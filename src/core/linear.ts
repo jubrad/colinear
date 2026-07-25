@@ -26,7 +26,9 @@ const ISSUE_FIELDS = `
   priority
   url
   branchName
-  state { name }
+  state { name type }
+  team { id }
+  project { id }
   labels { nodes { name color } }
   assignee { id displayName }
 `;
@@ -39,7 +41,9 @@ interface IssueNode {
   priority: number;
   url: string;
   branchName: string;
-  state: { name: string };
+  state: { name: string; type: string };
+  team?: { id: string } | null;
+  project?: { id: string } | null;
   labels: { nodes: Array<{ name: string; color: string }> };
   assignee?: { id: string; displayName: string } | null;
 }
@@ -54,6 +58,9 @@ function toIssue(n: IssueNode): LinearIssue {
     url: n.url,
     branchName: n.branchName,
     stateName: n.state.name,
+    stateType: n.state.type,
+    teamId: n.team?.id,
+    projectId: n.project?.id,
     labels: n.labels.nodes,
     assignee: n.assignee?.displayName,
     assigneeId: n.assignee?.id,
@@ -108,6 +115,84 @@ export async function fetchTeams(cfg: Config): Promise<LinearTeam[]> {
     `query { teams(first: 100) { nodes { id key name } } }`,
   );
   return data.teams.nodes;
+}
+
+export async function fetchProjects(cfg: Config): Promise<import('./types.js').LinearProject[]> {
+  const data = await gql<{
+    projects: {
+      nodes: Array<{
+        id: string;
+        name: string;
+        description?: string;
+        state: string;
+        progress: number;
+        targetDate?: string;
+        url: string;
+        teams: { nodes: Array<{ id: string; key: string; name: string }> };
+      }>;
+    };
+  }>(
+    cfg,
+    `query {
+      projects(first: 75, filter: { state: { in: ["planned", "started", "paused"] } }) {
+        nodes {
+          id name description state progress targetDate url
+          teams { nodes { id key name } }
+        }
+      }
+    }`,
+  );
+  return data.projects.nodes.map((n) => ({ ...n, teams: n.teams.nodes }));
+}
+
+export async function fetchProjectIssues(cfg: Config, projectId: string): Promise<LinearIssue[]> {
+  const data = await gql<{ issues: { nodes: IssueNode[] } }>(
+    cfg,
+    `query ($projectId: ID) {
+      issues(
+        first: 200
+        filter: { project: { id: { eq: $projectId } } }
+      ) { nodes { ${ISSUE_FIELDS} } }
+    }`,
+    { projectId },
+  );
+  return data.issues.nodes.map(toIssue);
+}
+
+export async function createIssue(
+  cfg: Config,
+  input: { teamId: string; title: string; description?: string; projectId?: string; priority?: number },
+): Promise<{ id: string; identifier: string }> {
+  const data = await gql<{ issueCreate: { success: boolean; issue: { id: string; identifier: string } } }>(
+    cfg,
+    `mutation ($input: IssueCreateInput!) {
+      issueCreate(input: $input) { success issue { id identifier } }
+    }`,
+    { input },
+  );
+  if (!data.issueCreate.success) throw new Error('issueCreate failed');
+  return data.issueCreate.issue;
+}
+
+export async function fetchWorkflowStates(cfg: Config, teamId: string): Promise<import('./types.js').WorkflowState[]> {
+  const data = await gql<{ team: { states: { nodes: import('./types.js').WorkflowState[] } } }>(
+    cfg,
+    `query ($teamId: String!) {
+      team(id: $teamId) { states { nodes { id name type position } } }
+    }`,
+    { teamId },
+  );
+  return data.team.states.nodes;
+}
+
+export async function updateIssueState(cfg: Config, issueId: string, stateId: string): Promise<void> {
+  await gql(
+    cfg,
+    `mutation ($issueId: String!, $stateId: String!) {
+      issueUpdate(id: $issueId, input: { stateId: $stateId }) { success }
+    }`,
+    { issueId, stateId },
+  );
 }
 
 export async function fetchViewer(cfg: Config): Promise<{ id: string; displayName: string }> {

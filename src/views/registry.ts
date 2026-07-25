@@ -2,6 +2,8 @@ import type { ComponentType } from 'react';
 import type { Candidate } from '../ui/CommandBar.js';
 import { BoardView, boardKeys } from './BoardView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
+import { ProjectsView, projectsKeys } from './ProjectsView.js';
+import { ProjectView, projectKeys } from './ProjectView.js';
 import { TaskView, taskKeys } from './TaskView.js';
 
 export interface ViewDef {
@@ -33,6 +35,20 @@ export const views: ViewDef[] = [
     describe: 'task detail + live log (:task CLOUD-123)',
     Component: TaskView,
     keys: taskKeys,
+  },
+  {
+    name: 'projects',
+    aliases: ['pj', 'proj'],
+    describe: 'Linear projects',
+    Component: ProjectsView,
+    keys: projectsKeys,
+  },
+  {
+    name: 'project',
+    aliases: ['pr'],
+    describe: 'project kanban (:project NAME)',
+    Component: ProjectView,
+    keys: projectKeys,
   },
 ];
 

@@ -10,12 +10,34 @@ export interface LinearIssue {
   labels: Array<{ name: string; color: string }>;
   assignee?: string;
   assigneeId?: string;
+  stateType?: string;
+  teamId?: string;
+  projectId?: string;
 }
 
 export interface LinearTeam {
   id: string;
   key: string;
   name: string;
+}
+
+export interface LinearProject {
+  id: string;
+  name: string;
+  description?: string;
+  state: string;
+  /** 0..1 */
+  progress: number;
+  targetDate?: string;
+  url: string;
+  teams: LinearTeam[];
+}
+
+export interface WorkflowState {
+  id: string;
+  name: string;
+  type: string;
+  position: number;
 }
 
 export type TaskStatus =

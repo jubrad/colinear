@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Config, PrInfo } from './types.js';
 import { store } from './store.js';
+import { syncIssueState } from './statesync.js';
 
 const exec = promisify(execFile);
 
@@ -61,8 +62,12 @@ export async function pollPrs(cfg: Config): Promise<void> {
       headRefName: pr.headRefName,
       baseRefName: pr.baseRefName,
     }));
+    const hadPrs = task.prs.length > 0;
     const changed = JSON.stringify(infos) !== JSON.stringify(task.prs);
     if (changed) store.update(task.issue.id, { prs: infos });
+    if (!hadPrs && infos.length > 0) {
+      void syncIssueState(cfg, task.issue, 'review');
+    }
     if (infos.some((pr) => pr.state === 'OPEN') && (task.status === 'done' || task.status === 'checks')) {
       store.setStatus(task.issue.id, 'pr_open');
     }

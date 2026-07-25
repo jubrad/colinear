@@ -7,6 +7,7 @@ import { runChecks } from './checks.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
+import { syncIssueState } from './statesync.js';
 import { store } from './store.js';
 import type { Config, LinearIssue, Subtask, Task, TriageVerdict } from './types.js';
 
@@ -134,6 +135,7 @@ export class Dispatcher {
 
       let plan: string | undefined;
       if (!resumeSession) {
+        void syncIssueState(this.cfg, issue, 'started');
         store.addActivity(id, 'triage pass');
         const triage = await runSession({
           prompt: triagePrompt(issue),
