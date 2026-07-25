@@ -1,8 +1,8 @@
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { useState } from 'react';
-import { formatDuration, formatTokens } from './Board.js';
-import type { Task } from '../types.js';
+import { formatDuration, formatTokens } from '../ui/format.js';
+import type { Task } from '../core/types.js';
 
 export function DetailPane(props: {
   task: Task;

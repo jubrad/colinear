@@ -1,5 +1,5 @@
-import { loadConfig } from './config.js';
-import { fetchIssues } from './linear.js';
+import { loadConfig } from './core/config.js';
+import { fetchIssues } from './core/linear.js';
 
 const cfg = loadConfig();
 const issues = await fetchIssues(cfg, cfg.team);

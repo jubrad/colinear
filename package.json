@@ -1,6 +1,6 @@
 {
   "name": "foreman",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Linear + Claude Code orchestrator TUI: pick issues, dispatch agents, watch the board",
   "type": "module",
   "bin": {
