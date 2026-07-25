@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { Candidate } from '../ui/CommandBar.js';
 import { BoardView, boardKeys } from './BoardView.js';
+import { ChatView, chatKeys } from './ChatView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
 import { ProjectsView, projectsKeys } from './ProjectsView.js';
 import { ProjectView, projectKeys } from './ProjectView.js';
@@ -49,6 +50,13 @@ export const views: ViewDef[] = [
     describe: 'project kanban (:project NAME)',
     Component: ProjectView,
     keys: projectKeys,
+  },
+  {
+    name: 'plan',
+    aliases: ['chat'],
+    describe: 'project planning chat (:plan PROJECT)',
+    Component: ChatView,
+    keys: chatKeys,
   },
 ];
 
