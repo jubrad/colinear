@@ -1,7 +1,9 @@
-import type { ComponentType } from 'react';
+import { createElement, type ComponentType } from 'react';
+import { loadCustomViews } from '../core/customviews.js';
 import type { Candidate } from '../ui/CommandBar.js';
 import { BoardView, boardKeys } from './BoardView.js';
 import { ChatView, chatKeys } from './ChatView.js';
+import { HelpView, helpKeys } from './HelpView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
 import { ProjectsView, projectsKeys } from './ProjectsView.js';
 import { ProjectView, projectKeys } from './ProjectView.js';
@@ -13,9 +15,10 @@ export interface ViewDef {
   describe: string;
   Component: ComponentType<{ param?: string }>;
   keys: Array<[string, string]>;
+  custom?: boolean;
 }
 
-export const views: ViewDef[] = [
+const builtinViews: ViewDef[] = [
   {
     name: 'issues',
     aliases: ['i', 'is'],
@@ -58,7 +61,33 @@ export const views: ViewDef[] = [
     Component: ChatView,
     keys: chatKeys,
   },
+  {
+    name: 'help',
+    aliases: ['h'],
+    describe: 'views, keys, custom view schema',
+    Component: HelpView,
+    keys: helpKeys,
+  },
 ];
+
+export let views: ViewDef[] = [...builtinViews];
+
+/** (Re)load ~/.config/foreman/views/*.json into the registry. Returns count. */
+export function reloadCustomViews(): number {
+  const specs = loadCustomViews();
+  const custom: ViewDef[] = specs.map((spec) => ({
+    name: spec.name,
+    aliases: spec.aliases ?? [],
+    describe: spec.describe ?? `custom view (${spec.name}.json)`,
+    Component: (props: { param?: string }) => createElement(IssuesView, { ...props, spec }),
+    keys: issuesKeys,
+    custom: true,
+  }));
+  views = [...builtinViews, ...custom.filter((c) => !builtinViews.some((b) => b.name === c.name))];
+  return custom.length;
+}
+
+reloadCustomViews();
 
 export function findView(nameOrAlias: string): ViewDef | undefined {
   const n = nameOrAlias.toLowerCase();
@@ -66,5 +95,8 @@ export function findView(nameOrAlias: string): ViewDef | undefined {
 }
 
 export function commandCandidates(): Candidate[] {
-  return views.map((v) => ({ label: `${v.name} — ${v.describe}`, value: v.name }));
+  return [
+    ...views.map((v) => ({ label: `${v.name} — ${v.describe}`, value: v.name })),
+    { label: 'reload — reload custom views', value: 'reload' },
+  ];
 }

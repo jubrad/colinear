@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { render } from 'ink';
 import { App } from './app.js';
 import { loadConfig } from './core/config.js';

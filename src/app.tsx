@@ -10,7 +10,7 @@ import { AppContext, type AppCtx, type ToastKind } from './ui/context.js';
 import { Crumbs } from './ui/Crumbs.js';
 import { formatTokens } from './ui/format.js';
 import { Header } from './ui/Header.js';
-import { commandCandidates, findView, views } from './views/registry.js';
+import { commandCandidates, findView, reloadCustomViews, views } from './views/registry.js';
 import { theme } from './theme.js';
 
 export const VERSION = '0.2.0';
@@ -136,6 +136,7 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
         if (stack.length > 1) back();
         else exit();
       }
+      if (input === '?') navigate('help');
     },
     { isActive: !capture && !cmdOpen },
   );
@@ -171,6 +172,11 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
               onSubmit={(value, top) => {
                 setCmdOpen(false);
                 const [name, ...rest] = value.trim().split(/\s+/);
+                if (name === 'reload' || top?.value === 'reload') {
+                  const n = reloadCustomViews();
+                  ctx.toast(`custom views reloaded (${n})`, 'ok');
+                  return;
+                }
                 const target = findView(name || '') ?? (top ? findView(top.value) : undefined);
                 if (target) navigate(target.name, rest.join(' ') || undefined);
                 else if (value.trim()) ctx.toast(`unknown view: ${name}`, 'err');

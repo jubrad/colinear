@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { assignIssue, fetchIssues } from '../core/linear.js';
+import type { CustomViewSpec } from '../core/customviews.js';
+import { assignIssue, fetchFilteredIssues, fetchIssues } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { LinearIssue } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
@@ -39,7 +40,8 @@ function resolveTeamParam(param: string | undefined, fallback: string | undefine
   return param.toUpperCase();
 }
 
-export function IssuesView(props: { param?: string }) {
+export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
+  const { spec } = props;
   const ctx = useForeman();
   const { cfg, teams } = ctx;
   const [team, setTeam] = useState<string | undefined>(() => resolveTeamParam(props.param, cfg.team));
@@ -51,19 +53,20 @@ export function IssuesView(props: { param?: string }) {
   const [query, setQuery] = useState('');
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
   const [bar, setBar] = useState<BarMode | null>(null);
-  const [sortKey, setSortKey] = useState('updated');
+  const [sortKey, setSortKey] = useState(spec?.sort ?? 'updated');
   const [sortDesc, setSortDesc] = useState(false);
 
   const refresh = useCallback(
     (teamKey: string | undefined) => {
       setLoading(true);
       setError(undefined);
-      fetchIssues(cfg, teamKey)
+      const fetch = spec ? fetchFilteredIssues(cfg, spec.filter ?? {}) : fetchIssues(cfg, teamKey);
+      fetch
         .then((all) => setIssues(all.filter((i) => !store.get(i.id))))
         .catch((e) => setError(String(e)))
         .finally(() => setLoading(false));
     },
-    [cfg],
+    [cfg, spec],
   );
 
   useEffect(() => refresh(team), []);
@@ -101,6 +104,11 @@ export function IssuesView(props: { param?: string }) {
       },
     ],
     [],
+  );
+
+  const visibleColumns = useMemo(
+    () => (spec?.columns?.length ? columns.filter((c) => spec.columns!.includes(c.key)) : columns),
+    [columns, spec],
   );
 
   const rows = useMemo(() => {
@@ -230,7 +238,7 @@ export function IssuesView(props: { param?: string }) {
       <Box justifyContent="space-between">
         <Text>
           <Text bold color={theme.accent}>
-            issues({team === '*' ? 'all' : (team ?? 'mine')})
+            {spec ? spec.name : `issues(${team === '*' ? 'all' : (team ?? 'mine')})`}
           </Text>
           <Text dimColor>
             [{rows.length}/{issues.length}]
@@ -254,7 +262,7 @@ export function IssuesView(props: { param?: string }) {
       )}
       <Table
         rows={rows}
-        columns={columns}
+        columns={visibleColumns}
         getId={(i) => i.id}
         cursor={cursor}
         selectedIds={selected}

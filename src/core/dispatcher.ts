@@ -188,6 +188,16 @@ export class Dispatcher {
       await pollPrs(this.cfg); // picks up the PR immediately and flips to pr_open
     } catch (err) {
       const cancelled = controller.signal.aborted;
+      const rateLimited = /529|overloaded|rate.?limit/i.test(String(err));
+      if (!cancelled && rateLimited && !store.get(id)?.retried) {
+        store.update(id, { status: 'queued', retried: true });
+        store.addActivity(id, 'rate limited — retrying in 30s');
+        setTimeout(() => {
+          this.queue.push(id);
+          this.pump();
+        }, 30_000);
+        return;
+      }
       store.update(id, { status: 'error', error: cancelled ? 'cancelled' : String(err) });
       store.addActivity(id, cancelled ? 'stopped' : `error: ${String(err).slice(0, 200)}`);
       if (!cancelled) {

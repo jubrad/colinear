@@ -107,6 +107,8 @@ export interface Task {
   error?: string;
   costUsd: number;
   escalationCommented?: boolean;
+  /** one automatic retry after a rate-limit failure */
+  retried?: boolean;
 }
 
 export interface CheckConfig {

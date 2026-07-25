@@ -117,6 +117,37 @@ export async function fetchTeams(cfg: Config): Promise<LinearTeam[]> {
   return data.teams.nodes;
 }
 
+export interface IssueFilterSpec {
+  team?: string;
+  labels?: string[];
+  /** workflow state types: triage, backlog, unstarted, started, completed */
+  state?: string[];
+  assignee?: 'me' | 'any';
+  /** null = no project; a string matches the project name */
+  project?: null | string;
+}
+
+/** Declarative filter (custom views) -> Linear IssueFilter object. */
+export async function fetchFilteredIssues(cfg: Config, spec: IssueFilterSpec): Promise<LinearIssue[]> {
+  const filter: Record<string, unknown> = {
+    state: { type: { in: spec.state ?? ['triage', 'backlog', 'unstarted', 'started'] } },
+  };
+  if (spec.team) filter.team = { key: { eq: spec.team.toUpperCase() } };
+  if (spec.labels?.length) filter.labels = { some: { name: { in: spec.labels } } };
+  if (spec.assignee === 'me') filter.assignee = { isMe: { eq: true } };
+  if (spec.project === null) filter.project = { null: true };
+  else if (spec.project) filter.project = { name: { eqIgnoreCase: spec.project } };
+
+  const data = await gql<{ issues: { nodes: IssueNode[] } }>(
+    cfg,
+    `query ($filter: IssueFilter) {
+      issues(first: 100, orderBy: updatedAt, filter: $filter) { nodes { ${ISSUE_FIELDS} } }
+    }`,
+    { filter },
+  );
+  return data.issues.nodes.map(toIssue);
+}
+
 export async function fetchProjects(cfg: Config): Promise<import('./types.js').LinearProject[]> {
   const data = await gql<{
     projects: {

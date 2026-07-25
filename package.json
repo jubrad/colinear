@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "tsx src/index.tsx",
-    "build": "tsc",
+    "doctor": "tsx src/doctor.ts",
+    "build": "tsc && chmod +x dist/index.js",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
