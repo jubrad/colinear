@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
+import { log } from './log.js';
+import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
 import { store } from './store.js';
 import type { Config, LinearIssue, Subtask, Task, TriageVerdict } from './types.js';
@@ -26,8 +28,31 @@ const TRIAGE_SCHEMA = {
 export class Dispatcher {
   private queue: string[] = [];
   private running = 0;
+  private aborts = new Map<string, AbortController>();
 
   constructor(private cfg: Config) {}
+
+  /** Abort a live session; task lands in error state with a cancel note. */
+  cancel(id: string): boolean {
+    const controller = this.aborts.get(id);
+    if (!controller) return false;
+    controller.abort();
+    store.addActivity(id, 'cancelled by user');
+    return true;
+  }
+
+  /**
+   * Resume an interrupted/errored task. With a saved session id the SDK
+   * continues the original transcript; otherwise the work pass restarts.
+   */
+  resume(id: string) {
+    const task = store.get(id);
+    if (!task || !['interrupted', 'error', 'escalated'].includes(task.status)) return;
+    store.update(id, { status: 'queued', error: undefined, endedAt: undefined });
+    store.addActivity(id, task.sessionId ? 'resuming session' : 'restarting');
+    this.queue.push(id);
+    this.pump();
+  }
 
   enqueue(issues: LinearIssue[]) {
     for (const issue of issues) {
@@ -73,6 +98,7 @@ export class Dispatcher {
       onQuestion: (question) => {
         const task = store.get(id);
         if (!task) return;
+        notify(this.cfg, task.issue.identifier, `needs input: ${question.text.slice(0, 80)}`);
         store.update(id, {
           question: {
             ...question,
@@ -97,40 +123,53 @@ export class Dispatcher {
     if (!task) return;
     const { issue } = task;
     let stopSubtaskPoll: (() => void) | undefined;
+    const controller = new AbortController();
+    this.aborts.set(id, controller);
+    const resumeSession = task.sessionId && task.worktree && existsSync(task.worktree) ? task.sessionId : undefined;
     try {
-      store.update(id, { status: 'triage', startedAt: Date.now() });
+      store.update(id, { status: resumeSession ? 'working' : 'triage', startedAt: task.startedAt ?? Date.now(), endedAt: undefined });
       store.addActivity(id, 'creating worktree');
       const { worktree, branch } = await this.ensureWorktree(issue);
       store.update(id, { worktree, branch });
 
-      store.addActivity(id, 'triage pass');
-      const triage = await runSession({
-        prompt: triagePrompt(issue),
-        cwd: worktree,
-        callbacks: this.callbacks(id),
-        outputSchema: TRIAGE_SCHEMA,
-        model: this.cfg.model,
-        maxTurns: 40,
-      });
-      store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + triage.costUsd });
-      if (triage.isError) throw new Error(`triage failed: ${triage.errors.join('; ')}`);
+      let plan: string | undefined;
+      if (!resumeSession) {
+        store.addActivity(id, 'triage pass');
+        const triage = await runSession({
+          prompt: triagePrompt(issue),
+          cwd: worktree,
+          callbacks: this.callbacks(id),
+          outputSchema: TRIAGE_SCHEMA,
+          model: this.cfg.model,
+          maxTurns: 40,
+          abortController: controller,
+        });
+        store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + triage.costUsd });
+        if (triage.isError) throw new Error(`triage failed: ${triage.errors.join('; ')}`);
 
-      const verdict = triage.structured as TriageVerdict;
-      store.update(id, { verdict });
-      if (verdict.verdict !== 'do') {
-        store.setStatus(id, 'escalated');
-        store.addActivity(id, `escalated (${verdict.verdict}): ${verdict.reason.slice(0, 100)}`);
-        return;
+        const verdict = triage.structured as TriageVerdict;
+        store.update(id, { verdict });
+        if (verdict.verdict !== 'do') {
+          store.setStatus(id, 'escalated');
+          store.addActivity(id, `escalated (${verdict.verdict}): ${verdict.reason.slice(0, 100)}`);
+          notify(this.cfg, issue.identifier, `escalated: ${verdict.verdict}`);
+          return;
+        }
+        plan = verdict.plan;
+        store.setStatus(id, 'working');
+        store.addActivity(id, 'work pass');
       }
 
-      store.setStatus(id, 'working');
-      store.addActivity(id, 'work pass');
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
       const work = await runSession({
-        prompt: workPrompt(issue, branch, this.cfg.defaultBranch, verdict.plan),
+        prompt: resumeSession
+          ? `foreman was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
+          : workPrompt(issue, branch, this.cfg.defaultBranch, plan),
         cwd: worktree,
         callbacks: this.callbacks(id),
         model: this.cfg.model,
+        resume: resumeSession,
+        abortController: controller,
       });
       store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + work.costUsd });
       if (work.isError) throw new Error(`work failed: ${work.errors.join('; ')}`);
@@ -143,11 +182,18 @@ export class Dispatcher {
       }
 
       store.setStatus(id, 'done');
+      notify(this.cfg, issue.identifier, 'agent finished');
       await pollPrs(this.cfg); // picks up the PR immediately and flips to pr_open
     } catch (err) {
-      store.update(id, { status: 'error', error: String(err) });
-      store.addActivity(id, `error: ${String(err).slice(0, 200)}`);
+      const cancelled = controller.signal.aborted;
+      store.update(id, { status: 'error', error: cancelled ? 'cancelled' : String(err) });
+      store.addActivity(id, cancelled ? 'stopped' : `error: ${String(err).slice(0, 200)}`);
+      if (!cancelled) {
+        log(`task ${issue.identifier} failed: ${err}`);
+        notify(this.cfg, issue.identifier, `error: ${String(err).slice(0, 80)}`);
+      }
     } finally {
+      this.aborts.delete(id);
       stopSubtaskPoll?.();
       store.update(id, { endedAt: Date.now() });
     }

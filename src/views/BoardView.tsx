@@ -16,7 +16,7 @@ interface BoardColumn {
 }
 
 const COLUMNS: BoardColumn[] = [
-  { title: 'Queued', statuses: ['queued'] },
+  { title: 'Queued', statuses: ['queued', 'interrupted'] },
   { title: 'Triage', statuses: ['triage'] },
   { title: 'Working', statuses: ['working', 'checks'] },
   { title: 'Needs Input', statuses: ['needs_input'] },
@@ -53,6 +53,14 @@ export function BoardView(_props: { param?: string }) {
       }
       if (input === 'a' && selected?.question) setAnswering(true);
       if (input === 'i') ctx.navigate('issues');
+      if (key.return && selected) ctx.navigate('task', selected.issue.identifier);
+      if (input === 'x' && selected) {
+        if (ctx.dispatcher.cancel(selected.issue.id)) ctx.toast(`cancelling ${selected.issue.identifier}`, 'info');
+      }
+      if (input === 'r' && selected && ['interrupted', 'error', 'escalated'].includes(selected.status)) {
+        ctx.dispatcher.resume(selected.issue.id);
+        ctx.toast(`requeued ${selected.issue.identifier}`, 'ok');
+      }
       if (input === 'o' && selected?.prs[0]) {
         execFile('open', [selected.prs[0].url], () => {});
         ctx.toast(`opened #${selected.prs[0].number}`, 'info');
@@ -191,8 +199,10 @@ function progressBar(done: number, total: number, width = 8): string {
 
 export const boardKeys: Array<[string, string]> = [
   ['←→/hl', 'select card'],
+  ['enter', 'task detail'],
   ['a', 'answer'],
-  ['1-9', 'pick option'],
+  ['x', 'cancel'],
+  ['r', 'resume'],
   ['c', 'escalate'],
   ['o', 'open PR'],
   ['i', 'issues'],

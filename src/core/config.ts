@@ -3,20 +3,26 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Config } from './types.js';
 
-const CONFIG_PATH = join(homedir(), '.foreman.json');
+const CONFIG_PATHS = [
+  join(homedir(), '.config', 'foreman', 'config.json'),
+  join(homedir(), '.foreman.json'),
+];
 
 export function loadConfig(): Config {
   let raw: Partial<Config> = {};
-  try {
-    raw = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
-  } catch {
-    // no config file yet; fall back to defaults + env
+  for (const path of CONFIG_PATHS) {
+    try {
+      raw = JSON.parse(readFileSync(path, 'utf8'));
+      break;
+    } catch {
+      // try the next location; fall back to defaults + env
+    }
   }
 
   const linearApiKey = raw.linearApiKey ?? process.env.LINEAR_API_KEY ?? '';
   if (!linearApiKey) {
     console.error(
-      `No Linear API key. Set LINEAR_API_KEY or add "linearApiKey" to ${CONFIG_PATH}`,
+      `No Linear API key. Set LINEAR_API_KEY or add "linearApiKey" to ${CONFIG_PATHS[0]}`,
     );
     process.exit(1);
   }
@@ -42,6 +48,8 @@ export function loadConfig(): Config {
     concurrency: raw.concurrency ?? 3,
     checks: raw.checks ?? [],
     model: raw.model,
+    notifications: raw.notifications ?? true,
+    stateSync: raw.stateSync ?? true,
   };
 }
 

@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type { Candidate } from '../ui/CommandBar.js';
 import { BoardView, boardKeys } from './BoardView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
+import { TaskView, taskKeys } from './TaskView.js';
 
 export interface ViewDef {
   name: string;
@@ -25,6 +26,13 @@ export const views: ViewDef[] = [
     describe: 'agent kanban board',
     Component: BoardView,
     keys: boardKeys,
+  },
+  {
+    name: 'task',
+    aliases: ['ta'],
+    describe: 'task detail + live log (:task CLOUD-123)',
+    Component: TaskView,
+    keys: taskKeys,
   },
 ];
 

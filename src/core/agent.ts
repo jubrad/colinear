@@ -30,8 +30,11 @@ export async function runSession(opts: {
   outputSchema?: Record<string, unknown>;
   model?: string;
   maxTurns?: number;
+  /** session id to resume (continues its transcript) */
+  resume?: string;
+  abortController?: AbortController;
 }): Promise<SessionResult> {
-  const { prompt, cwd, callbacks, outputSchema, model, maxTurns } = opts;
+  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController } = opts;
 
   const q = query({
     prompt,
@@ -39,6 +42,8 @@ export async function runSession(opts: {
       cwd,
       model,
       maxTurns,
+      resume,
+      abortController,
       permissionMode: 'acceptEdits',
       settingSources: ['project'],
       ...(outputSchema ? { outputFormat: { type: 'json_schema' as const, schema: outputSchema } } : {}),

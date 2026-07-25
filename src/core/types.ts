@@ -27,7 +27,9 @@ export type TaskStatus =
   | 'pr_open'
   | 'escalated'
   | 'done'
-  | 'error';
+  | 'error'
+  /** restored from a previous run while the agent was mid-flight */
+  | 'interrupted';
 
 export interface TriageVerdict {
   verdict: 'do' | 'too_big' | 'needs_info';
@@ -102,4 +104,8 @@ export interface Config {
   model?: string;
   /** Linear team key (e.g. "CLOUD") to browse; unset = my assigned issues */
   team?: string;
+  /** macOS notifications on needs_input / done / error (default true) */
+  notifications: boolean;
+  /** auto-move Linear states: dispatch -> started, PR -> In Review (default true) */
+  stateSync: boolean;
 }
