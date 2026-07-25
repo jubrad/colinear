@@ -4,7 +4,7 @@ import { useTasks } from '../core/hooks.js';
 import { assignIssue, fetchProjectIssues, fetchProjects } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { LinearIssue, LinearProject } from '../core/types.js';
-import { fuzzyMatch } from '../ui/CommandBar.js';
+import { CommandBar, fuzzyMatch } from '../ui/CommandBar.js';
 import { useForeman } from '../ui/context.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { projectCache } from './ProjectsView.js';
@@ -31,6 +31,10 @@ export function ProjectView(props: { param?: string }) {
   const [error, setError] = useState<string>();
   const [cursor, setCursor] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [asking, setAsking] = useState(false);
+
+  useEffect(() => ctx.setCapture(asking), [asking]);
+  useEffect(() => () => ctx.setCapture(false), []);
 
   const resolveProject = useCallback(async (): Promise<LinearProject | undefined> => {
     const param = (props.param ?? '').toLowerCase();
@@ -68,11 +72,16 @@ export function ProjectView(props: { param?: string }) {
   useEffect(() => setCursor((c) => Math.max(0, Math.min(c, ordered.length - 1))), [ordered.length]);
   const current = ordered[cursor];
 
+  const picked = useCallback(
+    () => (selected.size ? issues.filter((i) => selected.has(i.id)) : current ? [current] : []),
+    [selected, issues, current],
+  );
+
   const dispatch = useCallback(
-    (picked: LinearIssue[]) => {
+    (picked: LinearIssue[], instructions?: string) => {
       const eligible = picked.filter((i) => i.stateType !== 'completed');
       if (!eligible.length) return;
-      ctx.dispatcher.enqueue(eligible);
+      ctx.dispatcher.enqueue(eligible, instructions);
       const { viewer } = ctx;
       if (viewer) {
         for (const issue of eligible.filter((i) => i.assigneeId !== viewer.id)) {
@@ -87,26 +96,27 @@ export function ProjectView(props: { param?: string }) {
     [ctx],
   );
 
-  useInput((input, key) => {
-    if (key.leftArrow || input === 'h' || key.upArrow || input === 'k') setCursor((c) => Math.max(0, c - 1));
-    if (key.rightArrow || input === 'l' || key.downArrow || input === 'j') {
-      setCursor((c) => Math.min(ordered.length - 1, c + 1));
-    }
-    if (input === ' ' && current) {
-      setSelected((prev) => {
-        const next = new Set(prev);
-        if (next.has(current.id)) next.delete(current.id);
-        else next.add(current.id);
-        return next;
-      });
-    }
-    if (input === 'd') {
-      dispatch(selected.size ? issues.filter((i) => selected.has(i.id)) : current ? [current] : []);
-    }
-    if (input === 'r') refresh();
-    if (input === 'p' && project) ctx.navigate('plan', project.name);
-    if (key.return && current && store.get(current.id)) ctx.navigate('task', current.identifier);
-  });
+  useInput(
+    (input, key) => {
+      if (key.leftArrow || input === 'h' || key.upArrow || input === 'k') setCursor((c) => Math.max(0, c - 1));
+      if (key.rightArrow || input === 'l' || key.downArrow || input === 'j') {
+        setCursor((c) => Math.min(ordered.length - 1, c + 1));
+      }
+      if (input === ' ' && current) {
+        setSelected((prev) => {
+          const next = new Set(prev);
+          if (next.has(current.id)) next.delete(current.id);
+          else next.add(current.id);
+          return next;
+        });
+      }
+      if (input === 'd' && picked().length) setAsking(true);
+      if (input === 'r') refresh();
+      if (input === 'p' && project) ctx.navigate('plan', project.name);
+      if (key.return && current && store.get(current.id)) ctx.navigate('task', current.identifier);
+    },
+    { isActive: !asking },
+  );
 
   if (loading) return <Text color={theme.warn}>Loading project…</Text>;
   if (error)
@@ -135,6 +145,17 @@ export function ProjectView(props: { param?: string }) {
         <Text dimColor wrap="truncate">
           {project.description}
         </Text>
+      )}
+      {asking && (
+        <CommandBar
+          prefix={`dispatch ${picked().length} ▸ instructions> `}
+          placeholder="optional — enter to dispatch, esc to cancel"
+          onSubmit={(value) => {
+            setAsking(false);
+            dispatch(picked(), value.trim() || undefined);
+          }}
+          onCancel={() => setAsking(false)}
+        />
       )}
       <Box gap={1} flexGrow={1} marginTop={1}>
         {STATE_COLUMNS.map((col) => {

@@ -12,7 +12,7 @@ import { theme } from '../theme.js';
 const PRIORITY_LABELS = ['—', 'Urgent', 'High', 'Med', 'Low'];
 const PRIORITY_COLORS: Array<string | undefined> = [undefined, 'red', 'yellow', 'white', 'gray'];
 
-type BarMode = 'fuzzy' | 'team' | 'label' | 'sort';
+type BarMode = 'fuzzy' | 'team' | 'label' | 'sort' | 'dispatch';
 
 export function filterIssues(issues: LinearIssue[], query: string, labelFilters: string[]): LinearIssue[] {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -136,10 +136,16 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
     return () => ctx.setEscHandler(null);
   }, [hasFilters]);
 
+  const picked = useCallback(
+    () =>
+      selected.size ? issues.filter((i) => selected.has(i.id)) : rows[cursor] ? [rows[cursor]] : [],
+    [selected, issues, rows, cursor],
+  );
+
   const dispatch = useCallback(
-    (picked: LinearIssue[]) => {
+    (picked: LinearIssue[], instructions?: string) => {
       if (!picked.length) return;
-      ctx.dispatcher.enqueue(picked);
+      ctx.dispatcher.enqueue(picked, instructions);
       const { viewer } = ctx;
       if (viewer) {
         for (const issue of picked.filter((i) => i.assigneeId !== viewer.id)) {
@@ -173,14 +179,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
           return next;
         });
       }
-      if (key.return) {
-        const picked = selected.size
-          ? issues.filter((i) => selected.has(i.id))
-          : rows[cursor]
-            ? [rows[cursor]]
-            : [];
-        dispatch(picked);
-      }
+      if (key.return && picked().length) setBar('dispatch');
     },
     { isActive: bar === null },
   );
@@ -221,6 +220,11 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
         setSortDesc(false);
       }
     }
+    if (bar === 'dispatch') {
+      setBar(null);
+      dispatch(picked(), value.trim() || undefined);
+      return;
+    }
     setBar(null);
   };
 
@@ -257,7 +261,15 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       {bar === 'fuzzy' && (
         <CommandBar prefix="/" initial={query} onChange={setQuery} onSubmit={() => setBar(null)} onCancel={() => { setQuery(''); setBar(null); }} />
       )}
-      {bar && bar !== 'fuzzy' && (
+      {bar === 'dispatch' && (
+        <CommandBar
+          prefix={`dispatch ${picked().length} ▸ instructions> `}
+          placeholder="optional — enter to dispatch, esc to cancel"
+          onSubmit={submitBar}
+          onCancel={() => setBar(null)}
+        />
+      )}
+      {bar && bar !== 'fuzzy' && bar !== 'dispatch' && (
         <CommandBar prefix={`${bar}> `} candidates={barCandidates} onSubmit={submitBar} onCancel={() => setBar(null)} />
       )}
       <Table

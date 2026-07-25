@@ -107,6 +107,8 @@ export interface Task {
   error?: string;
   costUsd: number;
   escalationCommented?: boolean;
+  /** user-provided special instructions passed to triage + work prompts */
+  instructions?: string;
   /** one automatic retry after a rate-limit failure */
   retried?: boolean;
 }

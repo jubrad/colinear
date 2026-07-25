@@ -94,6 +94,11 @@ export function TaskView(props: { param?: string }) {
           {task.branch ? ` · ${task.branch}` : ''}
         </Text>
       </Text>
+      {task.instructions && (
+        <Text dimColor wrap="truncate">
+          instructions: {task.instructions}
+        </Text>
+      )}
       {task.error && <Text color={theme.err}>✖ {task.error.slice(0, 200)}</Text>}
       {task.verdict && task.verdict.verdict !== 'do' && (
         <Text color={theme.err} wrap="truncate">

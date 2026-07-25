@@ -55,7 +55,7 @@ export class Dispatcher {
     this.pump();
   }
 
-  enqueue(issues: LinearIssue[]) {
+  enqueue(issues: LinearIssue[], instructions?: string) {
     for (const issue of issues) {
       if (store.get(issue.id)) continue;
       const task: Task = {
@@ -67,8 +67,10 @@ export class Dispatcher {
         checks: [],
         prs: [],
         costUsd: 0,
+        instructions,
       };
       store.upsert(task);
+      if (instructions) store.addActivity(issue.id, `instructions: ${instructions.slice(0, 100)}`);
       this.queue.push(issue.id);
     }
     this.pump();
@@ -138,7 +140,7 @@ export class Dispatcher {
         void syncIssueState(this.cfg, issue, 'started');
         store.addActivity(id, 'triage pass');
         const triage = await runSession({
-          prompt: triagePrompt(issue),
+          prompt: triagePrompt(issue, store.get(id)?.instructions),
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: TRIAGE_SCHEMA,
@@ -166,7 +168,7 @@ export class Dispatcher {
       const work = await runSession({
         prompt: resumeSession
           ? `foreman was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
-          : workPrompt(issue, branch, this.cfg.defaultBranch, plan),
+          : workPrompt(issue, branch, this.cfg.defaultBranch, plan, store.get(id)?.instructions),
         cwd: worktree,
         callbacks: this.callbacks(id),
         model: this.cfg.model,
@@ -281,10 +283,17 @@ function issueBlock(issue: LinearIssue): string {
   ].join('\n');
 }
 
-function triagePrompt(issue: LinearIssue): string {
+function instructionsBlock(instructions?: string): string {
+  return instructions
+    ? `\nSpecial instructions from the user (these take precedence over the defaults below when they conflict):\n${instructions}\n`
+    : '';
+}
+
+function triagePrompt(issue: LinearIssue, instructions?: string): string {
   return `You are triaging a Linear issue before implementation. Investigate the codebase (read-only — do not modify files) to judge scope.
 
 ${issueBlock(issue)}
+${instructionsBlock(instructions)}
 
 Decide one of:
 - "do": clearly scoped, a single agent can complete it with one PR (or a small stack). Include a short implementation plan.
@@ -294,11 +303,17 @@ Decide one of:
 Only use AskUserQuestion if a single quick answer would flip you from needs_info to do.`;
 }
 
-function workPrompt(issue: LinearIssue, branch: string, defaultBranch: string, plan?: string): string {
+function workPrompt(
+  issue: LinearIssue,
+  branch: string,
+  defaultBranch: string,
+  plan?: string,
+  instructions?: string,
+): string {
   return `Implement this Linear issue. You are in a dedicated git worktree on branch "${branch}".
 
 ${issueBlock(issue)}
-${plan ? `\nTriage plan (from an earlier investigation pass):\n${plan}\n` : ''}
+${instructionsBlock(instructions)}${plan ? `\nTriage plan (from an earlier investigation pass):\n${plan}\n` : ''}
 Before writing any code, create ${SUBTASKS_FILE} in the worktree root: a short markdown checklist (3-8 items) of the subtasks needed to complete this issue. As you finish each subtask, immediately update its checkbox to [x]. Keep this file current — it drives a progress display. Never commit it (it is git-excluded).
 
 Requirements:
