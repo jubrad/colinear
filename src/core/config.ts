@@ -50,6 +50,7 @@ export function loadConfig(): Config {
     model: raw.model,
     notifications: raw.notifications ?? true,
     stateSync: raw.stateSync ?? true,
+    ciAutofix: raw.ciAutofix ?? true,
   };
 }
 

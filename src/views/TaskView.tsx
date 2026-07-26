@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { attachSession } from '../core/attach.js';
 import { useTasks } from '../core/hooks.js';
 import { useColinear } from '../ui/context.js';
-import { formatDuration, formatTokens, spinner } from '../ui/format.js';
+import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 
 /** k9s logs-style full-screen task detail; param = issue identifier. */
@@ -129,12 +129,28 @@ export function TaskView(props: { param?: string }) {
               {!c.ok && <Text dimColor> — {c.output.trim().split('\n').slice(-1)[0]?.slice(0, 120)}</Text>}
             </Text>
           ))}
-          {task.prs.map((pr) => (
-            <Text key={pr.number} color={theme.accent} wrap="truncate">
-              #{pr.number} {pr.title.slice(0, 70)} [{pr.isDraft ? 'draft' : pr.state.toLowerCase()},{' '}
-              {pr.checksStatus}] <Text dimColor>← {pr.baseRefName}</Text>
-            </Text>
-          ))}
+          {task.prs.map((pr) => {
+            const review = reviewStatus(pr);
+            return (
+              <Box key={pr.number} flexDirection="column">
+                <Text wrap="truncate">
+                  <Text color={theme.accent} bold>
+                    #{pr.number}
+                  </Text>{' '}
+                  {pr.title.slice(0, 60)} <Text dimColor>[{pr.isDraft ? 'draft' : pr.state.toLowerCase()}]</Text>{' '}
+                  <Text color={pr.checksStatus === 'failing' ? theme.err : pr.checksStatus === 'passing' ? theme.ok : theme.warn}>
+                    ci:{pr.checksStatus}
+                  </Text>{' '}
+                  <Text color={review.color}>{review.text}</Text>
+                  {pr.isDraft && <Text dimColor> · d to mark ready</Text>}
+                </Text>
+                <Text dimColor wrap="truncate">
+                  {'   '}
+                  {pr.url} <Text>← {pr.baseRefName}</Text>
+                </Text>
+              </Box>
+            );
+          })}
         </Box>
       )}
 

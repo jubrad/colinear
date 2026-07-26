@@ -76,7 +76,7 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
     fetchTeams(cfg)
       .then(setTeams)
       .catch(() => {});
-    return startPrPolling(cfg);
+    return startPrPolling(cfg, dispatcher);
   }, []);
 
   // toasts auto-expire

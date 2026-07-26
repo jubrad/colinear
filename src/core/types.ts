@@ -53,10 +53,14 @@ export type TaskStatus =
   /** restored from a previous run while the agent was mid-flight */
   | 'interrupted';
 
+export type Verification = 'local-light' | 'ci' | 'needs-env';
+
 export interface TriageVerdict {
   verdict: 'do' | 'too_big' | 'needs_info';
   reason: string;
   plan?: string;
+  /** how the change should be verified (drives the work-pass test strategy) */
+  verification?: Verification;
 }
 
 export interface PendingQuestion {
@@ -78,6 +82,8 @@ export interface PrInfo {
   state: string;
   isDraft: boolean;
   checksStatus: string;
+  /** APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED (unset = no reviews yet) */
+  reviewDecision?: string;
   headRefName: string;
   baseRefName: string;
 }
@@ -109,6 +115,8 @@ export interface Task {
   escalationCommented?: boolean;
   /** user-provided special instructions passed to triage + work prompts */
   instructions?: string;
+  /** set while a CI-failure fix has been dispatched for the current red rollup */
+  ciFixAttempted?: boolean;
   /** one automatic retry after a rate-limit failure */
   retried?: boolean;
 }
@@ -134,4 +142,6 @@ export interface Config {
   notifications: boolean;
   /** auto-move Linear states: dispatch -> started, PR -> In Review (default true) */
   stateSync: boolean;
+  /** auto-dispatch a fix session when a task's PR checks go red (default true) */
+  ciAutofix: boolean;
 }

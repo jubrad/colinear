@@ -1,4 +1,20 @@
-import type { Task } from '../core/types.js';
+import type { PrInfo, Task } from '../core/types.js';
+
+/** Human label + color for a PR's review state. */
+export function reviewStatus(pr: PrInfo): { text: string; color: string } {
+  if (pr.state === 'MERGED') return { text: 'merged', color: 'green' };
+  if (pr.state === 'CLOSED') return { text: 'closed', color: 'red' };
+  switch (pr.reviewDecision) {
+    case 'APPROVED':
+      return { text: 'approved', color: 'green' };
+    case 'CHANGES_REQUESTED':
+      return { text: 'changes requested', color: 'red' };
+    case 'REVIEW_REQUIRED':
+      return { text: 'awaiting review', color: 'yellow' };
+    default:
+      return { text: pr.isDraft ? 'draft — not in review' : 'no reviews yet', color: 'gray' };
+  }
+}
 
 export function formatTokens(t: { input: number; output: number }): string {
   const total = t.input + t.output;

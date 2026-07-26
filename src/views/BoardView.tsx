@@ -7,7 +7,7 @@ import { postComment } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { Task, TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
-import { formatDuration, formatTokens, spinner } from '../ui/format.js';
+import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
 
@@ -182,14 +182,18 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
           ))}
         </Text>
       )}
-      {task.prs.map((pr) => (
-        <Text key={pr.number} color={theme.accent} wrap="truncate">
-          #{pr.number} {pr.isDraft ? 'draft' : pr.state.toLowerCase()}{' '}
-          <Text color={pr.checksStatus === 'failing' ? theme.err : pr.checksStatus === 'passing' ? theme.ok : theme.warn}>
-            {pr.checksStatus}
+      {task.prs.map((pr) => {
+        const review = reviewStatus(pr);
+        return (
+          <Text key={pr.number} color={theme.accent} wrap="truncate">
+            #{pr.number} {pr.isDraft ? 'draft' : pr.state.toLowerCase()}{' '}
+            <Text color={pr.checksStatus === 'failing' ? theme.err : pr.checksStatus === 'passing' ? theme.ok : theme.warn}>
+              {pr.checksStatus}
+            </Text>{' '}
+            <Text color={review.color}>{review.text}</Text>
           </Text>
-        </Text>
-      ))}
+        );
+      })}
     </Box>
   );
 }

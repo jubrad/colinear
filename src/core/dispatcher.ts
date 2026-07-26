@@ -9,7 +9,7 @@ import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
 import { store } from './store.js';
-import type { Config, LinearIssue, Subtask, Task, TriageVerdict } from './types.js';
+import type { Config, LinearIssue, Subtask, Task, TriageVerdict, Verification } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -21,6 +21,7 @@ const TRIAGE_SCHEMA = {
     verdict: { type: 'string', enum: ['do', 'too_big', 'needs_info'] },
     reason: { type: 'string' },
     plan: { type: 'string' },
+    verification: { type: 'string', enum: ['local-light', 'ci', 'needs-env'] },
   },
   required: ['verdict', 'reason'],
   additionalProperties: false,
@@ -31,8 +32,21 @@ export class Dispatcher {
   private running = 0;
   private aborts = new Map<string, AbortController>();
   private suspended = new Set<string>();
+  private modes = new Map<string, 'fixci'>();
 
   constructor(private cfg: Config) {}
+
+  /** Dispatch a session to fix red CI on the task's draft PR(s). */
+  fixCi(id: string) {
+    const task = store.get(id);
+    if (!task || !task.prs.length || this.aborts.has(id) || this.queue.includes(id)) return;
+    this.modes.set(id, 'fixci');
+    store.update(id, { status: 'queued' });
+    store.addActivity(id, 'CI failing — dispatching fix session');
+    notify(this.cfg, task.issue.identifier, 'CI failing — dispatching fix', task.prs[0]?.url);
+    this.queue.push(id);
+    this.pump();
+  }
 
   /** Abort a live session but park it as `interrupted` (for interactive attach). */
   suspend(id: string): boolean {
@@ -111,7 +125,7 @@ export class Dispatcher {
       onQuestion: (question) => {
         const task = store.get(id);
         if (!task) return;
-        notify(this.cfg, task.issue.identifier, `needs input: ${question.text.slice(0, 80)}`);
+        notify(this.cfg, task.issue.identifier, `needs input: ${question.text.slice(0, 80)}`, task.issue.url);
         store.update(id, {
           question: {
             ...question,
@@ -138,6 +152,8 @@ export class Dispatcher {
     let stopSubtaskPoll: (() => void) | undefined;
     const controller = new AbortController();
     this.aborts.set(id, controller);
+    const mode = this.modes.get(id);
+    this.modes.delete(id);
     const resumeSession = task.sessionId && task.worktree && existsSync(task.worktree) ? task.sessionId : undefined;
     try {
       store.update(id, { status: resumeSession ? 'working' : 'triage', startedAt: task.startedAt ?? Date.now(), endedAt: undefined });
@@ -163,10 +179,11 @@ export class Dispatcher {
 
         const verdict = triage.structured as TriageVerdict;
         store.update(id, { verdict });
+        if (verdict.verification) store.addActivity(id, `verification: ${verdict.verification}`);
         if (verdict.verdict !== 'do') {
           store.setStatus(id, 'escalated');
           store.addActivity(id, `escalated (${verdict.verdict}): ${verdict.reason.slice(0, 100)}`);
-          notify(this.cfg, issue.identifier, `escalated: ${verdict.verdict}`);
+          notify(this.cfg, issue.identifier, `escalated: ${verdict.verdict}`, issue.url);
           return;
         }
         plan = verdict.plan;
@@ -175,10 +192,14 @@ export class Dispatcher {
       }
 
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
+      const current = store.get(id);
       const work = await runSession({
-        prompt: resumeSession
-          ? `colinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
-          : workPrompt(issue, branch, this.cfg.defaultBranch, plan, store.get(id)?.instructions),
+        prompt:
+          mode === 'fixci'
+            ? ciFixPrompt(issue, current?.prs ?? [])
+            : resumeSession
+              ? `colinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
+              : workPrompt(issue, branch, this.cfg.defaultBranch, plan, current?.instructions, current?.verdict?.verification),
         cwd: worktree,
         callbacks: this.callbacks(id),
         model: this.cfg.model,
@@ -196,8 +217,8 @@ export class Dispatcher {
       }
 
       store.setStatus(id, 'done');
-      notify(this.cfg, issue.identifier, 'agent finished');
-      await pollPrs(this.cfg); // picks up the PR immediately and flips to pr_open
+      await pollPrs(this.cfg, this); // picks up the PR immediately and flips to pr_open
+      notify(this.cfg, issue.identifier, 'agent finished', store.get(id)?.prs[0]?.url ?? issue.url);
     } catch (err) {
       if (this.suspended.delete(id)) {
         store.update(id, { status: 'interrupted', error: undefined });
@@ -315,7 +336,23 @@ Decide one of:
 - "too_big": needs to be broken up into a project with multiple issues. Explain why and sketch the breakdown.
 - "needs_info": the issue is ambiguous or missing decisions only a human can make. State exactly what's missing.
 
+Also decide HOW the change should be verified ("verification") — this repo may have expensive, contended local environments (shared clusters, personal cloud stacks, fixed local ports), so prefer the cheapest sufficient tier:
+- "local-light": linters + unit tests near the change are sufficient. The default.
+- "ci": the repository's CI covers this change. Before choosing this, read the CI configuration (.github/workflows/, buildkite, etc.) and confirm the jobs that exercise your changed area actually run on pull requests. Prefer this over heavyweight local verification when true.
+- "needs-env": verification truly requires a local cluster, deployed stack, or other exclusive environment. Choose only when unavoidable.
+
 Only use AskUserQuestion if a single quick answer would flip you from needs_info to do.`;
+}
+
+function verificationBlock(verification?: Verification): string {
+  switch (verification) {
+    case 'ci':
+      return `- Verification tier: CI. Run linters and fast unit tests locally, but do NOT run heavyweight local suites or spin up local environments — push the branch and open the draft PR EARLY so GitHub CI carries the expensive tests. After pushing, check "gh pr checks" and fix any failures.`;
+    case 'needs-env':
+      return `- Verification tier: needs-env. Local environments here are shared and contended — run linters, unit tests, and whatever verification you can without claiming a cluster/stack. List everything you could NOT verify in the PR body under a "Needs environment verification" section so the human knows what to exercise.`;
+    default:
+      return `- Verification tier: local-light. Run the repository's linters and the relevant unit tests for the code you touch before committing. Include "run lints" and "run tests" as subtasks.`;
+  }
 }
 
 function workPrompt(
@@ -324,6 +361,7 @@ function workPrompt(
   defaultBranch: string,
   plan?: string,
   instructions?: string,
+  verification?: Verification,
 ): string {
   return `Implement this Linear issue. You are in a dedicated git worktree on branch "${branch}".
 
@@ -333,10 +371,24 @@ Before writing any code, create ${SUBTASKS_FILE} in the worktree root: a short m
 
 Requirements:
 - Follow the repository's CLAUDE.md conventions.
-- Always run the repository's linters and the relevant tests for the code you touch before committing. Include "run lints" and "run tests" as subtasks.
+${verificationBlock(verification)}
 - Commit with clear messages referencing ${issue.identifier}.
 - Before opening the PR, spawn a subagent (Task tool) to review your full branch diff for bugs, missed edge cases, and convention violations. Address any real findings. Include this review as a subtask.
-- Push the branch and open a DRAFT PR against ${defaultBranch} with "gh pr create --draft", title prefixed with "${issue.identifier}:", body linking ${issue.url}. Always draft — a human marks it ready.
+- Push the branch and open a DRAFT PR against ${defaultBranch} with "gh pr create --draft", title prefixed with "${issue.identifier}:", body linking ${issue.url}.
+- PRs stay DRAFT: never run "gh pr ready" or mark a PR ready for review — promoting a PR out of draft is always a human decision.
 - If the change is genuinely better split into stacked PRs, create stacked branches off this one and open a draft PR per layer, each based on the previous branch.
 - If you get blocked on a decision only a human can make, use AskUserQuestion.`;
+}
+
+function ciFixPrompt(issue: LinearIssue, prs: Task['prs']): string {
+  const prList = prs.map((pr) => `#${pr.number} (${pr.headRefName})`).join(', ');
+  return `CI is failing on your draft PR(s) for ${issue.identifier}: ${prList}.
+
+Diagnose and fix:
+1. "gh pr checks <number>" to see which checks failed.
+2. "gh run view <run-id> --log-failed" for the failing logs.
+3. Fix the root cause in this worktree, run the relevant linters/tests locally, commit, and push.
+4. If a failure is clearly unrelated flaky infrastructure (not your change), do not chase it — say so in your final message and stop.
+
+PRs stay DRAFT: never run "gh pr ready" — promoting is a human decision.`;
 }
