@@ -165,6 +165,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       if (input === 'l') setBar('label');
       if (input === 's') setBar('sort');
       if (input === 'r') refresh(team);
+      if (input === 'b') ctx.navigate('board');
       if (input === ' ') {
         const issue = rows[cursor];
         if (!issue) return;
@@ -314,6 +315,7 @@ export const issuesKeys: Array<[string, string]> = [
   ['space', 'select'],
   ['enter', 'dispatch'],
   ['c', 'custom dispatch'],
+  ['b', 'board'],
   ['/', 'filter'],
   ['t', 'team'],
   ['l', 'label'],

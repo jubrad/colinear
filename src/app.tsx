@@ -4,6 +4,7 @@ import type { Dispatcher } from './core/dispatcher.js';
 import { useTasks } from './core/hooks.js';
 import { fetchTeams, fetchViewer } from './core/linear.js';
 import { startPrPolling } from './core/prs.js';
+import { store } from './core/store.js';
 import type { Config, LinearTeam } from './core/types.js';
 import { CommandBar } from './ui/CommandBar.js';
 import { AppContext, type AppCtx, type ToastKind } from './ui/context.js';
@@ -57,7 +58,10 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
   const tasks = useTasks();
 
   const keyCounter = useRef(1);
-  const [stack, setStack] = useState<StackEntry[]>([{ name: 'issues', key: 0 }]);
+  // land on the board when a previous run's tasks were restored
+  const [stack, setStack] = useState<StackEntry[]>([
+    { name: store.list().length ? 'board' : 'issues', key: 0 },
+  ]);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [toast, setToastState] = useState<{ text: string; kind: ToastKind; at: number }>();
   const [viewer, setViewer] = useState<{ id: string; displayName: string }>();
