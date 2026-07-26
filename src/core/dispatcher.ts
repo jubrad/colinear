@@ -30,8 +30,18 @@ export class Dispatcher {
   private queue: string[] = [];
   private running = 0;
   private aborts = new Map<string, AbortController>();
+  private suspended = new Set<string>();
 
   constructor(private cfg: Config) {}
+
+  /** Abort a live session but park it as `interrupted` (for interactive attach). */
+  suspend(id: string): boolean {
+    const controller = this.aborts.get(id);
+    if (!controller) return false;
+    this.suspended.add(id);
+    controller.abort();
+    return true;
+  }
 
   /** Abort a live session; task lands in error state with a cancel note. */
   cancel(id: string): boolean {
@@ -189,6 +199,11 @@ export class Dispatcher {
       notify(this.cfg, issue.identifier, 'agent finished');
       await pollPrs(this.cfg); // picks up the PR immediately and flips to pr_open
     } catch (err) {
+      if (this.suspended.delete(id)) {
+        store.update(id, { status: 'interrupted', error: undefined });
+        store.addActivity(id, 'suspended — attached in terminal; press r to hand back to colinear');
+        return;
+      }
       const cancelled = controller.signal.aborted;
       const rateLimited = /529|overloaded|rate.?limit/i.test(String(err));
       if (!cancelled && rateLimited && !store.get(id)?.retried) {
