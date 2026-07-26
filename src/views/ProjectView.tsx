@@ -110,7 +110,8 @@ export function ProjectView(props: { param?: string }) {
           return next;
         });
       }
-      if (input === 'd' && picked().length) setAsking(true);
+      if (input === 'd' && picked().length) dispatch(picked());
+      if (input === 'c' && picked().length) setAsking(true);
       if (input === 'r') refresh();
       if (input === 'p' && project) ctx.navigate('plan', project.name);
       if (key.return && current && store.get(current.id)) ctx.navigate('task', current.identifier);
@@ -205,6 +206,7 @@ export function ProjectView(props: { param?: string }) {
 export const projectKeys: Array<[string, string]> = [
   ['space', 'select'],
   ['d', 'dispatch'],
+  ['c', 'custom dispatch'],
   ['p', 'plan chat'],
   ['enter', 'task detail'],
   ['r', 'refresh'],

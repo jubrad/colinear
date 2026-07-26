@@ -179,7 +179,8 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
           return next;
         });
       }
-      if (key.return && picked().length) setBar('dispatch');
+      if (key.return && picked().length) dispatch(picked());
+      if (input === 'c' && picked().length) setBar('dispatch');
     },
     { isActive: bar === null },
   );
@@ -315,6 +316,7 @@ function LabelsCell(props: { labels: Array<{ name: string; color: string }>; wid
 export const issuesKeys: Array<[string, string]> = [
   ['space', 'select'],
   ['enter', 'dispatch'],
+  ['c', 'custom dispatch'],
   ['/', 'filter'],
   ['t', 'team'],
   ['l', 'label'],
