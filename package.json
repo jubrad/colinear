@@ -4,7 +4,8 @@
   "description": "Linear + Claude Code orchestrator TUI: pick issues, dispatch agents, watch the board",
   "type": "module",
   "bin": {
-    "colinear": "dist/index.js"
+    "colinear": "dist/index.js",
+    "coli": "dist/index.js"
   },
   "scripts": {
     "dev": "tsx src/index.tsx",
