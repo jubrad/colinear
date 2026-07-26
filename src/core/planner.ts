@@ -15,6 +15,13 @@ export interface DraftSubtask {
   selected: boolean;
 }
 
+export interface PlannerSnapshot {
+  project: LinearProject;
+  messages: ChatMessage[];
+  drafts: DraftSubtask[];
+  sessionId?: string;
+}
+
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'NotebookEdit']);
 
 /**
@@ -27,6 +34,7 @@ export class Planner {
   drafts: DraftSubtask[] = [];
   busy = false;
   error?: string;
+  sessionId?: string;
 
   private q?: Query;
   private inbox: SDKUserMessage[] = [];
@@ -35,12 +43,27 @@ export class Planner {
   private turnText = '';
   private listeners = new Set<() => void>();
   private abort = new AbortController();
+  /** session id restored from a previous colinear run */
+  private resumeId?: string;
 
   constructor(
     private cfg: Config,
     readonly project: LinearProject,
     private existingIssues: LinearIssue[],
   ) {}
+
+  /** live session id, or the one carried over from a previous run */
+  get persistedSessionId(): string | undefined {
+    return this.sessionId ?? this.resumeId;
+  }
+
+  static fromSnapshot(cfg: Config, snap: PlannerSnapshot): Planner {
+    const p = new Planner(cfg, snap.project, []);
+    p.messages = snap.messages;
+    p.drafts = snap.drafts;
+    p.resumeId = snap.sessionId;
+    return p;
+  }
 
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn);
@@ -58,7 +81,8 @@ export class Planner {
     this.turnText = '';
     this.emit();
     const first = !this.q;
-    this.push(first ? `${this.seedPrompt()}\n\n${text}` : text);
+    // a resumed session already has the project context in its transcript
+    this.push(first && !this.resumeId ? `${this.seedPrompt()}\n\n${text}` : text);
     if (first) this.start();
   }
 
@@ -121,6 +145,7 @@ export class Planner {
         permissionMode: 'default',
         settingSources: ['project'],
         abortController: this.abort,
+        resume: this.resumeId,
         canUseTool: async (toolName, input) => {
           if (WRITE_TOOLS.has(toolName)) {
             return { behavior: 'deny', message: 'Planning is read-only; do not modify files.', interrupt: false };
@@ -135,6 +160,9 @@ export class Planner {
   private async consume() {
     try {
       for await (const msg of this.q!) {
+        if (msg.type === 'system' && msg.subtype === 'init') {
+          this.sessionId = msg.session_id;
+        }
         if (msg.type === 'assistant') {
           for (const block of msg.message.content) {
             if (block.type === 'text' && block.text.trim()) {
@@ -210,4 +238,23 @@ export function plannerFor(cfg: Config, project: LinearProject, issues: LinearIs
     planners.set(project.id, p);
   }
   return p;
+}
+
+export function serializePlanners(): PlannerSnapshot[] {
+  return [...planners.values()]
+    .filter((p) => p.messages.length > 0)
+    .map((p) => ({
+      project: p.project,
+      messages: p.messages,
+      drafts: p.drafts,
+      sessionId: p.persistedSessionId,
+    }));
+}
+
+export function restorePlanners(cfg: Config, snaps: PlannerSnapshot[]): void {
+  for (const snap of snaps) {
+    if (!planners.has(snap.project.id)) {
+      planners.set(snap.project.id, Planner.fromSnapshot(cfg, snap));
+    }
+  }
 }

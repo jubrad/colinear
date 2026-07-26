@@ -8,7 +8,7 @@ import { loadState, startPersistence } from './core/persist.js';
 const cfg = loadConfig();
 const dispatcher = new Dispatcher(cfg);
 
-loadState();
+loadState(cfg);
 const stopPersistence = startPersistence();
 
 // Alternate screen buffer: fill the terminal, restore the shell on exit.

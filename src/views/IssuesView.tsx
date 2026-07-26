@@ -2,6 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CustomViewSpec } from '../core/customviews.js';
 import { assignIssue, fetchFilteredIssues, fetchIssues } from '../core/linear.js';
+import { getUiState, setUiState } from '../core/persist.js';
 import { store } from '../core/store.js';
 import type { LinearIssue } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
@@ -44,7 +45,9 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const { spec } = props;
   const ctx = useColinear();
   const { cfg, teams } = ctx;
-  const [team, setTeam] = useState<string | undefined>(() => resolveTeamParam(props.param, cfg.team));
+  const [team, setTeam] = useState<string | undefined>(() =>
+    resolveTeamParam(props.param, resolveTeamParam(getUiState().team, cfg.team)),
+  );
   const [issues, setIssues] = useState<LinearIssue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -209,6 +212,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
     if (bar === 'team' && pick) {
       const next = resolveTeamParam(pick, undefined);
       setTeam(next);
+      setUiState({ team: next ?? 'mine' }); // survives restarts
       refresh(next);
     }
     if (bar === 'label' && pick) {

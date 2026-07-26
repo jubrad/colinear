@@ -1,21 +1,45 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { STATE_DIR, log } from './log.js';
+import { restorePlanners, serializePlanners, type PlannerSnapshot } from './planner.js';
 import { store } from './store.js';
-import type { Task, TaskStatus } from './types.js';
+import type { Config, Task, TaskStatus } from './types.js';
 
 const STATE_FILE = join(STATE_DIR, 'state.json');
 const LIVE_STATUSES: TaskStatus[] = ['queued', 'triage', 'working', 'checks', 'needs_input'];
 
 type PersistedTask = Omit<Task, 'question'>;
 
-function serialize(): string {
-  const tasks: PersistedTask[] = store.list().map(({ question: _q, ...rest }) => rest);
-  return JSON.stringify({ version: 1, tasks }, null, 2);
+export interface UiState {
+  /** last picker team: 'mine', '*', or a team key */
+  team?: string;
 }
 
-/** Load persisted tasks; anything that was mid-flight comes back as `interrupted`. */
-export function loadState(): void {
+interface PersistedState {
+  version: number;
+  tasks?: PersistedTask[];
+  planners?: PlannerSnapshot[];
+  ui?: UiState;
+}
+
+let uiState: UiState = {};
+
+export function getUiState(): UiState {
+  return uiState;
+}
+
+export function setUiState(patch: Partial<UiState>): void {
+  Object.assign(uiState, patch);
+}
+
+function serialize(): string {
+  const tasks: PersistedTask[] = store.list().map(({ question: _q, ...rest }) => rest);
+  const state: PersistedState = { version: 2, tasks, planners: serializePlanners(), ui: uiState };
+  return JSON.stringify(state, null, 2);
+}
+
+/** Load persisted state; anything that was mid-flight comes back as `interrupted`. */
+export function loadState(cfg: Config): void {
   let raw: string;
   try {
     raw = readFileSync(STATE_FILE, 'utf8');
@@ -23,7 +47,7 @@ export function loadState(): void {
     return;
   }
   try {
-    const data = JSON.parse(raw) as { tasks?: PersistedTask[] };
+    const data = JSON.parse(raw) as PersistedState;
     for (const t of data.tasks ?? []) {
       const status: TaskStatus = LIVE_STATUSES.includes(t.status) ? 'interrupted' : t.status;
       store.upsert({ ...t, status, question: undefined });
@@ -31,12 +55,18 @@ export function loadState(): void {
         store.addActivity(t.issue.id, 'colinear restarted — press r to resume');
       }
     }
+    restorePlanners(cfg, data.planners ?? []);
+    uiState = data.ui ?? {};
   } catch (err) {
     log(`state load failed: ${err}`);
   }
 }
 
-/** Persist on every store change, debounced; atomic rename so a crash can't torch state. */
+/**
+ * Persist on store changes (debounced), on a slow heartbeat (catches planner
+ * chats and UI prefs, which live outside the store), and once on exit.
+ * Atomic rename so a crash can't torch state.
+ */
 export function startPersistence(): () => void {
   mkdirSync(STATE_DIR, { recursive: true });
   let timer: NodeJS.Timeout | undefined;
@@ -53,8 +83,10 @@ export function startPersistence(): () => void {
     clearTimeout(timer);
     timer = setTimeout(flush, 500);
   });
+  const heartbeat = setInterval(flush, 10_000);
   return () => {
     clearTimeout(timer);
+    clearInterval(heartbeat);
     unsubscribe();
     flush();
   };
