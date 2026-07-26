@@ -23,6 +23,6 @@ export interface AppCtx {
 
 export const AppContext = createContext<AppCtx>(null as unknown as AppCtx);
 
-export function useForeman(): AppCtx {
+export function useColinear(): AppCtx {
   return useContext(AppContext);
 }

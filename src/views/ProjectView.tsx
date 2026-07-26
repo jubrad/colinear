@@ -5,7 +5,7 @@ import { assignIssue, fetchProjectIssues, fetchProjects } from '../core/linear.j
 import { store } from '../core/store.js';
 import type { LinearIssue, LinearProject } from '../core/types.js';
 import { CommandBar, fuzzyMatch } from '../ui/CommandBar.js';
-import { useForeman } from '../ui/context.js';
+import { useColinear } from '../ui/context.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { projectCache } from './ProjectsView.js';
 
@@ -23,7 +23,7 @@ const STATE_COLUMNS: StateColumn[] = [
 ];
 
 export function ProjectView(props: { param?: string }) {
-  const ctx = useForeman();
+  const ctx = useColinear();
   useTasks(); // re-render on task changes so dispatched-status chips stay live
   const [project, setProject] = useState<LinearProject>();
   const [issues, setIssues] = useState<LinearIssue[]>([]);

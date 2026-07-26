@@ -182,7 +182,7 @@ export class Planner {
     const existing = this.existingIssues
       .map((i) => `- ${i.identifier} [${i.stateName}] ${i.title}`)
       .join('\n');
-    return `You are a planning assistant inside foreman, a TUI that dispatches coding agents against Linear issues. We are planning the Linear project "${this.project.name}".
+    return `You are a planning assistant inside colinear, a TUI that dispatches coding agents against Linear issues. We are planning the Linear project "${this.project.name}".
 
 Project description: ${this.project.description || '(none)'}
 Existing issues in this project:

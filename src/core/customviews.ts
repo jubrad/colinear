@@ -14,7 +14,7 @@ export interface CustomViewSpec {
   sort?: string;
 }
 
-export const VIEWS_DIR = join(homedir(), '.config', 'foreman', 'views');
+export const VIEWS_DIR = join(homedir(), '.config', 'colinear', 'views');
 
 export function loadCustomViews(): CustomViewSpec[] {
   let files: string[];

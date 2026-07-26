@@ -2,8 +2,8 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-export const STATE_DIR = join(homedir(), '.local', 'state', 'foreman');
-const LOG_FILE = join(STATE_DIR, 'foreman.log');
+export const STATE_DIR = join(homedir(), '.local', 'state', 'colinear');
+const LOG_FILE = join(STATE_DIR, 'colinear.log');
 
 let ready = false;
 

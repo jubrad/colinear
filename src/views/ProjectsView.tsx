@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchProjects } from '../core/linear.js';
 import type { LinearProject } from '../core/types.js';
 import { CommandBar, fuzzyMatch } from '../ui/CommandBar.js';
-import { useForeman } from '../ui/context.js';
+import { useColinear } from '../ui/context.js';
 import { Table, type Column } from '../ui/Table.js';
 import { theme } from '../theme.js';
 
@@ -11,7 +11,7 @@ import { theme } from '../theme.js';
 export let projectCache: LinearProject[] = [];
 
 export function ProjectsView(_props: { param?: string }) {
-  const ctx = useForeman();
+  const ctx = useColinear();
   const [projects, setProjects] = useState<LinearProject[]>(projectCache);
   const [loading, setLoading] = useState(projectCache.length === 0);
   const [error, setError] = useState<string>();

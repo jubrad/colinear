@@ -13,7 +13,7 @@ const bad = (name: string, detail: string) => {
 };
 let failures = 0;
 
-console.log('foreman doctor\n');
+console.log('colinear doctor\n');
 const cfg = loadConfig();
 
 try {

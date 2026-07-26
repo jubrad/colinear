@@ -1,10 +1,10 @@
 {
-  "name": "foreman",
+  "name": "colinear",
   "version": "0.2.0",
   "description": "Linear + Claude Code orchestrator TUI: pick issues, dispatch agents, watch the board",
   "type": "module",
   "bin": {
-    "foreman": "dist/index.js"
+    "colinear": "dist/index.js"
   },
   "scripts": {
     "dev": "tsx src/index.tsx",

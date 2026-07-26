@@ -72,7 +72,7 @@ const builtinViews: ViewDef[] = [
 
 export let views: ViewDef[] = [...builtinViews];
 
-/** (Re)load ~/.config/foreman/views/*.json into the registry. Returns count. */
+/** (Re)load ~/.config/colinear/views/*.json into the registry. Returns count. */
 export function reloadCustomViews(): number {
   const specs = loadCustomViews();
   const custom: ViewDef[] = specs.map((spec) => ({

@@ -5,7 +5,7 @@ import { useTasks } from '../core/hooks.js';
 import { postComment } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { Task, TaskStatus } from '../core/types.js';
-import { useForeman } from '../ui/context.js';
+import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
@@ -32,7 +32,7 @@ export function columnTasks(tasks: Task[]): Task[] {
 }
 
 export function BoardView(_props: { param?: string }) {
-  const ctx = useForeman();
+  const ctx = useColinear();
   const tasks = useTasks();
   const [cursorIdx, setCursorIdx] = useState(0);
   const [answering, setAnswering] = useState(false);
@@ -69,8 +69,8 @@ export function BoardView(_props: { param?: string }) {
         const v = selected.verdict;
         const body =
           v.verdict === 'too_big'
-            ? `**foreman triage: too big for a single agent.**\n\n${v.reason}\n\nSuggest creating a project and splitting this up.`
-            : `**foreman triage: needs more info.**\n\n${v.reason}`;
+            ? `**colinear triage: too big for a single agent.**\n\n${v.reason}\n\nSuggest creating a project and splitting this up.`
+            : `**colinear triage: needs more info.**\n\n${v.reason}`;
         void postComment(ctx.cfg, selected.issue.id, body)
           .then(() => {
             store.update(selected.issue.id, { escalationCommented: true });

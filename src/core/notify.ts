@@ -7,7 +7,7 @@ export function notify(cfg: Config, title: string, body: string): void {
   const esc = (s: string) => s.replace(/["\\]/g, '');
   execFile(
     'osascript',
-    ['-e', `display notification "${esc(body).slice(0, 120)}" with title "foreman" subtitle "${esc(title)}"`],
+    ['-e', `display notification "${esc(body).slice(0, 120)}" with title "colinear" subtitle "${esc(title)}"`],
     () => {},
   );
 }

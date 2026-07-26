@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
 import { theme } from '../theme.js';
 
-const LOGO = [' ⎈ foreman', '   agents on rails'];
+const LOGO = [' ⎈ colinear', '   agents on rails'];
 
 export function Header(props: {
   info: Array<[string, string]>;

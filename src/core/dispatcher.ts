@@ -13,7 +13,7 @@ import type { Config, LinearIssue, Subtask, Task, TriageVerdict } from './types.
 
 const exec = promisify(execFile);
 
-const SUBTASKS_FILE = '.foreman-subtasks.md';
+const SUBTASKS_FILE = '.colinear-subtasks.md';
 
 const TRIAGE_SCHEMA = {
   type: 'object',
@@ -167,7 +167,7 @@ export class Dispatcher {
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
       const work = await runSession({
         prompt: resumeSession
-          ? `foreman was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
+          ? `colinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
           : workPrompt(issue, branch, this.cfg.defaultBranch, plan, store.get(id)?.instructions),
         cwd: worktree,
         callbacks: this.callbacks(id),
@@ -213,7 +213,7 @@ export class Dispatcher {
     }
   }
 
-  /** Agents maintain a checkbox list in .foreman-subtasks.md; poll and mirror it onto the card. */
+  /** Agents maintain a checkbox list in .colinear-subtasks.md; poll and mirror it onto the card. */
   private pollSubtasks(id: string, worktree: string): () => void {
     const file = join(worktree, SUBTASKS_FILE);
     const read = () => {

@@ -28,7 +28,7 @@ export function loadState(): void {
       const status: TaskStatus = LIVE_STATUSES.includes(t.status) ? 'interrupted' : t.status;
       store.upsert({ ...t, status, question: undefined });
       if (status === 'interrupted') {
-        store.addActivity(t.issue.id, 'foreman restarted — press r to resume');
+        store.addActivity(t.issue.id, 'colinear restarted — press r to resume');
       }
     }
   } catch (err) {

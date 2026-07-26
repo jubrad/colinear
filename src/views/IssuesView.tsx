@@ -5,7 +5,7 @@ import { assignIssue, fetchFilteredIssues, fetchIssues } from '../core/linear.js
 import { store } from '../core/store.js';
 import type { LinearIssue } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
-import { useForeman } from '../ui/context.js';
+import { useColinear } from '../ui/context.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { theme } from '../theme.js';
 
@@ -42,7 +42,7 @@ function resolveTeamParam(param: string | undefined, fallback: string | undefine
 
 export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const { spec } = props;
-  const ctx = useForeman();
+  const ctx = useColinear();
   const { cfg, teams } = ctx;
   const [team, setTeam] = useState<string | undefined>(() => resolveTeamParam(props.param, cfg.team));
   const [issues, setIssues] = useState<LinearIssue[]>([]);

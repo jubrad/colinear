@@ -4,8 +4,8 @@ import { join } from 'node:path';
 import type { Config } from './types.js';
 
 const CONFIG_PATHS = [
-  join(homedir(), '.config', 'foreman', 'config.json'),
-  join(homedir(), '.foreman.json'),
+  join(homedir(), '.config', 'colinear', 'config.json'),
+  join(homedir(), '.colinear.json'),
 ];
 
 export function loadConfig(): Config {

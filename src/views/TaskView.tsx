@@ -3,13 +3,13 @@ import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
-import { useForeman } from '../ui/context.js';
+import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 
 /** k9s logs-style full-screen task detail; param = issue identifier. */
 export function TaskView(props: { param?: string }) {
-  const ctx = useForeman();
+  const ctx = useColinear();
   const tasks = useTasks();
   const task = useMemo(
     () => tasks.find((t) => t.issue.identifier.toLowerCase() === props.param?.toLowerCase()),

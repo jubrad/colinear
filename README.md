@@ -1,4 +1,4 @@
-# foreman
+# colinear
 
 A k9s-style TUI that runs Claude Code agents against Linear. Browse issues, dispatch agents (one git worktree each, subscription auth), watch a live kanban board, answer agent questions inline, plan projects in a chat that drafts subtask issues, and track draft PRs / stacks / CI — without leaving the terminal.
 
@@ -14,7 +14,7 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
 
 ## Config
 
-`~/.config/foreman/config.json` (or legacy `~/.foreman.json`); `LINEAR_API_KEY` env var works too:
+`~/.config/colinear/config.json` (or legacy `~/.colinear.json`); `LINEAR_API_KEY` env var works too:
 
 ```json
 {
@@ -47,7 +47,7 @@ Global: `esc` clears filters then goes back, `q` back/quit, `ctrl+c` quit. Crumb
 
 ## Custom views
 
-Drop JSON in `~/.config/foreman/views/`, then `:reload`:
+Drop JSON in `~/.config/colinear/views/`, then `:reload`:
 
 ```json
 {
@@ -66,10 +66,10 @@ Drop JSON in `~/.config/foreman/views/`, then `:reload`:
 
 Per issue: worktree off `origin/<defaultBranch>` → triage pass (read-only; JSON verdict `do`/`too_big`/`needs_info` — escalations can be posted back to Linear with `c`) → work pass (subtask checklist file drives the card's progress bar; lints + tests before commit; subagent diff review; draft PR via `gh pr create --draft`) → configured checks → PR polling with stack chaining. Linear state auto-syncs (dispatch → started, PR → In Review) unless `stateSync: false`.
 
-State persists in `~/.local/state/foreman/` — restart foreman and in-flight tasks come back as `interrupted`; `r` resumes the original session transcript. Rate-limited sessions retry once automatically. Agent questions pause the session and surface on the card/task view; answers are relayed back to the agent.
+State persists in `~/.local/state/colinear/` — restart colinear and in-flight tasks come back as `interrupted`; `r` resumes the original session transcript. Rate-limited sessions retry once automatically. Agent questions pause the session and surface on the card/task view; answers are relayed back to the agent.
 
 ## Notes
 
 - ~5+ concurrent sessions can hit subscription rate limits; default concurrency 3.
 - Worktrees are left for inspection: `git worktree remove`/`prune` when done.
-- Debug log: `~/.local/state/foreman/foreman.log`.
+- Debug log: `~/.local/state/colinear/colinear.log`.

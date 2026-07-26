@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchProjectIssues, fetchProjects } from '../core/linear.js';
 import { plannerFor, type Planner } from '../core/planner.js';
 import { fuzzyMatch } from '../ui/CommandBar.js';
-import { useForeman } from '../ui/context.js';
+import { useColinear } from '../ui/context.js';
 import { spinner } from '../ui/format.js';
 import { theme } from '../theme.js';
 import { projectCache } from './ProjectsView.js';
@@ -13,7 +13,7 @@ const ROLE_PREFIX = { user: 'you   ', assistant: 'plan  ', tool: '      ' } as c
 const ROLE_COLOR = { user: theme.selection, assistant: theme.accent, tool: theme.dim } as const;
 
 export function ChatView(props: { param?: string }) {
-  const ctx = useForeman();
+  const ctx = useColinear();
   const [planner, setPlanner] = useState<Planner>();
   const [error, setError] = useState<string>();
   const [, bump] = useState(0);
