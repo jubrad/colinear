@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
+import { assignIssue } from './linear.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
@@ -33,8 +34,13 @@ export class Dispatcher {
   private aborts = new Map<string, AbortController>();
   private suspended = new Set<string>();
   private modes = new Map<string, 'fixci'>();
+  private viewer?: { id: string; displayName: string };
 
   constructor(private cfg: Config) {}
+
+  setViewer(viewer: { id: string; displayName: string }) {
+    this.viewer = viewer;
+  }
 
   /** Dispatch a session to fix red CI on the task's draft PR(s). */
   fixCi(id: string) {
@@ -95,6 +101,14 @@ export class Dispatcher {
       };
       store.upsert(task);
       if (instructions) store.addActivity(issue.id, `instructions: ${instructions.slice(0, 100)}`);
+      // dispatch = mine + in progress, immediately (not when an agent slot frees up)
+      const viewer = this.viewer;
+      if (viewer && issue.assigneeId !== viewer.id) {
+        void assignIssue(this.cfg, issue.id, viewer.id)
+          .then(() => store.addActivity(issue.id, `assigned to ${viewer.displayName}`))
+          .catch((err) => store.addActivity(issue.id, `assign failed: ${String(err).slice(0, 80)}`));
+      }
+      void syncIssueState(this.cfg, issue, 'started');
       this.queue.push(issue.id);
     }
     this.pump();
@@ -163,7 +177,6 @@ export class Dispatcher {
 
       let plan: string | undefined;
       if (!resumeSession) {
-        void syncIssueState(this.cfg, issue, 'started');
         store.addActivity(id, 'triage pass');
         const triage = await runSession({
           prompt: triagePrompt(issue, store.get(id)?.instructions),

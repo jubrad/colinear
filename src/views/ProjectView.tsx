@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
-import { assignIssue, fetchProjectIssues, fetchProjects } from '../core/linear.js';
+import { fetchProjectIssues, fetchProjects } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { LinearIssue, LinearProject } from '../core/types.js';
 import { CommandBar, fuzzyMatch } from '../ui/CommandBar.js';
@@ -81,15 +81,8 @@ export function ProjectView(props: { param?: string }) {
     (picked: LinearIssue[], instructions?: string) => {
       const eligible = picked.filter((i) => i.stateType !== 'completed');
       if (!eligible.length) return;
+      // enqueue self-assigns and moves the Linear state to started
       ctx.dispatcher.enqueue(eligible, instructions);
-      const { viewer } = ctx;
-      if (viewer) {
-        for (const issue of eligible.filter((i) => i.assigneeId !== viewer.id)) {
-          void assignIssue(ctx.cfg, issue.id, viewer.id)
-            .then(() => store.addActivity(issue.id, `assigned to ${viewer.displayName}`))
-            .catch(() => ctx.toast(`assign failed: ${issue.identifier}`, 'err'));
-        }
-      }
       ctx.toast(`dispatched ${eligible.length}`, 'ok');
       ctx.navigate('board');
     },

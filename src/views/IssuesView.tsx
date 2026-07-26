@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CustomViewSpec } from '../core/customviews.js';
-import { assignIssue, fetchFilteredIssues, fetchIssues } from '../core/linear.js';
+import { fetchFilteredIssues, fetchIssues } from '../core/linear.js';
 import { getUiState, setUiState } from '../core/persist.js';
 import { store } from '../core/store.js';
 import type { LinearIssue } from '../core/types.js';
@@ -148,19 +148,12 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const dispatch = useCallback(
     (picked: LinearIssue[], instructions?: string) => {
       if (!picked.length) return;
+      // enqueue self-assigns and moves the Linear state to started
       ctx.dispatcher.enqueue(picked, instructions);
-      const { viewer } = ctx;
-      if (viewer) {
-        for (const issue of picked.filter((i) => i.assigneeId !== viewer.id)) {
-          void assignIssue(cfg, issue.id, viewer.id)
-            .then(() => store.addActivity(issue.id, `assigned to ${viewer.displayName}`))
-            .catch(() => ctx.toast(`assign failed: ${issue.identifier}`, 'err'));
-        }
-      }
       ctx.toast(`dispatched ${picked.length} issue${picked.length > 1 ? 's' : ''}`, 'ok');
       ctx.navigate('board');
     },
-    [ctx, cfg],
+    [ctx],
   );
 
   useInput(

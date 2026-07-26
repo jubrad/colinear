@@ -71,7 +71,10 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
 
   useEffect(() => {
     fetchViewer(cfg)
-      .then(setViewer)
+      .then((v) => {
+        setViewer(v);
+        dispatcher.setViewer(v);
+      })
       .catch(() => {});
     fetchTeams(cfg)
       .then(setTeams)
