@@ -108,7 +108,7 @@ export function ProjectsView(_props: { param?: string }) {
       if (input === 'p' && rows[cursor]) ctx.navigate('plan', rows[cursor].name);
       if (key.return && rows[cursor]) ctx.navigate('project', rows[cursor].name);
     },
-    { isActive: bar === null },
+    { isActive: bar === null && !ctx.cmdOpen },
   );
 
   const barCandidates = useMemo<Candidate[]>(() => {

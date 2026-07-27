@@ -15,6 +15,8 @@ export interface AppCtx {
   back: () => void;
   quit: () => void;
   toast: (text: string, kind?: ToastKind) => void;
+  /** true while the global : command bar is open — views must ignore input */
+  cmdOpen: boolean;
   /** views with active text inputs set this so global keys (: q esc) stand down */
   setCapture: (on: boolean) => void;
   /** view claims esc (e.g. clear filters); return true to consume, else app pops the view */

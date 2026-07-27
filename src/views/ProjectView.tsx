@@ -112,7 +112,7 @@ export function ProjectView(props: { param?: string }) {
       if (input === 'p' && project) ctx.navigate('plan', project.name);
       if (key.return && current && store.get(current.id)) ctx.navigate('task', current.identifier);
     },
-    { isActive: !asking },
+    { isActive: !asking && !ctx.cmdOpen },
   );
 
   if (loading) return <Text color={theme.warn}>Loading project…</Text>;

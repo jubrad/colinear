@@ -63,7 +63,7 @@ export function TaskView(props: { param?: string }) {
         });
       }
     },
-    { isActive: !answering },
+    { isActive: !answering && !ctx.cmdOpen },
   );
 
   if (!task) {

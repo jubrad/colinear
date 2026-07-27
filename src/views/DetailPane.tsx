@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { useState } from 'react';
+import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens } from '../ui/format.js';
 import type { Task } from '../core/types.js';
 
@@ -10,6 +11,7 @@ export function DetailPane(props: {
   onAnswerDone: () => void;
 }) {
   const { task, answering, onAnswerDone } = props;
+  const ctx = useColinear();
   const [draft, setDraft] = useState('');
 
   useInput(
@@ -21,7 +23,7 @@ export function DetailPane(props: {
         task.question.answer(task.question.options[idx]);
       }
     },
-    { isActive: Boolean(task.question) && !answering },
+    { isActive: Boolean(task.question) && !answering && !ctx.cmdOpen },
   );
 
   return (

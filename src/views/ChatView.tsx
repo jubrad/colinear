@@ -68,10 +68,13 @@ export function ChatView(props: { param?: string }) {
   );
 
   // focus toggle works from either side (TextInput ignores tab/esc)
-  useInput((_input, key) => {
-    if (key.tab) setFocus((f) => (f === 'input' ? 'drafts' : 'input'));
-    if (key.escape && focus === 'input') setFocus('drafts');
-  });
+  useInput(
+    (_input, key) => {
+      if (key.tab) setFocus((f) => (f === 'input' ? 'drafts' : 'input'));
+      if (key.escape && focus === 'input') setFocus('drafts');
+    },
+    { isActive: !ctx.cmdOpen },
+  );
 
   // drafts-focus keys
   useInput(
@@ -87,7 +90,7 @@ export function ChatView(props: { param?: string }) {
       if (input === 'A') approve(false);
       if (input === 'D') approve(true);
     },
-    { isActive: focus === 'drafts' },
+    { isActive: focus === 'drafts' && !ctx.cmdOpen },
   );
 
   const lines = useMemo(() => {

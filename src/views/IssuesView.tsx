@@ -183,7 +183,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       if (input === 'c' && picked().length) setDispatching(true);
       if (input === 'o' && rows[cursor]) openUrl(rows[cursor].url);
     },
-    { isActive: bar === null && !dispatching },
+    { isActive: bar === null && !dispatching && !ctx.cmdOpen },
   );
 
   const barCandidates = useMemo<Candidate[]>(() => {

@@ -115,6 +115,7 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
       now,
       navigate,
       back,
+      cmdOpen,
       quit: exit,
       toast: (text, kind = 'info') => setToastState({ text, kind, at: Date.now() }),
       setCapture: (on) => {
@@ -125,7 +126,7 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
         escHandlerRef.current = fn;
       },
     }),
-    [cfg, dispatcher, viewer, teams, size, now, navigate, back, exit],
+    [cfg, dispatcher, viewer, teams, size, now, navigate, back, exit, cmdOpen],
   );
 
   useInput(

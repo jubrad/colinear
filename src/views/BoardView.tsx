@@ -85,7 +85,7 @@ export function BoardView(_props: { param?: string }) {
           .catch(() => ctx.toast('Linear comment failed', 'err'));
       }
     },
-    { isActive: !answering },
+    { isActive: !answering && !ctx.cmdOpen },
   );
 
   if (!tasks.length) {
