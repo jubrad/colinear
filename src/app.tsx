@@ -191,7 +191,17 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
             />
           </Box>
         )}
-        <Box flexDirection="column" flexGrow={1} borderStyle="round" borderColor={theme.border} paddingX={1}>
+        <Box
+          flexDirection="column"
+          // hard height: flex-basis is content size in yoga, so a grown pane
+          // would otherwise push the whole app taller than the terminal and
+          // scroll the header off the top
+          height={Math.max(8, size.rows - 4 - 1 - (cmdOpen ? 4 : 0))}
+          overflow="hidden"
+          borderStyle="round"
+          borderColor={theme.border}
+          paddingX={1}
+        >
           <ViewComponent key={current.key} param={current.param} />
         </Box>
         <Crumbs

@@ -11,8 +11,9 @@ export function Header(props: {
 }) {
   const { info, keys, width, version } = props;
   // k9s layout: info block left, hotkeys middle (2 columns), logo right
-  const keyCols = 2;
-  const perCol = Math.ceil(keys.length / keyCols);
+  // cap the grid at 4 rows so header height stays constant
+  const perCol = 4;
+  const keyCols = Math.ceil(keys.length / perCol);
   const columns: Array<Array<[string, string]>> = [];
   for (let i = 0; i < keyCols; i++) columns.push(keys.slice(i * perCol, (i + 1) * perCol));
 

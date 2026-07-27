@@ -69,26 +69,55 @@ export function attachInTerminal(cfg: Config, task: Task, delayMs = 0): boolean 
 
 const ACTIVE_STATUSES = ['triage', 'working', 'checks'];
 
-/** Shared view action: suspend a live agent if needed, then open the terminal. */
+export interface PendingAttach {
+  worktree: string;
+  sessionId: string;
+  identifier: string;
+  /** transcript flush grace when a live agent was just suspended */
+  waitMs: number;
+}
+
+let pending: PendingAttach | null = null;
+
+/** index.tsx consumes this after the TUI unmounts to run claude in place. */
+export function consumePendingAttach(): PendingAttach | null {
+  const p = pending;
+  pending = null;
+  return p;
+}
+
+/**
+ * Shared view action. Default mode hands THIS terminal to claude: the TUI
+ * unmounts, `claude --resume` runs in place, and colinear re-renders when you
+ * quit claude. Config terminal: "ghostty" | "terminal" opens a window instead.
+ */
 export function attachSession(
   task: Task,
   ctx: {
     cfg: Config;
     dispatcher: { suspend(id: string): boolean };
     toast: (text: string, kind?: 'info' | 'ok' | 'err') => void;
+    quit: () => void;
   },
 ): void {
   if (!task.sessionId || !task.worktree) {
     ctx.toast('no session to attach yet', 'err');
     return;
   }
-  if (ACTIVE_STATUSES.includes(task.status)) {
-    ctx.dispatcher.suspend(task.issue.id);
-    // small delay so the SDK finishes flushing the transcript before claude opens it
-    attachInTerminal(ctx.cfg, task, 1500);
-    ctx.toast(`${task.issue.identifier}: agent suspended — opening terminal`, 'info');
-  } else {
-    attachInTerminal(ctx.cfg, task);
-    ctx.toast(`opening terminal on ${task.issue.identifier}`, 'info');
+  const active = ACTIVE_STATUSES.includes(task.status);
+  if (active) ctx.dispatcher.suspend(task.issue.id);
+
+  if (ctx.cfg.terminal === 'ghostty' || ctx.cfg.terminal === 'terminal') {
+    attachInTerminal(ctx.cfg, task, active ? 1500 : 0);
+    ctx.toast(`${task.issue.identifier}: opening terminal${active ? ' (agent suspended)' : ''}`, 'info');
+    return;
   }
+
+  pending = {
+    worktree: task.worktree,
+    sessionId: task.sessionId,
+    identifier: task.issue.identifier,
+    waitMs: active ? 1500 : 0,
+  };
+  ctx.quit();
 }
