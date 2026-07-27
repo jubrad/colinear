@@ -127,7 +127,11 @@ export function BoardView(_props: { param?: string }) {
         })}
       </Box>
       {selected && (
-        <DetailPane task={selected} answering={answering} onAnswerDone={() => setAnswering(false)} />
+        // fixed-height pane: however tall the task detail gets, it clips here
+        // instead of flex-squeezing the board columns (and their headers) away
+        <Box height={15} flexShrink={0} flexDirection="column" overflow="hidden">
+          <DetailPane task={selected} answering={answering} onAnswerDone={() => setAnswering(false)} />
+        </Box>
       )}
     </Box>
   );

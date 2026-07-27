@@ -41,10 +41,17 @@ export function attachInTerminal(cfg: Config, task: Task, delayMs = 0): boolean 
 
   setTimeout(() => {
     if (useGhostty) {
-      // opens a new Ghostty window running the attach script
-      execFile('open', ['-na', 'Ghostty.app', '--args', '-e', scriptPath], (err) => {
-        if (err) log(`ghostty attach failed for ${task.issue.identifier}: ${err}`);
-      });
+      // New Ghostty instance running the attach script. --window-save-state=never
+      // stops it restoring your existing tabs/splits into the new window.
+      // (Ghostty has no IPC/AppleScript yet, so a tab in the current window
+      // isn't scriptable — new window is the best it allows.)
+      execFile(
+        'open',
+        ['-na', 'Ghostty.app', '--args', '--window-save-state=never', '-e', scriptPath],
+        (err) => {
+          if (err) log(`ghostty attach failed for ${task.issue.identifier}: ${err}`);
+        },
+      );
     } else {
       const osa = [
         'tell application "Terminal"',
