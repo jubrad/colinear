@@ -39,7 +39,7 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
       [
         'pr', 'list',
         '--state', 'all',
-        '--limit', '100',
+        '--limit', '200',
         '--json', 'number,title,url,state,isDraft,headRefName,baseRefName,reviewDecision,statusCheckRollup',
       ],
       { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
@@ -54,9 +54,18 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
   for (const task of store.list()) {
     if (!task.branch) continue;
     if ((task.repo?.path ?? cfg.repos[0].path) !== repoPath) continue;
-    // Walk the stack: the task's PR plus anything based on it.
+    // Walk the stack: the task's PR plus anything based on it. Exact branch
+    // match first; fall back to the issue identifier in the head ref or title
+    // (agents sometimes pick their own branch names).
     const chain: GhPr[] = [];
-    const root = byHead.get(task.branch);
+    const ident = task.issue.identifier.toLowerCase();
+    const root =
+      byHead.get(task.branch) ??
+      prs.find(
+        (pr) =>
+          pr.headRefName.toLowerCase().includes(ident) ||
+          pr.title.toLowerCase().startsWith(ident),
+      );
     if (root) {
       chain.push(root);
       let frontier = [root.headRefName];
@@ -77,6 +86,8 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
       headRefName: pr.headRefName,
       baseRefName: pr.baseRefName,
     }));
+    // never wipe known PRs just because a poll window missed them
+    if (!infos.length && task.prs.length) continue;
     const hadPrs = task.prs.length > 0;
     const changed = JSON.stringify(infos) !== JSON.stringify(task.prs);
     if (changed) store.update(task.issue.id, { prs: infos });

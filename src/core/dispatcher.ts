@@ -237,8 +237,20 @@ export class Dispatcher {
         store.update(id, { checks: results });
       }
 
-      store.setStatus(id, 'done');
-      await pollPrs(this.cfg, this); // picks up the PR immediately and flips to pr_open
+      // decide the terminal status from actual PR state — setting done first
+      // caused a visible done -> pr_open flicker (and stuck-done when the PR
+      // wasn't matched)
+      await pollPrs(this.cfg, this);
+      const prs = store.get(id)?.prs ?? [];
+      if (prs.some((pr) => pr.state === 'OPEN')) {
+        store.setStatus(id, 'pr_open');
+      } else if (prs.length && prs.every((pr) => pr.state === 'MERGED')) {
+        store.setStatus(id, 'done');
+      } else if (!prs.length) {
+        store.update(id, { status: 'error', error: 'agent finished without an open PR (check activity)' });
+      } else {
+        store.setStatus(id, 'done');
+      }
       notify(this.cfg, issue.identifier, 'agent finished', store.get(id)?.prs[0]?.url ?? issue.url);
     } catch (err) {
       if (this.suspended.delete(id)) {
