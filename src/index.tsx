@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { render } from 'ink';
 import { App } from './app.js';
 import { consumePendingAction } from './core/attach.js';
-import { configPath, loadConfig } from './core/config.js';
+import { configPath, ensureConfigFile, loadConfig } from './core/config.js';
 import { Dispatcher } from './core/dispatcher.js';
 import { loadState, startPersistence } from './core/persist.js';
 
@@ -41,7 +41,8 @@ async function main() {
         stdio: 'inherit',
       });
     } else if (action.kind === 'edit-config') {
-      spawnSync(process.env.EDITOR ?? 'vi', [action.path], { stdio: 'inherit' });
+      const editPath = ensureConfigFile(cfg);
+      spawnSync(process.env.EDITOR ?? 'vi', [editPath], { stdio: 'inherit' });
       // hot-apply: cfg is shared by reference, so mutating it updates the
       // dispatcher and all views on the next render
       Object.assign(cfg, loadConfig());

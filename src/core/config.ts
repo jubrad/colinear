@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { CheckConfig, Config, RepoConfig } from './types.js';
 
 const CONFIG_PATHS = [
@@ -11,6 +11,33 @@ const CONFIG_PATHS = [
 /** the config file in use (first existing, else the preferred location) */
 export function configPath(): string {
   return CONFIG_PATHS.find((p) => existsSync(p)) ?? CONFIG_PATHS[0];
+}
+
+/** Make sure a config file exists to edit — seed it from the resolved config. */
+export function ensureConfigFile(cfg: Config): string {
+  const path = configPath();
+  if (existsSync(path)) return path;
+  const seed: Record<string, unknown> = {
+    // don't copy the key into a file when it comes from the environment
+    ...(process.env.LINEAR_API_KEY ? {} : { linearApiKey: cfg.linearApiKey }),
+    repos: cfg.repos.map(({ name, path: repoPath, defaultBranch, worktreeRoot, checks }) => ({
+      name,
+      path: repoPath,
+      defaultBranch,
+      worktreeRoot,
+      ...(checks.length ? { checks } : {}),
+    })),
+    concurrency: cfg.concurrency,
+    ...(cfg.team ? { team: cfg.team } : {}),
+    ...(cfg.model ? { model: cfg.model } : {}),
+    notifications: cfg.notifications,
+    stateSync: cfg.stateSync,
+    ciAutofix: cfg.ciAutofix,
+    ...(cfg.terminal ? { terminal: cfg.terminal } : {}),
+  };
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(seed, null, 2)}\n`);
+  return path;
 }
 
 interface RawRepo {
