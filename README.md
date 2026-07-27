@@ -19,16 +19,25 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
 ```json
 {
   "linearApiKey": "lin_api_...",
-  "repo": "~/work/cloud",
-  "defaultBranch": "main",
-  "worktreeRoot": "~/work/cloud-worktrees",
+  "repos": [
+    {
+      "name": "cloud",
+      "path": "~/work/cloud",
+      "defaultBranch": "main",
+      "worktreeRoot": "~/work/cloud-worktrees",
+      "checks": [{ "name": "fmt", "cmd": "bin/fmt --check" }]
+    },
+    { "name": "materialize", "path": "~/work/materialize" }
+  ],
   "concurrency": 3,
   "team": "CLOUD",
-  "checks": [{ "name": "fmt", "cmd": "bin/fmt --check" }],
   "notifications": true,
-  "stateSync": true
+  "stateSync": true,
+  "ciAutofix": true
 }
 ```
+
+`repos` is the allowlist: agents only ever touch these repos, and only through worktrees under each repo's `worktreeRoot` — your working copies are never modified (the main checkout only sees `git fetch` and `git worktree add`). The first entry is the default; custom dispatch (`c`) picks the repo per dispatch. Legacy single-repo fields (`repo`, `defaultBranch`, `worktreeRoot`, `checks`) still work. View and edit the live config with `:config` (`e` opens $EDITOR, changes hot-apply).
 
 `--team CLOUD` / `--team all` flags override the config.
 

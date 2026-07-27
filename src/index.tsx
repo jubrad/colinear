@@ -2,8 +2,8 @@
 import { spawnSync } from 'node:child_process';
 import { render } from 'ink';
 import { App } from './app.js';
-import { consumePendingAttach } from './core/attach.js';
-import { loadConfig } from './core/config.js';
+import { consumePendingAction } from './core/attach.js';
+import { configPath, loadConfig } from './core/config.js';
 import { Dispatcher } from './core/dispatcher.js';
 import { loadState, startPersistence } from './core/persist.js';
 
@@ -28,17 +28,25 @@ async function main() {
     await app.waitUntilExit();
     leaveAltScreen();
 
-    const attach = consumePendingAttach();
-    if (!attach) break;
-    if (attach.waitMs) {
-      console.log(`suspending ${attach.identifier}'s agent…`);
-      await sleep(attach.waitMs);
+    const action = consumePendingAction();
+    if (!action) break;
+    if (action.kind === 'attach') {
+      if (action.waitMs) {
+        console.log(`suspending ${action.identifier}'s agent…`);
+        await sleep(action.waitMs);
+      }
+      console.log(`attaching to ${action.identifier} — quit claude to return to colinear\n`);
+      spawnSync('claude', ['--resume', action.sessionId], {
+        cwd: action.worktree,
+        stdio: 'inherit',
+      });
+    } else if (action.kind === 'edit-config') {
+      spawnSync(process.env.EDITOR ?? 'vi', [action.path], { stdio: 'inherit' });
+      // hot-apply: cfg is shared by reference, so mutating it updates the
+      // dispatcher and all views on the next render
+      Object.assign(cfg, loadConfig());
+      console.log(`config reloaded from ${configPath()}`);
     }
-    console.log(`attaching to ${attach.identifier} — quit claude to return to colinear\n`);
-    spawnSync('claude', ['--resume', attach.sessionId], {
-      cwd: attach.worktree,
-      stdio: 'inherit',
-    });
   }
   stopPersistence();
 }

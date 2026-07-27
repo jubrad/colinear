@@ -1,15 +1,28 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import type { Config } from './types.js';
+import { basename, join } from 'node:path';
+import type { CheckConfig, Config, RepoConfig } from './types.js';
 
 const CONFIG_PATHS = [
   join(homedir(), '.config', 'colinear', 'config.json'),
   join(homedir(), '.colinear.json'),
 ];
 
+/** the config file in use (first existing, else the preferred location) */
+export function configPath(): string {
+  return CONFIG_PATHS.find((p) => existsSync(p)) ?? CONFIG_PATHS[0];
+}
+
+interface RawRepo {
+  name?: string;
+  path: string;
+  defaultBranch?: string;
+  worktreeRoot?: string;
+  checks?: CheckConfig[];
+}
+
 export function loadConfig(): Config {
-  let raw: Partial<Config> = {};
+  let raw: Partial<Config> & { repos?: RawRepo[] } = {};
   for (const path of CONFIG_PATHS) {
     try {
       raw = JSON.parse(readFileSync(path, 'utf8'));
@@ -27,7 +40,29 @@ export function loadConfig(): Config {
     process.exit(1);
   }
 
-  const repo = expandHome(raw.repo ?? join(homedir(), 'work', 'cloud'));
+  // repos allowlist; legacy single-repo fields feed the default entry
+  let repos: RepoConfig[] = (raw.repos ?? []).map((r) => {
+    const path = expandHome(r.path);
+    return {
+      name: r.name ?? basename(path),
+      path,
+      defaultBranch: r.defaultBranch ?? 'main',
+      worktreeRoot: expandHome(r.worktreeRoot ?? `${path}-worktrees`),
+      checks: r.checks ?? [],
+    };
+  });
+  if (!repos.length) {
+    const path = expandHome(raw.repo ?? join(homedir(), 'work', 'cloud'));
+    repos = [
+      {
+        name: basename(path),
+        path,
+        defaultBranch: raw.defaultBranch ?? 'main',
+        worktreeRoot: expandHome(raw.worktreeRoot ?? `${path}-worktrees`),
+        checks: raw.checks ?? [],
+      },
+    ];
+  }
 
   // --team FLAG (or --team=FLAG) overrides the config file
   let team = raw.team;
@@ -42,11 +77,12 @@ export function loadConfig(): Config {
     // "all" (any case) = every team, k9s-style
     team: team === undefined ? undefined : team.toLowerCase() === 'all' ? '*' : team.toUpperCase(),
     linearApiKey,
-    repo,
-    defaultBranch: raw.defaultBranch ?? 'main',
-    worktreeRoot: expandHome(raw.worktreeRoot ?? `${repo}-worktrees`),
+    repos,
+    repo: repos[0].path,
+    defaultBranch: repos[0].defaultBranch,
+    worktreeRoot: repos[0].worktreeRoot,
+    checks: repos[0].checks,
     concurrency: raw.concurrency ?? 3,
-    checks: raw.checks ?? [],
     model: raw.model,
     notifications: raw.notifications ?? true,
     stateSync: raw.stateSync ?? true,

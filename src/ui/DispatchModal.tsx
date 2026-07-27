@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { RepoConfig } from '../core/types.js';
 import { theme } from '../theme.js';
 
 const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
@@ -13,34 +14,70 @@ const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
 export interface DispatchOptions {
   instructions?: string;
   model?: string;
+  repo?: RepoConfig;
 }
 
-/** Custom-dispatch modal: free-text instructions + model tier. */
+type Field = 'instructions' | 'model' | 'repo';
+
+/** Custom-dispatch modal: instructions + model tier + target repo. */
 export function DispatchModal(props: {
   count: number;
+  repos: RepoConfig[];
   onSubmit: (opts: DispatchOptions) => void;
   onCancel: () => void;
 }) {
-  const { count, onSubmit, onCancel } = props;
+  const { count, repos, onSubmit, onCancel } = props;
   const [instructions, setInstructions] = useState('');
   const [modelIdx, setModelIdx] = useState(0);
-  const [focus, setFocus] = useState<'instructions' | 'model'>('instructions');
+  const [repoIdx, setRepoIdx] = useState(0);
+  const [focus, setFocus] = useState<Field>('instructions');
+
+  const fields = useMemo<Field[]>(
+    () => (repos.length > 1 ? ['instructions', 'model', 'repo'] : ['instructions', 'model']),
+    [repos.length],
+  );
 
   const submit = () =>
     onSubmit({
       instructions: instructions.trim() || undefined,
       model: MODEL_OPTIONS[modelIdx].value,
+      repo: repos[repoIdx],
     });
 
   useInput((input, key) => {
     if (key.escape) onCancel();
-    if (key.tab) setFocus((f) => (f === 'instructions' ? 'model' : 'instructions'));
+    if (key.tab) setFocus((f) => fields[(fields.indexOf(f) + 1) % fields.length]);
+    const cycle = (len: number, set: (fn: (i: number) => number) => void) => {
+      if (key.leftArrow || input === 'h') set((i) => (i + len - 1) % len);
+      if (key.rightArrow || input === 'l') set((i) => (i + 1) % len);
+    };
     if (focus === 'model') {
-      if (key.leftArrow || input === 'h') setModelIdx((i) => (i + MODEL_OPTIONS.length - 1) % MODEL_OPTIONS.length);
-      if (key.rightArrow || input === 'l') setModelIdx((i) => (i + 1) % MODEL_OPTIONS.length);
+      cycle(MODEL_OPTIONS.length, setModelIdx);
+      if (key.return) submit();
+    }
+    if (focus === 'repo') {
+      cycle(repos.length, setRepoIdx);
       if (key.return) submit();
     }
   });
+
+  const optionRow = (label: string, field: Field, options: string[], activeIdx: number) => (
+    <Box>
+      <Text bold color={focus === field ? theme.accent : theme.dim}>
+        {label.padEnd(14)}
+      </Text>
+      {options.map((opt, i) => (
+        <Text
+          key={opt}
+          inverse={focus === field && i === activeIdx}
+          color={i === activeIdx ? theme.selection : theme.dim}
+          bold={i === activeIdx}
+        >
+          {` ${opt} `}
+        </Text>
+      ))}
+    </Box>
+  );
 
   return (
     <Box flexDirection="column" borderStyle="double" borderColor={theme.key} paddingX={2}>
@@ -59,22 +96,9 @@ export function DispatchModal(props: {
           onSubmit={submit}
         />
       </Box>
-      <Box>
-        <Text bold color={focus === 'model' ? theme.accent : theme.dim}>
-          {'model         '}
-        </Text>
-        {MODEL_OPTIONS.map((m, i) => (
-          <Text
-            key={m.label}
-            inverse={focus === 'model' && i === modelIdx}
-            color={i === modelIdx ? theme.selection : theme.dim}
-            bold={i === modelIdx}
-          >
-            {` ${m.label} `}
-          </Text>
-        ))}
-      </Box>
-      <Text dimColor>tab: switch field · ←→: model · enter: dispatch · esc: cancel</Text>
+      {optionRow('model', 'model', MODEL_OPTIONS.map((m) => m.label), modelIdx)}
+      {repos.length > 1 && optionRow('repo', 'repo', repos.map((r) => r.name), repoIdx)}
+      <Text dimColor>tab: switch field · ←→: pick · enter: dispatch · esc: cancel</Text>
     </Box>
   );
 }

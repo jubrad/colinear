@@ -10,7 +10,7 @@ import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
 import { store } from './store.js';
-import type { Config, LinearIssue, Subtask, Task, TriageVerdict, Verification } from './types.js';
+import type { Config, LinearIssue, RepoConfig, Subtask, Task, TriageVerdict, Verification } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -85,7 +85,7 @@ export class Dispatcher {
     this.pump();
   }
 
-  enqueue(issues: LinearIssue[], opts?: { instructions?: string; model?: string }) {
+  enqueue(issues: LinearIssue[], opts?: { instructions?: string; model?: string; repo?: RepoConfig }) {
     for (const issue of issues) {
       if (store.get(issue.id)) continue;
       const task: Task = {
@@ -99,10 +99,14 @@ export class Dispatcher {
         costUsd: 0,
         instructions: opts?.instructions,
         model: opts?.model,
+        repo: (({ name, path, defaultBranch, worktreeRoot }) => ({ name, path, defaultBranch, worktreeRoot }))(
+          opts?.repo ?? this.cfg.repos[0],
+        ),
       };
       store.upsert(task);
       if (opts?.instructions) store.addActivity(issue.id, `instructions: ${opts.instructions.slice(0, 100)}`);
       if (opts?.model) store.addActivity(issue.id, `model: ${opts.model}`);
+      if (opts?.repo) store.addActivity(issue.id, `repo: ${opts.repo.name}`);
       // dispatch = mine + in progress, immediately (not when an agent slot frees up)
       const viewer = this.viewer;
       if (viewer && issue.assigneeId !== viewer.id) {
@@ -174,7 +178,8 @@ export class Dispatcher {
     try {
       store.update(id, { status: resumeSession ? 'working' : 'triage', startedAt: task.startedAt ?? Date.now(), endedAt: undefined });
       store.addActivity(id, 'creating worktree');
-      const { worktree, branch } = await this.ensureWorktree(issue);
+      const taskRepo = task.repo ?? this.cfg.repos[0];
+      const { worktree, branch } = await this.ensureWorktree(issue, taskRepo);
       store.update(id, { worktree, branch });
 
       let plan: string | undefined;
@@ -214,7 +219,7 @@ export class Dispatcher {
             ? ciFixPrompt(issue, current?.prs ?? [])
             : resumeSession
               ? `colinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
-              : workPrompt(issue, branch, this.cfg.defaultBranch, plan, current?.instructions, current?.verdict?.verification),
+              : workPrompt(issue, branch, taskRepo.defaultBranch, plan, current?.instructions, current?.verdict?.verification),
         cwd: worktree,
         callbacks: this.callbacks(id),
         model: store.get(id)?.model ?? this.cfg.model,
@@ -224,10 +229,11 @@ export class Dispatcher {
       store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + work.costUsd });
       if (work.isError) throw new Error(`work failed: ${work.errors.join('; ')}`);
 
-      if (this.cfg.checks.length) {
+      const repoChecks = this.cfg.repos.find((r) => r.path === taskRepo.path)?.checks ?? this.cfg.checks;
+      if (repoChecks.length) {
         store.setStatus(id, 'checks');
         store.addActivity(id, 'running checks');
-        const results = await runChecks(this.cfg.checks, worktree);
+        const results = await runChecks(repoChecks, worktree);
         store.update(id, { checks: results });
       }
 
@@ -292,8 +298,11 @@ export class Dispatcher {
     };
   }
 
-  private async ensureWorktree(issue: LinearIssue): Promise<{ worktree: string; branch: string }> {
-    const { repo, defaultBranch, worktreeRoot } = this.cfg;
+  private async ensureWorktree(
+    issue: LinearIssue,
+    repoCfg: { path: string; defaultBranch: string; worktreeRoot: string },
+  ): Promise<{ worktree: string; branch: string }> {
+    const { path: repo, defaultBranch, worktreeRoot } = repoCfg;
     const branch = issue.branchName || issue.identifier.toLowerCase();
     const worktree = join(worktreeRoot, issue.identifier);
     if (existsSync(worktree)) return { worktree, branch };

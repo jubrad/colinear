@@ -118,6 +118,8 @@ export interface Task {
   instructions?: string;
   /** per-dispatch model override (falls back to config model) */
   model?: string;
+  /** repo this task works on (defaults to the first configured repo) */
+  repo?: { name: string; path: string; defaultBranch: string; worktreeRoot: string };
   /** set while a CI-failure fix has been dispatched for the current red rollup */
   ciFixAttempted?: boolean;
   /** one automatic retry after a rate-limit failure */
@@ -129,9 +131,20 @@ export interface CheckConfig {
   cmd: string;
 }
 
+/** A repo agents are allowed to work on (always via worktrees, never in place). */
+export interface RepoConfig {
+  name: string;
+  path: string;
+  defaultBranch: string;
+  worktreeRoot: string;
+  checks: CheckConfig[];
+}
+
 export interface Config {
   linearApiKey: string;
-  /** absolute path to the repo agents work on */
+  /** repos agents may work on; first entry is the default */
+  repos: RepoConfig[];
+  /** absolute path to the default repo (mirror of repos[0].path) */
   repo: string;
   defaultBranch: string;
   /** where per-issue worktrees are created */

@@ -2,6 +2,7 @@ import { createElement, type ComponentType } from 'react';
 import { loadCustomViews } from '../core/customviews.js';
 import type { Candidate } from '../ui/CommandBar.js';
 import { BoardView, boardKeys } from './BoardView.js';
+import { ConfigView, configKeys } from './ConfigView.js';
 import { ChatView, chatKeys } from './ChatView.js';
 import { HelpView, helpKeys } from './HelpView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
@@ -60,6 +61,13 @@ const builtinViews: ViewDef[] = [
     describe: 'project planning chat (:plan PROJECT)',
     Component: ChatView,
     keys: chatKeys,
+  },
+  {
+    name: 'config',
+    aliases: ['cfg'],
+    describe: 'view & edit colinear config',
+    Component: ConfigView,
+    keys: configKeys,
   },
   {
     name: 'help',

@@ -69,18 +69,25 @@ export function attachInTerminal(cfg: Config, task: Task, delayMs = 0): boolean 
 
 const ACTIVE_STATUSES = ['triage', 'working', 'checks'];
 
-export interface PendingAttach {
-  worktree: string;
-  sessionId: string;
-  identifier: string;
-  /** transcript flush grace when a live agent was just suspended */
-  waitMs: number;
+export type PendingAction =
+  | {
+      kind: 'attach';
+      worktree: string;
+      sessionId: string;
+      identifier: string;
+      /** transcript flush grace when a live agent was just suspended */
+      waitMs: number;
+    }
+  | { kind: 'edit-config'; path: string };
+
+let pending: PendingAction | null = null;
+
+export function setPendingAction(action: PendingAction): void {
+  pending = action;
 }
 
-let pending: PendingAttach | null = null;
-
-/** index.tsx consumes this after the TUI unmounts to run claude in place. */
-export function consumePendingAttach(): PendingAttach | null {
+/** index.tsx consumes this after the TUI unmounts to run a child in place. */
+export function consumePendingAction(): PendingAction | null {
   const p = pending;
   pending = null;
   return p;
@@ -114,6 +121,7 @@ export function attachSession(
   }
 
   pending = {
+    kind: 'attach',
     worktree: task.worktree,
     sessionId: task.sessionId,
     identifier: task.issue.identifier,

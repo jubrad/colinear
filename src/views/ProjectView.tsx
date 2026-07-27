@@ -146,6 +146,7 @@ export function ProjectView(props: { param?: string }) {
       {asking && (
         <DispatchModal
           count={picked().length}
+          repos={ctx.cfg.repos}
           onSubmit={(opts) => {
             setAsking(false);
             dispatch(picked(), opts);

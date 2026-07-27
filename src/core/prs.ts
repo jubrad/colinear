@@ -23,8 +23,15 @@ export interface CiFixer {
   fixCi(id: string): void;
 }
 
-/** Fetch all open/merged PRs once and match them to tasks by branch. */
+/** Fetch PRs for every repo that has tasks and match them by branch. */
 export async function pollPrs(cfg: Config, fixer?: CiFixer): Promise<void> {
+  const repoPaths = new Set<string>(store.list().map((t) => t.repo?.path ?? cfg.repos[0].path));
+  for (const repoPath of repoPaths) {
+    await pollRepo(cfg, repoPath, fixer);
+  }
+}
+
+async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise<void> {
   let prs: GhPr[];
   try {
     const { stdout } = await exec(
@@ -35,7 +42,7 @@ export async function pollPrs(cfg: Config, fixer?: CiFixer): Promise<void> {
         '--limit', '100',
         '--json', 'number,title,url,state,isDraft,headRefName,baseRefName,reviewDecision,statusCheckRollup',
       ],
-      { cwd: cfg.repo, maxBuffer: 10 * 1024 * 1024 },
+      { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
     );
     prs = JSON.parse(stdout);
   } catch {
@@ -46,6 +53,7 @@ export async function pollPrs(cfg: Config, fixer?: CiFixer): Promise<void> {
 
   for (const task of store.list()) {
     if (!task.branch) continue;
+    if ((task.repo?.path ?? cfg.repos[0].path) !== repoPath) continue;
     // Walk the stack: the task's PR plus anything based on it.
     const chain: GhPr[] = [];
     const root = byHead.get(task.branch);

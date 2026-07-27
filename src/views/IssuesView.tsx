@@ -262,6 +262,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       {dispatching && (
         <DispatchModal
           count={picked().length}
+          repos={ctx.cfg.repos}
           onSubmit={(opts) => {
             setDispatching(false);
             dispatch(picked(), opts);
