@@ -44,7 +44,7 @@ export function DetailPane(props: {
       {task.verdict && (
         <Text>
           verdict <Text bold>{task.verdict.verdict}</Text>: {task.verdict.reason.slice(0, 200)}
-          {task.status === 'escalated' && !task.escalationCommented && (
+          {task.verdict.verdict !== 'do' && !task.escalationCommented && (
             <Text color="yellow"> — press c to post to Linear</Text>
           )}
           {task.escalationCommented && <Text color="green"> (posted to Linear)</Text>}

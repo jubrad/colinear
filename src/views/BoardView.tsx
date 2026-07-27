@@ -23,7 +23,7 @@ const COLUMNS: BoardColumn[] = [
   { title: 'Needs Input', statuses: ['needs_input'] },
   { title: 'PR Open', statuses: ['pr_open'] },
   { title: 'Done', statuses: ['done'] },
-  { title: 'Escalated', statuses: ['escalated', 'error'] },
+  { title: 'Failed', statuses: ['escalated', 'error'] },
 ];
 
 const ACTIVE_STATUSES: TaskStatus[] = ['triage', 'working', 'checks'];
@@ -58,7 +58,7 @@ export function BoardView(_props: { param?: string }) {
       if (input === 'x' && selected) {
         if (ctx.dispatcher.cancel(selected.issue.id)) ctx.toast(`cancelling ${selected.issue.identifier}`, 'info');
       }
-      if (input === 'r' && selected && ['interrupted', 'error', 'escalated'].includes(selected.status)) {
+      if (input === 'r' && selected && !selected.question) {
         ctx.dispatcher.resume(selected.issue.id);
         ctx.toast(`requeued ${selected.issue.identifier}`, 'ok');
       }
@@ -72,7 +72,7 @@ export function BoardView(_props: { param?: string }) {
         execFile('open', [selected.issue.url], () => {});
         ctx.toast(`opened ${selected.issue.identifier} in Linear`, 'info');
       }
-      if (input === 'c' && selected?.status === 'escalated' && selected.verdict && !selected.escalationCommented) {
+      if (input === 'c' && selected?.verdict && selected.verdict.verdict !== 'do' && !selected.question && !selected.escalationCommented) {
         const v = selected.verdict;
         const body =
           v.verdict === 'too_big'

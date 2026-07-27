@@ -78,7 +78,8 @@ export class Dispatcher {
    */
   resume(id: string) {
     const task = store.get(id);
-    if (!task || !['interrupted', 'error', 'escalated'].includes(task.status)) return;
+    if (!task || !['interrupted', 'error', 'escalated', 'needs_input'].includes(task.status)) return;
+    if (task.question) return; // a live agent is waiting on an answer, not a restart
     store.update(id, { status: 'queued', error: undefined, endedAt: undefined });
     store.addActivity(id, task.sessionId ? 'resuming session' : 'restarting');
     this.queue.push(id);
@@ -201,9 +202,11 @@ export class Dispatcher {
         store.update(id, { verdict });
         if (verdict.verification) store.addActivity(id, `verification: ${verdict.verification}`);
         if (verdict.verdict !== 'do') {
-          store.setStatus(id, 'escalated');
-          store.addActivity(id, `escalated (${verdict.verdict}): ${verdict.reason.slice(0, 100)}`);
-          notify(this.cfg, issue.identifier, `escalated: ${verdict.verdict}`, issue.url);
+          // a too_big / needs_info verdict is a human decision — park it with
+          // the questions, not the failures
+          store.setStatus(id, 'needs_input');
+          store.addActivity(id, `needs your input (${verdict.verdict}): ${verdict.reason.slice(0, 100)}`);
+          notify(this.cfg, issue.identifier, `needs input: ${verdict.verdict}`, issue.url);
           return;
         }
         plan = verdict.plan;
