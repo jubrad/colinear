@@ -51,6 +51,7 @@ export function loadConfig(): Config {
     notifications: raw.notifications ?? true,
     stateSync: raw.stateSync ?? true,
     ciAutofix: raw.ciAutofix ?? true,
+    terminal: raw.terminal,
   };
 }
 

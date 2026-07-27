@@ -55,6 +55,7 @@ export function TaskView(props: { param?: string }) {
         ctx.toast(`requeued ${task.issue.identifier}`, 'ok');
       }
       if (input === 'o' && task.prs[0]) execFile('open', [task.prs[0].url], () => {});
+      if (input === 'O') execFile('open', [task.issue.url], () => {});
       if (input === 'd' && task.prs[0]?.isDraft) {
         execFile('gh', ['pr', 'ready', String(task.prs[0].number)], { cwd: ctx.cfg.repo }, (err) => {
           if (err) ctx.toast(`gh pr ready failed`, 'err');
@@ -207,4 +208,5 @@ export const taskKeys: Array<[string, string]> = [
   ['r', 'resume/retry'],
   ['d', 'PR ready'],
   ['o', 'open PR'],
+  ['O', 'open issue'],
 ];

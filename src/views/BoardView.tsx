@@ -67,6 +67,10 @@ export function BoardView(_props: { param?: string }) {
         execFile('open', [selected.prs[0].url], () => {});
         ctx.toast(`opened #${selected.prs[0].number}`, 'info');
       }
+      if (input === 'O' && selected) {
+        execFile('open', [selected.issue.url], () => {});
+        ctx.toast(`opened ${selected.issue.identifier} in Linear`, 'info');
+      }
       if (input === 'c' && selected?.status === 'escalated' && selected.verdict && !selected.escalationCommented) {
         const v = selected.verdict;
         const body =
@@ -99,7 +103,8 @@ export function BoardView(_props: { param?: string }) {
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      <Box gap={1} flexGrow={1}>
+      {/* overflow clip keeps tall columns from pushing card headers off-screen */}
+      <Box gap={1} flexGrow={1} overflow="hidden">
         {COLUMNS.map((col) => {
           const colTasks = tasks.filter((t) => col.statuses.includes(t.status));
           const color = STATUS_COLORS[col.statuses[0]];
@@ -212,5 +217,6 @@ export const boardKeys: Array<[string, string]> = [
   ['r', 'resume'],
   ['c', 'escalate'],
   ['o', 'open PR'],
+  ['O', 'open issue'],
   ['i', 'issues'],
 ];

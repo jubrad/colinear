@@ -2,18 +2,20 @@ import { Box, Text, useInput } from 'ink';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CustomViewSpec } from '../core/customviews.js';
 import { fetchFilteredIssues, fetchIssues } from '../core/linear.js';
+import { openUrl } from '../core/open.js';
 import { getUiState, setUiState } from '../core/persist.js';
 import { store } from '../core/store.js';
 import type { LinearIssue } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
 import { useColinear } from '../ui/context.js';
+import { DispatchModal, type DispatchOptions } from '../ui/DispatchModal.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { theme } from '../theme.js';
 
 const PRIORITY_LABELS = ['—', 'Urgent', 'High', 'Med', 'Low'];
 const PRIORITY_COLORS: Array<string | undefined> = [undefined, 'red', 'yellow', 'white', 'gray'];
 
-type BarMode = 'fuzzy' | 'team' | 'label' | 'sort' | 'dispatch';
+type BarMode = 'fuzzy' | 'team' | 'label' | 'sort';
 
 export function filterIssues(issues: LinearIssue[], query: string, labelFilters: string[]): LinearIssue[] {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -56,6 +58,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const [query, setQuery] = useState('');
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
   const [bar, setBar] = useState<BarMode | null>(null);
+  const [dispatching, setDispatching] = useState(false);
   const [sortKey, setSortKey] = useState(spec?.sort ?? 'updated');
   const [sortDesc, setSortDesc] = useState(false);
 
@@ -73,7 +76,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   );
 
   useEffect(() => refresh(team), []);
-  useEffect(() => ctx.setCapture(bar !== null), [bar]);
+  useEffect(() => ctx.setCapture(bar !== null || dispatching), [bar, dispatching]);
   useEffect(() => () => ctx.setCapture(false), []);
 
   const columns = useMemo<Array<Column<LinearIssue>>>(
@@ -146,10 +149,10 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   );
 
   const dispatch = useCallback(
-    (picked: LinearIssue[], instructions?: string) => {
+    (picked: LinearIssue[], opts?: DispatchOptions) => {
       if (!picked.length) return;
       // enqueue self-assigns and moves the Linear state to started
-      ctx.dispatcher.enqueue(picked, instructions);
+      ctx.dispatcher.enqueue(picked, opts);
       ctx.toast(`dispatched ${picked.length} issue${picked.length > 1 ? 's' : ''}`, 'ok');
       ctx.navigate('board');
     },
@@ -177,9 +180,10 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
         });
       }
       if (key.return && picked().length) dispatch(picked());
-      if (input === 'c' && picked().length) setBar('dispatch');
+      if (input === 'c' && picked().length) setDispatching(true);
+      if (input === 'o' && rows[cursor]) openUrl(rows[cursor].url);
     },
-    { isActive: bar === null },
+    { isActive: bar === null && !dispatching },
   );
 
   const barCandidates = useMemo<Candidate[]>(() => {
@@ -219,11 +223,6 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
         setSortDesc(false);
       }
     }
-    if (bar === 'dispatch') {
-      setBar(null);
-      dispatch(picked(), value.trim() || undefined);
-      return;
-    }
     setBar(null);
   };
 
@@ -260,15 +259,17 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       {bar === 'fuzzy' && (
         <CommandBar prefix="/" initial={query} onChange={setQuery} onSubmit={() => setBar(null)} onCancel={() => { setQuery(''); setBar(null); }} />
       )}
-      {bar === 'dispatch' && (
-        <CommandBar
-          prefix={`dispatch ${picked().length} ▸ instructions> `}
-          placeholder="optional — enter to dispatch, esc to cancel"
-          onSubmit={submitBar}
-          onCancel={() => setBar(null)}
+      {dispatching && (
+        <DispatchModal
+          count={picked().length}
+          onSubmit={(opts) => {
+            setDispatching(false);
+            dispatch(picked(), opts);
+          }}
+          onCancel={() => setDispatching(false)}
         />
       )}
-      {bar && bar !== 'fuzzy' && bar !== 'dispatch' && (
+      {bar && bar !== 'fuzzy' && (
         <CommandBar prefix={`${bar}> `} candidates={barCandidates} onSubmit={submitBar} onCancel={() => setBar(null)} />
       )}
       <Table
@@ -315,6 +316,7 @@ export const issuesKeys: Array<[string, string]> = [
   ['space', 'select'],
   ['enter', 'dispatch'],
   ['c', 'custom dispatch'],
+  ['o', 'open in browser'],
   ['b', 'board'],
   ['/', 'filter'],
   ['t', 'team'],

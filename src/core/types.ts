@@ -31,6 +31,7 @@ export interface LinearProject {
   targetDate?: string;
   url: string;
   teams: LinearTeam[];
+  lead?: string;
 }
 
 export interface WorkflowState {
@@ -115,6 +116,8 @@ export interface Task {
   escalationCommented?: boolean;
   /** user-provided special instructions passed to triage + work prompts */
   instructions?: string;
+  /** per-dispatch model override (falls back to config model) */
+  model?: string;
   /** set while a CI-failure fix has been dispatched for the current red rollup */
   ciFixAttempted?: boolean;
   /** one automatic retry after a rate-limit failure */
@@ -144,4 +147,6 @@ export interface Config {
   stateSync: boolean;
   /** auto-dispatch a fix session when a task's PR checks go red (default true) */
   ciAutofix: boolean;
+  /** terminal for session attach: "ghostty" | "terminal" (default: Ghostty if installed) */
+  terminal?: string;
 }

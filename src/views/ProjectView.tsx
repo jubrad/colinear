@@ -4,8 +4,10 @@ import { useTasks } from '../core/hooks.js';
 import { fetchProjectIssues, fetchProjects } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { LinearIssue, LinearProject } from '../core/types.js';
-import { CommandBar, fuzzyMatch } from '../ui/CommandBar.js';
+import { fuzzyMatch } from '../ui/CommandBar.js';
+import { openUrl } from '../core/open.js';
 import { useColinear } from '../ui/context.js';
+import { DispatchModal, type DispatchOptions } from '../ui/DispatchModal.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { projectCache } from './ProjectsView.js';
 
@@ -78,11 +80,11 @@ export function ProjectView(props: { param?: string }) {
   );
 
   const dispatch = useCallback(
-    (picked: LinearIssue[], instructions?: string) => {
+    (picked: LinearIssue[], opts?: DispatchOptions) => {
       const eligible = picked.filter((i) => i.stateType !== 'completed');
       if (!eligible.length) return;
       // enqueue self-assigns and moves the Linear state to started
-      ctx.dispatcher.enqueue(eligible, instructions);
+      ctx.dispatcher.enqueue(eligible, opts);
       ctx.toast(`dispatched ${eligible.length}`, 'ok');
       ctx.navigate('board');
     },
@@ -106,6 +108,7 @@ export function ProjectView(props: { param?: string }) {
       if (input === 'd' && picked().length) dispatch(picked());
       if (input === 'c' && picked().length) setAsking(true);
       if (input === 'r') refresh();
+      if (input === 'o' && current) openUrl(current.url);
       if (input === 'p' && project) ctx.navigate('plan', project.name);
       if (key.return && current && store.get(current.id)) ctx.navigate('task', current.identifier);
     },
@@ -141,12 +144,11 @@ export function ProjectView(props: { param?: string }) {
         </Text>
       )}
       {asking && (
-        <CommandBar
-          prefix={`dispatch ${picked().length} ▸ instructions> `}
-          placeholder="optional — enter to dispatch, esc to cancel"
-          onSubmit={(value) => {
+        <DispatchModal
+          count={picked().length}
+          onSubmit={(opts) => {
             setAsking(false);
-            dispatch(picked(), value.trim() || undefined);
+            dispatch(picked(), opts);
           }}
           onCancel={() => setAsking(false)}
         />
@@ -200,6 +202,7 @@ export const projectKeys: Array<[string, string]> = [
   ['space', 'select'],
   ['d', 'dispatch'],
   ['c', 'custom dispatch'],
+  ['o', 'open in browser'],
   ['p', 'plan chat'],
   ['enter', 'task detail'],
   ['r', 'refresh'],

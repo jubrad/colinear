@@ -81,11 +81,15 @@ export function DetailPane(props: {
 
       {task.subtasks.length > 0 && (
         <Box flexDirection="column">
-          {task.subtasks.map((s) => (
+          {/* capped: an unbounded checklist squeezes the board above off-screen */}
+          {task.subtasks.slice(0, 5).map((s) => (
             <Text key={s.text} color={s.done ? 'green' : undefined} dimColor={s.done}>
               {s.done ? '☑' : '☐'} {s.text.slice(0, 100)}
             </Text>
           ))}
+          {task.subtasks.length > 5 && (
+            <Text dimColor>… {task.subtasks.length - 5} more (enter for task view)</Text>
+          )}
         </Box>
       )}
 
@@ -104,7 +108,7 @@ export function DetailPane(props: {
       ))}
 
       <Text dimColor>── activity ──</Text>
-      {task.activity.slice(-8).map((line, i) => (
+      {task.activity.slice(-5).map((line, i) => (
         <Text key={`${i}-${line.slice(0, 10)}`} dimColor>
           {line.slice(0, 140)}
         </Text>

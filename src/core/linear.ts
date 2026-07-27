@@ -160,6 +160,7 @@ export async function fetchProjects(cfg: Config): Promise<import('./types.js').L
         targetDate?: string;
         url: string;
         teams: { nodes: Array<{ id: string; key: string; name: string }> };
+        lead?: { displayName: string } | null;
       }>;
     };
   }>(
@@ -169,11 +170,12 @@ export async function fetchProjects(cfg: Config): Promise<import('./types.js').L
         nodes {
           id name description state progress targetDate url
           teams { nodes { id key name } }
+          lead { displayName }
         }
       }
     }`,
   );
-  return data.projects.nodes.map((n) => ({ ...n, teams: n.teams.nodes }));
+  return data.projects.nodes.map((n) => ({ ...n, teams: n.teams.nodes, lead: n.lead?.displayName }));
 }
 
 export async function fetchProjectIssues(cfg: Config, projectId: string): Promise<LinearIssue[]> {

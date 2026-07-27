@@ -85,7 +85,7 @@ export class Dispatcher {
     this.pump();
   }
 
-  enqueue(issues: LinearIssue[], instructions?: string) {
+  enqueue(issues: LinearIssue[], opts?: { instructions?: string; model?: string }) {
     for (const issue of issues) {
       if (store.get(issue.id)) continue;
       const task: Task = {
@@ -97,10 +97,12 @@ export class Dispatcher {
         checks: [],
         prs: [],
         costUsd: 0,
-        instructions,
+        instructions: opts?.instructions,
+        model: opts?.model,
       };
       store.upsert(task);
-      if (instructions) store.addActivity(issue.id, `instructions: ${instructions.slice(0, 100)}`);
+      if (opts?.instructions) store.addActivity(issue.id, `instructions: ${opts.instructions.slice(0, 100)}`);
+      if (opts?.model) store.addActivity(issue.id, `model: ${opts.model}`);
       // dispatch = mine + in progress, immediately (not when an agent slot frees up)
       const viewer = this.viewer;
       if (viewer && issue.assigneeId !== viewer.id) {
@@ -183,7 +185,7 @@ export class Dispatcher {
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: TRIAGE_SCHEMA,
-          model: this.cfg.model,
+          model: store.get(id)?.model ?? this.cfg.model,
           maxTurns: 40,
           abortController: controller,
         });
@@ -215,7 +217,7 @@ export class Dispatcher {
               : workPrompt(issue, branch, this.cfg.defaultBranch, plan, current?.instructions, current?.verdict?.verification),
         cwd: worktree,
         callbacks: this.callbacks(id),
-        model: this.cfg.model,
+        model: store.get(id)?.model ?? this.cfg.model,
         resume: resumeSession,
         abortController: controller,
       });
