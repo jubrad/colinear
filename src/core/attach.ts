@@ -72,9 +72,11 @@ const ACTIVE_STATUSES = ['triage', 'working', 'checks'];
 export type PendingAction =
   | {
       kind: 'attach';
+      mode: 'claude' | 'shell';
       worktree: string;
-      sessionId: string;
+      sessionId?: string;
       identifier: string;
+      issueId: string;
       /** transcript flush grace when a live agent was just suspended */
       waitMs: number;
     }
@@ -122,10 +124,32 @@ export function attachSession(
 
   pending = {
     kind: 'attach',
+    mode: 'claude',
     worktree: task.worktree,
     sessionId: task.sessionId,
     identifier: task.issue.identifier,
+    issueId: task.issue.id,
     waitMs: active ? 1500 : 0,
+  };
+  ctx.quit();
+}
+
+/** Drop into a plain shell in the task's worktree (agent keeps running). */
+export function attachShell(
+  task: Task,
+  ctx: { toast: (text: string, kind?: 'info' | 'ok' | 'err') => void; quit: () => void },
+): void {
+  if (!task.worktree) {
+    ctx.toast('no worktree yet', 'err');
+    return;
+  }
+  pending = {
+    kind: 'attach',
+    mode: 'shell',
+    worktree: task.worktree,
+    identifier: task.issue.identifier,
+    issueId: task.issue.id,
+    waitMs: 0,
   };
   ctx.quit();
 }

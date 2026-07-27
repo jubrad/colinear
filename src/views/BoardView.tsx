@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
-import { attachSession } from '../core/attach.js';
+import { attachSession, attachShell } from '../core/attach.js';
 import { useTasks } from '../core/hooks.js';
 import { postComment } from '../core/linear.js';
 import { store } from '../core/store.js';
@@ -63,6 +63,7 @@ export function BoardView(_props: { param?: string }) {
         ctx.toast(`requeued ${selected.issue.identifier}`, 'ok');
       }
       if (input === 's' && selected) attachSession(selected, ctx);
+      if (input === 'S' && selected) attachShell(selected, ctx);
       if (input === 'o' && selected?.prs[0]) {
         execFile('open', [selected.prs[0].url], () => {});
         ctx.toast(`opened #${selected.prs[0].number}`, 'info');
@@ -217,7 +218,8 @@ export const boardKeys: Array<[string, string]> = [
   ['enter', 'task detail'],
   ['a', 'answer'],
   ['x', 'cancel'],
-  ['s', 'attach'],
+  ['s', 'attach claude'],
+  ['S', 'shell'],
   ['r', 'resume'],
   ['c', 'escalate'],
   ['o', 'open PR'],

@@ -2,7 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
-import { attachSession } from '../core/attach.js';
+import { attachSession, attachShell } from '../core/attach.js';
 import { useTasks } from '../core/hooks.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
@@ -50,6 +50,7 @@ export function TaskView(props: { param?: string }) {
         else ctx.toast('no live session to cancel', 'err');
       }
       if (input === 's') attachSession(task, ctx);
+      if (input === 'S') attachShell(task, ctx);
       if (input === 'r') {
         ctx.dispatcher.resume(task.issue.id);
         ctx.toast(`requeued ${task.issue.identifier}`, 'ok');
@@ -204,7 +205,8 @@ export const taskKeys: Array<[string, string]> = [
   ['g/G', 'top/follow'],
   ['a', 'answer'],
   ['x', 'cancel agent'],
-  ['s', 'attach terminal'],
+  ['s', 'attach claude'],
+  ['S', 'shell'],
   ['r', 'resume/retry'],
   ['d', 'PR ready'],
   ['o', 'open PR'],
