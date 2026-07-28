@@ -3,7 +3,9 @@ import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
 import { attachSession, attachShell } from '../core/attach.js';
+import { createBlocksRelation, createIssue, fetchIssuesByIds } from '../core/linear.js';
 import { useTasks } from '../core/hooks.js';
+import { store } from '../core/store.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
@@ -19,9 +21,87 @@ export function TaskView(props: { param?: string }) {
   const [scroll, setScroll] = useState<number | null>(null); // null = follow tail
   const [answering, setAnswering] = useState(false);
   const [draft, setDraft] = useState('');
+  const [planMode, setPlanMode] = useState(false);
+  const [planCursor, setPlanCursor] = useState(0);
+  const [dropped, setDropped] = useState<Set<number>>(new Set());
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => ctx.setCapture(answering), [answering]);
   useEffect(() => () => ctx.setCapture(false), []);
+
+  const approvePlan = (dispatchAfter: boolean) => {
+    const subtasks = task?.verdict?.subtasks ?? [];
+    const teamId = task?.issue.teamId;
+    if (!task || !subtasks.length || creating) return;
+    if (!teamId) return ctx.toast('parent issue has no team id — refresh issues', 'err');
+    setCreating(true);
+    void (async () => {
+      try {
+        const created = new Map<number, { id: string; identifier: string }>();
+        for (let i = 0; i < subtasks.length; i++) {
+          if (dropped.has(i)) continue;
+          const st = subtasks[i];
+          created.set(
+            i,
+            await createIssue(ctx.cfg, {
+              teamId,
+              title: st.title,
+              description: `${st.description}\n\n_Split from ${task.issue.identifier} by colinear._`,
+              priority: st.priority,
+              parentId: task.issue.id,
+            }),
+          );
+        }
+        for (const [i, child] of created) {
+          for (const dep of subtasks[i].blockedBy ?? []) {
+            const blocker = created.get(dep);
+            if (blocker) await createBlocksRelation(ctx.cfg, blocker.id, child.id);
+          }
+        }
+        const names = [...created.values()].map((c) => c.identifier);
+        store.addActivity(task.issue.id, `split into ${names.join(', ')}`);
+        store.setStatus(task.issue.id, 'done');
+        ctx.toast(`created ${names.join(', ')}`, 'ok');
+        if (dispatchAfter) {
+          const issues = await fetchIssuesByIds(ctx.cfg, [...created.values()].map((c) => c.id));
+          for (const [i, child] of created) {
+            const issue = issues.find((x) => x.id === child.id);
+            if (!issue) continue;
+            const repo = ctx.cfg.repos.find((r) => r.name === subtasks[i].repo);
+            ctx.dispatcher.enqueue([issue], { repo });
+          }
+          ctx.toast(`created + dispatched ${names.length} (dependencies queue automatically)`, 'ok');
+          ctx.navigate('board');
+        }
+      } catch (err) {
+        ctx.toast(`split failed: ${String(err).slice(0, 80)}`, 'err');
+      } finally {
+        setCreating(false);
+        setPlanMode(false);
+      }
+    })();
+  };
+
+  // plan-review keys
+  useInput(
+    (input, key) => {
+      const n = task?.verdict?.subtasks?.length ?? 0;
+      if (key.escape || input === 'q') setPlanMode(false);
+      if (key.upArrow || input === 'k') setPlanCursor((c) => Math.max(0, c - 1));
+      if (key.downArrow || input === 'j') setPlanCursor((c) => Math.min(n - 1, c + 1));
+      if (input === ' ') {
+        setDropped((prev) => {
+          const next = new Set(prev);
+          if (next.has(planCursor)) next.delete(planCursor);
+          else next.add(planCursor);
+          return next;
+        });
+      }
+      if (input === 'A') approvePlan(false);
+      if (input === 'D') approvePlan(true);
+    },
+    { isActive: planMode && !ctx.cmdOpen },
+  );
 
   const logRows = Math.max(6, ctx.size.rows - 20);
   const activity = task?.activity ?? [];
@@ -49,6 +129,7 @@ export function TaskView(props: { param?: string }) {
         if (ctx.dispatcher.cancel(task.issue.id)) ctx.toast(`cancelling ${task.issue.identifier}`, 'info');
         else ctx.toast('no live session to cancel', 'err');
       }
+      if (input === 'P' && task.verdict?.subtasks?.length) setPlanMode(true);
       if (input === 's') attachSession(task, ctx);
       if (input === 'S') attachShell(task, ctx);
       if (input === 'r') {
@@ -64,7 +145,7 @@ export function TaskView(props: { param?: string }) {
         });
       }
     },
-    { isActive: !answering && !ctx.cmdOpen },
+    { isActive: !answering && !ctx.cmdOpen && !planMode },
   );
 
   if (!task) {
@@ -108,6 +189,36 @@ export function TaskView(props: { param?: string }) {
         <Text color={theme.err} wrap="truncate">
           {task.verdict.verdict}: {task.verdict.reason}
         </Text>
+      )}
+
+      {(task.verdict?.subtasks?.length ?? 0) > 0 && (
+        <Box
+          flexDirection="column"
+          marginTop={1}
+          borderStyle="round"
+          borderColor={planMode ? theme.borderFocus : theme.border}
+          paddingX={1}
+        >
+          <Text bold color={theme.header}>
+            SPLIT PLAN ({(task.verdict!.subtasks!.length - dropped.size)}/{task.verdict!.subtasks!.length}){' '}
+            <Text dimColor>
+              {planMode
+                ? creating
+                  ? 'creating…'
+                  : 'space: toggle · A: create sub-issues · D: create + dispatch · esc: done'
+                : 'press P to review/approve'}
+            </Text>
+          </Text>
+          {task.verdict!.subtasks!.map((st, i) => (
+            <Text key={st.title} inverse={planMode && i === planCursor} wrap="truncate">
+              {dropped.has(i) ? '○' : '◉'} {st.title}
+              <Text dimColor>
+                {st.repo ? ` [${st.repo}]` : ''}
+                {st.blockedBy?.length ? ` ⛓ after #${st.blockedBy.map((d) => d + 1).join(',#')}` : ''}
+              </Text>
+            </Text>
+          ))}
+        </Box>
       )}
 
       {task.subtasks.length > 0 && (
@@ -204,6 +315,7 @@ export const taskKeys: Array<[string, string]> = [
   ['j/k', 'scroll log'],
   ['g/G', 'top/follow'],
   ['a', 'answer'],
+  ['P', 'review split plan'],
   ['x', 'cancel agent'],
   ['s', 'attach claude'],
   ['S', 'shell'],

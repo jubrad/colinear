@@ -52,9 +52,21 @@ export type TaskStatus =
   | 'done'
   | 'error'
   /** restored from a previous run while the agent was mid-flight */
-  | 'interrupted';
+  | 'interrupted'
+  /** waiting on Linear blocking issues to complete */
+  | 'blocked';
 
 export type Verification = 'local-light' | 'ci' | 'needs-env';
+
+export interface PlannedSubtask {
+  title: string;
+  description: string;
+  priority?: number;
+  /** repo name from the config allowlist */
+  repo?: string;
+  /** indices into the subtasks array of items that must finish first */
+  blockedBy?: number[];
+}
 
 export interface TriageVerdict {
   verdict: 'do' | 'too_big' | 'needs_info';
@@ -62,6 +74,8 @@ export interface TriageVerdict {
   plan?: string;
   /** how the change should be verified (drives the work-pass test strategy) */
   verification?: Verification;
+  /** too_big only: proposed single-repo sub-issues with dependencies */
+  subtasks?: PlannedSubtask[];
 }
 
 export interface PendingQuestion {
@@ -122,6 +136,8 @@ export interface Task {
   repo?: { name: string; path: string; defaultBranch: string; remote?: string; pushRemote?: string; prBase?: string; worktreeRoot: string };
   /** set while a CI-failure fix has been dispatched for the current red rollup */
   ciFixAttempted?: boolean;
+  /** unresolved Linear blockers keeping this task out of the queue */
+  blockedBy?: Array<{ id: string; identifier: string }>;
   /** one automatic retry after a rate-limit failure */
   retried?: boolean;
 }

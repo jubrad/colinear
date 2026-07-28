@@ -26,4 +26,5 @@ export const STATUS_COLORS: Record<string, string> = {
   escalated: 'red',
   error: 'red',
   interrupted: '#ff8700',
+  blocked: '#af87ff',
 };

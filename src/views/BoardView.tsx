@@ -17,7 +17,7 @@ interface BoardColumn {
 }
 
 const COLUMNS: BoardColumn[] = [
-  { title: 'Queued', statuses: ['queued', 'interrupted'] },
+  { title: 'Queued', statuses: ['queued', 'blocked', 'interrupted'] },
   { title: 'Triage', statuses: ['triage'] },
   { title: 'Working', statuses: ['working', 'checks'] },
   { title: 'Needs Input', statuses: ['needs_input'] },
@@ -173,6 +173,11 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
       {task.question && (
         <Text color={theme.info} wrap="truncate">
           ? {task.question.text}
+        </Text>
+      )}
+      {task.status === 'blocked' && task.blockedBy && (
+        <Text color={STATUS_COLORS.blocked} wrap="truncate">
+          ⛓ {task.blockedBy.map((b) => b.identifier).join(', ')}
         </Text>
       )}
       {task.verdict && task.verdict.verdict !== 'do' && (

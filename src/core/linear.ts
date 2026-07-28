@@ -194,7 +194,15 @@ export async function fetchProjectIssues(cfg: Config, projectId: string): Promis
 
 export async function createIssue(
   cfg: Config,
-  input: { teamId: string; title: string; description?: string; projectId?: string; priority?: number },
+  input: {
+    teamId: string;
+    title: string;
+    description?: string;
+    projectId?: string;
+    priority?: number;
+    /** makes the new issue a sub-issue of this parent */
+    parentId?: string;
+  },
 ): Promise<{ id: string; identifier: string }> {
   const data = await gql<{ issueCreate: { success: boolean; issue: { id: string; identifier: string } } }>(
     cfg,
@@ -226,6 +234,66 @@ export async function updateIssueState(cfg: Config, issueId: string, stateId: st
     }`,
     { issueId, stateId },
   );
+}
+
+/** blocker "blocks" blocked — a Linear blocking relation */
+export async function createBlocksRelation(cfg: Config, blockerId: string, blockedId: string): Promise<void> {
+  await gql(
+    cfg,
+    `mutation ($input: IssueRelationCreateInput!) {
+      issueRelationCreate(input: $input) { success }
+    }`,
+    { input: { issueId: blockerId, relatedIssueId: blockedId, type: 'blocks' } },
+  );
+}
+
+export async function fetchIssuesByIds(cfg: Config, ids: string[]): Promise<LinearIssue[]> {
+  if (!ids.length) return [];
+  const data = await gql<{ issues: { nodes: IssueNode[] } }>(
+    cfg,
+    `query ($ids: [ID!]) {
+      issues(first: 50, filter: { id: { in: $ids } }) { nodes { ${ISSUE_FIELDS} } }
+    }`,
+    { ids },
+  );
+  return data.issues.nodes.map(toIssue);
+}
+
+/** Unresolved issues that block this one (Linear "blocks" relations, both directions). */
+export async function fetchBlockers(
+  cfg: Config,
+  issueId: string,
+): Promise<Array<{ id: string; identifier: string; done: boolean }>> {
+  const data = await gql<{
+    issue: {
+      relations: { nodes: Array<{ type: string; relatedIssue?: RelNode | null }> };
+      inverseRelations: { nodes: Array<{ type: string; issue?: RelNode | null }> };
+    };
+  }>(
+    cfg,
+    `query ($id: String!) {
+      issue(id: $id) {
+        relations(first: 50) { nodes { type relatedIssue { id identifier state { type } } } }
+        inverseRelations(first: 50) { nodes { type issue { id identifier state { type } } } }
+      }
+    }`,
+    { id: issueId },
+  );
+  // inverseRelations of type "blocks": other issue blocks this one
+  const blockers = data.issue.inverseRelations.nodes
+    .filter((n) => n.type === 'blocks' && n.issue)
+    .map((n) => n.issue!);
+  return blockers.map((b) => ({
+    id: b.id,
+    identifier: b.identifier,
+    done: b.state.type === 'completed' || b.state.type === 'canceled',
+  }));
+}
+
+interface RelNode {
+  id: string;
+  identifier: string;
+  state: { type: string };
 }
 
 export async function fetchViewer(cfg: Config): Promise<{ id: string; displayName: string }> {

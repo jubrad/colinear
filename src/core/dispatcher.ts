@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
-import { assignIssue } from './linear.js';
+import { assignIssue, fetchBlockers } from './linear.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
@@ -23,6 +23,21 @@ const TRIAGE_SCHEMA = {
     reason: { type: 'string' },
     plan: { type: 'string' },
     verification: { type: 'string', enum: ['local-light', 'ci', 'needs-env'] },
+    subtasks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          description: { type: 'string' },
+          priority: { type: 'number' },
+          repo: { type: 'string' },
+          blockedBy: { type: 'array', items: { type: 'number' } },
+        },
+        required: ['title', 'description'],
+        additionalProperties: false,
+      },
+    },
   },
   required: ['verdict', 'reason'],
   additionalProperties: false,
@@ -36,7 +51,9 @@ export class Dispatcher {
   private modes = new Map<string, 'fixci'>();
   private viewer?: { id: string; displayName: string };
 
-  constructor(private cfg: Config) {}
+  constructor(private cfg: Config) {
+    setInterval(() => void this.recheckBlocked(), 60_000);
+  }
 
   setViewer(viewer: { id: string; displayName: string }) {
     this.viewer = viewer;
@@ -78,9 +95,9 @@ export class Dispatcher {
    */
   resume(id: string) {
     const task = store.get(id);
-    if (!task || !['interrupted', 'error', 'escalated', 'needs_input'].includes(task.status)) return;
+    if (!task || !['interrupted', 'error', 'escalated', 'needs_input', 'blocked'].includes(task.status)) return;
     if (task.question) return; // a live agent is waiting on an answer, not a restart
-    store.update(id, { status: 'queued', error: undefined, endedAt: undefined });
+    store.update(id, { status: 'queued', error: undefined, endedAt: undefined, blockedBy: undefined });
     store.addActivity(id, task.sessionId ? 'resuming session' : 'restarting');
     this.queue.push(id);
     this.pump();
@@ -116,7 +133,39 @@ export class Dispatcher {
           .catch((err) => store.addActivity(issue.id, `assign failed: ${String(err).slice(0, 80)}`));
       }
       void syncIssueState(this.cfg, issue, 'started');
-      this.queue.push(issue.id);
+      // respect Linear "blocks" relations: park behind unresolved blockers
+      void fetchBlockers(this.cfg, issue.id)
+        .catch(() => [])
+        .then((blockers) => {
+          const open = (blockers || []).filter((b) => !b.done && store.get(b.id)?.status !== 'done');
+          if (store.get(issue.id)?.status !== 'queued') return; // already picked up/cancelled
+          if (open.length) {
+            store.update(issue.id, {
+              status: 'blocked',
+              blockedBy: open.map(({ id: bid, identifier }) => ({ id: bid, identifier })),
+            });
+            store.addActivity(issue.id, `blocked by ${open.map((b) => b.identifier).join(', ')}`);
+          } else {
+            this.queue.push(issue.id);
+            this.pump();
+          }
+        });
+    }
+  }
+
+  /** Re-check blocked tasks; queue the ones whose Linear blockers finished. */
+  async recheckBlocked() {
+    for (const task of store.list().filter((t) => t.status === 'blocked')) {
+      const blockers = await fetchBlockers(this.cfg, task.issue.id).catch(() => null);
+      if (!blockers) continue;
+      const open = blockers.filter((b) => !b.done && store.get(b.id)?.status !== 'done');
+      if (open.length) {
+        store.update(task.issue.id, { blockedBy: open.map(({ id, identifier }) => ({ id, identifier })) });
+        continue;
+      }
+      store.update(task.issue.id, { status: 'queued', blockedBy: undefined });
+      store.addActivity(task.issue.id, 'blockers resolved — queued');
+      this.queue.push(task.issue.id);
     }
     this.pump();
   }
@@ -187,7 +236,7 @@ export class Dispatcher {
       if (!resumeSession) {
         store.addActivity(id, 'triage pass');
         const triage = await runSession({
-          prompt: triagePrompt(issue, store.get(id)?.instructions),
+          prompt: triagePrompt(issue, this.cfg.repos.map((r) => r.name), store.get(id)?.instructions),
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: TRIAGE_SCHEMA,
@@ -255,6 +304,7 @@ export class Dispatcher {
         store.setStatus(id, 'done');
       }
       notify(this.cfg, issue.identifier, 'agent finished', store.get(id)?.prs[0]?.url ?? issue.url);
+      void this.recheckBlocked();
     } catch (err) {
       if (this.suspended.delete(id)) {
         store.update(id, { status: 'interrupted', error: undefined });
@@ -365,7 +415,7 @@ function instructionsBlock(instructions?: string): string {
     : '';
 }
 
-function triagePrompt(issue: LinearIssue, instructions?: string): string {
+function triagePrompt(issue: LinearIssue, repoNames: string[], instructions?: string): string {
   return `You are triaging a Linear issue before implementation. Investigate the codebase (read-only — do not modify files) to judge scope.
 
 ${issueBlock(issue)}
@@ -373,7 +423,7 @@ ${instructionsBlock(instructions)}
 
 Decide one of:
 - "do": clearly scoped, a single agent can complete it with one PR (or a small stack). Include a short implementation plan.
-- "too_big": needs to be broken up into a project with multiple issues. Explain why and sketch the breakdown.
+- "too_big": needs to be broken up into multiple issues. Explain why — AND include "subtasks": an ordered array of proposed sub-issues, each completable by one agent with one PR in ONE repository. Per subtask: title (actionable, self-contained), description (context + acceptance criteria, markdown — assume the reader has not seen this issue), optional priority (1 urgent … 4 low), repo (one of: ${repoNames.join(', ')}), and blockedBy (array of zero-based indices of subtasks that must land first). The user will review, edit selection, and approve these into Linear.
 - "needs_info": the issue is ambiguous or missing decisions only a human can make. State exactly what's missing.
 
 Also decide HOW the change should be verified ("verification") — this repo may have expensive, contended local environments (shared clusters, personal cloud stacks, fixed local ports), so prefer the cheapest sufficient tier:
