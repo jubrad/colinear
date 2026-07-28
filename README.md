@@ -40,7 +40,7 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
 }
 ```
 
-- `repos` — the allowlist. Agents only ever touch these repos, and only through worktrees under each repo's `worktreeRoot`; working copies are never modified (the main checkout only sees `git fetch` and `git worktree add`). First entry is the default; custom dispatch picks per dispatch. Per repo: `defaultBranch` (worktree base, default `main`), `remote` (the upstream: worktree base + the repo PRs land in, default `origin`), `pushRemote` (where branches are pushed — set your fork here for a fork workflow, e.g. `"jubrad"`; default = `remote`), `prBase` (PR target branch, default = `defaultBranch`), `checks` (run after the work pass). In fork mode agents skip stacked PRs (they'd require pushing to the upstream). Legacy single-repo fields (`repo`, `defaultBranch`, `worktreeRoot`, `checks`) still work.
+- `repos` — the allowlist. Agents only ever touch these repos, and only through worktrees under each repo's `worktreeRoot`; working copies are never modified (the main checkout only sees `git fetch` and `git worktree add`). First entry is the default; custom dispatch picks per dispatch. Per repo: `defaultBranch` (worktree base, default `main`), `remote` (the upstream: worktree base + the repo PRs land in, default `origin`), `pushRemote` (where branches are pushed — set your fork here for a fork workflow, e.g. `"jubrad"`; default = `remote`), `prBase` (PR target branch, default = `defaultBranch`), `checks` (run after the work pass). `remote`/`pushRemote` are **git remote names** as they appear in `git remote -v` for that repo (`"mz"`, `"jubrad"`), not `owner/repo` slugs. In fork mode agents skip stacked PRs (they'd require pushing to the upstream). Legacy single-repo fields (`repo`, `defaultBranch`, `worktreeRoot`, `checks`) still work.
 - `model` — default model for agents; overridable per dispatch.
 - `stateSync` — auto-move Linear states (dispatch → In Progress, PR → In Review).
 - `ciAutofix` — dispatch a fix session when a task's PR checks go red.
@@ -95,6 +95,7 @@ Drop JSON in `~/.config/colinear/views/`, then `:reload`:
 
 ## Notes
 
+- Repos with multiple remotes need a gh default so PR polling/creation works non-interactively: `cd <repo> && gh repo set-default OWNER/REPO` (once per repo).
 - ~5+ concurrent sessions can hit subscription rate limits; default concurrency 3. Rate-limited sessions retry once after 30s.
 - Worktrees are left for inspection: `git worktree remove`/`prune` when done — but removing one orphans its session (resume will start fresh).
 - Debug log: `~/.local/state/colinear/colinear.log`.
