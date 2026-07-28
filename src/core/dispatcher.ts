@@ -100,7 +100,7 @@ export class Dispatcher {
         costUsd: 0,
         instructions: opts?.instructions,
         model: opts?.model,
-        repo: (({ name, path, defaultBranch, remote, prBase, worktreeRoot }) => ({ name, path, defaultBranch, remote, prBase, worktreeRoot }))(
+        repo: (({ name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot }) => ({ name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot }))(
           opts?.repo ?? this.cfg.repos[0],
         ),
       };
@@ -222,7 +222,7 @@ export class Dispatcher {
             ? ciFixPrompt(issue, current?.prs ?? [])
             : resumeSession
               ? `colinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
-              : workPrompt(issue, branch, taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, plan, current?.instructions, current?.verdict?.verification),
+              : workPrompt(issue, branch, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, plan, current?.instructions, current?.verdict?.verification),
         cwd: worktree,
         callbacks: this.callbacks(id),
         model: store.get(id)?.model ?? this.cfg.model,
@@ -398,12 +398,14 @@ function verificationBlock(verification?: Verification): string {
 function workPrompt(
   issue: LinearIssue,
   branch: string,
-  remote: string,
+  pushRemote: string,
+  upstreamRemote: string,
   prBase: string,
   plan?: string,
   instructions?: string,
   verification?: Verification,
 ): string {
+  const forked = pushRemote !== upstreamRemote;
   return `Implement this Linear issue. You are in a dedicated git worktree on branch "${branch}".
 
 ${issueBlock(issue)}
@@ -415,9 +417,9 @@ Requirements:
 ${verificationBlock(verification)}
 - Commit with clear messages referencing ${issue.identifier}.
 - Before opening the PR, spawn a subagent (Task tool) to review your full branch diff for bugs, missed edge cases, and convention violations. Address any real findings. Include this review as a subtask.
-- Push the branch to the "${remote}" remote and open a DRAFT PR against ${prBase} with "gh pr create --draft --base ${prBase}", title prefixed with "${issue.identifier}:", body linking ${issue.url}.
+- Push the branch to the "${pushRemote}" remote${forked ? ` (a fork — the upstream is "${upstreamRemote}")` : ''} and open a DRAFT PR against ${prBase} of the upstream repo with "gh pr create --draft --base ${prBase}"${forked ? ' (gh handles fork PRs; pass --head <fork-owner>:<branch> if it asks)' : ''}, title prefixed with "${issue.identifier}:", body linking ${issue.url}.
 - PRs stay DRAFT: never run "gh pr ready" or mark a PR ready for review — promoting a PR out of draft is always a human decision.
-- If the change is genuinely better split into stacked PRs, create stacked branches off this one and open a draft PR per layer, each based on the previous branch.
+${forked ? '- Do NOT create stacked PRs: this repo uses a fork workflow and stacked PRs require pushing to the upstream. Keep it to a single PR.' : '- If the change is genuinely better split into stacked PRs, create stacked branches off this one and open a draft PR per layer, each based on the previous branch.'}
 - If you get blocked on a decision only a human can make, use AskUserQuestion.`;
 }
 

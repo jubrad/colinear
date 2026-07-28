@@ -45,6 +45,7 @@ interface RawRepo {
   path: string;
   defaultBranch?: string;
   remote?: string;
+  pushRemote?: string;
   prBase?: string;
   worktreeRoot?: string;
   checks?: CheckConfig[];
@@ -78,6 +79,7 @@ export function loadConfig(): Config {
       path,
       defaultBranch,
       remote: r.remote ?? 'origin',
+      pushRemote: r.pushRemote ?? r.remote ?? 'origin',
       prBase: r.prBase ?? defaultBranch,
       worktreeRoot: expandHome(r.worktreeRoot ?? `${path}-worktrees`),
       checks: r.checks ?? [],
@@ -91,6 +93,7 @@ export function loadConfig(): Config {
         path,
         defaultBranch: raw.defaultBranch ?? 'main',
         remote: 'origin',
+        pushRemote: 'origin',
         prBase: raw.defaultBranch ?? 'main',
         worktreeRoot: expandHome(raw.worktreeRoot ?? `${path}-worktrees`),
         checks: raw.checks ?? [],

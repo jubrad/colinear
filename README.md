@@ -25,12 +25,10 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
       "name": "cloud",
       "path": "~/work/cloud",
       "defaultBranch": "main",
-      "remote": "origin",
-      "prBase": "main",
       "worktreeRoot": "~/work/cloud-worktrees",
       "checks": [{ "name": "fmt", "cmd": "bin/fmt --check" }]
     },
-    { "name": "materialize", "path": "~/work/materialize" }
+    { "name": "materialize", "path": "~/work/materialize", "pushRemote": "jubrad" }
   ],
   "concurrency": 3,
   "team": "CLOUD",
@@ -42,7 +40,7 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
 }
 ```
 
-- `repos` — the allowlist. Agents only ever touch these repos, and only through worktrees under each repo's `worktreeRoot`; working copies are never modified (the main checkout only sees `git fetch` and `git worktree add`). First entry is the default; custom dispatch picks per dispatch. Per repo: `defaultBranch` (worktree base, default `main`), `remote` (push target, default `origin`), `prBase` (PR target branch, default = `defaultBranch`), `checks` (run after the work pass). Legacy single-repo fields (`repo`, `defaultBranch`, `worktreeRoot`, `checks`) still work.
+- `repos` — the allowlist. Agents only ever touch these repos, and only through worktrees under each repo's `worktreeRoot`; working copies are never modified (the main checkout only sees `git fetch` and `git worktree add`). First entry is the default; custom dispatch picks per dispatch. Per repo: `defaultBranch` (worktree base, default `main`), `remote` (the upstream: worktree base + the repo PRs land in, default `origin`), `pushRemote` (where branches are pushed — set your fork here for a fork workflow, e.g. `"jubrad"`; default = `remote`), `prBase` (PR target branch, default = `defaultBranch`), `checks` (run after the work pass). In fork mode agents skip stacked PRs (they'd require pushing to the upstream). Legacy single-repo fields (`repo`, `defaultBranch`, `worktreeRoot`, `checks`) still work.
 - `model` — default model for agents; overridable per dispatch.
 - `stateSync` — auto-move Linear states (dispatch → In Progress, PR → In Review).
 - `ciAutofix` — dispatch a fix session when a task's PR checks go red.
@@ -69,7 +67,7 @@ Dispatching (enter, or `c` for the custom modal) immediately self-assigns the is
 
 1. **Worktree** off `<remote>/<defaultBranch>` under the repo's `worktreeRoot`.
 2. **Triage pass** (read-only): JSON verdict `do` / `too_big` / `needs_info` plus a **verification tier** — `local-light` (lints + unit tests), `ci` (agent confirms the CI config covers the change, then pushes the draft PR early and lets GitHub carry the heavy suites), or `needs-env` (contended local envs: verify what's possible, list the rest in the PR body). `too_big`/`needs_info` land in **Needs Input** for you to decide — `c` posts the proposed breakdown to Linear, `r` requeues after you act.
-3. **Work pass**: subtask checklist file drives the card's progress bar; lints/tests per the verification tier; subagent diff review; push to the repo's `remote`; draft PR against `prBase` via `gh pr create --draft`. Agents may stack PRs (chained by base branch, rendered as a stack). **Agents never mark PRs ready** — that's your `d`.
+3. **Work pass**: subtask checklist file drives the card's progress bar; lints/tests per the verification tier; subagent diff review; push to the repo's `pushRemote` (your fork, if configured); draft PR against `prBase` of the upstream via `gh pr create --draft`. Agents may stack PRs (chained by base branch, rendered as a stack). **Agents never mark PRs ready** — that's your `d`.
 4. **Checks** from the repo config, then PR polling: state, CI rollup, review decision (approved / changes requested / awaiting review). With `ciAutofix`, red checks dispatch a fix session (one per red rollup) that pulls the failing logs and pushes a fix.
 
 ## Sessions: attach, chat, background

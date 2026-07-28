@@ -119,7 +119,7 @@ export interface Task {
   /** per-dispatch model override (falls back to config model) */
   model?: string;
   /** repo this task works on (defaults to the first configured repo) */
-  repo?: { name: string; path: string; defaultBranch: string; remote?: string; prBase?: string; worktreeRoot: string };
+  repo?: { name: string; path: string; defaultBranch: string; remote?: string; pushRemote?: string; prBase?: string; worktreeRoot: string };
   /** set while a CI-failure fix has been dispatched for the current red rollup */
   ciFixAttempted?: boolean;
   /** one automatic retry after a rate-limit failure */
@@ -136,8 +136,10 @@ export interface RepoConfig {
   name: string;
   path: string;
   defaultBranch: string;
-  /** remote agents push to (default "origin") */
+  /** upstream remote: worktree base + the repo PRs target (default "origin") */
   remote: string;
+  /** remote branches are pushed to — your fork in a fork workflow (default: remote) */
+  pushRemote: string;
   /** branch PRs are opened against (default: defaultBranch, i.e. "main") */
   prBase: string;
   worktreeRoot: string;
