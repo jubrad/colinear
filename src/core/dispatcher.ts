@@ -100,7 +100,7 @@ export class Dispatcher {
         costUsd: 0,
         instructions: opts?.instructions,
         model: opts?.model,
-        repo: (({ name, path, defaultBranch, worktreeRoot }) => ({ name, path, defaultBranch, worktreeRoot }))(
+        repo: (({ name, path, defaultBranch, remote, prBase, worktreeRoot }) => ({ name, path, defaultBranch, remote, prBase, worktreeRoot }))(
           opts?.repo ?? this.cfg.repos[0],
         ),
       };
@@ -222,7 +222,7 @@ export class Dispatcher {
             ? ciFixPrompt(issue, current?.prs ?? [])
             : resumeSession
               ? `colinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
-              : workPrompt(issue, branch, taskRepo.defaultBranch, plan, current?.instructions, current?.verdict?.verification),
+              : workPrompt(issue, branch, taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, plan, current?.instructions, current?.verdict?.verification),
         cwd: worktree,
         callbacks: this.callbacks(id),
         model: store.get(id)?.model ?? this.cfg.model,
@@ -315,17 +315,18 @@ export class Dispatcher {
 
   private async ensureWorktree(
     issue: LinearIssue,
-    repoCfg: { path: string; defaultBranch: string; worktreeRoot: string },
+    repoCfg: { path: string; defaultBranch: string; remote?: string; worktreeRoot: string },
   ): Promise<{ worktree: string; branch: string }> {
     const { path: repo, defaultBranch, worktreeRoot } = repoCfg;
+    const remote = repoCfg.remote ?? 'origin';
     const branch = issue.branchName || issue.identifier.toLowerCase();
     const worktree = join(worktreeRoot, issue.identifier);
     if (existsSync(worktree)) return { worktree, branch };
 
     mkdirSync(worktreeRoot, { recursive: true });
-    await exec('git', ['-C', repo, 'fetch', 'origin', defaultBranch]);
+    await exec('git', ['-C', repo, 'fetch', remote, defaultBranch]);
     try {
-      await exec('git', ['-C', repo, 'worktree', 'add', worktree, '-b', branch, `origin/${defaultBranch}`]);
+      await exec('git', ['-C', repo, 'worktree', 'add', worktree, '-b', branch, `${remote}/${defaultBranch}`]);
     } catch {
       // branch already exists — attach the worktree to it instead
       await exec('git', ['-C', repo, 'worktree', 'add', worktree, branch]);
@@ -397,7 +398,8 @@ function verificationBlock(verification?: Verification): string {
 function workPrompt(
   issue: LinearIssue,
   branch: string,
-  defaultBranch: string,
+  remote: string,
+  prBase: string,
   plan?: string,
   instructions?: string,
   verification?: Verification,
@@ -413,7 +415,7 @@ Requirements:
 ${verificationBlock(verification)}
 - Commit with clear messages referencing ${issue.identifier}.
 - Before opening the PR, spawn a subagent (Task tool) to review your full branch diff for bugs, missed edge cases, and convention violations. Address any real findings. Include this review as a subtask.
-- Push the branch and open a DRAFT PR against ${defaultBranch} with "gh pr create --draft", title prefixed with "${issue.identifier}:", body linking ${issue.url}.
+- Push the branch to the "${remote}" remote and open a DRAFT PR against ${prBase} with "gh pr create --draft --base ${prBase}", title prefixed with "${issue.identifier}:", body linking ${issue.url}.
 - PRs stay DRAFT: never run "gh pr ready" or mark a PR ready for review — promoting a PR out of draft is always a human decision.
 - If the change is genuinely better split into stacked PRs, create stacked branches off this one and open a draft PR per layer, each based on the previous branch.
 - If you get blocked on a decision only a human can make, use AskUserQuestion.`;

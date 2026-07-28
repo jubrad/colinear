@@ -44,6 +44,8 @@ interface RawRepo {
   name?: string;
   path: string;
   defaultBranch?: string;
+  remote?: string;
+  prBase?: string;
   worktreeRoot?: string;
   checks?: CheckConfig[];
 }
@@ -70,10 +72,13 @@ export function loadConfig(): Config {
   // repos allowlist; legacy single-repo fields feed the default entry
   let repos: RepoConfig[] = (raw.repos ?? []).map((r) => {
     const path = expandHome(r.path);
+    const defaultBranch = r.defaultBranch ?? 'main';
     return {
       name: r.name ?? basename(path),
       path,
-      defaultBranch: r.defaultBranch ?? 'main',
+      defaultBranch,
+      remote: r.remote ?? 'origin',
+      prBase: r.prBase ?? defaultBranch,
       worktreeRoot: expandHome(r.worktreeRoot ?? `${path}-worktrees`),
       checks: r.checks ?? [],
     };
@@ -85,6 +90,8 @@ export function loadConfig(): Config {
         name: basename(path),
         path,
         defaultBranch: raw.defaultBranch ?? 'main',
+        remote: 'origin',
+        prBase: raw.defaultBranch ?? 'main',
         worktreeRoot: expandHome(raw.worktreeRoot ?? `${path}-worktrees`),
         checks: raw.checks ?? [],
       },
