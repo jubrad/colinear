@@ -130,6 +130,8 @@ export interface Task {
   escalationCommented?: boolean;
   /** user-provided special instructions passed to triage + work prompts */
   instructions?: string;
+  /** operator chose to go straight to the work pass */
+  skipTriage?: boolean;
   /** per-dispatch model override (falls back to config model) */
   model?: string;
   /** repo this task works on (defaults to the first configured repo) */

@@ -103,7 +103,10 @@ export class Dispatcher {
     this.pump();
   }
 
-  enqueue(issues: LinearIssue[], opts?: { instructions?: string; model?: string; repo?: RepoConfig }) {
+  enqueue(
+    issues: LinearIssue[],
+    opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean },
+  ) {
     for (const issue of issues) {
       if (store.get(issue.id)) continue;
       const task: Task = {
@@ -117,12 +120,14 @@ export class Dispatcher {
         costUsd: 0,
         instructions: opts?.instructions,
         model: opts?.model,
+        skipTriage: opts?.skipTriage,
         repo: (({ name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot }) => ({ name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot }))(
           opts?.repo ?? this.cfg.repos[0],
         ),
       };
       store.upsert(task);
       if (opts?.instructions) store.addActivity(issue.id, `instructions: ${opts.instructions.slice(0, 100)}`);
+      if (opts?.skipTriage) store.addActivity(issue.id, 'triage skipped by operator');
       if (opts?.model) store.addActivity(issue.id, `model: ${opts.model}`);
       if (opts?.repo) store.addActivity(issue.id, `repo: ${opts.repo.name}`);
       // dispatch = mine + in progress, immediately (not when an agent slot frees up)
@@ -226,14 +231,21 @@ export class Dispatcher {
     this.modes.delete(id);
     const resumeSession = task.sessionId && task.worktree && existsSync(task.worktree) ? task.sessionId : undefined;
     try {
-      store.update(id, { status: resumeSession ? 'working' : 'triage', startedAt: task.startedAt ?? Date.now(), endedAt: undefined });
+      store.update(id, {
+        status: resumeSession || task.skipTriage ? 'working' : 'triage',
+        startedAt: task.startedAt ?? Date.now(),
+        endedAt: undefined,
+      });
       store.addActivity(id, 'creating worktree');
       const taskRepo = task.repo ?? this.cfg.repos[0];
       const { worktree, branch } = await this.ensureWorktree(issue, taskRepo);
       store.update(id, { worktree, branch });
 
       let plan: string | undefined;
-      if (!resumeSession) {
+      if (!resumeSession && task.skipTriage) {
+        store.addActivity(id, 'work pass (triage skipped)');
+      }
+      if (!resumeSession && !task.skipTriage) {
         store.addActivity(id, 'triage pass');
         const triage = await runSession({
           prompt: triagePrompt(issue, this.cfg.repos.map((r) => r.name), store.get(id)?.instructions),
@@ -271,7 +283,7 @@ export class Dispatcher {
             ? ciFixPrompt(issue, current?.prs ?? [])
             : resumeSession
               ? `colinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
-              : workPrompt(issue, branch, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, plan, current?.instructions, current?.verdict?.verification),
+              : workPrompt(issue, branch, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, plan, current?.instructions, current?.verdict?.verification, task.skipTriage),
         cwd: worktree,
         callbacks: this.callbacks(id),
         model: store.get(id)?.model ?? this.cfg.model,
@@ -454,9 +466,13 @@ function workPrompt(
   plan?: string,
   instructions?: string,
   verification?: Verification,
+  triageSkipped?: boolean,
 ): string {
   const forked = pushRemote !== upstreamRemote;
-  return `Implement this Linear issue. You are in a dedicated git worktree on branch "${branch}".
+  const skipNote = triageSkipped
+    ? `\nNo triage pass ran for this issue (the operator skipped it). Do a brief investigation before writing code. If the issue turns out to be far larger than a single PR, or hinges on decisions only a human can make, use AskUserQuestion instead of guessing.\n`
+    : '';
+  return `Implement this Linear issue. You are in a dedicated git worktree on branch "${branch}".${skipNote}
 
 ${issueBlock(issue)}
 ${instructionsBlock(instructions)}${plan ? `\nTriage plan (from an earlier investigation pass):\n${plan}\n` : ''}

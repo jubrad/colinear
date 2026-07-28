@@ -180,6 +180,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
         });
       }
       if (key.return && picked().length) dispatch(picked());
+      if (input === 'D' && picked().length) dispatch(picked(), { skipTriage: true });
       if (input === 'c' && picked().length) setDispatching(true);
       if (input === 'o' && rows[cursor]) openUrl(rows[cursor].url);
     },
@@ -316,6 +317,7 @@ function LabelsCell(props: { labels: Array<{ name: string; color: string }>; wid
 export const issuesKeys: Array<[string, string]> = [
   ['space', 'select'],
   ['enter', 'dispatch'],
+  ['D', 'dispatch, no triage'],
   ['c', 'custom dispatch'],
   ['o', 'open in browser'],
   ['b', 'board'],

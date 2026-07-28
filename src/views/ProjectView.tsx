@@ -106,6 +106,7 @@ export function ProjectView(props: { param?: string }) {
         });
       }
       if (input === 'd' && picked().length) dispatch(picked());
+      if (input === 'D' && picked().length) dispatch(picked(), { skipTriage: true });
       if (input === 'c' && picked().length) setAsking(true);
       if (input === 'r') refresh();
       if (input === 'o' && current) openUrl(current.url);
@@ -202,6 +203,7 @@ export function ProjectView(props: { param?: string }) {
 export const projectKeys: Array<[string, string]> = [
   ['space', 'select'],
   ['d', 'dispatch'],
+  ['D', 'dispatch, no triage'],
   ['c', 'custom dispatch'],
   ['o', 'open in browser'],
   ['p', 'plan chat'],
