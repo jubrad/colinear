@@ -175,7 +175,10 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
 
   return (
     <AppContext.Provider value={ctx}>
-      <Box flexDirection="column" width={size.columns} height={size.rows} paddingX={1} overflow="hidden">
+      {/* rows - 1: Ink full-clears every frame when output height >= terminal
+          rows (equality included) — one spare row keeps it on the incremental
+          diff path, which is what stops the flicker */}
+      <Box flexDirection="column" width={size.columns} height={size.rows - 1} paddingX={1} overflow="hidden">
         <Header info={info} keys={[...viewDef.keys, ...GLOBAL_KEYS]} width={size.columns - 2} version={VERSION} />
         {cmdOpen && (
           <Box borderStyle="round" borderColor={theme.key} paddingX={1}>
@@ -204,7 +207,7 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
           // hard height: flex-basis is content size in yoga, so a grown pane
           // would otherwise push the whole app taller than the terminal and
           // scroll the header off the top
-          height={Math.max(8, size.rows - 4 - 1 - (cmdOpen ? 4 : 0))}
+          height={Math.max(8, size.rows - 4 - 2 - (cmdOpen ? 4 : 0))}
           overflow="hidden"
           borderStyle="round"
           borderColor={theme.border}
