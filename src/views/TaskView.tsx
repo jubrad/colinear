@@ -21,7 +21,10 @@ export function TaskView(props: { param?: string }) {
   const [scroll, setScroll] = useState<number | null>(null); // null = follow tail
   const [answering, setAnswering] = useState(false);
   const [draft, setDraft] = useState('');
-  const [planMode, setPlanMode] = useState(false);
+  // a parked too_big verdict is exactly why you'd open this task — land in review
+  const [planMode, setPlanMode] = useState(
+    () => Boolean(task && task.status === 'needs_input' && task.verdict?.subtasks?.length),
+  );
   const [planCursor, setPlanCursor] = useState(0);
   const [dropped, setDropped] = useState<Set<number>>(new Set());
   const [creating, setCreating] = useState(false);
