@@ -21,6 +21,8 @@ interface GhPr {
 /** Something that can dispatch a CI-fix session (the Dispatcher; injected to avoid a cycle). */
 export interface CiFixer {
   fixCi(id: string): void;
+  /** called when polling detects a task's PRs all merged, so blocked dependents free up immediately */
+  recheckBlocked?(): void;
 }
 
 /** Fetch PRs for every repo that has tasks and match them by branch. */
@@ -99,6 +101,7 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
     }
     if (infos.length && infos.every((pr) => pr.state === 'MERGED') && task.status === 'pr_open') {
       store.setStatus(task.issue.id, 'done');
+      fixer?.recheckBlocked?.(); // free dependents now, not on the next 60s tick
     }
 
     // CI babysitter: one fix session per red rollup; re-arms once checks recover
