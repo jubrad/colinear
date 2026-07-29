@@ -53,7 +53,16 @@ export class Dispatcher {
   private viewer?: { id: string; displayName: string };
 
   constructor(private cfg: Config) {
-    setInterval(() => void this.recheckBlocked(), 60_000);
+    // unref: a pending timer must never keep the process alive after quit
+    setInterval(() => void this.recheckBlocked(), 60_000).unref();
+  }
+
+  /** Abort every live session so quitting doesn't wait on (or orphan) agents. */
+  shutdown() {
+    for (const [id, controller] of this.aborts) {
+      store.addActivity(id, 'colinear quit — agent stopped (resumes with r next run)');
+      controller.abort();
+    }
   }
 
   setViewer(viewer: { id: string; displayName: string }) {

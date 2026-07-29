@@ -79,7 +79,13 @@ async function main() {
       console.log(`config reloaded from ${configPath()}`);
     }
   }
+  // abort live agents (their sessions resume with r next run), flush state,
+  // then exit hard — lingering SDK/child handles otherwise keep the event
+  // loop alive and ctrl-c appears to hang
+  dispatcher.shutdown();
+  await sleep(200); // let aborts propagate + interrupted statuses land in the store
   stopPersistence();
+  process.exit(0);
 }
 
 void main();
