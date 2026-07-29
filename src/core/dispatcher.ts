@@ -10,7 +10,7 @@ import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
 import { store } from './store.js';
-import type { Config, LinearIssue, RepoConfig, Subtask, Task, TriageVerdict, Verification } from './types.js';
+import type { Config, LinearIssue, PrInfo, RepoConfig, Subtask, Task, TriageVerdict, Verification } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -178,6 +178,9 @@ export class Dispatcher {
     if (!task || this.aborts.has(id) || this.queue.includes(id)) return false;
     // a successful triage travels with the task unless the operator asks for a redo
     const keepTriage = !opts?.retriage && task.verdict?.verdict === 'do';
+    // same repo: known/pinned PRs stay so the requeued agent adopts them;
+    // different repo: they belong to the old repo and would mislead
+    const repoChanged = repo.path !== (task.repo?.path ?? this.cfg.repos[0].path);
     store.update(id, {
       repo: { name: repo.name, path: repo.path, defaultBranch: repo.defaultBranch, remote: repo.remote, pushRemote: repo.pushRemote, prBase: repo.prBase, worktreeRoot: repo.worktreeRoot },
       status: 'queued',
@@ -188,7 +191,8 @@ export class Dispatcher {
       skipTriage: keepTriage ? true : task.skipTriage,
       subtasks: [],
       checks: [],
-      prs: [],
+      prs: repoChanged ? [] : task.prs,
+      pinnedPr: repoChanged ? undefined : task.pinnedPr,
       error: undefined,
       blockedBy: undefined,
       endedAt: undefined,
@@ -284,7 +288,13 @@ export class Dispatcher {
       });
       store.addActivity(id, 'creating worktree');
       let taskRepo = task.repo ?? this.cfg.repos[0];
-      let { worktree, branch } = await this.ensureWorktree(issue, taskRepo);
+      // adopt an existing PR (operator-pinned first, else any open one):
+      // work happens on its branch and the agent is told not to open another
+      const knownPr =
+        task.prs.find((pr) => pr.number === task.pinnedPr) ??
+        task.prs.find((pr) => pr.state === 'OPEN');
+      if (knownPr) store.addActivity(id, `adopting PR #${knownPr.number} (${knownPr.headRefName})`);
+      let { worktree, branch } = await this.ensureWorktree(issue, taskRepo, knownPr?.headRefName);
       store.update(id, { worktree, branch });
 
       let plan: string | undefined;
@@ -343,8 +353,8 @@ export class Dispatcher {
           mode === 'fixci'
             ? ciFixPrompt(issue, current?.prs ?? [])
             : resumeSession
-              ? `colinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.`
-              : workPrompt(issue, branch, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, plan, current?.instructions, current?.verdict?.verification, task.skipTriage),
+              ? `colinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
+              : workPrompt(issue, branch, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, plan, current?.instructions, current?.verdict?.verification, task.skipTriage, knownPr),
         cwd: worktree,
         callbacks: this.callbacks(id),
         model: store.get(id)?.model ?? this.cfg.model,
@@ -438,15 +448,42 @@ export class Dispatcher {
 
   private async ensureWorktree(
     issue: LinearIssue,
-    repoCfg: { path: string; defaultBranch: string; remote?: string; worktreeRoot: string },
+    repoCfg: { path: string; defaultBranch: string; remote?: string; pushRemote?: string; worktreeRoot: string },
+    /** adopt an existing PR: check out its head branch instead of a fresh one */
+    branchOverride?: string,
   ): Promise<{ worktree: string; branch: string }> {
     const { path: repo, defaultBranch, worktreeRoot } = repoCfg;
     const remote = repoCfg.remote ?? 'origin';
-    const branch = issue.branchName || issue.identifier.toLowerCase();
+    const branch = branchOverride ?? issue.branchName ?? issue.identifier.toLowerCase();
     const worktree = join(worktreeRoot, issue.identifier);
-    if (existsSync(worktree)) return { worktree, branch };
+    if (existsSync(worktree)) {
+      if (branchOverride) {
+        // adopting a PR into a pre-existing worktree: make sure it's on the PR's branch
+        const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', '--abbrev-ref', 'HEAD']).catch(() => ({ stdout: '' }));
+        if (stdout.trim() !== branchOverride) {
+          const prRemote = repoCfg.pushRemote ?? remote;
+          await exec('git', ['-C', repo, 'fetch', prRemote, branchOverride]).catch(() => {});
+          await exec('git', ['-C', worktree, 'checkout', branchOverride]).catch(async () => {
+            await exec('git', ['-C', worktree, 'checkout', '-b', branchOverride, `${prRemote}/${branchOverride}`]).catch(() => {});
+          });
+        }
+      }
+      return { worktree, branch };
+    }
 
     mkdirSync(worktreeRoot, { recursive: true });
+    if (branchOverride) {
+      // the PR's branch lives on the push remote in a fork workflow
+      const prRemote = repoCfg.pushRemote ?? remote;
+      await exec('git', ['-C', repo, 'fetch', prRemote, branchOverride]).catch(() => {});
+      try {
+        await exec('git', ['-C', repo, 'worktree', 'add', worktree, branchOverride]);
+      } catch {
+        await exec('git', ['-C', repo, 'worktree', 'add', worktree, '-b', branchOverride, `${prRemote}/${branchOverride}`]);
+      }
+      await this.excludeSubtasksFile(worktree);
+      return { worktree, branch };
+    }
     await exec('git', ['-C', repo, 'fetch', remote, defaultBranch]);
     try {
       await exec('git', ['-C', repo, 'worktree', 'add', worktree, '-b', branch, `${remote}/${defaultBranch}`]);
@@ -535,12 +572,16 @@ function workPrompt(
   instructions?: string,
   verification?: Verification,
   triageSkipped?: boolean,
+  existingPr?: PrInfo,
 ): string {
   const forked = pushRemote !== upstreamRemote;
   const skipNote = triageSkipped
     ? `\nNo triage pass ran for this issue (the operator skipped it). Do a brief investigation before writing code. If the issue turns out to be far larger than a single PR, or hinges on decisions only a human can make, use AskUserQuestion instead of guessing.\n`
     : '';
-  return `Implement this Linear issue. You are in a dedicated git worktree on branch "${branch}".${skipNote}
+  const adoptNote = existingPr
+    ? `\nA PR ALREADY EXISTS for this issue: #${existingPr.number} (${existingPr.url}), branch "${existingPr.headRefName}" — your worktree is on that branch. Start by reviewing its current diff ("gh pr view ${existingPr.number}", "git log", "git diff ${prBase}...HEAD") and ADOPT it: continue the work with additional commits pushed to this branch. Do NOT create a new branch or open another PR.\n`
+    : '';
+  return `Implement this Linear issue. You are in a dedicated git worktree on branch "${branch}".${skipNote}${adoptNote}
 
 ${issueBlock(issue)}
 ${instructionsBlock(instructions)}${plan ? `\nTriage plan (from an earlier investigation pass):\n${plan}\n` : ''}
@@ -551,7 +592,7 @@ Requirements:
 ${verificationBlock(verification)}
 - Commit with clear messages referencing ${issue.identifier}.
 - Before opening the PR, spawn a subagent (Task tool) to review your full branch diff for bugs, missed edge cases, and convention violations. Address any real findings. Include this review as a subtask.
-- Push the branch to the "${pushRemote}" remote${forked ? ` (a fork — the upstream is "${upstreamRemote}")` : ''} and open a DRAFT PR against ${prBase} of the upstream repo with "gh pr create --draft --base ${prBase}"${forked ? ' (gh handles fork PRs; pass --head <fork-owner>:<branch> if it asks)' : ''}, title prefixed with "${issue.identifier}:", body linking ${issue.url}.
+${existingPr ? `- Push further commits to the "${pushRemote}" remote branch "${existingPr.headRefName}" — they land on the existing PR #${existingPr.number}. Never open a second PR.` : `- Push the branch to the "${pushRemote}" remote${forked ? ` (a fork — the upstream is "${upstreamRemote}")` : ''} and open a DRAFT PR against ${prBase} of the upstream repo with "gh pr create --draft --base ${prBase}"${forked ? ' (gh handles fork PRs; pass --head <fork-owner>:<branch> if it asks)' : ''}, title prefixed with "${issue.identifier}:", body linking ${issue.url}.`}
 - PRs stay DRAFT: never run "gh pr ready" or mark a PR ready for review — promoting a PR out of draft is always a human decision.
 ${forked ? '- Do NOT create stacked PRs: this repo uses a fork workflow and stacked PRs require pushing to the upstream. Keep it to a single PR.' : '- If the change is genuinely better split into stacked PRs, create stacked branches off this one and open a draft PR per layer, each based on the previous branch.'}
 - If you get blocked on a decision only a human can make, use AskUserQuestion.`;
