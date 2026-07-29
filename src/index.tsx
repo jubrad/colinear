@@ -15,8 +15,24 @@ const dispatcher = new Dispatcher(cfg);
 loadState(cfg);
 const stopPersistence = startPersistence();
 
-const enterAltScreen = () => process.stdout.write('\x1b[?1049h\x1b[H');
-const leaveAltScreen = () => process.stdout.write('\x1b[?1049l');
+// Synchronized output (DEC 2026): wrap every frame Ink writes so supporting
+// terminals (iTerm2, Ghostty, Kitty, WezTerm) paint it atomically instead of
+// showing the erase-then-rewrite as a flash. Terminals without it ignore the
+// guards. Only active while the TUI owns the screen.
+const realWrite = process.stdout.write.bind(process.stdout);
+const syncWrite = ((chunk: string | Uint8Array, ...rest: unknown[]) =>
+  typeof chunk === 'string'
+    ? (realWrite as (...args: unknown[]) => boolean)(`\x1b[?2026h${chunk}\x1b[?2026l`, ...rest)
+    : (realWrite as (...args: unknown[]) => boolean)(chunk, ...rest)) as typeof process.stdout.write;
+
+const enterAltScreen = () => {
+  realWrite('\x1b[?1049h\x1b[H');
+  process.stdout.write = syncWrite;
+};
+const leaveAltScreen = () => {
+  process.stdout.write = realWrite;
+  realWrite('\x1b[?1049l');
+};
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

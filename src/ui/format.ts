@@ -40,5 +40,5 @@ export function cell(text: string, w: number): string {
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 export function spinner(now: number): string {
-  return SPINNER[Math.floor(now / 120) % SPINNER.length];
+  return SPINNER[Math.floor(now / 1000) % SPINNER.length];
 }

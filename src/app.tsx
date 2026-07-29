@@ -48,7 +48,7 @@ function useTerminalSize() {
 // NOTE: renders happen on every tick; if the tree is ever taller than the
 // terminal, Ink falls back to full-screen clears per frame (visible flicker).
 // Keep this slow-ish and keep the root Box clipped.
-function useClock(intervalMs = 500): number {
+function useClock(intervalMs = 1000): number {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), intervalMs);
