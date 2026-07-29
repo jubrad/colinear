@@ -56,10 +56,11 @@ export function EditTaskModal(props: {
   }, [hasTriage]);
 
   const submit = (requeue: boolean) => {
-    const pinNum = Number.parseInt(pin.trim(), 10);
+    // accepts "123", "#123", or a full PR URL (…/pull/123)
+    const pinMatch = pin.trim().match(/(\d+)\/?\s*$/);
     onSubmit({
       repo: repos[repoIdx],
-      pinnedPr: Number.isNaN(pinNum) ? undefined : pinNum,
+      pinnedPr: pinMatch ? Number.parseInt(pinMatch[1], 10) : undefined,
       instructions: instructions.trim() || undefined,
       model: MODEL_OPTIONS[modelIdx].value,
       retriage: !hasTriage || triageIdx === 1,
@@ -134,7 +135,7 @@ export function EditTaskModal(props: {
         edit {task.issue.identifier}
       </Text>
       {optionRow('repo', 'repo', repos.map((r) => r.name), repoIdx)}
-      {textRow('pinned PR', 'pin', pin, setPin, 'auto-match (set a number to pin)')}
+      {textRow('pinned PR', 'pin', pin, setPin, 'auto-match (number, #123, or PR URL to pin)')}
       {textRow('instructions', 'instructions', instructions, setInstructions, 'none')}
       {optionRow('model', 'model', MODEL_OPTIONS.map((m) => m.label), modelIdx)}
       {hasTriage && optionRow('on requeue', 'triage', TRIAGE_OPTIONS, triageIdx)}
