@@ -61,7 +61,7 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
   const { cfg, dispatcher } = props;
   const { exit } = useApp();
   const size = useTerminalSize();
-  const now = useClock();
+  const now = useClock(cfg.tickMs);
   const tasks = useTasks();
 
   const keyCounter = useRef(1);

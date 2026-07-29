@@ -192,6 +192,8 @@ export interface Config {
   stateSync: boolean;
   /** auto-dispatch a fix session when a task's PR checks go red (default true) */
   ciAutofix: boolean;
+  /** UI refresh tick in ms — raise it (e.g. 2000) if your terminal/mux flickers (default 1000) */
+  tickMs: number;
   /** terminal for session attach: "ghostty" | "terminal" (default: Ghostty if installed) */
   terminal?: string;
 }

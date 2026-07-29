@@ -127,6 +127,7 @@ export function loadConfig(): Config {
     notifications: raw.notifications ?? true,
     stateSync: raw.stateSync ?? true,
     ciAutofix: raw.ciAutofix ?? true,
+    tickMs: raw.tickMs ?? 1000,
     terminal: raw.terminal,
   };
 }
