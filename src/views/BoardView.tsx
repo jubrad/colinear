@@ -49,14 +49,19 @@ export function BoardView(_props: { param?: string }) {
     [tasks, store.version],
   );
 
-  // keep the cursor on a real card as tasks move between columns
+  // keep the cursor on a real card as tasks move between columns; must
+  // return the SAME object when nothing changes or this setState loops
   useEffect(() => {
     setPos((p) => {
-      if (grid[p.col]?.length) return { col: p.col, row: Math.min(p.row, grid[p.col].length - 1) };
+      if (grid[p.col]?.length) {
+        const row = Math.min(p.row, grid[p.col].length - 1);
+        return row === p.row ? p : { col: p.col, row };
+      }
       const near = grid.findIndex((g, i) => g.length && i >= p.col);
       const before = grid.map((g, i) => (g.length ? i : -1)).filter((i) => i !== -1 && i < p.col);
       const col = near !== -1 ? near : (before[before.length - 1] ?? -1);
-      return col === -1 ? { col: 0, row: 0 } : { col, row: 0 };
+      if (col === -1) return p.col === 0 && p.row === 0 ? p : { col: 0, row: 0 };
+      return col === p.col && p.row === 0 ? p : { col, row: 0 };
     });
   }, [grid]);
 
