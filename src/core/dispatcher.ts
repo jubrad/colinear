@@ -456,6 +456,13 @@ export class Dispatcher {
     const { path: repo, defaultBranch, worktreeRoot } = repoCfg;
     const remote = repoCfg.remote ?? 'origin';
     const branch = branchOverride ?? issue.branchName ?? issue.identifier.toLowerCase();
+    // git allows one checkout per branch: if some worktree (old path scheme,
+    // manual checkout, attach shell) already has it, reuse that worktree
+    const existing = await this.worktreeForBranch(repo, branch);
+    if (existing && existing !== repo) {
+      await this.excludeSubtasksFile(existing);
+      return { worktree: existing, branch };
+    }
     const worktree = join(worktreeRoot, issue.identifier);
     if (existsSync(worktree)) {
       if (branchOverride) {
@@ -494,6 +501,17 @@ export class Dispatcher {
     }
     await this.excludeSubtasksFile(worktree);
     return { worktree, branch };
+  }
+
+  /** Path of the worktree that has `branch` checked out, if any. */
+  private async worktreeForBranch(repo: string, branch: string): Promise<string | undefined> {
+    const { stdout } = await exec('git', ['-C', repo, 'worktree', 'list', '--porcelain']).catch(() => ({ stdout: '' }));
+    for (const block of stdout.split('\n\n')) {
+      if (block.includes(`\nbranch refs/heads/${branch}`)) {
+        return block.match(/^worktree (.+)$/m)?.[1];
+      }
+    }
+    return undefined;
   }
 
   /** Keep the subtask scratch file out of git via the per-worktree exclude file. */
