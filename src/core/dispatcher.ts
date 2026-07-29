@@ -347,14 +347,15 @@ export class Dispatcher {
       }
 
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
-      const current = store.get(id);
+      const current = store.get(id) ?? task;
+      const ctx = taskContext(current, taskRepo, branch);
       const work = await runSession({
         prompt:
           mode === 'fixci'
-            ? ciFixPrompt(issue, current?.prs ?? [])
+            ? ciFixPrompt(ctx, issue, current.prs)
             : resumeSession
-              ? `colinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
-              : workPrompt(issue, branch, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, plan, current?.instructions, current?.verdict?.verification, task.skipTriage, knownPr),
+              ? `${ctx}\n\ncolinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
+              : workPrompt(ctx, issue, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, current.verdict?.verification, task.skipTriage, knownPr),
         cwd: worktree,
         callbacks: this.callbacks(id),
         model: store.get(id)?.model ?? this.cfg.model,
@@ -525,6 +526,54 @@ function instructionsBlock(instructions?: string): string {
     : '';
 }
 
+interface RepoLike {
+  name?: string;
+  path: string;
+  defaultBranch: string;
+  remote?: string;
+  pushRemote?: string;
+  prBase?: string;
+}
+
+/** Everything the agent should know about this task, shared by all session prompts. */
+function taskContext(task: Task, repo: RepoLike, branch: string): string {
+  const issue = task.issue;
+  const remote = repo.remote ?? 'origin';
+  const pushRemote = repo.pushRemote ?? remote;
+  const prBase = repo.prBase ?? repo.defaultBranch;
+  const prLine = task.prs.length
+    ? `Existing PR(s): ${task.prs
+        .map(
+          (pr) =>
+            `#${pr.number} [${pr.isDraft ? 'draft' : pr.state.toLowerCase()}, ci:${pr.checksStatus}${
+              task.pinnedPr === pr.number ? ', PINNED by operator — this is the canonical PR' : ''
+            }] ${pr.url}`,
+        )
+        .join('; ')}`
+    : '';
+  return [
+    '## Task context',
+    `Linear issue ${issue.identifier}: ${issue.title}`,
+    `URL: ${issue.url}`,
+    issue.parent ? `Parent issue: ${issue.parent.identifier} (this is a sub-issue of it)` : '',
+    '',
+    'Issue description:',
+    issue.description?.trim() || '(no description)',
+    '',
+    `Repository: ${repo.name ?? repo.path} at ${repo.path}. You are in a dedicated git worktree on branch "${branch}". PRs target "${prBase}" on remote "${remote}"; pushes go to "${pushRemote}"${pushRemote !== remote ? ' (fork workflow)' : ''}.`,
+    prLine,
+    task.verdict
+      ? `Triage verdict: ${task.verdict.verdict}${task.verdict.verification ? ` · verification tier: ${task.verdict.verification}` : ''} — ${task.verdict.reason}`
+      : '',
+    task.verdict?.plan ? `\nTriage plan:\n${task.verdict.plan}` : '',
+    task.instructions
+      ? `\nOperator instructions (these take precedence when they conflict with anything else):\n${task.instructions}`
+      : '',
+  ]
+    .filter((line) => line !== '')
+    .join('\n');
+}
+
 function triagePrompt(issue: LinearIssue, repos: RepoConfig[], instructions?: string): string {
   const roster = repos
     .map((r) => `- ${r.name} (${r.path}): ${r.description ?? '(no description)'}`)
@@ -563,13 +612,11 @@ function verificationBlock(verification?: Verification): string {
 }
 
 function workPrompt(
+  ctx: string,
   issue: LinearIssue,
-  branch: string,
   pushRemote: string,
   upstreamRemote: string,
   prBase: string,
-  plan?: string,
-  instructions?: string,
   verification?: Verification,
   triageSkipped?: boolean,
   existingPr?: PrInfo,
@@ -581,10 +628,9 @@ function workPrompt(
   const adoptNote = existingPr
     ? `\nA PR ALREADY EXISTS for this issue: #${existingPr.number} (${existingPr.url}), branch "${existingPr.headRefName}" — your worktree is on that branch. Start by reviewing its current diff ("gh pr view ${existingPr.number}", "git log", "git diff ${prBase}...HEAD") and ADOPT it: continue the work with additional commits pushed to this branch. Do NOT create a new branch or open another PR.\n`
     : '';
-  return `Implement this Linear issue. You are in a dedicated git worktree on branch "${branch}".${skipNote}${adoptNote}
+  return `${ctx}
 
-${issueBlock(issue)}
-${instructionsBlock(instructions)}${plan ? `\nTriage plan (from an earlier investigation pass):\n${plan}\n` : ''}
+Implement this Linear issue.${skipNote}${adoptNote}
 Before writing any code, create ${SUBTASKS_FILE} in the worktree root: a short markdown checklist (3-8 items) of the subtasks needed to complete this issue. As you finish each subtask, immediately update its checkbox to [x]. Keep this file current — it drives a progress display. Never commit it (it is git-excluded).
 
 Requirements:
@@ -598,9 +644,11 @@ ${forked ? '- Do NOT create stacked PRs: this repo uses a fork workflow and stac
 - If you get blocked on a decision only a human can make, use AskUserQuestion.`;
 }
 
-function ciFixPrompt(issue: LinearIssue, prs: Task['prs']): string {
+function ciFixPrompt(ctx: string, issue: LinearIssue, prs: Task['prs']): string {
   const prList = prs.map((pr) => `#${pr.number} (${pr.headRefName})`).join(', ');
-  return `CI is failing on your draft PR(s) for ${issue.identifier}: ${prList}.
+  return `${ctx}
+
+CI is failing on your draft PR(s) for ${issue.identifier}: ${prList}.
 
 Diagnose and fix:
 1. "gh pr checks <number>" to see which checks failed.
