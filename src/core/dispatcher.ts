@@ -164,16 +164,19 @@ export class Dispatcher {
    * worktree, fresh session, fresh triage. Keeps instructions/model/activity.
    * The old worktree (in the old repo) is left behind for inspection.
    */
-  redispatch(id: string, repo: RepoConfig): boolean {
+  redispatch(id: string, repo: RepoConfig, opts?: { retriage?: boolean }): boolean {
     const task = store.get(id);
     if (!task || this.aborts.has(id) || this.queue.includes(id)) return false;
+    // a successful triage travels with the task unless the operator asks for a redo
+    const keepTriage = !opts?.retriage && task.verdict?.verdict === 'do';
     store.update(id, {
       repo: { name: repo.name, path: repo.path, defaultBranch: repo.defaultBranch, remote: repo.remote, pushRemote: repo.pushRemote, prBase: repo.prBase, worktreeRoot: repo.worktreeRoot },
       status: 'queued',
       sessionId: undefined,
       worktree: undefined,
       branch: undefined,
-      verdict: undefined,
+      verdict: keepTriage ? task.verdict : undefined,
+      skipTriage: keepTriage ? true : task.skipTriage,
       subtasks: [],
       checks: [],
       prs: [],
@@ -183,7 +186,10 @@ export class Dispatcher {
       retried: false,
       ciFixAttempted: false,
     });
-    store.addActivity(id, `re-dispatched in repo ${repo.name}`);
+    store.addActivity(
+      id,
+      `re-dispatched in repo ${repo.name}${keepTriage ? ' (keeping triage plan)' : ' (fresh triage)'}`,
+    );
     this.queue.push(id);
     this.pump();
     return true;
@@ -274,7 +280,9 @@ export class Dispatcher {
 
       let plan: string | undefined;
       if (!resumeSession && task.skipTriage) {
-        store.addActivity(id, 'work pass (triage skipped)');
+        // a kept triage plan (e.g. repo re-dispatch) still feeds the work pass
+        plan = store.get(id)?.verdict?.plan;
+        store.addActivity(id, plan ? 'work pass (existing triage plan)' : 'work pass (triage skipped)');
       }
       if (!resumeSession && !task.skipTriage) {
         store.addActivity(id, 'triage pass');

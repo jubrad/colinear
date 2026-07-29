@@ -186,11 +186,15 @@ export function BoardView(_props: { param?: string }) {
           taskLabel={repoModal.issue.identifier}
           repos={ctx.cfg.repos}
           current={repoModal.repo?.name}
+          hasTriage={repoModal.verdict?.verdict === 'do'}
           onCancel={() => setRepoModal(undefined)}
-          onSubmit={(repo) => {
+          onSubmit={(repo, opts) => {
             setRepoModal(undefined);
-            if (ctx.dispatcher.redispatch(repoModal.issue.id, repo)) {
-              ctx.toast(`${repoModal.issue.identifier} re-dispatched in ${repo.name}`, 'ok');
+            if (ctx.dispatcher.redispatch(repoModal.issue.id, repo, opts)) {
+              ctx.toast(
+                `${repoModal.issue.identifier} re-dispatched in ${repo.name}${opts.retriage ? '' : repoModal.verdict?.verdict === 'do' ? ' (kept triage)' : ''}`,
+                'ok',
+              );
             } else {
               ctx.toast('cannot re-dispatch a running/queued task', 'err');
             }
