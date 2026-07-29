@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
 import { attachSession, attachShell } from '../core/attach.js';
 import { useTasks } from '../core/hooks.js';
-import { postComment } from '../core/linear.js';
+import { fetchSubIssues, postComment } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { Task, TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
@@ -64,6 +64,21 @@ export function BoardView(_props: { param?: string }) {
       }
       if (input === 's' && selected) attachSession(selected, ctx);
       if (input === 'S' && selected) attachShell(selected, ctx);
+      if (input === 'u' && selected) {
+        void fetchSubIssues(ctx.cfg, selected.issue.id)
+          .then((subs) => {
+            const fresh = subs.filter((s) => s.stateType !== 'completed' && !store.get(s.id));
+            if (!fresh.length) {
+              ctx.toast(`no undispatched sub-issues on ${selected.issue.identifier}`, 'info');
+              return;
+            }
+            // sub-issues default to the parent's repo; dependency queue orders them
+            const repo = ctx.cfg.repos.find((r) => r.path === selected.repo?.path);
+            ctx.dispatcher.enqueue(fresh, { repo });
+            ctx.toast(`dispatched ${fresh.length} sub-issue${fresh.length > 1 ? 's' : ''} of ${selected.issue.identifier}`, 'ok');
+          })
+          .catch(() => ctx.toast('failed to fetch sub-issues', 'err'));
+      }
       if (input === 'o' && selected?.prs[0]) {
         execFile('open', [selected.prs[0].url], () => {});
         ctx.toast(`opened #${selected.prs[0].number}`, 'info');
@@ -226,6 +241,7 @@ function progressBar(done: number, total: number, width = 8): string {
 export const boardKeys: Array<[string, string]> = [
   ['←→/hl', 'select card'],
   ['enter', 'task detail'],
+  ['u', 'dispatch subs'],
   ['a', 'answer'],
   ['x', 'cancel'],
   ['s', 'attach claude'],

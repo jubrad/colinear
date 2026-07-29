@@ -83,6 +83,14 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
     () => [
       { key: 'issue', label: 'ISSUE', width: 11, text: (i) => i.identifier },
       {
+        key: 'parent',
+        label: 'PARENT',
+        width: 11,
+        text: (i) => (i.parent ? `↳ ${i.parent.identifier}` : ''),
+        color: () => theme.info,
+        sort: (a, b) => (a.parent?.identifier ?? '￿').localeCompare(b.parent?.identifier ?? '￿'),
+      },
+      {
         key: 'priority',
         label: 'PRI',
         width: 8,

@@ -13,6 +13,8 @@ export interface LinearIssue {
   stateType?: string;
   teamId?: string;
   projectId?: string;
+  /** set when this issue is a sub-issue */
+  parent?: { id: string; identifier: string };
 }
 
 export interface LinearTeam {

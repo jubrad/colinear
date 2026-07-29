@@ -31,6 +31,7 @@ const ISSUE_FIELDS = `
   project { id }
   labels { nodes { name color } }
   assignee { id displayName }
+  parent { id identifier }
 `;
 
 interface IssueNode {
@@ -46,6 +47,7 @@ interface IssueNode {
   project?: { id: string } | null;
   labels: { nodes: Array<{ name: string; color: string }> };
   assignee?: { id: string; displayName: string } | null;
+  parent?: { id: string; identifier: string } | null;
 }
 
 function toIssue(n: IssueNode): LinearIssue {
@@ -64,7 +66,22 @@ function toIssue(n: IssueNode): LinearIssue {
     labels: n.labels.nodes,
     assignee: n.assignee?.displayName,
     assigneeId: n.assignee?.id,
+    parent: n.parent ?? undefined,
   };
+}
+
+/** Direct sub-issues of a parent issue. */
+export async function fetchSubIssues(cfg: Config, parentId: string): Promise<LinearIssue[]> {
+  const data = await gql<{ issues: { nodes: IssueNode[] } }>(
+    cfg,
+    `query ($parentId: ID) {
+      issues(first: 100, filter: { parent: { id: { eq: $parentId } } }) {
+        nodes { ${ISSUE_FIELDS} }
+      }
+    }`,
+    { parentId },
+  );
+  return data.issues.nodes.map(toIssue);
 }
 
 /** All-teams view sentinel (k9s-style "all namespaces"). */
