@@ -48,12 +48,14 @@ function useTerminalSize() {
 // NOTE: renders happen on every tick; if the tree is ever taller than the
 // terminal, Ink falls back to full-screen clears per frame (visible flicker).
 // Keep this slow-ish and keep the root Box clipped.
-function useClock(intervalMs = 1000): number {
+function useClock(intervalMs = 1000, active = true): number {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
+    if (!active) return;
+    setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), intervalMs);
     return () => clearInterval(t);
-  }, [intervalMs]);
+  }, [intervalMs, active]);
   return now;
 }
 
@@ -61,8 +63,11 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
   const { cfg, dispatcher } = props;
   const { exit } = useApp();
   const size = useTerminalSize();
-  const now = useClock(cfg.tickMs);
   const tasks = useTasks();
+  // nothing on screen is timing/spinning -> stop ticking, so an idle board
+  // writes zero frames (matters for unfocused panes)
+  const anyTicking = tasks.some((t) => t.startedAt && !t.endedAt);
+  const now = useClock(cfg.tickMs, anyTicking);
 
   const keyCounter = useRef(1);
   // land on the board when a previous run's tasks were restored

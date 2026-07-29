@@ -6,6 +6,7 @@ import { App } from './app.js';
 import { consumePendingAction } from './core/attach.js';
 import { configPath, ensureConfigFile, loadConfig } from './core/config.js';
 import { Dispatcher } from './core/dispatcher.js';
+import { log } from './core/log.js';
 import { loadState, startPersistence } from './core/persist.js';
 import { store } from './core/store.js';
 
@@ -25,12 +26,22 @@ const syncWrite = ((chunk: string | Uint8Array, ...rest: unknown[]) =>
     ? (realWrite as (...args: unknown[]) => boolean)(`\x1b[?2026h${chunk}\x1b[?2026l`, ...rest)
     : (realWrite as (...args: unknown[]) => boolean)(chunk, ...rest)) as typeof process.stdout.write;
 
+// stderr leaking from the SDK / libraries lands outside Ink's synchronized
+// frames and tears the screen — divert it to the debug log while the TUI is up
+const realErrWrite = process.stderr.write.bind(process.stderr);
+const logErrWrite = ((chunk: string | Uint8Array) => {
+  log(`stderr: ${String(chunk).trimEnd()}`);
+  return true;
+}) as typeof process.stderr.write;
+
 const enterAltScreen = () => {
   realWrite('\x1b[?1049h\x1b[H');
   process.stdout.write = syncWrite;
+  process.stderr.write = logErrWrite;
 };
 const leaveAltScreen = () => {
   process.stdout.write = realWrite;
+  process.stderr.write = realErrWrite;
   realWrite('\x1b[?1049l');
 };
 
