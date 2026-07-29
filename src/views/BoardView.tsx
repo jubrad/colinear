@@ -8,6 +8,7 @@ import { store } from '../core/store.js';
 import type { Task, TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
+import { SubIssueModal, type SubIssueRow } from '../ui/SubIssueModal.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
 
@@ -37,6 +38,7 @@ export function BoardView(_props: { param?: string }) {
   const tasks = useTasks();
   const [cursorIdx, setCursorIdx] = useState(0);
   const [answering, setAnswering] = useState(false);
+  const [subModal, setSubModal] = useState<{ parent: Task; rows: SubIssueRow[] }>();
 
   const ordered = useMemo(() => columnTasks(tasks), [tasks, store.version]);
   const selected = ordered[Math.min(cursorIdx, Math.max(0, ordered.length - 1))];
@@ -67,15 +69,18 @@ export function BoardView(_props: { param?: string }) {
       if (input === 'u' && selected) {
         void fetchSubIssues(ctx.cfg, selected.issue.id)
           .then((subs) => {
-            const fresh = subs.filter((s) => s.stateType !== 'completed' && !store.get(s.id));
-            if (!fresh.length) {
-              ctx.toast(`no undispatched sub-issues on ${selected.issue.identifier}`, 'info');
+            if (!subs.length) {
+              ctx.toast(`${selected.issue.identifier} has no sub-issues`, 'info');
               return;
             }
-            // sub-issues default to the parent's repo; dependency queue orders them
-            const repo = ctx.cfg.repos.find((r) => r.path === selected.repo?.path);
-            ctx.dispatcher.enqueue(fresh, { repo });
-            ctx.toast(`dispatched ${fresh.length} sub-issue${fresh.length > 1 ? 's' : ''} of ${selected.issue.identifier}`, 'ok');
+            setSubModal({
+              parent: selected,
+              rows: subs.map((issue) => ({
+                issue,
+                disabled:
+                  issue.stateType === 'completed' ? ('done' as const) : store.get(issue.id) ? ('on board' as const) : undefined,
+              })),
+            });
           })
           .catch(() => ctx.toast('failed to fetch sub-issues', 'err'));
       }
@@ -101,7 +106,7 @@ export function BoardView(_props: { param?: string }) {
           .catch(() => ctx.toast('Linear comment failed', 'err'));
       }
     },
-    { isActive: !answering && !ctx.cmdOpen },
+    { isActive: !answering && !subModal && !ctx.cmdOpen },
   );
 
   if (!tasks.length) {
@@ -119,6 +124,23 @@ export function BoardView(_props: { param?: string }) {
 
   return (
     <Box flexDirection="column" flexGrow={1}>
+      {subModal && (
+        <SubIssueModal
+          parent={subModal.parent.issue.identifier}
+          rows={subModal.rows}
+          onCancel={() => setSubModal(undefined)}
+          onSubmit={(picked) => {
+            setSubModal(undefined);
+            // sub-issues default to the parent's repo; dependency queue orders them
+            const repo = ctx.cfg.repos.find((r) => r.path === subModal.parent.repo?.path);
+            ctx.dispatcher.enqueue(picked, { repo });
+            ctx.toast(
+              `dispatched ${picked.length} sub-issue${picked.length > 1 ? 's' : ''} of ${subModal.parent.issue.identifier}`,
+              'ok',
+            );
+          }}
+        />
+      )}
       {/* overflow clip keeps tall columns from pushing card headers off-screen */}
       <Box gap={1} flexGrow={1} overflow="hidden">
         {COLUMNS.map((col) => {
