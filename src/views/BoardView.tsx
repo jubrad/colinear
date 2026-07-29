@@ -36,26 +36,57 @@ export function columnTasks(tasks: Task[]): Task[] {
 export function BoardView(_props: { param?: string }) {
   const ctx = useColinear();
   const tasks = useTasks();
-  const [cursorIdx, setCursorIdx] = useState(0);
+  const [pos, setPos] = useState({ col: 0, row: 0 });
   const [answering, setAnswering] = useState(false);
   const [subModal, setSubModal] = useState<{ parent: Task; rows: SubIssueRow[] }>();
 
-  const ordered = useMemo(() => columnTasks(tasks), [tasks, store.version]);
-  const selected = ordered[Math.min(cursorIdx, Math.max(0, ordered.length - 1))];
+  // grid[col] = tasks in that board column, in render order
+  const grid = useMemo(
+    () => COLUMNS.map((col) => tasks.filter((t) => col.statuses.includes(t.status))),
+    [tasks, store.version],
+  );
+
+  // keep the cursor on a real card as tasks move between columns
+  useEffect(() => {
+    setPos((p) => {
+      if (grid[p.col]?.length) return { col: p.col, row: Math.min(p.row, grid[p.col].length - 1) };
+      const near = grid.findIndex((g, i) => g.length && i >= p.col);
+      const before = grid.map((g, i) => (g.length ? i : -1)).filter((i) => i !== -1 && i < p.col);
+      const col = near !== -1 ? near : (before[before.length - 1] ?? -1);
+      return col === -1 ? { col: 0, row: 0 } : { col, row: 0 };
+    });
+  }, [grid]);
+
+  const selected = grid[pos.col]?.[Math.min(pos.row, Math.max(0, (grid[pos.col]?.length ?? 1) - 1))];
+
+  const moveCol = (dir: 1 | -1) =>
+    setPos((p) => {
+      let col = p.col;
+      do {
+        col += dir;
+      } while (col >= 0 && col < grid.length && !grid[col].length);
+      if (col < 0 || col >= grid.length) return p;
+      return { col, row: Math.min(p.row, grid[col].length - 1) };
+    });
+
+  const moveRow = (dir: 1 | -1) =>
+    setPos((p) => ({
+      col: p.col,
+      row: Math.max(0, Math.min((grid[p.col]?.length ?? 1) - 1, p.row + dir)),
+    }));
 
   useEffect(() => ctx.setCapture(answering), [answering]);
   useEffect(() => () => ctx.setCapture(false), []);
 
   useInput(
     (input, key) => {
-      if (key.leftArrow || input === 'h' || key.upArrow || input === 'k') {
-        setCursorIdx((i) => Math.max(0, i - 1));
-      }
-      if (key.rightArrow || input === 'l' || key.downArrow || input === 'j') {
-        setCursorIdx((i) => Math.min(ordered.length - 1, i + 1));
-      }
+      // ijkl: i/k walk cards in a column, j/l jump columns (arrows too)
+      if (key.leftArrow || input === 'j') moveCol(-1);
+      if (key.rightArrow || input === 'l') moveCol(1);
+      if (key.upArrow || input === 'i') moveRow(-1);
+      if (key.downArrow || input === 'k') moveRow(1);
       if (input === 'a' && selected?.question) setAnswering(true);
-      if (input === 'i') ctx.navigate('issues');
+      if (input === 'n') ctx.navigate('issues');
       if (key.return && selected) ctx.navigate('task', selected.issue.identifier);
       if (input === 'x' && selected) {
         if (ctx.dispatcher.cancel(selected.issue.id)) ctx.toast(`cancelling ${selected.issue.identifier}`, 'info');
@@ -114,7 +145,7 @@ export function BoardView(_props: { param?: string }) {
       <Box flexDirection="column" flexGrow={1} justifyContent="center" alignItems="center">
         <Text dimColor>No agents dispatched yet.</Text>
         <Text dimColor>
-          press <Text color={theme.key}>i</Text> to pick issues
+          press <Text color={theme.key}>n</Text> to pick issues
         </Text>
       </Box>
     );
@@ -261,7 +292,8 @@ function progressBar(done: number, total: number, width = 8): string {
 }
 
 export const boardKeys: Array<[string, string]> = [
-  ['←→/hl', 'select card'],
+  ['j/l ←→', 'column'],
+  ['i/k ↑↓', 'card'],
   ['enter', 'task detail'],
   ['u', 'dispatch subs'],
   ['a', 'answer'],
@@ -272,5 +304,5 @@ export const boardKeys: Array<[string, string]> = [
   ['c', 'escalate'],
   ['o', 'open PR'],
   ['O', 'open issue'],
-  ['i', 'issues'],
+  ['n', 'issues'],
 ];
