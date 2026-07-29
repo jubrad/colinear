@@ -76,6 +76,8 @@ export interface TriageVerdict {
   plan?: string;
   /** how the change should be verified (drives the work-pass test strategy) */
   verification?: Verification;
+  /** repo (by config name) triage decided the work belongs in */
+  repo?: string;
   /** too_big only: proposed single-repo sub-issues with dependencies */
   subtasks?: PlannedSubtask[];
 }
@@ -154,6 +156,8 @@ export interface CheckConfig {
 /** A repo agents are allowed to work on (always via worktrees, never in place). */
 export interface RepoConfig {
   name: string;
+  /** what lives here — triage uses this to route issues to the right repo */
+  description?: string;
   path: string;
   defaultBranch: string;
   /** upstream remote: worktree base + the repo PRs target (default "origin") */

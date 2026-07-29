@@ -179,6 +179,7 @@ export function TaskView(props: { param?: string }) {
         <Text dimColor>
           {' '}· {formatDuration(task, ctx.now) || '--:--'} · {formatTokens(task.tokens)} tok · $
           {task.costUsd.toFixed(2)}
+          {task.repo ? ` · ${task.repo.name}` : ''}
           {task.branch ? ` · ${task.branch}` : ''}
         </Text>
       </Text>

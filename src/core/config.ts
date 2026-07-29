@@ -42,6 +42,8 @@ export function ensureConfigFile(cfg: Config): string {
 
 interface RawRepo {
   name?: string;
+  /** what lives here — triage uses this to route issues to the right repo */
+  description?: string;
   path: string;
   defaultBranch?: string;
   remote?: string;
@@ -76,6 +78,7 @@ export function loadConfig(): Config {
     const defaultBranch = r.defaultBranch ?? 'main';
     return {
       name: r.name ?? basename(path),
+      description: r.description,
       path,
       defaultBranch,
       remote: r.remote ?? 'origin',

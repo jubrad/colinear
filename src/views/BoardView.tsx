@@ -8,6 +8,7 @@ import { store } from '../core/store.js';
 import type { Task, TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
+import { RepoModal } from '../ui/RepoModal.js';
 import { SubIssueModal, type SubIssueRow } from '../ui/SubIssueModal.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
@@ -39,6 +40,7 @@ export function BoardView(_props: { param?: string }) {
   const [pos, setPos] = useState({ col: 0, row: 0 });
   const [answering, setAnswering] = useState(false);
   const [subModal, setSubModal] = useState<{ parent: Task; rows: SubIssueRow[] }>();
+  const [repoModal, setRepoModal] = useState<Task>();
 
   // grid[col] = tasks in that board column, in render order
   const grid = useMemo(
@@ -97,6 +99,13 @@ export function BoardView(_props: { param?: string }) {
       }
       if (input === 's' && selected) attachSession(selected, ctx);
       if (input === 'S' && selected) attachShell(selected, ctx);
+      if (input === 'm' && selected) {
+        if (['triage', 'working', 'checks'].includes(selected.status)) {
+          ctx.toast('agent is live — x to cancel first', 'err');
+        } else {
+          setRepoModal(selected);
+        }
+      }
       if (input === 'u' && selected) {
         void fetchSubIssues(ctx.cfg, selected.issue.id)
           .then((subs) => {
@@ -137,7 +146,7 @@ export function BoardView(_props: { param?: string }) {
           .catch(() => ctx.toast('Linear comment failed', 'err'));
       }
     },
-    { isActive: !answering && !subModal && !ctx.cmdOpen },
+    { isActive: !answering && !subModal && !repoModal && !ctx.cmdOpen },
   );
 
   if (!tasks.length) {
@@ -169,6 +178,22 @@ export function BoardView(_props: { param?: string }) {
               `dispatched ${picked.length} sub-issue${picked.length > 1 ? 's' : ''} of ${subModal.parent.issue.identifier}`,
               'ok',
             );
+          }}
+        />
+      )}
+      {repoModal && (
+        <RepoModal
+          taskLabel={repoModal.issue.identifier}
+          repos={ctx.cfg.repos}
+          current={repoModal.repo?.name}
+          onCancel={() => setRepoModal(undefined)}
+          onSubmit={(repo) => {
+            setRepoModal(undefined);
+            if (ctx.dispatcher.redispatch(repoModal.issue.id, repo)) {
+              ctx.toast(`${repoModal.issue.identifier} re-dispatched in ${repo.name}`, 'ok');
+            } else {
+              ctx.toast('cannot re-dispatch a running/queued task', 'err');
+            }
           }}
         />
       )}
@@ -224,6 +249,7 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
       </Text>
       <Text dimColor wrap="truncate">
         {formatDuration(task, now) || '--:--'} · {formatTokens(task.tokens)} tok
+        {task.repo ? ` · ${task.repo.name}` : ''}
       </Text>
       {task.subtasks.length > 0 && (
         <Text wrap="truncate">
@@ -296,6 +322,7 @@ export const boardKeys: Array<[string, string]> = [
   ['i/k ↑↓', 'card'],
   ['enter', 'task detail'],
   ['u', 'dispatch subs'],
+  ['m', 'repo + redispatch'],
   ['a', 'answer'],
   ['x', 'cancel'],
   ['s', 'attach claude'],

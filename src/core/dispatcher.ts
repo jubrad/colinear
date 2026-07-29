@@ -23,6 +23,7 @@ const TRIAGE_SCHEMA = {
     reason: { type: 'string' },
     plan: { type: 'string' },
     verification: { type: 'string', enum: ['local-light', 'ci', 'needs-env'] },
+    repo: { type: 'string' },
     subtasks: {
       type: 'array',
       items: {
@@ -158,6 +159,36 @@ export class Dispatcher {
     }
   }
 
+  /**
+   * Re-dispatch a task from scratch in a (possibly different) repo: fresh
+   * worktree, fresh session, fresh triage. Keeps instructions/model/activity.
+   * The old worktree (in the old repo) is left behind for inspection.
+   */
+  redispatch(id: string, repo: RepoConfig): boolean {
+    const task = store.get(id);
+    if (!task || this.aborts.has(id) || this.queue.includes(id)) return false;
+    store.update(id, {
+      repo: { name: repo.name, path: repo.path, defaultBranch: repo.defaultBranch, remote: repo.remote, pushRemote: repo.pushRemote, prBase: repo.prBase, worktreeRoot: repo.worktreeRoot },
+      status: 'queued',
+      sessionId: undefined,
+      worktree: undefined,
+      branch: undefined,
+      verdict: undefined,
+      subtasks: [],
+      checks: [],
+      prs: [],
+      error: undefined,
+      blockedBy: undefined,
+      endedAt: undefined,
+      retried: false,
+      ciFixAttempted: false,
+    });
+    store.addActivity(id, `re-dispatched in repo ${repo.name}`);
+    this.queue.push(id);
+    this.pump();
+    return true;
+  }
+
   /** Re-check blocked tasks; queue the ones whose Linear blockers finished. */
   async recheckBlocked() {
     for (const task of store.list().filter((t) => t.status === 'blocked')) {
@@ -237,8 +268,8 @@ export class Dispatcher {
         endedAt: undefined,
       });
       store.addActivity(id, 'creating worktree');
-      const taskRepo = task.repo ?? this.cfg.repos[0];
-      const { worktree, branch } = await this.ensureWorktree(issue, taskRepo);
+      let taskRepo = task.repo ?? this.cfg.repos[0];
+      let { worktree, branch } = await this.ensureWorktree(issue, taskRepo);
       store.update(id, { worktree, branch });
 
       let plan: string | undefined;
@@ -248,7 +279,7 @@ export class Dispatcher {
       if (!resumeSession && !task.skipTriage) {
         store.addActivity(id, 'triage pass');
         const triage = await runSession({
-          prompt: triagePrompt(issue, this.cfg.repos.map((r) => r.name), store.get(id)?.instructions),
+          prompt: triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions),
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: TRIAGE_SCHEMA,
@@ -262,6 +293,19 @@ export class Dispatcher {
         const verdict = triage.structured as TriageVerdict;
         store.update(id, { verdict });
         if (verdict.verification) store.addActivity(id, `verification: ${verdict.verification}`);
+
+        // triage routes the work: switch repo (fresh worktree) if it picked another
+        const chosen = verdict.repo && this.cfg.repos.find((r) => r.name === verdict.repo);
+        if (chosen && chosen.path !== taskRepo.path) {
+          store.addActivity(id, `triage routed to repo ${chosen.name}`);
+          taskRepo = chosen;
+          ({ worktree, branch } = await this.ensureWorktree(issue, chosen));
+          store.update(id, {
+            worktree,
+            branch,
+            repo: { name: chosen.name, path: chosen.path, defaultBranch: chosen.defaultBranch, remote: chosen.remote, pushRemote: chosen.pushRemote, prBase: chosen.prBase, worktreeRoot: chosen.worktreeRoot },
+          });
+        }
         if (verdict.verdict !== 'do') {
           // a too_big / needs_info verdict is a human decision — park it with
           // the questions, not the failures
@@ -427,15 +471,22 @@ function instructionsBlock(instructions?: string): string {
     : '';
 }
 
-function triagePrompt(issue: LinearIssue, repoNames: string[], instructions?: string): string {
+function triagePrompt(issue: LinearIssue, repos: RepoConfig[], instructions?: string): string {
+  const roster = repos
+    .map((r) => `- ${r.name} (${r.path}): ${r.description ?? '(no description)'}`)
+    .join('\n');
   return `You are triaging a Linear issue before implementation. Investigate the codebase (read-only — do not modify files) to judge scope.
 
 ${issueBlock(issue)}
 ${instructionsBlock(instructions)}
+Work for this team can live in any of these repositories:
+${roster}
+
+FIRST decide which repository this issue's work belongs in — return it as "repo" (one of: ${repos.map((r) => r.name).join(', ')}). Your current working directory is a worktree of one of them, but you can and should read the other repos at their listed paths to check where the relevant code actually lives. If you pick a different repo than your cwd, the work session will start there.
 
 Decide one of:
 - "do": clearly scoped, a single agent can complete it with one PR (or a small stack). Include a short implementation plan.
-- "too_big": needs to be broken up into multiple issues. Explain why — AND include "subtasks": an ordered array of proposed sub-issues, each completable by one agent with one PR in ONE repository. Per subtask: title (actionable, self-contained), description (context + acceptance criteria, markdown — assume the reader has not seen this issue), optional priority (1 urgent … 4 low), repo (one of: ${repoNames.join(', ')}), and blockedBy (array of zero-based indices of subtasks that must land first). The user will review, edit selection, and approve these into Linear.
+- "too_big": needs to be broken up into multiple issues. Explain why — AND include "subtasks": an ordered array of proposed sub-issues, each completable by one agent with one PR in ONE repository. Per subtask: title (actionable, self-contained), description (context + acceptance criteria, markdown — assume the reader has not seen this issue), optional priority (1 urgent … 4 low), repo (one of: ${repos.map((r) => r.name).join(', ')}), and blockedBy (array of zero-based indices of subtasks that must land first). The user will review, edit selection, and approve these into Linear.
 - "needs_info": the issue is ambiguous or missing decisions only a human can make. State exactly what's missing.
 
 Also decide HOW the change should be verified ("verification") — this repo may have expensive, contended local environments (shared clusters, personal cloud stacks, fixed local ports), so prefer the cheapest sufficient tier:
