@@ -105,11 +105,17 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
     if (!hadPrs && infos.length > 0) {
       void syncIssueState(cfg, task.issue, 'review');
     }
-    if (infos.some((pr) => pr.state === 'OPEN') && (task.status === 'done' || task.status === 'checks')) {
-      store.setStatus(task.issue.id, 'pr_open');
+    // error included: pinning/discovering a live PR un-fails the task instead
+    // of leaving it confused in the Failed column
+    if (infos.some((pr) => pr.state === 'OPEN') && ['done', 'checks', 'error'].includes(task.status)) {
+      store.update(task.issue.id, { status: 'pr_open', error: undefined });
     }
-    if (infos.length && infos.every((pr) => pr.state === 'MERGED') && task.status === 'pr_open') {
-      store.setStatus(task.issue.id, 'done');
+    if (
+      infos.length &&
+      infos.every((pr) => pr.state === 'MERGED') &&
+      (task.status === 'pr_open' || task.status === 'error')
+    ) {
+      store.update(task.issue.id, { status: 'done', error: undefined });
       fixer?.recheckBlocked?.(); // free dependents now, not on the next 60s tick
     }
 
