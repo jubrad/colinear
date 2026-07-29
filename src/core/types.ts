@@ -142,6 +142,8 @@ export interface Task {
   repo?: { name: string; path: string; defaultBranch: string; remote?: string; pushRemote?: string; prBase?: string; worktreeRoot: string };
   /** set while a CI-failure fix has been dispatched for the current red rollup */
   ciFixAttempted?: boolean;
+  /** operator-pinned PR number: PR matching uses exactly this, never guesses */
+  pinnedPr?: number;
   /** unresolved Linear blockers keeping this task out of the queue */
   blockedBy?: Array<{ id: string; identifier: string }>;
   /** one automatic retry after a rate-limit failure */

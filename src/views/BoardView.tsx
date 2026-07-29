@@ -4,11 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { attachSession, attachShell } from '../core/attach.js';
 import { useTasks } from '../core/hooks.js';
 import { fetchSubIssues, postComment } from '../core/linear.js';
+import { pollPrs } from '../core/prs.js';
 import { store } from '../core/store.js';
 import type { Task, TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
-import { RepoModal } from '../ui/RepoModal.js';
+import { EditTaskModal, type TaskEdits } from '../ui/EditTaskModal.js';
 import { SubIssueModal, type SubIssueRow } from '../ui/SubIssueModal.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
@@ -99,13 +100,7 @@ export function BoardView(_props: { param?: string }) {
       }
       if (input === 's' && selected) attachSession(selected, ctx);
       if (input === 'S' && selected) attachShell(selected, ctx);
-      if (input === 'm' && selected) {
-        if (['triage', 'working', 'checks'].includes(selected.status)) {
-          ctx.toast('agent is live — x to cancel first', 'err');
-        } else {
-          setRepoModal(selected);
-        }
-      }
+      if (input === 'm' && selected) setRepoModal(selected);
       if (input === 'u' && selected) {
         void fetchSubIssues(ctx.cfg, selected.issue.id)
           .then((subs) => {
@@ -182,22 +177,13 @@ export function BoardView(_props: { param?: string }) {
         />
       )}
       {repoModal && (
-        <RepoModal
-          taskLabel={repoModal.issue.identifier}
+        <EditTaskModal
+          task={repoModal}
           repos={ctx.cfg.repos}
-          current={repoModal.repo?.name}
-          hasTriage={repoModal.verdict?.verdict === 'do'}
           onCancel={() => setRepoModal(undefined)}
-          onSubmit={(repo, opts) => {
+          onSubmit={(edits) => {
             setRepoModal(undefined);
-            if (ctx.dispatcher.redispatch(repoModal.issue.id, repo, opts)) {
-              ctx.toast(
-                `${repoModal.issue.identifier} re-dispatched in ${repo.name}${opts.retriage ? '' : repoModal.verdict?.verdict === 'do' ? ' (kept triage)' : ''}`,
-                'ok',
-              );
-            } else {
-              ctx.toast('cannot re-dispatch a running/queued task', 'err');
-            }
+            applyTaskEdits(repoModal, edits, ctx);
           }}
         />
       )}
@@ -316,6 +302,37 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
   );
 }
 
+function applyTaskEdits(task: Task, edits: TaskEdits, ctx: ReturnType<typeof useColinear>) {
+  const id = task.issue.id;
+  const pinChanged = edits.pinnedPr !== task.pinnedPr;
+  store.update(id, {
+    instructions: edits.instructions,
+    model: edits.model,
+    pinnedPr: edits.pinnedPr,
+  });
+  if (pinChanged) {
+    // drop the stale match and re-poll so the pinned PR shows up right away
+    store.update(id, { prs: [] });
+    void pollPrs(ctx.cfg, ctx.dispatcher);
+    ctx.toast(
+      edits.pinnedPr ? `${task.issue.identifier} pinned to #${edits.pinnedPr}` : `${task.issue.identifier} PR match back to auto`,
+      'ok',
+    );
+  }
+  const repoChanged = edits.repo.path !== (task.repo?.path ?? ctx.cfg.repos[0].path);
+  if (edits.requeue || repoChanged) {
+    if (['triage', 'working', 'checks'].includes(store.get(id)?.status ?? '')) {
+      ctx.toast('agent is live — x to cancel before requeueing', 'err');
+      return;
+    }
+    if (ctx.dispatcher.redispatch(id, edits.repo, { retriage: edits.retriage })) {
+      ctx.toast(`${task.issue.identifier} requeued in ${edits.repo.name}`, 'ok');
+    }
+  } else if (!pinChanged) {
+    ctx.toast(`${task.issue.identifier} updated`, 'ok');
+  }
+}
+
 function progressBar(done: number, total: number, width = 8): string {
   const filled = total === 0 ? 0 : Math.round((done / total) * width);
   return '▰'.repeat(filled) + '▱'.repeat(width - filled);
@@ -326,7 +343,7 @@ export const boardKeys: Array<[string, string]> = [
   ['i/k ↑↓', 'card'],
   ['enter', 'task detail'],
   ['u', 'dispatch subs'],
-  ['m', 'repo + redispatch'],
+  ['m', 'edit task'],
   ['a', 'answer'],
   ['x', 'cancel'],
   ['s', 'attach claude'],

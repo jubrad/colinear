@@ -61,13 +61,22 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
     // (agents sometimes pick their own branch names).
     const chain: GhPr[] = [];
     const ident = task.issue.identifier.toLowerCase();
-    const root =
-      byHead.get(task.branch) ??
-      prs.find(
-        (pr) =>
-          pr.headRefName.toLowerCase().includes(ident) ||
-          pr.title.toLowerCase().startsWith(ident),
-      );
+    // operator pin wins; otherwise prefer live PRs — a closed duplicate must
+    // not shadow the open/merged one that superseded it
+    const statePref: Record<string, number> = { OPEN: 0, MERGED: 1, CLOSED: 2 };
+    const candidates = task.pinnedPr
+      ? prs.filter((pr) => pr.number === task.pinnedPr)
+      : [
+          ...(byHead.get(task.branch) ? [byHead.get(task.branch)!] : []),
+          ...prs.filter(
+            (pr) =>
+              pr.headRefName.toLowerCase().includes(ident) ||
+              pr.title.toLowerCase().startsWith(ident),
+          ),
+        ];
+    const root = [...new Set(candidates)].sort(
+      (a, b) => (statePref[a.state] ?? 3) - (statePref[b.state] ?? 3),
+    )[0];
     if (root) {
       chain.push(root);
       let frontier = [root.headRefName];
