@@ -276,7 +276,7 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
       )}
       {task.verdict && task.verdict.verdict !== 'do' && (
         <Text color={theme.err} wrap="truncate">
-          {task.verdict.verdict === 'too_big' ? '⛰ too big' : '？needs info'}
+          {task.verdict.verdict === 'too_big' ? '⛰ too big' : '? needs info'}
           {task.verdict.subtasks?.length ? (
             <Text color={theme.info}> — enter: review {task.verdict.subtasks.length}-issue plan</Text>
           ) : null}

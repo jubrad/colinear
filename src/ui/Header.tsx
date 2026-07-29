@@ -1,7 +1,9 @@
 import { Box, Text } from 'ink';
 import { theme } from '../theme.js';
 
-const LOGO = [' ⎈ colinear', '   agents on rails'];
+// ASCII only: ambiguous-width glyphs here wrap header lines on some terminals,
+// pushing the tree past the screen height and forcing full-clear renders
+const LOGO = [' >> colinear', '    agents on rails'];
 
 export function Header(props: {
   info: Array<[string, string]>;

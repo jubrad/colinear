@@ -32,7 +32,11 @@ function useTerminalSize() {
   const { stdout } = useStdout();
   const [size, setSize] = useState({ columns: stdout.columns ?? 120, rows: stdout.rows ?? 40 });
   useEffect(() => {
-    const onResize = () => setSize({ columns: stdout.columns ?? 120, rows: stdout.rows ?? 40 });
+    const onResize = () => {
+      // wipe the alt screen so stale cells from the old geometry can't linger
+      stdout.write('\x1b[2J\x1b[3J\x1b[H');
+      setSize({ columns: stdout.columns ?? 120, rows: stdout.rows ?? 40 });
+    };
     stdout.on('resize', onResize);
     return () => {
       stdout.off('resize', onResize);
@@ -41,7 +45,10 @@ function useTerminalSize() {
   return size;
 }
 
-function useClock(intervalMs = 250): number {
+// NOTE: renders happen on every tick; if the tree is ever taller than the
+// terminal, Ink falls back to full-screen clears per frame (visible flicker).
+// Keep this slow-ish and keep the root Box clipped.
+function useClock(intervalMs = 500): number {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), intervalMs);
@@ -168,7 +175,7 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
 
   return (
     <AppContext.Provider value={ctx}>
-      <Box flexDirection="column" width={size.columns} height={size.rows} paddingX={1}>
+      <Box flexDirection="column" width={size.columns} height={size.rows} paddingX={1} overflow="hidden">
         <Header info={info} keys={[...viewDef.keys, ...GLOBAL_KEYS]} width={size.columns - 2} version={VERSION} />
         {cmdOpen && (
           <Box borderStyle="round" borderColor={theme.key} paddingX={1}>
