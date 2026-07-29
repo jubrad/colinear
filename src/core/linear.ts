@@ -70,60 +70,53 @@ function toIssue(n: IssueNode): LinearIssue {
   };
 }
 
+/** Hard cap across pages so a runaway filter can't pull the whole workspace. */
+const MAX_ISSUES = 500;
+
+/** Cursor-paginated issue query — Linear caps pages at 100 nodes. */
+async function queryIssuesPaged(cfg: Config, filter: Record<string, unknown>): Promise<LinearIssue[]> {
+  const out: IssueNode[] = [];
+  let after: string | undefined;
+  do {
+    const data = await gql<{
+      issues: { nodes: IssueNode[]; pageInfo: { hasNextPage: boolean; endCursor?: string } };
+    }>(
+      cfg,
+      `query ($filter: IssueFilter, $after: String) {
+        issues(first: 100, after: $after, orderBy: updatedAt, filter: $filter) {
+          nodes { ${ISSUE_FIELDS} }
+          pageInfo { hasNextPage endCursor }
+        }
+      }`,
+      { filter, after },
+    );
+    out.push(...data.issues.nodes);
+    after = data.issues.pageInfo.hasNextPage ? data.issues.pageInfo.endCursor : undefined;
+  } while (after && out.length < MAX_ISSUES);
+  return out.map(toIssue);
+}
+
 /** Direct sub-issues of a parent issue. */
 export async function fetchSubIssues(cfg: Config, parentId: string): Promise<LinearIssue[]> {
-  const data = await gql<{ issues: { nodes: IssueNode[] } }>(
-    cfg,
-    `query ($parentId: ID) {
-      issues(first: 100, filter: { parent: { id: { eq: $parentId } } }) {
-        nodes { ${ISSUE_FIELDS} }
-      }
-    }`,
-    { parentId },
-  );
-  return data.issues.nodes.map(toIssue);
+  return queryIssuesPaged(cfg, { parent: { id: { eq: parentId } } });
 }
 
 /** All-teams view sentinel (k9s-style "all namespaces"). */
 export const ALL_TEAMS = '*';
 
 /** teamKey: undefined = my assigned issues, ALL_TEAMS = every team, else that team's active issues. */
-export async function fetchIssues(cfg: Config, teamKey?: string): Promise<LinearIssue[]> {
-  if (teamKey) {
-    const teamFilter = teamKey === ALL_TEAMS ? '' : 'team: { key: { eq: $team } }';
-    const data = await gql<{ issues: { nodes: IssueNode[] } }>(
-      cfg,
-      `query TeamIssues${teamKey === ALL_TEAMS ? '' : '($team: String!)'} {
-        issues(
-          first: 100
-          orderBy: updatedAt
-          filter: {
-            ${teamFilter}
-            state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }
-            project: { null: true }
-          }
-        ) { nodes { ${ISSUE_FIELDS} } }
-      }`,
-      teamKey === ALL_TEAMS ? undefined : { team: teamKey },
-    );
-    return data.issues.nodes.map(toIssue);
-  }
-  const data = await gql<{ viewer: { assignedIssues: { nodes: IssueNode[] } } }>(
-    cfg,
-    `query MyIssues {
-      viewer {
-        assignedIssues(
-          first: 50
-          orderBy: updatedAt
-          filter: {
-            state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }
-            project: { null: true }
-          }
-        ) { nodes { ${ISSUE_FIELDS} } }
-      }
-    }`,
-  );
-  return data.viewer.assignedIssues.nodes.map(toIssue);
+export async function fetchIssues(
+  cfg: Config,
+  teamKey?: string,
+  opts?: { includeProjects?: boolean },
+): Promise<LinearIssue[]> {
+  const filter: Record<string, unknown> = {
+    state: { type: { in: ['triage', 'backlog', 'unstarted', 'started'] } },
+  };
+  if (!opts?.includeProjects) filter.project = { null: true };
+  if (teamKey === undefined) filter.assignee = { isMe: { eq: true } };
+  else if (teamKey !== ALL_TEAMS) filter.team = { key: { eq: teamKey } };
+  return queryIssuesPaged(cfg, filter);
 }
 
 export async function fetchTeams(cfg: Config): Promise<LinearTeam[]> {
@@ -155,14 +148,7 @@ export async function fetchFilteredIssues(cfg: Config, spec: IssueFilterSpec): P
   if (spec.project === null) filter.project = { null: true };
   else if (spec.project) filter.project = { name: { eqIgnoreCase: spec.project } };
 
-  const data = await gql<{ issues: { nodes: IssueNode[] } }>(
-    cfg,
-    `query ($filter: IssueFilter) {
-      issues(first: 100, orderBy: updatedAt, filter: $filter) { nodes { ${ISSUE_FIELDS} } }
-    }`,
-    { filter },
-  );
-  return data.issues.nodes.map(toIssue);
+  return queryIssuesPaged(cfg, filter);
 }
 
 export async function fetchProjects(cfg: Config): Promise<import('./types.js').LinearProject[]> {
@@ -196,17 +182,7 @@ export async function fetchProjects(cfg: Config): Promise<import('./types.js').L
 }
 
 export async function fetchProjectIssues(cfg: Config, projectId: string): Promise<LinearIssue[]> {
-  const data = await gql<{ issues: { nodes: IssueNode[] } }>(
-    cfg,
-    `query ($projectId: ID) {
-      issues(
-        first: 200
-        filter: { project: { id: { eq: $projectId } } }
-      ) { nodes { ${ISSUE_FIELDS} } }
-    }`,
-    { projectId },
-  );
-  return data.issues.nodes.map(toIssue);
+  return queryIssuesPaged(cfg, { project: { id: { eq: projectId } } });
 }
 
 export async function createIssue(

@@ -61,18 +61,21 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const [dispatching, setDispatching] = useState(false);
   const [sortKey, setSortKey] = useState(spec?.sort ?? 'updated');
   const [sortDesc, setSortDesc] = useState(false);
+  const [includeProjects, setIncludeProjects] = useState(false);
 
   const refresh = useCallback(
-    (teamKey: string | undefined) => {
+    (teamKey: string | undefined, withProjects = includeProjects) => {
       setLoading(true);
       setError(undefined);
-      const fetch = spec ? fetchFilteredIssues(cfg, spec.filter ?? {}) : fetchIssues(cfg, teamKey);
+      const fetch = spec
+        ? fetchFilteredIssues(cfg, spec.filter ?? {})
+        : fetchIssues(cfg, teamKey, { includeProjects: withProjects });
       fetch
         .then((all) => setIssues(all.filter((i) => !store.get(i.id))))
         .catch((e) => setError(String(e)))
         .finally(() => setLoading(false));
     },
-    [cfg, spec],
+    [cfg, spec, includeProjects],
   );
 
   useEffect(() => refresh(team), []);
@@ -176,6 +179,12 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       if (input === 'l') setBar('label');
       if (input === 's') setBar('sort');
       if (input === 'r') refresh(team);
+      if (input === 'p') {
+        setIncludeProjects((v) => {
+          refresh(team, !v);
+          return !v;
+        });
+      }
       if (input === 'b') ctx.navigate('board');
       if (input === ' ') {
         const issue = rows[cursor];
@@ -249,7 +258,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       <Box justifyContent="space-between">
         <Text>
           <Text bold color={theme.accent}>
-            {spec ? spec.name : `issues(${team === '*' ? 'all' : (team ?? 'mine')})`}
+            {spec ? spec.name : `issues(${team === '*' ? 'all' : (team ?? 'mine')}${includeProjects ? '+projects' : ''})`}
           </Text>
           <Text dimColor>
             [{rows.length}/{issues.length}]
@@ -333,5 +342,6 @@ export const issuesKeys: Array<[string, string]> = [
   ['t', 'team'],
   ['l', 'label'],
   ['s', 'sort'],
+  ['p', 'projects on/off'],
   ['r', 'refresh'],
 ];
