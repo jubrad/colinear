@@ -160,7 +160,11 @@ export function BoardView(_props: { param?: string }) {
     );
   }
 
-  const colWidth = Math.max(18, Math.floor((ctx.size.columns - COLUMNS.length) / COLUMNS.length));
+  // available width: terminal minus root padding (2), view border (2) + its
+  // padding (2), then the inter-column gaps — the old math used the raw
+  // terminal width and clipped the last (Failed) column's right border
+  const avail = ctx.size.columns - 6;
+  const colWidth = Math.max(16, Math.floor((avail - (COLUMNS.length - 1)) / COLUMNS.length));
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -238,10 +242,14 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
       borderColor={selected ? theme.borderFocus : color}
       paddingX={1}
     >
-      <Text bold wrap="truncate">
-        {active && <Text color={theme.warn}>{spinner(now)} </Text>}
-        {task.issue.identifier} <Text dimColor>{task.issue.title}</Text>
-      </Text>
+      {/* fixed two-line wrapped title: every card shows the same amount of
+          text instead of a one-line truncate that hides most of it */}
+      <Box height={2} overflow="hidden">
+        <Text bold wrap="wrap">
+          {active && <Text color={theme.warn}>{spinner(now)} </Text>}
+          {task.issue.identifier} <Text dimColor>{task.issue.title}</Text>
+        </Text>
+      </Box>
       <Text dimColor wrap="truncate">
         {formatDuration(task, now) || '--:--'} · {formatTokens(task.tokens)} tok
         {task.repo ? ` · ${task.repo.name}` : ''}
