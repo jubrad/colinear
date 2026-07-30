@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CustomViewSpec } from '../core/customviews.js';
 import { fetchFilteredIssues, fetchIssues } from '../core/linear.js';
 import { openUrl } from '../core/open.js';
+import { createIssueFromPrompt } from '../core/newissue.js';
 import { getUiState, setUiState } from '../core/persist.js';
 import { store } from '../core/store.js';
 import type { LinearIssue } from '../core/types.js';
@@ -15,7 +16,7 @@ import { theme } from '../theme.js';
 const PRIORITY_LABELS = ['—', 'Urgent', 'High', 'Med', 'Low'];
 const PRIORITY_COLORS: Array<string | undefined> = [undefined, 'red', 'yellow', 'white', 'gray'];
 
-type BarMode = 'fuzzy' | 'team' | 'label' | 'sort';
+type BarMode = 'fuzzy' | 'team' | 'label' | 'sort' | 'new';
 
 export function filterIssues(issues: LinearIssue[], query: string, labelFilters: string[]): LinearIssue[] {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -159,6 +160,27 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
     [selected, issues, rows, cursor],
   );
 
+  const createNewIssue = useCallback(
+    (request: string) => {
+      if (!request) return;
+      // resolve the team: current view team, else the config default
+      const teamKey = team && team !== '*' ? team : cfg.team && cfg.team !== '*' ? cfg.team : undefined;
+      const teamObj = teamKey ? teams.find((t) => t.key === teamKey) : undefined;
+      if (!teamObj) {
+        ctx.toast('switch to a specific team first (t) so the issue has a home', 'err');
+        return;
+      }
+      ctx.toast(`drafting issue in ${teamObj.key}…`, 'info');
+      void createIssueFromPrompt(cfg, teamObj.id, request)
+        .then((issue) => {
+          ctx.toast(`created ${issue.identifier}`, 'ok');
+          refresh(team);
+        })
+        .catch((e) => ctx.toast(`issue creation failed: ${String(e).slice(0, 80)}`, 'err'));
+    },
+    [team, teams, cfg, ctx, refresh],
+  );
+
   const dispatch = useCallback(
     (picked: LinearIssue[], opts?: DispatchOptions) => {
       if (!picked.length) return;
@@ -179,6 +201,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       if (input === 'l') setBar('label');
       if (input === 's') setBar('sort');
       if (input === 'r') refresh(team);
+      if (input === 'n') setBar('new');
       if (input === 'p') {
         setIncludeProjects((v) => {
           refresh(team, !v);
@@ -288,7 +311,18 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
           onCancel={() => setDispatching(false)}
         />
       )}
-      {bar && bar !== 'fuzzy' && (
+      {bar === 'new' && (
+        <CommandBar
+          prefix="new issue> "
+          placeholder="describe it — an agent drafts the title/description and files it"
+          onSubmit={(value) => {
+            setBar(null);
+            createNewIssue(value.trim());
+          }}
+          onCancel={() => setBar(null)}
+        />
+      )}
+      {bar && bar !== 'fuzzy' && bar !== 'new' && (
         <CommandBar prefix={`${bar}> `} candidates={barCandidates} onSubmit={submitBar} onCancel={() => setBar(null)} />
       )}
       <Table
@@ -342,6 +376,7 @@ export const issuesKeys: Array<[string, string]> = [
   ['t', 'team'],
   ['l', 'label'],
   ['s', 'sort'],
+  ['n', 'new issue'],
   ['p', 'projects on/off'],
   ['r', 'refresh'],
 ];
