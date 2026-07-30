@@ -68,7 +68,7 @@ async function main() {
         await sleep(action.waitMs);
       }
       console.log(`attaching to ${action.identifier} — quit claude (/exit) to return to colinear\n`);
-      spawnSync('claude', ['--resume', action.sessionId ?? ''], {
+      spawnSync('claude', ['--resume', action.sessionId ?? '', '--permission-mode', cfg.attachPermissionMode], {
         cwd: action.worktree,
         stdio: 'inherit',
       });

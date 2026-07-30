@@ -26,7 +26,8 @@ export function attachInTerminal(cfg: Config, task: Task, delayMs = 0): boolean 
       [
         '#!/bin/zsh',
         `cd ${JSON.stringify(task.worktree)} || exit 1`,
-        `exec claude --resume ${task.sessionId}`,
+        // headless agents run auto-accept; the interactive session should too
+        `exec claude --resume ${task.sessionId} --permission-mode ${cfg.attachPermissionMode}`,
         '',
       ].join('\n'),
     );

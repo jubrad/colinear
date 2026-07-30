@@ -194,6 +194,8 @@ export interface Config {
   ciAutofix: boolean;
   /** UI refresh tick in ms — raise it (e.g. 2000) if your terminal/mux flickers (default 1000) */
   tickMs: number;
+  /** permission mode for interactive attach sessions (default "acceptEdits", matching headless agents) */
+  attachPermissionMode: string;
   /** terminal for session attach: "ghostty" | "terminal" (default: Ghostty if installed) */
   terminal?: string;
 }

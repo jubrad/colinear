@@ -128,6 +128,7 @@ export function loadConfig(): Config {
     stateSync: raw.stateSync ?? true,
     ciAutofix: raw.ciAutofix ?? true,
     tickMs: raw.tickMs ?? 1000,
+    attachPermissionMode: raw.attachPermissionMode ?? 'acceptEdits',
     terminal: raw.terminal,
   };
 }
