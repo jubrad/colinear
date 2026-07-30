@@ -83,7 +83,12 @@ export function BoardView(_props: { param?: string }) {
       row: Math.max(0, Math.min((grid[p.col]?.length ?? 1) - 1, p.row + dir)),
     }));
 
-  useEffect(() => ctx.setCapture(answering), [answering]);
+  // modals own the keyboard: without capture, global keys stay live and a
+  // ":" typed into the pin field (e.g. pasting a URL) opens the command bar
+  useEffect(
+    () => ctx.setCapture(answering || Boolean(subModal) || Boolean(repoModal)),
+    [answering, subModal, repoModal],
+  );
   useEffect(() => () => ctx.setCapture(false), []);
 
   useInput(
