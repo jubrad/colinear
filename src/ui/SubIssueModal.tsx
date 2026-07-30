@@ -50,7 +50,7 @@ export function SubIssueModal(props: {
   });
 
   return (
-    <Box flexDirection="column" borderStyle="double" borderColor={theme.key} paddingX={2}>
+    <Box flexDirection="column" flexShrink={0} borderStyle="double" borderColor={theme.key} paddingX={2}>
       <Text bold color={theme.key}>
         sub-issues of {parent} — {selected.size}/{selectable.length} selected
       </Text>

@@ -130,7 +130,9 @@ export function EditTaskModal(props: {
   );
 
   return (
-    <Box flexDirection="column" borderStyle="double" borderColor={theme.key} paddingX={2}>
+    // flexShrink 0: when vertical space is tight, yoga must squeeze the board
+    // behind us, never the modal's own rows
+    <Box flexDirection="column" flexShrink={0} borderStyle="double" borderColor={theme.key} paddingX={2}>
       <Text bold color={theme.key}>
         edit {task.issue.identifier}
       </Text>

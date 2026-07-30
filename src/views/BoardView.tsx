@@ -224,9 +224,10 @@ export function BoardView(_props: { param?: string }) {
           );
         })}
       </Box>
-      {selected && (
+      {selected && !subModal && !repoModal && (
         // fixed-height pane: however tall the task detail gets, it clips here
-        // instead of flex-squeezing the board columns (and their headers) away
+        // instead of flex-squeezing the board columns (and their headers) away.
+        // hidden while a modal is open so the modal always has vertical room
         <Box height={15} flexShrink={0} flexDirection="column" overflow="hidden">
           <DetailPane task={selected} answering={answering} onAnswerDone={() => setAnswering(false)} />
         </Box>
