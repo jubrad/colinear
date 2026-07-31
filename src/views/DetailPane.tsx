@@ -28,14 +28,28 @@ export function DetailPane(props: {
     { isActive: Boolean(task.question) && !answering && !ctx.cmdOpen },
   );
 
+  // tracking parents roll up their sub-issues' spend
+  const subTasks = (task.subIssues ?? [])
+    .map((s) => store.get(s.id))
+    .filter((t): t is Task => Boolean(t));
+  const rolledCost = task.costUsd + subTasks.reduce((n, t) => n + t.costUsd, 0);
+  const rolledTokens = subTasks.reduce(
+    (acc, t) => ({ input: acc.input + t.tokens.input, output: acc.output + t.tokens.output }),
+    { ...task.tokens },
+  );
+  const isTracking = Boolean(task.subIssues?.length);
+
   return (
     <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
       <Text bold>
         {task.issue.identifier}: {task.issue.title}{' '}
         <Text dimColor>
-          {formatDuration(task, Date.now())} · {formatTokens(task.tokens)} tok · ${task.costUsd.toFixed(2)}
+          {isTracking
+            ? `${formatTokens(rolledTokens)} tok · $${rolledCost.toFixed(2)} (incl. ${task.subIssues!.length} sub-issues)`
+            : `${formatDuration(task, Date.now())} · ${formatTokens(task.tokens)} tok · $${task.costUsd.toFixed(2)}`}
         </Text>
       </Text>
+      {isTracking && <Text dimColor>{task.issue.url}</Text>}
       {task.branch && (
         <Text dimColor>
           branch {task.branch} · worktree {task.worktree}
