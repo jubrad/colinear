@@ -8,6 +8,7 @@ const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
   { label: 'default' },
   { label: 'sonnet', value: 'sonnet' },
   { label: 'opus', value: 'opus' },
+  { label: 'fable', value: 'fable' },
   { label: 'haiku', value: 'haiku' },
 ];
 
