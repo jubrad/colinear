@@ -3,17 +3,26 @@ import type { CheckConfig, CheckResult } from './types.js';
 
 const CHECK_TIMEOUT_MS = 15 * 60 * 1000;
 
-export async function runChecks(checks: CheckConfig[], cwd: string): Promise<CheckResult[]> {
+export async function runChecks(
+  checks: CheckConfig[],
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
   for (const check of checks) {
-    results.push(await runCheck(check, cwd));
+    if (signal?.aborted) {
+      results.push({ name: check.name, ok: false, output: 'cancelled' });
+      continue;
+    }
+    results.push(await runCheck(check, cwd, signal));
   }
   return results;
 }
 
-function runCheck(check: CheckConfig, cwd: string): Promise<CheckResult> {
+function runCheck(check: CheckConfig, cwd: string, signal?: AbortSignal): Promise<CheckResult> {
   return new Promise((resolve) => {
-    const child = spawn('bash', ['-lc', check.cmd], { cwd, timeout: CHECK_TIMEOUT_MS });
+    // signal: task cancellation must kill the shell, not wait out the timeout
+    const child = spawn('bash', ['-lc', check.cmd], { cwd, timeout: CHECK_TIMEOUT_MS, signal });
     let output = '';
     const collect = (chunk: Buffer) => {
       output += chunk.toString();

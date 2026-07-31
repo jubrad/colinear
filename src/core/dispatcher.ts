@@ -92,11 +92,22 @@ export class Dispatcher {
 
   /** Abort a live session; task lands in error state with a cancel note. */
   cancel(id: string): boolean {
+    // queued/blocked tasks have no live session — pull them out directly
+    const qi = this.queue.indexOf(id);
+    if (qi !== -1) this.queue.splice(qi, 1);
     const controller = this.aborts.get(id);
-    if (!controller) return false;
-    controller.abort();
-    store.addActivity(id, 'cancelled by user');
-    return true;
+    if (controller) {
+      controller.abort();
+      store.addActivity(id, 'cancelled by user');
+      return true;
+    }
+    const task = store.get(id);
+    if (task && ['queued', 'blocked'].includes(task.status)) {
+      store.update(id, { status: 'error', error: 'cancelled', blockedBy: undefined, endedAt: Date.now() });
+      store.addActivity(id, 'cancelled before start');
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -416,7 +427,7 @@ export class Dispatcher {
       if (repoChecks.length) {
         store.setStatus(id, 'checks');
         store.addActivity(id, 'running checks');
-        const results = await runChecks(repoChecks, worktree);
+        const results = await runChecks(repoChecks, worktree, controller.signal);
         store.update(id, { checks: results });
       }
 
@@ -453,7 +464,8 @@ export class Dispatcher {
         }, 30_000);
         return;
       }
-      store.update(id, { status: 'error', error: cancelled ? 'cancelled' : String(err) });
+      // a cancelled needs-input task must not keep its dead question around
+      store.update(id, { status: 'error', error: cancelled ? 'cancelled' : String(err), question: undefined });
       store.addActivity(id, cancelled ? 'stopped' : `error: ${String(err).slice(0, 200)}`);
       if (!cancelled) {
         log(`task ${issue.identifier} failed: ${err}`);
