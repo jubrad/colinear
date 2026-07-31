@@ -279,6 +279,13 @@ export class Dispatcher {
     this.aborts.set(id, controller);
     const mode = this.modes.get(id);
     this.modes.delete(id);
+    // all PRs merged = the work already landed; never burn an agent on it
+    if (mode !== 'fixci' && task.prs.length && task.prs.every((pr) => pr.state === 'MERGED')) {
+      store.update(id, { status: 'done', error: undefined });
+      store.addActivity(id, 'PR(s) already merged — nothing to run');
+      void this.recheckBlocked();
+      return;
+    }
     const resumeSession = task.sessionId && task.worktree && existsSync(task.worktree) ? task.sessionId : undefined;
     try {
       store.update(id, {

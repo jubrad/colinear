@@ -113,9 +113,10 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
     if (
       infos.length &&
       infos.every((pr) => pr.state === 'MERGED') &&
-      (task.status === 'pr_open' || task.status === 'error')
+      // merged work is done, whatever state the task was stuck in
+      ['pr_open', 'error', 'escalated', 'interrupted', 'queued', 'blocked', 'needs_input'].includes(task.status)
     ) {
-      store.update(task.issue.id, { status: 'done', error: undefined });
+      store.update(task.issue.id, { status: 'done', error: undefined, question: undefined });
       fixer?.recheckBlocked?.(); // free dependents now, not on the next 60s tick
     }
 
