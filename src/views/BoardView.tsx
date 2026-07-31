@@ -257,7 +257,9 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
     <Box
       flexDirection="column"
       borderStyle={selected ? 'double' : 'round'}
-      borderColor={selected ? theme.borderFocus : color}
+      // per-status border, not per-column: tracking parents in the Working
+      // column read differently from cards with a live agent
+      borderColor={selected ? theme.borderFocus : (STATUS_COLORS[task.status] ?? color)}
       paddingX={1}
     >
       {/* fixed two-line wrapped title: every card shows the same amount of
