@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
-import { assignIssue, fetchBlockers, fetchSubIssues } from './linear.js';
+import { assignIssue, fetchBlockers, fetchIssuesByIds, fetchSubIssues } from './linear.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
@@ -406,7 +406,17 @@ export class Dispatcher {
 
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
       const current = store.get(id) ?? task;
-      const ctx = taskContext(current, taskRepo, branch);
+      // sub-issue agents get the family picture: parent goal + sibling scopes,
+      // so parallel agents don't overlap or wander across boundaries
+      let family: IssueFamily | undefined;
+      if (issue.parent) {
+        const [parentIssue, siblings] = await Promise.all([
+          fetchIssuesByIds(this.cfg, [issue.parent.id]).then((r) => r[0]).catch(() => undefined),
+          fetchSubIssues(this.cfg, issue.parent.id).catch(() => undefined),
+        ]);
+        family = { parent: parentIssue, siblings: siblings?.filter((s) => s.id !== issue.id) };
+      }
+      const ctx = taskContext(current, taskRepo, branch, family);
       const work = await runSession({
         prompt:
           mode === 'fixci'
@@ -613,7 +623,39 @@ interface RepoLike {
 }
 
 /** Everything the agent should know about this task, shared by all session prompts. */
-function taskContext(task: Task, repo: RepoLike, branch: string): string {
+interface IssueFamily {
+  parent?: LinearIssue;
+  siblings?: LinearIssue[];
+}
+
+function familyBlock(task: Task, family?: IssueFamily): string {
+  if (!task.issue.parent || !family) return '';
+  const lines: string[] = ['', `## Parent & sibling context`];
+  if (family.parent) {
+    lines.push(
+      `Parent issue ${family.parent.identifier}: ${family.parent.title}`,
+      family.parent.description?.trim()
+        ? `Parent description (overall goal):\n${family.parent.description.trim().slice(0, 1500)}`
+        : '',
+    );
+  } else {
+    lines.push(`Parent issue: ${task.issue.parent.identifier}`);
+  }
+  if (family.siblings?.length) {
+    lines.push(
+      '',
+      'Sibling sub-issues, handled by OTHER agents in parallel:',
+      ...family.siblings.map(
+        (s) => `- ${s.identifier} [${s.stateName}] ${s.title}`,
+      ),
+      '',
+      'Boundaries: implement ONLY this issue\'s scope. Do not implement, refactor, or "helpfully fix" anything a sibling covers — overlapping solutions create merge conflicts and duplicated work. If your work genuinely requires something a sibling owns and it has not landed yet, note the dependency in your PR body instead of building it.',
+    );
+  }
+  return lines.filter((l) => l !== '').join('\n');
+}
+
+function taskContext(task: Task, repo: RepoLike, branch: string, family?: IssueFamily): string {
   const issue = task.issue;
   const remote = repo.remote ?? 'origin';
   const pushRemote = repo.pushRemote ?? remote;
@@ -646,6 +688,7 @@ function taskContext(task: Task, repo: RepoLike, branch: string): string {
     task.instructions
       ? `\nOperator instructions (these take precedence when they conflict with anything else):\n${task.instructions}`
       : '',
+    familyBlock(task, family),
   ]
     .filter((line) => line !== '')
     .join('\n');
