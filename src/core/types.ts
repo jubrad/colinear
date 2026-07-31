@@ -56,7 +56,9 @@ export type TaskStatus =
   /** restored from a previous run while the agent was mid-flight */
   | 'interrupted'
   /** waiting on Linear blocking issues to complete */
-  | 'blocked';
+  | 'blocked'
+  /** parent issue whose work happens via its sub-issues; completes when they all do */
+  | 'tracking';
 
 export type Verification = 'local-light' | 'ci' | 'needs-env';
 
@@ -144,6 +146,8 @@ export interface Task {
   ciFixAttempted?: boolean;
   /** operator-pinned PR number: PR matching uses exactly this, never guesses */
   pinnedPr?: number;
+  /** sub-issues a `tracking` parent is waiting on */
+  subIssues?: Array<{ id: string; identifier: string; title: string; done: boolean }>;
   /** unresolved Linear blockers keeping this task out of the queue */
   blockedBy?: Array<{ id: string; identifier: string }>;
   /** one automatic retry after a rate-limit failure */

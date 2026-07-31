@@ -63,7 +63,17 @@ export function TaskView(props: { param?: string }) {
         }
         const names = [...created.values()].map((c) => c.identifier);
         store.addActivity(task.issue.id, `split into ${names.join(', ')}`);
-        store.setStatus(task.issue.id, 'done');
+        // the parent's work now lives in its sub-issues: track them and
+        // auto-complete when they all land (refreshTracking keeps this fresh)
+        store.update(task.issue.id, {
+          status: 'tracking',
+          subIssues: [...created.entries()].map(([i, c]) => ({
+            id: c.id,
+            identifier: c.identifier,
+            title: subtasks[i].title,
+            done: false,
+          })),
+        });
         ctx.toast(`created ${names.join(', ')}`, 'ok');
         if (dispatchAfter) {
           const issues = await fetchIssuesByIds(ctx.cfg, [...created.values()].map((c) => c.id));

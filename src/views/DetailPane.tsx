@@ -1,8 +1,10 @@
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { useState } from 'react';
+import { store } from '../core/store.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens } from '../ui/format.js';
+import { STATUS_COLORS } from '../theme.js';
 import type { Task } from '../core/types.js';
 
 export function DetailPane(props: {
@@ -81,7 +83,23 @@ export function DetailPane(props: {
         </Box>
       )}
 
-      {task.subtasks.length > 0 && (
+      {task.subIssues?.length ? (
+        <Box flexDirection="column">
+          {/* tracking parent: sub-issue progress, with live board status chips */}
+          {task.subIssues.slice(0, 5).map((s) => (
+            <Text key={s.id} color={s.done ? 'green' : undefined} dimColor={s.done}>
+              {s.done ? '☑' : '☐'} {s.identifier} {s.title.slice(0, 70)}
+              {!s.done && store.get(s.id) ? (
+                <Text color={STATUS_COLORS[store.get(s.id)!.status]}> ⚒ {store.get(s.id)!.status}</Text>
+              ) : null}
+            </Text>
+          ))}
+          {task.subIssues.length > 5 && (
+            <Text dimColor>… {task.subIssues.length - 5} more (enter for task view)</Text>
+          )}
+        </Box>
+      ) : null}
+      {task.subtasks.length > 0 && !task.subIssues?.length && (
         <Box flexDirection="column">
           {/* capped: an unbounded checklist squeezes the board above off-screen */}
           {task.subtasks.slice(0, 5).map((s) => (

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
-import { assignIssue, fetchBlockers } from './linear.js';
+import { assignIssue, fetchBlockers, fetchSubIssues } from './linear.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
@@ -208,8 +208,48 @@ export class Dispatcher {
     return true;
   }
 
+  /**
+   * Refresh `tracking` parents (issues handled entirely by their sub-issues):
+   * update sub-issue progress, complete the parent when every sub lands, and
+   * auto-convert failed/escalated parents that have Linear sub-issues and no
+   * PRs of their own — no agent tokens needed to close those out.
+   */
+  async refreshTracking() {
+    for (const task of store.list()) {
+      const candidate =
+        task.status === 'tracking' ||
+        (['error', 'escalated'].includes(task.status) && !task.prs.length);
+      if (!candidate) continue;
+      const subs = await fetchSubIssues(this.cfg, task.issue.id).catch(() => null);
+      if (!subs || !subs.length) continue;
+      const subIssues = subs.map((s) => ({
+        id: s.id,
+        identifier: s.identifier,
+        title: s.title,
+        done:
+          s.stateType === 'completed' ||
+          s.stateType === 'canceled' ||
+          store.get(s.id)?.status === 'done',
+      }));
+      const allDone = subIssues.every((s) => s.done);
+      const nextStatus = allDone ? 'done' : 'tracking';
+      const changed =
+        task.status !== nextStatus || JSON.stringify(subIssues) !== JSON.stringify(task.subIssues);
+      if (!changed) continue;
+      if (task.status !== 'tracking' && !allDone) {
+        store.addActivity(task.issue.id, `tracking ${subIssues.length} sub-issues`);
+      }
+      store.update(task.issue.id, { status: nextStatus, subIssues, error: undefined });
+      if (allDone && task.status !== 'done') {
+        store.addActivity(task.issue.id, 'all sub-issues done');
+        notify(this.cfg, task.issue.identifier, 'all sub-issues done', task.issue.url);
+      }
+    }
+  }
+
   /** Re-check blocked tasks; queue the ones whose Linear blockers finished. */
   async recheckBlocked() {
+    await this.refreshTracking().catch(() => {});
     for (const task of store.list().filter((t) => t.status === 'blocked')) {
       const blockers = await fetchBlockers(this.cfg, task.issue.id).catch(() => null);
       if (!blockers) continue;

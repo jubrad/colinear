@@ -22,7 +22,7 @@ interface BoardColumn {
 const COLUMNS: BoardColumn[] = [
   { title: 'Queued', statuses: ['queued', 'blocked', 'interrupted'] },
   { title: 'Triage', statuses: ['triage'] },
-  { title: 'Working', statuses: ['working', 'checks'] },
+  { title: 'Working', statuses: ['working', 'checks', 'tracking'] },
   { title: 'Needs Input', statuses: ['needs_input'] },
   { title: 'PR Open', statuses: ['pr_open'] },
   { title: 'Done', statuses: ['done'] },
@@ -183,6 +183,18 @@ export function BoardView(_props: { param?: string }) {
             // sub-issues default to the parent's repo; dependency queue orders them
             const repo = ctx.cfg.repos.find((r) => r.path === subModal.parent.repo?.path);
             ctx.dispatcher.enqueue(picked, { repo });
+            // a parent with no PRs of its own is now just tracking its subs
+            if (!subModal.parent.prs.length) {
+              store.update(subModal.parent.issue.id, {
+                status: 'tracking',
+                subIssues: subModal.rows.map((r) => ({
+                  id: r.issue.id,
+                  identifier: r.issue.identifier,
+                  title: r.issue.title,
+                  done: r.disabled === 'done',
+                })),
+              });
+            }
             ctx.toast(
               `dispatched ${picked.length} sub-issue${picked.length > 1 ? 's' : ''} of ${subModal.parent.issue.identifier}`,
               'ok',
@@ -260,7 +272,23 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
         {formatDuration(task, now) || '--:--'} · {formatTokens(task.tokens)} tok
         {task.repo ? ` · ${task.repo.name}` : ''}
       </Text>
-      {task.subtasks.length > 0 && (
+      {task.subIssues?.length ? (
+        // tracking parent: sub-issue progress is the story, not PRs
+        <>
+          <Text wrap="truncate">
+            <Text color={STATUS_COLORS.tracking}>
+              {progressBar(task.subIssues.filter((s) => s.done).length, task.subIssues.length)}
+            </Text>{' '}
+            {task.subIssues.filter((s) => s.done).length}/{task.subIssues.length} sub-issues
+          </Text>
+          {task.subIssues.slice(0, 3).map((s) => (
+            <Text key={s.id} dimColor wrap="truncate">
+              {s.done ? '✓' : '·'} {s.identifier} {s.title}
+            </Text>
+          ))}
+        </>
+      ) : null}
+      {task.subtasks.length > 0 && !task.subIssues?.length && (
         <Text wrap="truncate">
           <Text color={doneCount === task.subtasks.length ? theme.ok : theme.warn}>
             {progressBar(doneCount, task.subtasks.length)}
@@ -283,7 +311,7 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
           ⛓ {task.blockedBy.map((b) => b.identifier).join(', ')}
         </Text>
       )}
-      {task.verdict && task.verdict.verdict !== 'do' && (
+      {task.verdict && task.verdict.verdict !== 'do' && !task.subIssues?.length && (
         <Text color={theme.err} wrap="truncate">
           {task.verdict.verdict === 'too_big' ? '⛰ too big' : '? needs info'}
           {task.verdict.subtasks?.length ? (
@@ -305,7 +333,7 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
           ))}
         </Text>
       )}
-      {task.prs.map((pr) => {
+      {(task.subIssues?.length ? [] : task.prs).map((pr) => {
         const review = reviewStatus(pr);
         return (
           <Text key={pr.number} color={theme.accent} wrap="truncate">
