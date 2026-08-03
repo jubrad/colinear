@@ -41,6 +41,10 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
       [
         'pr', 'list',
         '--state', 'all',
+        // colinear PRs are always authored by the operator (agents use their
+        // gh auth) — filtering keeps busy upstreams (materialize!) from
+        // pushing our PRs past the list limit, which orphaned matched work
+        '--author', '@me',
         '--limit', '200',
         '--json', 'number,title,url,state,isDraft,headRefName,baseRefName,reviewDecision,statusCheckRollup',
       ],
