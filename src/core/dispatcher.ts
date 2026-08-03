@@ -196,6 +196,10 @@ export class Dispatcher {
       repo: { name: repo.name, path: repo.path, defaultBranch: repo.defaultBranch, remote: repo.remote, pushRemote: repo.pushRemote, prBase: repo.prBase, worktreeRoot: repo.worktreeRoot },
       status: 'queued',
       sessionId: undefined,
+      // the wiped pointer stays recoverable (TaskView shows previous sessions)
+      sessionHistory: task.sessionId
+        ? [...(task.sessionHistory ?? []), { sessionId: task.sessionId, worktree: task.worktree, at: Date.now() }].slice(-5)
+        : task.sessionHistory,
       worktree: undefined,
       branch: undefined,
       verdict: keepTriage ? task.verdict : undefined,
@@ -290,7 +294,16 @@ export class Dispatcher {
   private callbacks(id: string): SessionCallbacks {
     return {
       onActivity: (line) => store.addActivity(id, line),
-      onSessionId: (sessionId) => store.update(id, { sessionId }),
+      onSessionId: (sessionId) => {
+        const prev = store.get(id);
+        // a resume that crashes after init still mints a new id — keep the
+        // old pointer so the real transcript is always recoverable
+        const history =
+          prev?.sessionId && prev.sessionId !== sessionId
+            ? [...(prev.sessionHistory ?? []), { sessionId: prev.sessionId, worktree: prev.worktree, at: Date.now() }].slice(-5)
+            : prev?.sessionHistory;
+        store.update(id, { sessionId, sessionHistory: history });
+      },
       onUsage: (u) => {
         const task = store.get(id);
         if (!task) return;

@@ -198,6 +198,15 @@ export function TaskView(props: { param?: string }) {
           instructions: {task.instructions}
         </Text>
       )}
+      {task.sessionHistory?.length ? (
+        <Text dimColor wrap="truncate">
+          previous session{task.sessionHistory.length > 1 ? 's' : ''}:{' '}
+          {task.sessionHistory
+            .slice(-2)
+            .map((s) => `claude --resume ${s.sessionId}${s.worktree ? ` (in ${s.worktree})` : ''}`)
+            .join(' · ')}
+        </Text>
+      ) : null}
       {task.error && <Text color={theme.err}>✖ {task.error.slice(0, 200)}</Text>}
       {task.verdict && task.verdict.verdict !== 'do' && (
         <Text color={theme.err} wrap="truncate">

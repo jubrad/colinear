@@ -152,6 +152,8 @@ export interface Task {
   blockedBy?: Array<{ id: string; identifier: string }>;
   /** one automatic retry after a rate-limit failure */
   retried?: boolean;
+  /** superseded session pointers — recovery when a new session clobbers a good one */
+  sessionHistory?: Array<{ sessionId: string; worktree?: string; at: number }>;
 }
 
 export interface CheckConfig {
