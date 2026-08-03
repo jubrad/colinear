@@ -324,7 +324,7 @@ export class Dispatcher {
   private async runTask(id: string) {
     const task = store.get(id);
     if (!task) return;
-    const { issue } = task;
+    let issue = task.issue;
     let stopSubtaskPoll: (() => void) | undefined;
     const controller = new AbortController();
     this.aborts.set(id, controller);
@@ -344,6 +344,23 @@ export class Dispatcher {
         startedAt: task.startedAt ?? Date.now(),
         endedAt: undefined,
       });
+      // refresh the issue snapshot: persisted tasks carry dispatch-time data,
+      // which goes stale (edited descriptions, parent links added later)
+      const freshIssue = (await fetchIssuesByIds(this.cfg, [issue.id]).catch(() => []))[0];
+      if (freshIssue) {
+        issue = freshIssue;
+        store.update(id, { issue: freshIssue });
+      }
+      // sub-issue agents get the family picture: parent goal + sibling scopes,
+      // so parallel agents don't overlap or wander across boundaries
+      let family: IssueFamily | undefined;
+      if (issue.parent) {
+        const [parentIssue, siblings] = await Promise.all([
+          fetchIssuesByIds(this.cfg, [issue.parent.id]).then((r) => r[0]).catch(() => undefined),
+          fetchSubIssues(this.cfg, issue.parent.id).catch(() => undefined),
+        ]);
+        family = { parent: parentIssue, siblings: siblings?.filter((s) => s.id !== issue.id) };
+      }
       store.addActivity(id, 'creating worktree');
       let taskRepo = task.repo ?? this.cfg.repos[0];
       // adopt an existing PR (operator-pinned first, else any open one):
@@ -364,7 +381,7 @@ export class Dispatcher {
       if (!resumeSession && !task.skipTriage) {
         store.addActivity(id, 'triage pass');
         const triage = await runSession({
-          prompt: triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions),
+          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions)}\n${familyBlock(issue, family)}`,
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: TRIAGE_SCHEMA,
@@ -406,16 +423,6 @@ export class Dispatcher {
 
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
       const current = store.get(id) ?? task;
-      // sub-issue agents get the family picture: parent goal + sibling scopes,
-      // so parallel agents don't overlap or wander across boundaries
-      let family: IssueFamily | undefined;
-      if (issue.parent) {
-        const [parentIssue, siblings] = await Promise.all([
-          fetchIssuesByIds(this.cfg, [issue.parent.id]).then((r) => r[0]).catch(() => undefined),
-          fetchSubIssues(this.cfg, issue.parent.id).catch(() => undefined),
-        ]);
-        family = { parent: parentIssue, siblings: siblings?.filter((s) => s.id !== issue.id) };
-      }
       const ctx = taskContext(current, taskRepo, branch, family);
       const work = await runSession({
         prompt:
@@ -628,8 +635,8 @@ interface IssueFamily {
   siblings?: LinearIssue[];
 }
 
-function familyBlock(task: Task, family?: IssueFamily): string {
-  if (!task.issue.parent || !family) return '';
+function familyBlock(issue: LinearIssue, family?: IssueFamily): string {
+  if (!issue.parent || !family) return '';
   const lines: string[] = ['', `## Parent & sibling context`];
   if (family.parent) {
     lines.push(
@@ -639,7 +646,7 @@ function familyBlock(task: Task, family?: IssueFamily): string {
         : '',
     );
   } else {
-    lines.push(`Parent issue: ${task.issue.parent.identifier}`);
+    lines.push(`Parent issue: ${issue.parent.identifier}`);
   }
   if (family.siblings?.length) {
     lines.push(
@@ -688,7 +695,7 @@ function taskContext(task: Task, repo: RepoLike, branch: string, family?: IssueF
     task.instructions
       ? `\nOperator instructions (these take precedence when they conflict with anything else):\n${task.instructions}`
       : '',
-    familyBlock(task, family),
+    familyBlock(task.issue, family),
   ]
     .filter((line) => line !== '')
     .join('\n');
