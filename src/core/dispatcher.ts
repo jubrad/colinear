@@ -378,16 +378,22 @@ export class Dispatcher {
         plan = store.get(id)?.verdict?.plan;
         store.addActivity(id, plan ? 'work pass (existing triage plan)' : 'work pass (triage skipped)');
       }
+      // sub-issue triage coordinates too (scope questions surface earliest there)
+      const triageChannel =
+        this.cfg.coordination && issue.parent
+          ? { id: `#${issue.parent.identifier}`, username: issue.identifier }
+          : undefined;
       if (!resumeSession && !task.skipTriage) {
         store.addActivity(id, 'triage pass');
         const triage = await runSession({
-          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions)}\n${familyBlock(issue, family)}`,
+          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions)}\n${familyBlock(issue, family)}${triageChannel ? channelBlock(triageChannel.id) : ''}`,
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: TRIAGE_SCHEMA,
           model: store.get(id)?.model ?? this.cfg.model,
           maxTurns: 40,
           abortController: controller,
+          channel: triageChannel,
         });
         store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + triage.costUsd });
         if (triage.isError) throw new Error(`triage failed: ${triage.errors.join('; ')}`);
@@ -423,7 +429,12 @@ export class Dispatcher {
 
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
       const current = store.get(id) ?? task;
-      const ctx = taskContext(current, taskRepo, branch, family);
+      // EXPERIMENTAL coordination channel: family-scoped, identity baked in
+      const channelId = this.cfg.coordination
+        ? issue.parent?.identifier ?? (store.get(id)?.subIssues?.length ? issue.identifier : undefined)
+        : undefined;
+      const channel = channelId ? { id: `#${channelId}`, username: issue.identifier } : undefined;
+      const ctx = taskContext(current, taskRepo, branch, family) + (channel ? channelBlock(channel.id) : '');
       const work = await runSession({
         prompt:
           mode === 'fixci'
@@ -436,6 +447,7 @@ export class Dispatcher {
         model: store.get(id)?.model ?? this.cfg.model,
         resume: resumeSession,
         abortController: controller,
+        channel,
       });
       store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + work.costUsd });
       if (work.isError) throw new Error(`work failed: ${work.errors.join('; ')}`);
@@ -660,6 +672,18 @@ function familyBlock(issue: LinearIssue, family?: IssueFamily): string {
     );
   }
   return lines.filter((l) => l !== '').join('\n');
+}
+
+function channelBlock(channel: string): string {
+  return `
+
+## Coordination channel ${channel} (experimental)
+You share this channel with the other agents working this issue family and with the human operator.
+Tools: mcp__colinear__channel_read (new messages since your last read — you never see duplicates) and mcp__colinear__channel_post (short message, max ~2 lines; your name is stamped automatically).
+Discipline:
+- READ at session start, before structural/architectural decisions, and before opening your PR.
+- POST: a scope claim at session start (files/dirs you own), architectural decisions siblings must know about, advisory claims on shared resources ("using the kind cluster ~20min"), your PR link when opened, and a done notice.
+- OPERATOR messages outrank everything else in this channel.`;
 }
 
 function taskContext(task: Task, repo: RepoLike, branch: string, family?: IssueFamily): string {

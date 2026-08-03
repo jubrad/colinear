@@ -82,6 +82,10 @@ Dispatching (enter, or `c` for the custom modal) immediately self-assigns the is
 
 Everything persists in `~/.local/state/colinear/`: tasks (status, session ids, PRs, activity), planner chats, UI prefs. Restart and in-flight tasks return as `interrupted` (`r` resumes the same transcript); planner chats resume their sessions too. Sessions are cwd-keyed by Claude Code, but colinear pins every session to its worktree path, so you can run `coli` from anywhere.
 
+## Coordination channels (HIGHLY EXPERIMENTAL — `coordination-channels` branch)
+
+`"coordination": true` gives issue families an IRC-style channel (`#CLO-67`): sub-issue agents get `channel_read`/`channel_post` tools (identity stamped at spawn, cursor-based reads — no double-pulls) and are prompted to claim scopes, announce architectural decisions and PRs, and read before big moves. `:chan` lists channels; `:chan CLO-67` is a live tail with an operator input — one message reaches every family agent. Full design + deferred work (push delivery, resource leases, remote executors): COORDINATION.md.
+
 ## Custom views
 
 Drop JSON in `~/.config/colinear/views/`, then `:reload`:

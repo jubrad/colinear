@@ -127,6 +127,7 @@ export function loadConfig(): Config {
     notifications: raw.notifications ?? true,
     stateSync: raw.stateSync ?? true,
     ciAutofix: raw.ciAutofix ?? true,
+    coordination: raw.coordination ?? false,
     tickMs: raw.tickMs ?? 1000,
     attachPermissionMode: raw.attachPermissionMode ?? 'acceptEdits',
     terminal: raw.terminal,

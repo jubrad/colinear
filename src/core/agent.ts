@@ -1,5 +1,37 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
+import { channels, formatMessages } from './channel.js';
 import type { PendingQuestion } from './types.js';
+
+/**
+ * Per-session coordination tools. Identity is enforced by construction: the
+ * channel and username are closed over at spawn — there is no from/channel
+ * parameter for the agent to spoof.
+ */
+function coordinationServer(channel: string, username: string) {
+  return createSdkMcpServer({
+    name: 'colinear',
+    tools: [
+      tool(
+        'channel_read',
+        `Read new messages on your coordination channel ${channel} (since your last read; you never see the same message twice).`,
+        {},
+        async () => ({
+          content: [{ type: 'text', text: formatMessages(channels.readSince(channel, username)) }],
+        }),
+      ),
+      tool(
+        'channel_post',
+        `Post a short message (max ~2 lines) to your coordination channel ${channel}. Your name is stamped automatically.`,
+        { message: z.string().min(1).max(500) },
+        async ({ message }) => {
+          channels.post(channel, username, 'agent', message);
+          return { content: [{ type: 'text', text: 'posted' }] };
+        },
+      ),
+    ],
+  });
+}
 
 export interface SessionCallbacks {
   onActivity: (line: string) => void;
@@ -33,8 +65,10 @@ export async function runSession(opts: {
   /** session id to resume (continues its transcript) */
   resume?: string;
   abortController?: AbortController;
+  /** coordination channel membership (identity baked in at spawn) */
+  channel?: { id: string; username: string };
 }): Promise<SessionResult> {
-  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController } = opts;
+  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController, channel } = opts;
 
   const q = query({
     prompt,
@@ -46,6 +80,9 @@ export async function runSession(opts: {
       abortController,
       permissionMode: 'acceptEdits',
       settingSources: ['project'],
+      ...(channel
+        ? { mcpServers: { colinear: coordinationServer(channel.id, channel.username) } }
+        : {}),
       ...(outputSchema ? { outputFormat: { type: 'json_schema' as const, schema: outputSchema } } : {}),
       canUseTool: async (toolName, input) => {
         if (toolName === 'AskUserQuestion') {

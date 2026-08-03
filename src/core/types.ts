@@ -196,6 +196,8 @@ export interface Config {
   stateSync: boolean;
   /** auto-dispatch a fix session when a task's PR checks go red (default true) */
   ciAutofix: boolean;
+  /** EXPERIMENTAL: family coordination channels for sub-issue agents (default false) */
+  coordination: boolean;
   /** UI refresh tick in ms — raise it (e.g. 2000) if your terminal/mux flickers (default 1000) */
   tickMs: number;
   /** permission mode for interactive attach sessions (default "acceptEdits", matching headless agents) */

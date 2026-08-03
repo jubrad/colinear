@@ -3,6 +3,7 @@ import { loadCustomViews } from '../core/customviews.js';
 import type { Candidate } from '../ui/CommandBar.js';
 import { BoardView, boardKeys } from './BoardView.js';
 import { ConfigView, configKeys } from './ConfigView.js';
+import { ChannelView, channelKeys } from './ChannelView.js';
 import { ChatView, chatKeys } from './ChatView.js';
 import { HelpView, helpKeys } from './HelpView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
@@ -68,6 +69,13 @@ const builtinViews: ViewDef[] = [
     describe: 'view & edit colinear config',
     Component: ConfigView,
     keys: configKeys,
+  },
+  {
+    name: 'chan',
+    aliases: ['channel', 'irc'],
+    describe: 'coordination channels (experimental — :chan CLO-67)',
+    Component: ChannelView,
+    keys: channelKeys,
   },
   {
     name: 'help',
