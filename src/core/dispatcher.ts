@@ -451,7 +451,31 @@ export class Dispatcher {
         abortController: controller,
       });
       store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + work.costUsd });
-      if (work.isError) throw new Error(`work failed: ${work.errors.join('; ')}`);
+      if (work.isError) {
+        // auto-recovery: a spawn that died before its first assistant turn
+        // clobbered the previous (good) session pointer at init — roll it
+        // back, and retry once. Only when the superseded pointer belongs to
+        // THIS worktree (a redispatch wipe is deliberate, don't undo it).
+        const now = store.get(id);
+        const prevPtr = now?.sessionHistory?.at(-1);
+        if (work.assistantTurns === 0 && prevPtr && (!prevPtr.worktree || prevPtr.worktree === worktree)) {
+          store.update(id, {
+            sessionId: prevPtr.sessionId,
+            sessionHistory: now!.sessionHistory!.slice(0, -1),
+          });
+          store.addActivity(id, `session crashed before starting — restored session ${prevPtr.sessionId.slice(0, 8)}…`);
+          if (!now?.retried) {
+            store.update(id, { status: 'queued', retried: true });
+            store.addActivity(id, 'auto-retrying with the restored session in 5s');
+            setTimeout(() => {
+              this.queue.push(id);
+              this.pump();
+            }, 5_000);
+            return;
+          }
+        }
+        throw new Error(`work failed: ${work.errors.join('; ')}`);
+      }
 
       const repoChecks = this.cfg.repos.find((r) => r.path === taskRepo.path)?.checks ?? this.cfg.checks;
       if (repoChecks.length) {

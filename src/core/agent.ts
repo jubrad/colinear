@@ -14,6 +14,8 @@ export interface SessionResult {
   costUsd: number;
   isError: boolean;
   errors: string[];
+  /** assistant messages seen — 0 on a spawn that died before doing anything */
+  assistantTurns: number;
 }
 
 interface AskUserQuestionInput {
@@ -69,7 +71,7 @@ export async function runSession(opts: {
     },
   });
 
-  const result: SessionResult = { text: '', costUsd: 0, isError: false, errors: [] };
+  const result: SessionResult = { text: '', costUsd: 0, isError: false, errors: [], assistantTurns: 0 };
 
   for await (const msg of q) {
     switch (msg.type) {
@@ -77,6 +79,7 @@ export async function runSession(opts: {
         if (msg.subtype === 'init') callbacks.onSessionId(msg.session_id);
         break;
       case 'assistant': {
+        result.assistantTurns++;
         const usage = (msg.message as { usage?: Record<string, number | undefined> }).usage;
         if (usage && callbacks.onUsage) {
           callbacks.onUsage({
