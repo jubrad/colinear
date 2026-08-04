@@ -20,15 +20,14 @@ interface BoardColumn {
 }
 
 const COLUMNS: BoardColumn[] = [
-  // Done leads: finished work parks on the left edge out of the way of the
-  // active pipeline, which reads left-to-right from Queued
-  { title: 'Done', statuses: ['done'] },
+  // pipeline reads left-to-right; finished work parks on the right edge
   { title: 'Queued', statuses: ['queued', 'blocked', 'interrupted'] },
   { title: 'Triage', statuses: ['triage'] },
   { title: 'Working', statuses: ['working', 'checks', 'tracking'] },
   { title: 'Needs Input', statuses: ['needs_input'] },
   { title: 'PR Open', statuses: ['pr_open'] },
   { title: 'Failed', statuses: ['escalated', 'error'] },
+  { title: 'Done', statuses: ['done'] },
 ];
 
 const ACTIVE_STATUSES: TaskStatus[] = ['triage', 'working', 'checks'];
