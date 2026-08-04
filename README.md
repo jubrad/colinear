@@ -39,7 +39,7 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
   "ciAutofix": true,
   "terminal": "ghostty",
   "tickMs": 1000,
-  "attachPermissionMode": "acceptEdits"
+  "attachPermissionMode": "auto"
 }
 ```
 
@@ -47,7 +47,7 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
 - `description` (per repo) — what lives there. **Triage reads these to route each issue to the right repo** (it can inspect all allowlisted repos and returns its pick; the work pass starts there). Write them honestly.
 - `model` — default model for agents; overridable per dispatch and per task (`m`).
 - `tickMs` — UI refresh tick; raise if your terminal repaints non-atomically.
-- `attachPermissionMode` — permission mode for `s` attach sessions: `acceptEdits` (default), `bypassPermissions`, or `default`.
+- `attachPermissionMode` — permission mode for `s` attach sessions: `auto` (default — classifier gates risky commands), `acceptEdits`, `bypassPermissions`, or `default`. Headless agents always run in `auto`; classifier-blocked commands surface on the board as needs-input questions (allow/deny).
 - `stateSync` — auto-move Linear states (dispatch → In Progress, PR → In Review).
 - `ciAutofix` — dispatch a fix session when a task's PR checks go red.
 - `terminal` — session attach target: unset = in-place (recommended), `"ghostty"` / `"terminal"` = external window.

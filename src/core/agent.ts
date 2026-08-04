@@ -46,7 +46,9 @@ export async function runSession(opts: {
       maxTurns,
       resume,
       abortController,
-      permissionMode: 'acceptEdits',
+      // auto: the classifier approves routine work and only risky/uncertain
+      // calls fall through to canUseTool below (haiku predates auto support)
+      permissionMode: model?.includes('haiku') ? 'acceptEdits' : 'auto',
       settingSources: ['project'],
       ...(outputSchema ? { outputFormat: { type: 'json_schema' as const, schema: outputSchema } } : {}),
       canUseTool: async (toolName, input) => {
@@ -66,7 +68,22 @@ export async function runSession(opts: {
             interrupt: false,
           };
         }
-        return { behavior: 'allow', updatedInput: input };
+        // only reached when the auto-mode classifier blocked the call or
+        // couldn't decide — ask the operator instead of rubber-stamping
+        const answer = await new Promise<string>((resolve) => {
+          callbacks.onQuestion({
+            text: `⚒ wants to run ${toolName}: ${describeInput(input)}`,
+            options: ['allow', 'deny'],
+            answer: resolve,
+          });
+        });
+        if (answer === 'allow') return { behavior: 'allow', updatedInput: input };
+        return {
+          behavior: 'deny',
+          message:
+            'The operator denied this action. Do not retry it as-is — find a safer approach, or ask what to do via AskUserQuestion.',
+          interrupt: false,
+        };
       },
     },
   });
@@ -80,7 +97,7 @@ export async function runSession(opts: {
         break;
       case 'assistant': {
         result.assistantTurns++;
-        const usage = (msg.message as { usage?: Record<string, number | undefined> }).usage;
+        const usage = msg.message.usage;
         if (usage && callbacks.onUsage) {
           callbacks.onUsage({
             input:
@@ -129,4 +146,15 @@ function summarizeInput(input: unknown): string {
     if (typeof hint === 'string' && hint) return hint.slice(0, 80);
   }
   return '';
+}
+
+/** fuller than summarizeInput: permission questions must show the whole command */
+function describeInput(input: unknown): string {
+  const hint = summarizeInput(input);
+  if (input && typeof input === 'object') {
+    const o = input as Record<string, unknown>;
+    const full = o.command ?? o.file_path ?? o.url ?? '';
+    if (typeof full === 'string' && full) return full.slice(0, 300);
+  }
+  return hint || JSON.stringify(input ?? {}).slice(0, 300);
 }
