@@ -135,7 +135,7 @@ export class Dispatcher {
         status: 'queued',
         activity: [],
         subtasks: [],
-        tokens: { input: 0, output: 0 },
+        tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         checks: [],
         prs: [],
         costUsd: 0,
@@ -309,7 +309,12 @@ export class Dispatcher {
         const task = store.get(id);
         if (!task) return;
         store.update(id, {
-          tokens: { input: task.tokens.input + u.input, output: task.tokens.output + u.output },
+          tokens: {
+            input: task.tokens.input + u.input,
+            output: task.tokens.output + u.output,
+            cacheRead: (task.tokens.cacheRead ?? 0) + u.cacheRead,
+            cacheWrite: (task.tokens.cacheWrite ?? 0) + u.cacheWrite,
+          },
         });
       },
       onQuestion: (question) => {

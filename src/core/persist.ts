@@ -50,7 +50,10 @@ export function loadState(cfg: Config): void {
     const data = JSON.parse(raw) as PersistedState;
     for (const t of data.tasks ?? []) {
       const status: TaskStatus = LIVE_STATUSES.includes(t.status) ? 'interrupted' : t.status;
-      store.upsert({ ...t, status, question: undefined });
+      // pre-cache-split states lack these fields (their `input` includes
+      // cache traffic — inflated, but not worth rewriting history over)
+      const tokens = { ...t.tokens, cacheRead: t.tokens.cacheRead ?? 0, cacheWrite: t.tokens.cacheWrite ?? 0 };
+      store.upsert({ ...t, status, tokens, question: undefined });
       if (status === 'interrupted') {
         store.addActivity(t.issue.id, 'colinear restarted — press r to resume');
       }

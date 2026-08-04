@@ -3,7 +3,7 @@ import TextInput from 'ink-text-input';
 import { useState } from 'react';
 import { store } from '../core/store.js';
 import { useColinear } from '../ui/context.js';
-import { formatDuration, formatTokens } from '../ui/format.js';
+import { formatDuration, formatTokens, formatTokensFull } from '../ui/format.js';
 import { STATUS_COLORS } from '../theme.js';
 import type { Task } from '../core/types.js';
 
@@ -34,7 +34,12 @@ export function DetailPane(props: {
     .filter((t): t is Task => Boolean(t));
   const rolledCost = task.costUsd + subTasks.reduce((n, t) => n + t.costUsd, 0);
   const rolledTokens = subTasks.reduce(
-    (acc, t) => ({ input: acc.input + t.tokens.input, output: acc.output + t.tokens.output }),
+    (acc, t) => ({
+      input: acc.input + t.tokens.input,
+      output: acc.output + t.tokens.output,
+      cacheRead: acc.cacheRead + (t.tokens.cacheRead ?? 0),
+      cacheWrite: acc.cacheWrite + (t.tokens.cacheWrite ?? 0),
+    }),
     { ...task.tokens },
   );
   const isTracking = Boolean(task.subIssues?.length);
@@ -46,7 +51,7 @@ export function DetailPane(props: {
         <Text dimColor>
           {isTracking
             ? `${formatTokens(rolledTokens)} tok · $${rolledCost.toFixed(2)} (incl. ${task.subIssues!.length} sub-issues)`
-            : `${formatDuration(task, Date.now())} · ${formatTokens(task.tokens)} tok · $${task.costUsd.toFixed(2)}`}
+            : `${formatDuration(task, Date.now())} · ${formatTokensFull(task.tokens)} · $${task.costUsd.toFixed(2)}`}
         </Text>
       </Text>
       {isTracking && <Text dimColor>{task.issue.url}</Text>}

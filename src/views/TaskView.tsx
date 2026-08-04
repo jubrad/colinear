@@ -7,7 +7,7 @@ import { createBlocksRelation, createIssue, fetchIssuesByIds } from '../core/lin
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import { useColinear } from '../ui/context.js';
-import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
+import { formatDuration, formatTokensFull, reviewStatus, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 
 /** k9s logs-style full-screen task detail; param = issue identifier. */
@@ -187,7 +187,7 @@ export function TaskView(props: { param?: string }) {
           {task.status}
         </Text>
         <Text dimColor>
-          {' '}· {formatDuration(task, ctx.now) || '--:--'} · {formatTokens(task.tokens)} tok · $
+          {' '}· {formatDuration(task, ctx.now) || '--:--'} · {formatTokensFull(task.tokens)} · $
           {task.costUsd.toFixed(2)}
           {task.repo ? ` · ${task.repo.name}` : ''}
           {task.branch ? ` · ${task.branch}` : ''}

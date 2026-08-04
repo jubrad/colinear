@@ -5,7 +5,7 @@ export interface SessionCallbacks {
   onActivity: (line: string) => void;
   onSessionId: (id: string) => void;
   onQuestion: (q: PendingQuestion) => void;
-  onUsage?: (u: { input: number; output: number }) => void;
+  onUsage?: (u: { input: number; output: number; cacheRead: number; cacheWrite: number }) => void;
 }
 
 export interface SessionResult {
@@ -99,12 +99,13 @@ export async function runSession(opts: {
         result.assistantTurns++;
         const usage = msg.message.usage;
         if (usage && callbacks.onUsage) {
+          // mirror Claude Code's /cost split: cache traffic reported apart
+          // from real input, or 40 cached turns read as millions of tokens
           callbacks.onUsage({
-            input:
-              (usage.input_tokens ?? 0) +
-              (usage.cache_creation_input_tokens ?? 0) +
-              (usage.cache_read_input_tokens ?? 0),
+            input: usage.input_tokens ?? 0,
             output: usage.output_tokens ?? 0,
+            cacheRead: usage.cache_read_input_tokens ?? 0,
+            cacheWrite: usage.cache_creation_input_tokens ?? 0,
           });
         }
         for (const block of msg.message.content) {

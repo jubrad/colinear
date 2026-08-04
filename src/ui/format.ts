@@ -16,11 +16,28 @@ export function reviewStatus(pr: PrInfo): { text: string; color: string } {
   }
 }
 
+function fmtCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
+}
+
+/** Headline figure: uncached input + output, matching Claude Code's /cost. */
 export function formatTokens(t: { input: number; output: number }): string {
-  const total = t.input + t.output;
-  if (total >= 1_000_000) return `${(total / 1_000_000).toFixed(1)}M`;
-  if (total >= 1_000) return `${Math.round(total / 1_000)}k`;
-  return String(total);
+  return fmtCount(t.input + t.output);
+}
+
+/** Full /cost-style breakdown for detail views. */
+export function formatTokensFull(t: {
+  input: number;
+  output: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+}): string {
+  const parts = [`${fmtCount(t.input)} in`, `${fmtCount(t.output)} out`];
+  if (t.cacheRead) parts.push(`${fmtCount(t.cacheRead)} cache read`);
+  if (t.cacheWrite) parts.push(`${fmtCount(t.cacheWrite)} cache write`);
+  return parts.join(' · ');
 }
 
 export function formatDuration(task: Task, now: number): string {

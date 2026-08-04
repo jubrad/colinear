@@ -121,7 +121,9 @@ export interface Task {
   statusBeforeQuestion?: TaskStatus;
   activity: string[];
   subtasks: Subtask[];
-  tokens: { input: number; output: number };
+  /** input/output are uncached (what Claude Code's /cost calls input/output);
+      cache reads/writes tracked separately — they dwarf the rest and mislead */
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
   startedAt?: number;
   endedAt?: number;
   sessionId?: string;
