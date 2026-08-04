@@ -20,12 +20,14 @@ interface BoardColumn {
 }
 
 const COLUMNS: BoardColumn[] = [
+  // Done leads: finished work parks on the left edge out of the way of the
+  // active pipeline, which reads left-to-right from Queued
+  { title: 'Done', statuses: ['done'] },
   { title: 'Queued', statuses: ['queued', 'blocked', 'interrupted'] },
   { title: 'Triage', statuses: ['triage'] },
   { title: 'Working', statuses: ['working', 'checks', 'tracking'] },
   { title: 'Needs Input', statuses: ['needs_input'] },
   { title: 'PR Open', statuses: ['pr_open'] },
-  { title: 'Done', statuses: ['done'] },
   { title: 'Failed', statuses: ['escalated', 'error'] },
 ];
 
@@ -171,6 +173,12 @@ export function BoardView(_props: { param?: string }) {
   const avail = ctx.size.columns - 6;
   const colWidth = Math.max(16, Math.floor((avail - (COLUMNS.length - 1)) / COLUMNS.length));
 
+  // vertical budget for cards: view inner height (app.tsx sizes the view pane
+  // to rows-6-cmd, minus its own border) less the detail pane and the column
+  // header line. Columns window their cards to this instead of flex-squeezing.
+  const viewInner = Math.max(8, ctx.size.rows - 6 - (ctx.cmdOpen ? 4 : 0)) - 2;
+  const cardBudget = Math.max(4, viewInner - (selected ? 15 : 0) - 1);
+
   return (
     <Box flexDirection="column" flexGrow={1}>
       {subModal && (
@@ -215,15 +223,20 @@ export function BoardView(_props: { param?: string }) {
       )}
       {/* overflow clip keeps tall columns from pushing card headers off-screen */}
       <Box gap={1} flexGrow={1} overflow="hidden">
-        {COLUMNS.map((col) => {
-          const colTasks = tasks.filter((t) => col.statuses.includes(t.status));
+        {COLUMNS.map((col, colIdx) => {
+          const colTasks = grid[colIdx];
           const color = STATUS_COLORS[col.statuses[0]];
+          // window the column to the height budget, scrolled so the cursor's
+          // card stays visible — cards never flex-shrink into unreadability
+          const selIdx = colIdx === pos.col ? Math.min(pos.row, Math.max(0, colTasks.length - 1)) : 0;
+          const [start, end] = windowColumn(colTasks.map(cardHeight), cardBudget, selIdx);
           return (
             <Box key={col.title} flexDirection="column" width={colWidth} flexShrink={0}>
               <Text bold color={color}>
                 {col.title}({colTasks.length})
+                {start > 0 || end < colTasks.length ? <Text dimColor> {start > 0 ? `↑${start} ` : ''}{end < colTasks.length ? `↓${colTasks.length - end}` : ''}</Text> : null}
               </Text>
-              {colTasks.map((task) => (
+              {colTasks.slice(start, end).map((task) => (
                 <Card
                   key={task.issue.id}
                   task={task}
@@ -253,9 +266,31 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
   const last = task.activity[task.activity.length - 1] ?? '';
   const doneCount = task.subtasks.filter((s) => s.done).length;
   const active = ACTIVE_STATUSES.includes(task.status);
+  if (task.status === 'done') {
+    // done work is settled — id, title, and how it finished is the whole story
+    const merged = task.prs.find((pr) => pr.state === 'MERGED');
+    return (
+      <Box
+        flexDirection="column"
+        flexShrink={0}
+        borderStyle={selected ? 'double' : 'round'}
+        borderColor={selected ? theme.borderFocus : STATUS_COLORS.done}
+        paddingX={1}
+      >
+        <Text bold wrap="truncate">
+          {task.issue.identifier} <Text dimColor>{task.issue.title}</Text>
+        </Text>
+        <Text color={theme.ok} wrap="truncate">
+          {merged ? `✓ merged #${merged.number}` : '✓ marked done'}
+        </Text>
+      </Box>
+    );
+  }
   return (
     <Box
       flexDirection="column"
+      // windowing handles overflow; shrinking would compress cards instead
+      flexShrink={0}
       borderStyle={selected ? 'double' : 'round'}
       // per-status border, not per-column: tracking parents in the Working
       // column read differently from cards with a live agent
@@ -390,6 +425,46 @@ async function applyTaskEdits(task: Task, edits: TaskEdits, ctx: ReturnType<type
   } else {
     ctx.toast(`${task.issue.identifier} updated`, 'ok');
   }
+}
+
+/** Rendered height of a card in terminal rows — must mirror Card's branches. */
+function cardHeight(task: Task): number {
+  if (task.status === 'done') return 4; // border 2 + title 1 + outcome 1
+  let h = 5; // border 2 + title 2 + duration/tokens 1
+  if (task.subIssues?.length) h += 1 + Math.min(3, task.subIssues.length);
+  else if (task.subtasks.length > 0) h += 1;
+  if (task.status === 'error') h += 1;
+  if (task.question) h += 1;
+  if (task.status === 'blocked' && task.blockedBy) h += 1;
+  if (task.verdict && task.verdict.verdict !== 'do' && !task.subIssues?.length) h += 1;
+  if (task.activity.length && !task.question) h += 1;
+  if (task.checks.length > 0) h += 1;
+  if (!task.subIssues?.length) h += task.prs.length;
+  return h;
+}
+
+/**
+ * Slice of cards to render within `budget` rows, scrolled just far enough
+ * that card `selIdx` is fully visible. Returns [start, end) indices.
+ */
+function windowColumn(heights: number[], budget: number, selIdx: number): [number, number] {
+  const endFor = (s: number): number => {
+    let used = 0;
+    let e = s;
+    while (e < heights.length) {
+      if (used + heights[e] > budget && e > s) break;
+      used += heights[e];
+      e++;
+    }
+    return e;
+  };
+  let start = 0;
+  let end = endFor(0);
+  while (selIdx >= end && start < selIdx) {
+    start++;
+    end = endFor(start);
+  }
+  return [start, end];
 }
 
 function progressBar(done: number, total: number, width = 8): string {
