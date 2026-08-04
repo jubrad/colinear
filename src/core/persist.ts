@@ -50,9 +50,13 @@ export function loadState(cfg: Config): void {
     const data = JSON.parse(raw) as PersistedState;
     for (const t of data.tasks ?? []) {
       const status: TaskStatus = LIVE_STATUSES.includes(t.status) ? 'interrupted' : t.status;
-      // pre-cache-split states lack these fields (their `input` includes
-      // cache traffic — inflated, but not worth rewriting history over)
-      const tokens = { ...t.tokens, cacheRead: t.tokens.cacheRead ?? 0, cacheWrite: t.tokens.cacheWrite ?? 0 };
+      // pre-cache-split states folded cache traffic into `input`. That total
+      // is ~95% cache reads in practice, so reclassify it wholesale — a small
+      // undercount of real input beats a headline inflated 20x
+      const tokens =
+        t.tokens.cacheRead === undefined
+          ? { input: 0, output: t.tokens.output, cacheRead: t.tokens.input, cacheWrite: 0 }
+          : t.tokens;
       store.upsert({ ...t, status, tokens, question: undefined });
       if (status === 'interrupted') {
         store.addActivity(t.issue.id, 'colinear restarted — press r to resume');
