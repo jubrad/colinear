@@ -19,7 +19,13 @@ interface GhPr {
 
 interface GhPrDetails {
   reviewDecision: string | null;
-  statusCheckRollup: Array<{ conclusion?: string; status?: string }> | null;
+  /** mixed shapes: CheckRuns have status/conclusion, commit StatusContexts
+      (Buildkite et al.) have state — both must be read or CI lies */
+  statusCheckRollup: Array<{
+    conclusion?: string | null;
+    status?: string | null;
+    state?: string | null;
+  }> | null;
 }
 
 /** Something that can dispatch a CI-fix session (the Dispatcher; injected to avoid a cycle). */
@@ -170,10 +176,17 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
   }
 }
 
+const FAILED_CONCLUSIONS = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'STARTUP_FAILURE']);
+const FAILED_STATES = new Set(['FAILURE', 'ERROR']);
+
 function rollupStatus(rollup: GhPrDetails['statusCheckRollup']): string {
   if (!rollup || rollup.length === 0) return 'no checks';
-  if (rollup.some((c) => c.conclusion === 'FAILURE')) return 'failing';
-  if (rollup.some((c) => c.status && c.status !== 'COMPLETED')) return 'running';
+  if (rollup.some((c) => FAILED_CONCLUSIONS.has(c.conclusion ?? '') || FAILED_STATES.has(c.state ?? ''))) {
+    return 'failing';
+  }
+  if (rollup.some((c) => (c.status && c.status !== 'COMPLETED') || c.state === 'PENDING' || c.state === 'EXPECTED')) {
+    return 'running';
+  }
   return 'passing';
 }
 
