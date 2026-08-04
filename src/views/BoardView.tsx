@@ -233,8 +233,12 @@ export function BoardView(_props: { param?: string }) {
             <Box key={col.title} flexDirection="column" width={colWidth} flexShrink={0}>
               <Text bold color={color}>
                 {col.title}({colTasks.length})
-                {start > 0 || end < colTasks.length ? <Text dimColor> {start > 0 ? `↑${start} ` : ''}{end < colTasks.length ? `↓${colTasks.length - end}` : ''}</Text> : null}
               </Text>
+              {start > 0 && (
+                <Text dimColor wrap="truncate">
+                  ▲ {start} more above
+                </Text>
+              )}
               {colTasks.slice(start, end).map((task) => (
                 <Card
                   key={task.issue.id}
@@ -244,6 +248,11 @@ export function BoardView(_props: { param?: string }) {
                   now={ctx.now}
                 />
               ))}
+              {end < colTasks.length && (
+                <Text dimColor wrap="truncate">
+                  ▼ {colTasks.length - end} more — i/k to scroll
+                </Text>
+              )}
             </Box>
           );
         })}
@@ -457,10 +466,12 @@ function cardHeight(task: Task): number {
  */
 function windowColumn(heights: number[], budget: number, selIdx: number): [number, number] {
   const endFor = (s: number): number => {
-    let used = 0;
+    let used = s > 0 ? 1 : 0; // "▲ N more above" row
     let e = s;
     while (e < heights.length) {
-      if (used + heights[e] > budget && e > s) break;
+      // reserve the "▼ N more" row unless this card is the last one
+      const reserve = e < heights.length - 1 ? 1 : 0;
+      if (used + heights[e] > budget - reserve && e > s) break;
       used += heights[e];
       e++;
     }
