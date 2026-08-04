@@ -184,7 +184,7 @@ export class Dispatcher {
    * worktree, fresh session, fresh triage. Keeps instructions/model/activity.
    * The old worktree (in the old repo) is left behind for inspection.
    */
-  redispatch(id: string, repo: RepoConfig, opts?: { retriage?: boolean }): boolean {
+  redispatch(id: string, repo: RepoConfig, opts?: { retriage?: boolean; skipTriage?: boolean }): boolean {
     const task = store.get(id);
     if (!task || this.aborts.has(id) || this.queue.includes(id)) return false;
     // a successful triage travels with the task unless the operator asks for a redo
@@ -203,7 +203,8 @@ export class Dispatcher {
       worktree: undefined,
       branch: undefined,
       verdict: keepTriage ? task.verdict : undefined,
-      skipTriage: keepTriage ? true : task.skipTriage,
+      // explicit operator choice wins; keep-plan implies skipping the triage pass
+      skipTriage: opts?.skipTriage ?? (keepTriage ? true : task.skipTriage),
       subtasks: [],
       checks: [],
       prs: repoChanged ? [] : task.prs,
@@ -216,7 +217,7 @@ export class Dispatcher {
     });
     store.addActivity(
       id,
-      `re-dispatched in repo ${repo.name}${keepTriage ? ' (keeping triage plan)' : ' (fresh triage)'}`,
+      `re-dispatched in repo ${repo.name}${keepTriage ? ' (keeping triage plan)' : opts?.skipTriage ? ' (triage skipped)' : ' (fresh triage)'}`,
     );
     this.queue.push(id);
     this.pump();

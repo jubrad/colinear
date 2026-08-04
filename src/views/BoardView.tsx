@@ -394,6 +394,8 @@ async function applyTaskEdits(task: Task, edits: TaskEdits, ctx: ReturnType<type
     instructions: edits.instructions,
     model: edits.model,
     pinnedPr: edits.pinnedPr,
+    // tri-state: undefined = keep plan chosen, leave the stored flag alone
+    ...(edits.skipTriage !== undefined ? { skipTriage: edits.skipTriage } : {}),
     // persist the repo even without a requeue: PR matching polls per repo,
     // so a pin can only resolve once the task points at the right one
     ...(repoChanged ? { repo: { name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot } } : {}),
@@ -418,7 +420,7 @@ async function applyTaskEdits(task: Task, edits: TaskEdits, ctx: ReturnType<type
       ctx.toast('agent is live — x to cancel before requeueing', 'err');
       return;
     }
-    if (ctx.dispatcher.redispatch(id, edits.repo, { retriage: edits.retriage })) {
+    if (ctx.dispatcher.redispatch(id, edits.repo, { retriage: edits.retriage, skipTriage: edits.skipTriage })) {
       ctx.toast(`${task.issue.identifier} requeued in ${edits.repo.name}`, 'ok');
     }
   } else {

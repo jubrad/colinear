@@ -12,8 +12,6 @@ const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
   { label: 'haiku', value: 'haiku' },
 ];
 
-const TRIAGE_OPTIONS = ['keep plan', 'fresh triage'];
-
 export interface TaskEdits {
   repo: RepoConfig;
   /** undefined = auto-match, number = pinned */
@@ -21,6 +19,8 @@ export interface TaskEdits {
   instructions?: string;
   model?: string;
   retriage: boolean;
+  /** true = straight to work, false = triage wanted, undefined = keep as-is */
+  skipTriage?: boolean;
   /** true when the operator asked to requeue (ctrl+r) */
   requeue: boolean;
 }
@@ -36,6 +36,9 @@ export function EditTaskModal(props: {
 }) {
   const { task, repos, onSubmit, onCancel } = props;
   const hasTriage = task.verdict?.verdict === 'do';
+  // with a plan: keep it, redo it, or drop it and go straight to work;
+  // without one: triage as usual, or skip straight to work
+  const triageOptions = hasTriage ? ['keep plan', 'fresh triage', 'skip triage'] : ['triage', 'skip triage'];
 
   const [repoIdx, setRepoIdx] = useState(() => {
     const idx = repos.findIndex((r) => r.name === task.repo?.name);
@@ -47,24 +50,23 @@ export function EditTaskModal(props: {
     const idx = MODEL_OPTIONS.findIndex((m) => m.value === task.model);
     return idx === -1 ? 0 : idx;
   });
-  const [triageIdx, setTriageIdx] = useState(hasTriage ? 0 : 1);
+  const [triageIdx, setTriageIdx] = useState(!hasTriage && task.skipTriage ? 1 : 0);
   const [focus, setFocus] = useState<Field>('repo');
 
-  const fields = useMemo<Field[]>(() => {
-    const f: Field[] = ['repo', 'pin', 'instructions', 'model'];
-    if (hasTriage) f.push('triage');
-    return f;
-  }, [hasTriage]);
+  const fields = useMemo<Field[]>(() => ['repo', 'pin', 'instructions', 'model', 'triage'], []);
 
   const submit = (requeue: boolean) => {
     // accepts "123", "#123", or a full PR URL (…/pull/123)
     const pinMatch = pin.trim().match(/(\d+)\/?\s*$/);
+    const choice = triageOptions[triageIdx];
     onSubmit({
       repo: repos[repoIdx],
       pinnedPr: pinMatch ? Number.parseInt(pinMatch[1], 10) : undefined,
       instructions: instructions.trim() || undefined,
       model: MODEL_OPTIONS[modelIdx].value,
-      retriage: !hasTriage || triageIdx === 1,
+      retriage: choice !== 'keep plan',
+      // keep plan leaves the stored flag alone (dispatcher derives it)
+      skipTriage: choice === 'keep plan' ? undefined : choice === 'skip triage',
       requeue,
     });
   };
@@ -86,7 +88,7 @@ export function EditTaskModal(props: {
       if (key.return) submit(false);
     }
     if (focus === 'triage') {
-      cycle(TRIAGE_OPTIONS.length, setTriageIdx);
+      cycle(triageOptions.length, setTriageIdx);
       if (key.return) submit(false);
     }
   });
@@ -141,7 +143,7 @@ export function EditTaskModal(props: {
       {textRow('pinned PR', 'pin', pin, setPin, 'auto-match (number, #123, or PR URL to pin)')}
       {textRow('instructions', 'instructions', instructions, setInstructions, 'none')}
       {optionRow('model', 'model', MODEL_OPTIONS.map((m) => m.label), modelIdx)}
-      {hasTriage && optionRow('on requeue', 'triage', TRIAGE_OPTIONS, triageIdx)}
+      {optionRow('on requeue', 'triage', triageOptions, triageIdx)}
       <Text dimColor>
         tab: field · ←→: pick · enter: save · ctrl+r: save + requeue{' '}
         {task.repo ? `(repo change implies requeue)` : ''}
