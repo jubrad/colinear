@@ -553,6 +553,25 @@ export class Dispatcher {
       // the cancelled-in-Linear sweep aborted us and already parked the task
       if (store.get(id)?.status === 'cancelled') return;
       const cancelled = controller.signal.aborted;
+      // dead session pointer (transcript moved/deleted — e.g. the task was
+      // re-routed to another repo and the old worktree's transcript can't be
+      // found from the new cwd): retire it and restart fresh instead of
+      // looping the same resume error on every r
+      if (!cancelled && /No conversation found/i.test(String(err))) {
+        const cur = store.get(id);
+        store.update(id, {
+          sessionId: undefined,
+          sessionHistory: cur?.sessionId
+            ? [...(cur.sessionHistory ?? []), { sessionId: cur.sessionId, worktree: cur.worktree, at: Date.now() }].slice(-5)
+            : cur?.sessionHistory,
+          status: 'queued',
+          error: undefined,
+        });
+        store.addActivity(id, 'session transcript not found — pointer retired, restarting fresh');
+        this.queue.push(id);
+        this.pump();
+        return;
+      }
       const rateLimited = /529|overloaded|rate.?limit/i.test(String(err));
       if (!cancelled && rateLimited && !store.get(id)?.retried) {
         store.update(id, { status: 'queued', retried: true });
