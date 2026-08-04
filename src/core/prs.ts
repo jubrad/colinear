@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { Config, PrInfo } from './types.js';
+import { log } from './log.js';
 import { store } from './store.js';
 import { syncIssueState } from './statesync.js';
 
@@ -14,6 +15,9 @@ interface GhPr {
   isDraft: boolean;
   headRefName: string;
   baseRefName: string;
+}
+
+interface GhPrDetails {
   reviewDecision: string | null;
   statusCheckRollup: Array<{ conclusion?: string; status?: string }> | null;
 }
@@ -36,6 +40,9 @@ export async function pollPrs(cfg: Config, fixer?: CiFixer): Promise<void> {
 async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise<void> {
   let prs: GhPr[];
   try {
+    // LIGHT fields only: statusCheckRollup/reviewDecision over a 200-PR list
+    // 504s GitHub's GraphQL on big repos (that's how materialize silently
+    // stopped polling) — details are fetched per MATCHED PR below instead
     const { stdout } = await exec(
       'gh',
       [
@@ -46,14 +53,36 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
         // pushing our PRs past the list limit, which orphaned matched work
         '--author', '@me',
         '--limit', '200',
-        '--json', 'number,title,url,state,isDraft,headRefName,baseRefName,reviewDecision,statusCheckRollup',
+        '--json', 'number,title,url,state,isDraft,headRefName,baseRefName',
       ],
       { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
     );
     prs = JSON.parse(stdout);
-  } catch {
+  } catch (err) {
+    log(`pr poll failed for ${repoPath}: ${String(err).slice(0, 200)}`);
     return; // gh unavailable or transient failure; try again next poll
   }
+
+  // CI + review state per matched PR (bounded by tasks, not repo traffic)
+  const details = new Map<number, GhPrDetails>();
+  const fetchDetails = async (pr: GhPr): Promise<GhPrDetails> => {
+    if (details.has(pr.number)) return details.get(pr.number)!;
+    try {
+      const { stdout } = await exec(
+        'gh',
+        ['pr', 'view', String(pr.number), '--json', 'reviewDecision,statusCheckRollup'],
+        { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
+      );
+      const d = JSON.parse(stdout) as GhPrDetails;
+      details.set(pr.number, d);
+      return d;
+    } catch (err) {
+      log(`pr detail fetch failed for #${pr.number} in ${repoPath}: ${String(err).slice(0, 120)}`);
+      const d: GhPrDetails = { reviewDecision: null, statusCheckRollup: null };
+      details.set(pr.number, d);
+      return d;
+    }
+  };
 
   const byHead = new Map(prs.map((pr) => [pr.headRefName, pr]));
 
@@ -90,17 +119,23 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
         frontier = next.map((pr) => pr.headRefName);
       }
     }
-    const infos: PrInfo[] = chain.map((pr) => ({
-      number: pr.number,
-      title: pr.title,
-      url: pr.url,
-      state: pr.state,
-      isDraft: pr.isDraft,
-      checksStatus: rollupStatus(pr.statusCheckRollup),
-      reviewDecision: pr.reviewDecision ?? undefined,
-      headRefName: pr.headRefName,
-      baseRefName: pr.baseRefName,
-    }));
+    const infos: PrInfo[] = await Promise.all(
+      chain.map(async (pr) => {
+        // merged/closed PRs don't need live CI/review state — skip the fetch
+        const d = pr.state === 'OPEN' ? await fetchDetails(pr) : { reviewDecision: null, statusCheckRollup: null };
+        return {
+          number: pr.number,
+          title: pr.title,
+          url: pr.url,
+          state: pr.state,
+          isDraft: pr.isDraft,
+          checksStatus: rollupStatus(d.statusCheckRollup),
+          reviewDecision: d.reviewDecision ?? undefined,
+          headRefName: pr.headRefName,
+          baseRefName: pr.baseRefName,
+        };
+      }),
+    );
     // never wipe known PRs just because a poll window missed them
     if (!infos.length && task.prs.length) continue;
     const hadPrs = task.prs.length > 0;
@@ -135,7 +170,7 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
   }
 }
 
-function rollupStatus(rollup: GhPr['statusCheckRollup']): string {
+function rollupStatus(rollup: GhPrDetails['statusCheckRollup']): string {
   if (!rollup || rollup.length === 0) return 'no checks';
   if (rollup.some((c) => c.conclusion === 'FAILURE')) return 'failing';
   if (rollup.some((c) => c.status && c.status !== 'COMPLETED')) return 'running';
