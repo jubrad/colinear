@@ -58,7 +58,9 @@ export type TaskStatus =
   /** waiting on Linear blocking issues to complete */
   | 'blocked'
   /** parent issue whose work happens via its sub-issues; completes when they all do */
-  | 'tracking';
+  | 'tracking'
+  /** issue closed as cancelled in Linear — parks in the Done column, distinct look */
+  | 'cancelled';
 
 export type Verification = 'local-light' | 'ci' | 'needs-env';
 

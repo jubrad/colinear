@@ -28,4 +28,5 @@ export const STATUS_COLORS: Record<string, string> = {
   interrupted: '#ff8700',
   blocked: '#af87ff',
   tracking: '#5fafff',
+  cancelled: 'gray',
 };

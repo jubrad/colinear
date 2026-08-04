@@ -263,8 +263,34 @@ export class Dispatcher {
     }
   }
 
+  /**
+   * Park tasks whose Linear issue was closed as cancelled: abort any live
+   * agent and move them to the Done column with the cancelled look.
+   */
+  async sweepCancelled() {
+    const open = store.list().filter((t) => !['done', 'cancelled'].includes(t.status));
+    if (!open.length) return;
+    const fresh = await fetchIssuesByIds(this.cfg, open.map((t) => t.issue.id)).catch(() => null);
+    if (!fresh) return;
+    for (const issue of fresh) {
+      if (issue.stateType !== 'canceled') continue;
+      if (!store.get(issue.id)) continue;
+      this.cancel(issue.id); // dequeue / abort; the status below wins the race
+      store.update(issue.id, {
+        status: 'cancelled',
+        issue,
+        error: undefined,
+        question: undefined,
+        blockedBy: undefined,
+        endedAt: store.get(issue.id)?.endedAt ?? Date.now(),
+      });
+      store.addActivity(issue.id, 'issue cancelled in Linear');
+    }
+  }
+
   /** Re-check blocked tasks; queue the ones whose Linear blockers finished. */
   async recheckBlocked() {
+    await this.sweepCancelled().catch(() => {});
     await this.refreshTracking().catch(() => {});
     for (const task of store.list().filter((t) => t.status === 'blocked')) {
       const blockers = await fetchBlockers(this.cfg, task.issue.id).catch(() => null);
@@ -513,6 +539,8 @@ export class Dispatcher {
         store.addActivity(id, 'suspended — attached in terminal; press r to hand back to colinear');
         return;
       }
+      // the cancelled-in-Linear sweep aborted us and already parked the task
+      if (store.get(id)?.status === 'cancelled') return;
       const cancelled = controller.signal.aborted;
       const rateLimited = /529|overloaded|rate.?limit/i.test(String(err));
       if (!cancelled && rateLimited && !store.get(id)?.retried) {

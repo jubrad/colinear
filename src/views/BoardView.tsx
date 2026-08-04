@@ -27,7 +27,7 @@ const COLUMNS: BoardColumn[] = [
   { title: 'Needs Input', statuses: ['needs_input'] },
   { title: 'PR Open', statuses: ['pr_open'] },
   { title: 'Failed', statuses: ['escalated', 'error'] },
-  { title: 'Done', statuses: ['done'] },
+  { title: 'Done', statuses: ['done', 'cancelled'] },
 ];
 
 const ACTIVE_STATUSES: TaskStatus[] = ['triage', 'working', 'checks'];
@@ -265,23 +265,30 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
   const last = task.activity[task.activity.length - 1] ?? '';
   const doneCount = task.subtasks.filter((s) => s.done).length;
   const active = ACTIVE_STATUSES.includes(task.status);
-  if (task.status === 'done') {
-    // done work is settled — id, title, and how it finished is the whole story
+  if (task.status === 'done' || task.status === 'cancelled') {
+    // settled work — id, title, and how it finished is the whole story
     const merged = task.prs.find((pr) => pr.state === 'MERGED');
+    const cancelled = task.status === 'cancelled';
     return (
       <Box
         flexDirection="column"
         flexShrink={0}
         borderStyle={selected ? 'double' : 'round'}
-        borderColor={selected ? theme.borderFocus : STATUS_COLORS.done}
+        borderColor={selected ? theme.borderFocus : STATUS_COLORS[task.status]}
         paddingX={1}
       >
-        <Text bold wrap="truncate">
+        <Text bold wrap="truncate" dimColor={cancelled}>
           {task.issue.identifier} <Text dimColor>{task.issue.title}</Text>
         </Text>
-        <Text color={theme.ok} wrap="truncate">
-          {merged ? `✓ merged #${merged.number}` : '✓ marked done'}
-        </Text>
+        {cancelled ? (
+          <Text dimColor wrap="truncate">
+            ⊘ cancelled in Linear
+          </Text>
+        ) : (
+          <Text color={theme.ok} wrap="truncate">
+            {merged ? `✓ merged #${merged.number}` : '✓ marked done'}
+          </Text>
+        )}
       </Box>
     );
   }
@@ -430,7 +437,7 @@ async function applyTaskEdits(task: Task, edits: TaskEdits, ctx: ReturnType<type
 
 /** Rendered height of a card in terminal rows — must mirror Card's branches. */
 function cardHeight(task: Task): number {
-  if (task.status === 'done') return 4; // border 2 + title 1 + outcome 1
+  if (task.status === 'done' || task.status === 'cancelled') return 4; // border 2 + title 1 + outcome 1
   let h = 5; // border 2 + title 2 + duration/tokens 1
   if (task.subIssues?.length) h += 1 + Math.min(3, task.subIssues.length);
   else if (task.subtasks.length > 0) h += 1;
