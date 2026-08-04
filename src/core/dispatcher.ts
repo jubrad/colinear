@@ -16,33 +16,38 @@ const exec = promisify(execFile);
 
 const SUBTASKS_FILE = '.colinear-subtasks.md';
 
-const TRIAGE_SCHEMA = {
-  type: 'object',
-  properties: {
-    verdict: { type: 'string', enum: ['do', 'too_big', 'needs_info'] },
-    reason: { type: 'string' },
-    plan: { type: 'string' },
-    verification: { type: 'string', enum: ['local-light', 'ci', 'needs-env'] },
-    repo: { type: 'string' },
-    subtasks: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          description: { type: 'string' },
-          priority: { type: 'number' },
-          repo: { type: 'string' },
-          blockedBy: { type: 'array', items: { type: 'number' } },
+/** repo fields are enum-constrained to the config allowlist so routing can't
+    silently miss on a name the model made up ("materialize-cloud", a path…) */
+function triageSchema(repoNames: string[]) {
+  const repo = { type: 'string', enum: repoNames };
+  return {
+    type: 'object',
+    properties: {
+      verdict: { type: 'string', enum: ['do', 'too_big', 'needs_info'] },
+      reason: { type: 'string' },
+      plan: { type: 'string' },
+      verification: { type: 'string', enum: ['local-light', 'ci', 'needs-env'] },
+      repo,
+      subtasks: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            description: { type: 'string' },
+            priority: { type: 'number' },
+            repo,
+            blockedBy: { type: 'array', items: { type: 'number' } },
+          },
+          required: ['title', 'description'],
+          additionalProperties: false,
         },
-        required: ['title', 'description'],
-        additionalProperties: false,
       },
     },
-  },
-  required: ['verdict', 'reason'],
-  additionalProperties: false,
-};
+    required: ['verdict', 'reason', 'repo'],
+    additionalProperties: false,
+  };
+}
 
 export class Dispatcher {
   private queue: string[] = [];
@@ -103,8 +108,9 @@ export class Dispatcher {
     }
     const task = store.get(id);
     if (task && ['queued', 'blocked'].includes(task.status)) {
-      store.update(id, { status: 'error', error: 'cancelled', blockedBy: undefined, endedAt: Date.now() });
-      store.addActivity(id, 'cancelled before start');
+      // operator stop is not a failure — park it resumable, not in Failed
+      store.update(id, { status: 'interrupted', error: undefined, blockedBy: undefined, endedAt: Date.now() });
+      store.addActivity(id, 'cancelled before start — r to requeue');
       return true;
     }
     return false;
@@ -429,7 +435,7 @@ export class Dispatcher {
           prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions)}\n${familyBlock(issue, family)}`,
           cwd: worktree,
           callbacks: this.callbacks(id),
-          outputSchema: TRIAGE_SCHEMA,
+          outputSchema: triageSchema(this.cfg.repos.map((r) => r.name)),
           model: store.get(id)?.model ?? this.cfg.model,
           maxTurns: 40,
           abortController: controller,
@@ -443,6 +449,11 @@ export class Dispatcher {
 
         // triage routes the work: switch repo (fresh worktree) if it picked another
         const chosen = verdict.repo && this.cfg.repos.find((r) => r.name === verdict.repo);
+        if (verdict.repo && !chosen) {
+          store.addActivity(id, `triage picked unknown repo "${verdict.repo}" — staying in ${taskRepo.name}`);
+        } else if (chosen && chosen.path === taskRepo.path) {
+          store.addActivity(id, `triage confirmed repo ${taskRepo.name}`);
+        }
         if (chosen && chosen.path !== taskRepo.path) {
           store.addActivity(id, `triage routed to repo ${chosen.name}`);
           taskRepo = chosen;
@@ -552,9 +563,30 @@ export class Dispatcher {
         }, 30_000);
         return;
       }
-      // a cancelled needs-input task must not keep its dead question around
-      store.update(id, { status: 'error', error: cancelled ? 'cancelled' : String(err), question: undefined });
-      store.addActivity(id, cancelled ? 'stopped' : `error: ${String(err).slice(0, 200)}`);
+      // a cancelled needs-input task must not keep its dead question around;
+      // an operator stop parks as interrupted (resumable), never as a failure
+      const now = store.get(id);
+      // no verdict yet = stopped during triage: that transcript is a read-only
+      // triage session, resuming it as the work pass would go sideways
+      const midTriage = cancelled && !now?.verdict && !task.skipTriage;
+      store.update(id, {
+        status: cancelled ? 'interrupted' : 'error',
+        error: cancelled ? undefined : String(err),
+        question: undefined,
+        ...(midTriage && now?.sessionId
+          ? {
+              sessionId: undefined,
+              sessionHistory: [
+                ...(now.sessionHistory ?? []),
+                { sessionId: now.sessionId, worktree: now.worktree, at: Date.now() },
+              ].slice(-5),
+            }
+          : {}),
+      });
+      store.addActivity(
+        id,
+        cancelled ? (midTriage ? 'stopped during triage — r restarts triage' : 'stopped — r to resume') : `error: ${String(err).slice(0, 200)}`,
+      );
       if (!cancelled) {
         log(`task ${issue.identifier} failed: ${err}`);
         notify(this.cfg, issue.identifier, `error: ${String(err).slice(0, 80)}`);
