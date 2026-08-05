@@ -292,11 +292,12 @@ export function TaskView(props: { param?: string }) {
 
       {task.question && (
         <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={theme.info} paddingX={1}>
-          <Text color={theme.info} bold wrap="truncate">
+          {/* full view has room: wrap the whole question, never truncate it */}
+          <Text color={theme.info} bold wrap="wrap">
             ? {task.question.text}
           </Text>
           {task.question.options.map((opt, i) => (
-            <Text key={opt} color={theme.info}>
+            <Text key={opt} color={theme.info} wrap="wrap">
               {'  '}{i + 1}. {opt}
             </Text>
           ))}

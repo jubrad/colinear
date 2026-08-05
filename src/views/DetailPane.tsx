@@ -74,11 +74,19 @@ export function DetailPane(props: {
 
       {task.question && (
         <Box flexDirection="column">
-          <Text color="magenta" bold>
-            ? {task.question.text}
-          </Text>
+          {/* wrap the question but cap it at 3 rows — the pane is a fixed
+              15 rows and an unbounded question pushes the answer options
+              below the clip (enter for the full text in task view) */}
+          <Box
+            height={Math.max(1, Math.min(3, Math.ceil((task.question.text.length + 2) / Math.max(20, ctx.size.columns - 10))))}
+            overflow="hidden"
+          >
+            <Text color="magenta" bold wrap="wrap">
+              ? {task.question.text}
+            </Text>
+          </Box>
           {task.question.options.map((opt, i) => (
-            <Text key={opt} color="magenta">
+            <Text key={opt} color="magenta" wrap="truncate">
               {'  '}{i + 1}. {opt}
             </Text>
           ))}
