@@ -270,33 +270,38 @@ export class Dispatcher {
   }
 
   /**
-   * Park tasks whose Linear issue was closed as cancelled: abort any live
-   * agent and move them to the Done column with the cancelled look.
+   * Park tasks whose Linear issue was closed by a human: abort any live agent
+   * and move them to the Done column. Cancelled keeps its own distinct look;
+   * completed lands as plain done. colinear never sets either state itself
+   * (state sync only moves issues to started/review), so both always mean the
+   * operator closed it out and whatever the board thinks is stale.
    */
-  async sweepCancelled() {
+  async sweepClosed() {
     const open = store.list().filter((t) => !['done', 'cancelled'].includes(t.status));
     if (!open.length) return;
     const fresh = await fetchIssuesByIds(this.cfg, open.map((t) => t.issue.id)).catch(() => null);
     if (!fresh) return;
     for (const issue of fresh) {
-      if (issue.stateType !== 'canceled') continue;
+      const closed =
+        issue.stateType === 'canceled' ? 'cancelled' : issue.stateType === 'completed' ? 'done' : undefined;
+      if (!closed) continue;
       if (!store.get(issue.id)) continue;
       this.cancel(issue.id); // dequeue / abort; the status below wins the race
       store.update(issue.id, {
-        status: 'cancelled',
+        status: closed,
         issue,
         error: undefined,
         question: undefined,
         blockedBy: undefined,
         endedAt: store.get(issue.id)?.endedAt ?? Date.now(),
       });
-      store.addActivity(issue.id, 'issue cancelled in Linear');
+      store.addActivity(issue.id, `issue ${closed === 'done' ? 'completed' : 'cancelled'} in Linear`);
     }
   }
 
   /** Re-check blocked tasks; queue the ones whose Linear blockers finished. */
   async recheckBlocked() {
-    await this.sweepCancelled().catch(() => {});
+    await this.sweepClosed().catch(() => {});
     await this.refreshTracking().catch(() => {});
     for (const task of store.list().filter((t) => t.status === 'blocked')) {
       const blockers = await fetchBlockers(this.cfg, task.issue.id).catch(() => null);
