@@ -54,7 +54,8 @@ interface RawRepo {
 }
 
 export function loadConfig(): Config {
-  let raw: Partial<Config> & { repos?: RawRepo[] } = {};
+  // guidance widened: config.json may write it as a list of lines
+  let raw: Partial<Config> & { repos?: RawRepo[]; guidance?: string | string[] } = {};
   for (const path of CONFIG_PATHS) {
     try {
       raw = JSON.parse(readFileSync(path, 'utf8'));
@@ -124,6 +125,8 @@ export function loadConfig(): Config {
     checks: repos[0].checks,
     concurrency: raw.concurrency ?? 3,
     model: raw.model,
+    // accepts a string or a list of lines, so config.json stays readable
+    guidance: Array.isArray(raw.guidance) ? raw.guidance.join('\n') : raw.guidance,
     notifications: raw.notifications ?? true,
     stateSync: raw.stateSync ?? true,
     ciAutofix: raw.ciAutofix ?? true,

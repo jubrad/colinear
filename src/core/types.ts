@@ -194,6 +194,12 @@ export interface Config {
   concurrency: number;
   checks: CheckConfig[];
   model?: string;
+  /**
+   * Operator's standing guidance, appended to every agent prompt (triage,
+   * work, CI fix). House rules that outlive any one issue — code style,
+   * what a good PR looks like. Per-task `instructions` outrank it.
+   */
+  guidance?: string;
   /** Linear team key (e.g. "CLOUD") to browse; unset = my assigned issues */
   team?: string;
   /** macOS notifications on needs_input / done / error (default true) */

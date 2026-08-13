@@ -39,13 +39,18 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
   "ciAutofix": true,
   "terminal": "ghostty",
   "tickMs": 1000,
-  "attachPermissionMode": "auto"
+  "attachPermissionMode": "auto",
+  "guidance": [
+    "PRs should solve the problem at hand simply and clearly.",
+    "Code is debt: don't write code that isn't needed to solve and validate the problem."
+  ]
 }
 ```
 
 - `repos` — the allowlist. Agents only ever touch these repos, and only through worktrees under each repo's `worktreeRoot`; working copies are never modified (the main checkout only sees `git fetch` and `git worktree add`). First entry is the default; custom dispatch picks per dispatch. Per repo: `defaultBranch` (worktree base, default `main`), `remote` (the upstream: worktree base + the repo PRs land in, default `origin`), `pushRemote` (where branches are pushed — set your fork here for a fork workflow, e.g. `"jubrad"`; default = `remote`), `prBase` (PR target branch, default = `defaultBranch`), `checks` (run after the work pass). `remote`/`pushRemote` are **git remote names** as they appear in `git remote -v` for that repo (`"mz"`, `"jubrad"`), not `owner/repo` slugs. In fork mode agents skip stacked PRs (they'd require pushing to the upstream). Legacy single-repo fields (`repo`, `defaultBranch`, `worktreeRoot`, `checks`) still work.
 - `description` (per repo) — what lives there. **Triage reads these to route each issue to the right repo** (it can inspect all allowlisted repos and returns its pick; the work pass starts there). Write them honestly.
 - `model` — default model for agents; overridable per dispatch and per task (`m`).
+- `guidance` — standing house rules appended to every agent prompt (triage, work, CI fix). A string, or a list of lines. Use it for what a good PR looks like here; per-task instructions (`m`) outrank it, and repo-specific conventions still belong in each repo's `CLAUDE.md`.
 - `tickMs` — UI refresh tick; raise if your terminal repaints non-atomically.
 - `attachPermissionMode` — permission mode for `s` attach sessions: `auto` (default — classifier gates risky commands), `acceptEdits`, `bypassPermissions`, or `default`. Headless agents always run in `auto`; classifier-blocked commands surface on the board as needs-input questions (allow/deny).
 - `stateSync` — auto-move Linear states (dispatch → In Progress, PR → In Review).

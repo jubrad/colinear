@@ -437,7 +437,7 @@ export class Dispatcher {
       if (!resumeSession && !task.skipTriage) {
         store.addActivity(id, 'triage pass');
         const triage = await runSession({
-          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions)}\n${familyBlock(issue, family)}`,
+          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, this.cfg.guidance)}\n${familyBlock(issue, family)}`,
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: triageSchema(this.cfg.repos.map((r) => r.name)),
@@ -484,7 +484,7 @@ export class Dispatcher {
 
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
       const current = store.get(id) ?? task;
-      const ctx = taskContext(current, taskRepo, branch, family);
+      const ctx = taskContext(current, taskRepo, branch, family, this.cfg.guidance);
       const work = await runSession({
         prompt:
           mode === 'fixci'
@@ -789,7 +789,18 @@ function familyBlock(issue: LinearIssue, family?: IssueFamily): string {
   return lines.filter((l) => l !== '').join('\n');
 }
 
-function taskContext(task: Task, repo: RepoLike, branch: string, family?: IssueFamily): string {
+/** Operator's standing config guidance, if any. */
+function guidanceBlock(guidance?: string): string {
+  return guidance?.trim() ? `\n## Standing guidance from the operator\n${guidance.trim()}` : '';
+}
+
+function taskContext(
+  task: Task,
+  repo: RepoLike,
+  branch: string,
+  family?: IssueFamily,
+  guidance?: string,
+): string {
   const issue = task.issue;
   const remote = repo.remote ?? 'origin';
   const pushRemote = repo.pushRemote ?? remote;
@@ -819,8 +830,9 @@ function taskContext(task: Task, repo: RepoLike, branch: string, family?: IssueF
       ? `Triage verdict: ${task.verdict.verdict}${task.verdict.verification ? ` · verification tier: ${task.verdict.verification}` : ''} — ${task.verdict.reason}`
       : '',
     task.verdict?.plan ? `\nTriage plan:\n${task.verdict.plan}` : '',
+    guidanceBlock(guidance),
     task.instructions
-      ? `\nOperator instructions (these take precedence when they conflict with anything else):\n${task.instructions}`
+      ? `\nOperator instructions for THIS issue (these take precedence over the standing guidance and anything else):\n${task.instructions}`
       : '',
     familyBlock(task.issue, family),
   ]
@@ -828,13 +840,18 @@ function taskContext(task: Task, repo: RepoLike, branch: string, family?: IssueF
     .join('\n');
 }
 
-function triagePrompt(issue: LinearIssue, repos: RepoConfig[], instructions?: string): string {
+function triagePrompt(
+  issue: LinearIssue,
+  repos: RepoConfig[],
+  instructions?: string,
+  guidance?: string,
+): string {
   const roster = repos
     .map((r) => `- ${r.name} (${r.path}): ${r.description ?? '(no description)'}`)
     .join('\n');
   return `You are triaging a Linear issue before implementation. Investigate the codebase (read-only — do not modify files) to judge scope.
 
-${issueBlock(issue)}
+${issueBlock(issue)}${guidanceBlock(guidance)}
 ${instructionsBlock(instructions)}
 Work for this team can live in any of these repositories:
 ${roster}
