@@ -11,7 +11,8 @@
     "dev": "tsx src/index.tsx",
     "doctor": "tsx src/doctor.ts",
     "build": "tsc && chmod +x dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check": "tsx src/core/store.check.ts"
   },
   "engines": {
     "node": ">=18"
