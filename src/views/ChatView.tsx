@@ -25,6 +25,13 @@ export function ChatView(props: { param?: string }) {
     const param = (props.param ?? '').toLowerCase();
     (async () => {
       const pool = projectCache.length ? projectCache : await fetchProjects(ctx.cfg);
+      if (!param) {
+        setError(
+          `:plan needs a project — try ${pool.slice(0, 3).map((p) => `“${p.name}”`).join(', ')}` +
+            ', or pick one in :projects and press p',
+        );
+        return;
+      }
       const project =
         pool.find((p) => p.id === props.param) ??
         pool.find((p) => p.name.toLowerCase() === param) ??

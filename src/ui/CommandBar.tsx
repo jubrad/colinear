@@ -9,6 +9,8 @@ export interface Candidate {
 }
 
 export function fuzzyMatch(haystack: string, needle: string): boolean {
+  // an empty needle is "no query", not "matches the first thing you tried"
+  if (!needle) return false;
   let i = 0;
   for (const ch of haystack) {
     if (ch === needle[i]) i++;
