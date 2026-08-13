@@ -10,7 +10,7 @@ import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
 import { store } from './store.js';
-import type { Config, LinearIssue, PrInfo, RepoConfig, Subtask, Task, TriageVerdict, Verification } from './types.js';
+import type { Config, LinearIssue, PrInfo, RepoConfig, Subtask, Task, TaskEdits, TriageVerdict, Verification } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -68,6 +68,13 @@ export class Dispatcher {
       store.addActivity(id, 'colinear quit — agent stopped (resumes with r next run)');
       controller.abort();
     }
+  }
+
+  /** Where operator-facing messages go (the daemon forwards them to clients). */
+  onToast?: (text: string, kind: 'info' | 'ok' | 'err') => void;
+
+  private toast(text: string, kind: 'info' | 'ok' | 'err') {
+    this.onToast?.(text, kind);
   }
 
   setViewer(viewer: { id: string; displayName: string }) {
@@ -300,6 +307,56 @@ export class Dispatcher {
   }
 
   /** Re-check blocked tasks; queue the ones whose Linear blockers finished. */
+  /**
+   * Apply the board's edit modal. The decision of whether an agent still
+   * needs to run depends on what re-polling finds, so the whole sequence
+   * belongs here rather than split across the wire.
+   */
+  async applyEdits(id: string, edits: TaskEdits) {
+    const task = store.get(id);
+    if (!task) return;
+    const pinChanged = edits.pinnedPr !== task.pinnedPr;
+    const repoChanged = edits.repo.path !== (task.repo?.path ?? this.cfg.repos[0].path);
+    const { name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot } = edits.repo;
+    store.update(id, {
+      instructions: edits.instructions,
+      model: edits.model,
+      pinnedPr: edits.pinnedPr,
+      // tri-state: undefined = keep plan chosen, leave the stored flag alone
+      ...(edits.skipTriage !== undefined ? { skipTriage: edits.skipTriage } : {}),
+      // persist the repo even without a requeue: PR matching polls per repo,
+      // so a pin can only resolve once the task points at the right one
+      ...(repoChanged ? { repo: { name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot } } : {}),
+    });
+    const ident = task.issue.identifier;
+    if (pinChanged || repoChanged) {
+      // drop the stale match and re-poll; if the pin resolves the task on its
+      // own (PR merged -> done, PR open -> pr_open), no agent needs to run
+      store.update(id, { prs: [] });
+      await this.pollPrs();
+      const after = store.get(id);
+      if (after?.status === 'done') return this.toast(`${ident}: PR already merged — moved to Done`, 'ok');
+      if (after?.status === 'pr_open' && !edits.requeue) {
+        return this.toast(`${ident}: linked to open PR — no agent needed`, 'ok');
+      }
+    }
+    if (edits.requeue || repoChanged) {
+      if (['triage', 'working', 'checks'].includes(store.get(id)?.status ?? '')) {
+        return this.toast('agent is live — x to cancel before requeueing', 'err');
+      }
+      if (this.redispatch(id, edits.repo, { retriage: edits.retriage, skipTriage: edits.skipTriage })) {
+        this.toast(`${ident} requeued in ${edits.repo.name}`, 'ok');
+      }
+    } else {
+      this.toast(`${ident} updated`, 'ok');
+    }
+  }
+
+  /** Re-match PRs now (the UI asks for this after editing a pin or repo). */
+  async pollPrs() {
+    await pollPrs(this.cfg, this).catch(() => {});
+  }
+
   async recheckBlocked() {
     await this.sweepClosed().catch(() => {});
     await this.refreshTracking().catch(() => {});

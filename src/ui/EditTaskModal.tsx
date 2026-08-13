@@ -1,7 +1,9 @@
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { useMemo, useState } from 'react';
-import type { RepoConfig, Task } from '../core/types.js';
+import type { RepoConfig, Task, TaskEdits } from '../core/types.js';
+
+export type { TaskEdits };
 import { theme } from '../theme.js';
 
 const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
@@ -11,19 +13,6 @@ const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
   { label: 'fable', value: 'fable' },
   { label: 'haiku', value: 'haiku' },
 ];
-
-export interface TaskEdits {
-  repo: RepoConfig;
-  /** undefined = auto-match, number = pinned */
-  pinnedPr?: number;
-  instructions?: string;
-  model?: string;
-  retriage: boolean;
-  /** true = straight to work, false = triage wanted, undefined = keep as-is */
-  skipTriage?: boolean;
-  /** true when the operator asked to requeue (ctrl+r) */
-  requeue: boolean;
-}
 
 type Field = 'repo' | 'pin' | 'instructions' | 'model' | 'triage';
 

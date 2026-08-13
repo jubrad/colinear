@@ -160,6 +160,20 @@ export interface Task {
   sessionHistory?: Array<{ sessionId: string; worktree?: string; at: number }>;
 }
 
+/** Operator's edits from the board's `m` modal; applied by the dispatcher. */
+export interface TaskEdits {
+  repo: RepoConfig;
+  /** undefined = auto-match, number = pinned */
+  pinnedPr?: number;
+  instructions?: string;
+  model?: string;
+  retriage: boolean;
+  /** true = straight to work, false = triage wanted, undefined = keep as-is */
+  skipTriage?: boolean;
+  /** true when the operator asked to requeue (ctrl+r) */
+  requeue: boolean;
+}
+
 export interface CheckConfig {
   name: string;
   cmd: string;

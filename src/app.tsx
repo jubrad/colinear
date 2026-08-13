@@ -1,9 +1,9 @@
 import { Box, useApp, useInput, useStdout } from 'ink';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Dispatcher } from './core/dispatcher.js';
+import type { DispatcherApi } from './client.js';
+import { setPendingAction } from './core/attach.js';
 import { useTasks } from './core/hooks.js';
 import { fetchTeams, fetchViewer } from './core/linear.js';
-import { startPrPolling } from './core/prs.js';
 import { store } from './core/store.js';
 import type { Config, LinearTeam } from './core/types.js';
 import { CommandBar } from './ui/CommandBar.js';
@@ -18,6 +18,7 @@ export const VERSION = '0.2.0';
 
 const GLOBAL_KEYS: Array<[string, string]> = [
   [':', 'command'],
+  ['R', 'reload ui'],
   ['esc', 'back'],
   ['q', 'quit view'],
 ];
@@ -59,8 +60,13 @@ function useClock(intervalMs = 1000, active = true): number {
   return now;
 }
 
-export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
-  const { cfg, dispatcher } = props;
+export function App(props: {
+  cfg: Config;
+  dispatcher: DispatcherApi;
+  /** daemon-side messages surface as toasts; returns an unsubscribe */
+  onToast?: (fn: (text: string, kind: ToastKind) => void) => () => void;
+}) {
+  const { cfg, dispatcher, onToast } = props;
   const { exit } = useApp();
   const size = useTerminalSize();
   const tasks = useTasks();
@@ -95,8 +101,13 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
     fetchTeams(cfg)
       .then(setTeams)
       .catch(() => {});
-    return startPrPolling(cfg, dispatcher);
   }, []);
+
+  // messages the daemon originates (edit results, requeue outcomes)
+  useEffect(
+    () => onToast?.((text, kind) => setToastState({ text, kind, at: Date.now() })),
+    [onToast],
+  );
 
   // toasts auto-expire
   useEffect(() => {
@@ -145,6 +156,12 @@ export function App(props: { cfg: Config; dispatcher: Dispatcher }) {
     (input, key) => {
       if (input === ':') {
         setCmdOpen(true);
+        return;
+      }
+      if (input === 'R') {
+        // restart this process on new code; the daemon (and its agents) stay up
+        setPendingAction({ kind: 'reload-ui' });
+        exit();
         return;
       }
       if (key.escape) {

@@ -81,7 +81,9 @@ export type PendingAction =
       /** transcript flush grace when a live agent was just suspended */
       waitMs: number;
     }
-  | { kind: 'edit-config'; path: string };
+  | { kind: 'edit-config'; path: string }
+  /** restart the TUI process on new code; the daemon and its agents stay up */
+  | { kind: 'reload-ui' };
 
 let pending: PendingAction | null = null;
 

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { attachSession, attachShell } from '../core/attach.js';
 import { useTasks } from '../core/hooks.js';
 import { fetchSubIssues, postComment } from '../core/linear.js';
-import { pollPrs } from '../core/prs.js';
 import { store } from '../core/store.js';
 import type { Task, TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
@@ -216,7 +215,7 @@ export function BoardView(_props: { param?: string }) {
           onCancel={() => setRepoModal(undefined)}
           onSubmit={(edits) => {
             setRepoModal(undefined);
-            void applyTaskEdits(repoModal, edits, ctx);
+            ctx.dispatcher.applyEdits(repoModal.issue.id, edits);
           }}
         />
       )}
@@ -401,48 +400,6 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
   );
 }
 
-async function applyTaskEdits(task: Task, edits: TaskEdits, ctx: ReturnType<typeof useColinear>) {
-  const id = task.issue.id;
-  const pinChanged = edits.pinnedPr !== task.pinnedPr;
-  const repoChanged = edits.repo.path !== (task.repo?.path ?? ctx.cfg.repos[0].path);
-  const { name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot } = edits.repo;
-  store.update(id, {
-    instructions: edits.instructions,
-    model: edits.model,
-    pinnedPr: edits.pinnedPr,
-    // tri-state: undefined = keep plan chosen, leave the stored flag alone
-    ...(edits.skipTriage !== undefined ? { skipTriage: edits.skipTriage } : {}),
-    // persist the repo even without a requeue: PR matching polls per repo,
-    // so a pin can only resolve once the task points at the right one
-    ...(repoChanged ? { repo: { name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot } } : {}),
-  });
-  if (pinChanged || repoChanged) {
-    // drop the stale match and re-poll; if the pin resolves the task on its
-    // own (PR merged -> done, PR open -> pr_open), no agent needs to run
-    store.update(id, { prs: [] });
-    await pollPrs(ctx.cfg, ctx.dispatcher).catch(() => {});
-    const after = store.get(id);
-    if (after?.status === 'done') {
-      ctx.toast(`${task.issue.identifier}: PR already merged — moved to Done`, 'ok');
-      return;
-    }
-    if (after?.status === 'pr_open' && !edits.requeue) {
-      ctx.toast(`${task.issue.identifier}: linked to open PR — no agent needed`, 'ok');
-      return;
-    }
-  }
-  if (edits.requeue || repoChanged) {
-    if (['triage', 'working', 'checks'].includes(store.get(id)?.status ?? '')) {
-      ctx.toast('agent is live — x to cancel before requeueing', 'err');
-      return;
-    }
-    if (ctx.dispatcher.redispatch(id, edits.repo, { retriage: edits.retriage, skipTriage: edits.skipTriage })) {
-      ctx.toast(`${task.issue.identifier} requeued in ${edits.repo.name}`, 'ok');
-    }
-  } else {
-    ctx.toast(`${task.issue.identifier} updated`, 'ok');
-  }
-}
 
 /** Rendered height of a card in terminal rows — must mirror Card's branches. */
 function cardHeight(task: Task): number {

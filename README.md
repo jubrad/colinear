@@ -58,6 +58,21 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
 - `terminal` — session attach target: unset = in-place (recommended), `"ghostty"` / `"terminal"` = external window.
 - `--team CLOUD` / `--team all` flags override the config; the last picker team is remembered across runs.
 
+## Daemon
+
+`coli` is two processes: a **daemon** that owns the dispatcher, the task store, persistence, PR polling and the Linear sweeps, and a **TUI** that mirrors its state over a unix socket (`~/.local/state/colinear/coli.sock`). Running `coli` starts both — the daemon only if one isn't already up.
+
+Agents therefore outlive the UI. Close the terminal, quit with `q`, or hit `R` to restart the frontend on a fresh build; the daemon keeps working and the board reattaches to live state. The mirror is kept current by change data capture: the client hydrates from a snapshot and follows a versioned delta stream, re-snapshotting if it ever misses one.
+
+| command | what |
+|---|---|
+| `coli` | TUI (starts a daemon if needed) |
+| `coli daemon` | run the daemon in the foreground |
+| `coli daemon status` | pid + socket, or "no daemon running" |
+| `coli daemon stop` | stop it — live agents abort and resume with `r` |
+
+Only the daemon dispatches agents, so stopping it is the one thing that interrupts work.
+
 ## Views (`:` to jump, tab completes; `:reload` refreshes custom views)
 
 | view | what |
@@ -71,7 +86,7 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
 | `:config` | resolved config (key masked), `e` to edit |
 | `:help` (`?`) | all views, keys, custom view schema |
 
-Global: `esc` clears filters then goes back, `q` back/quit, `ctrl+c` quit. Crumbs + toasts at the bottom; header shows agents/tokens/cost and per-view hotkeys. Board opens first when a previous run's tasks were restored.
+Global: `esc` clears filters then goes back, `q` back/quit, `R` reloads the frontend on new code (agents keep running), `ctrl+c` quit. Crumbs + toasts at the bottom; header shows agents/tokens/cost and per-view hotkeys. Board opens first when a previous run's tasks were restored.
 
 ## How dispatch works
 

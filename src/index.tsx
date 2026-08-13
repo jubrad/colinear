@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
+import { fileURLToPath } from 'node:url';
 import { render } from 'ink';
 import { App } from './app.js';
+import { connectToDaemon } from './client.js';
 import { consumePendingAction } from './core/attach.js';
 import { configPath, ensureConfigFile, loadConfig } from './core/config.js';
-import { Dispatcher } from './core/dispatcher.js';
+import { runDaemon, PID_PATH } from './daemon.js';
 import { log } from './core/log.js';
-import { loadState, startPersistence } from './core/persist.js';
+import { SOCKET_PATH } from './core/protocol.js';
 import { store } from './core/store.js';
 
-const cfg = loadConfig();
-const dispatcher = new Dispatcher(cfg);
-
-loadState(cfg);
-const stopPersistence = startPersistence();
+/** exit code the TUI uses to ask the supervisor for a fresh process */
+const RELOAD_EXIT = 75;
 
 // Synchronized output (DEC 2026): wrap every frame Ink writes so supporting
 // terminals (iTerm2, Ghostty, Kitty, WezTerm) paint it atomically instead of
@@ -47,18 +47,65 @@ const leaveAltScreen = () => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// The TUI runs in a loop so `s` (attach) can hand this terminal to an
-// interactive `claude --resume` and drop back onto the board afterwards.
-// Dispatched agents keep running in-process while claude has the screen.
-async function main() {
+function daemonPid(): number | undefined {
+  if (!existsSync(PID_PATH)) return undefined;
+  const pid = Number.parseInt(readFileSync(PID_PATH, 'utf8').trim(), 10);
+  if (Number.isNaN(pid)) return undefined;
+  try {
+    process.kill(pid, 0); // signal 0 just tests liveness
+    return pid;
+  } catch {
+    return undefined; // pidfile outlived the process
+  }
+}
+
+/** `coli daemon [stop|status]` — the backend, and its lifecycle controls. */
+async function daemonCommand(sub?: string): Promise<void> {
+  const pid = daemonPid();
+  if (sub === 'stop') {
+    if (!pid) {
+      console.log('no daemon running');
+      if (existsSync(SOCKET_PATH)) unlinkSync(SOCKET_PATH);
+      return;
+    }
+    process.kill(pid, 'SIGTERM');
+    console.log(`stopped daemon (pid ${pid}) — agents were aborted and resume with r`);
+    return;
+  }
+  if (sub === 'status') {
+    console.log(pid ? `daemon running (pid ${pid}) on ${SOCKET_PATH}` : 'no daemon running');
+    return;
+  }
+  if (pid) {
+    console.error(`a daemon is already running (pid ${pid})`);
+    process.exit(1);
+  }
+  await runDaemon();
+}
+
+/**
+ * The TUI: a client of the daemon. Everything stateful lives over there, so
+ * quitting, reloading, or crashing this process leaves the agents alone.
+ */
+async function runTui(): Promise<void> {
+  const conn = await connectToDaemon();
+  const cfg = conn.cfg;
+  let reload = false;
+
+  // The TUI runs in a loop so `s` (attach) can hand this terminal to an
+  // interactive `claude --resume` and drop back onto the board afterwards.
   for (;;) {
     enterAltScreen();
-    const app = render(<App cfg={cfg} dispatcher={dispatcher} />, { patchConsole: true });
+    const app = render(<App cfg={cfg} dispatcher={conn.dispatcher} onToast={conn.onToast} />, { patchConsole: true });
     await app.waitUntilExit();
     leaveAltScreen();
 
     const action = consumePendingAction();
     if (!action) break;
+    if (action.kind === 'reload-ui') {
+      reload = true;
+      break;
+    }
     if (action.kind === 'attach' && action.mode === 'shell') {
       console.log(`shell in ${action.worktree} — exit to return to colinear\n`);
       spawnSync(process.env.SHELL ?? 'zsh', [], { cwd: action.worktree, stdio: 'inherit' });
@@ -75,28 +122,38 @@ async function main() {
       // "background it": hand the conversation back to a headless agent
       if (store.get(action.issueId)?.status === 'interrupted') {
         const rl = createInterface({ input: process.stdin, output: process.stdout });
-        const answer = await rl.question(
-          `resume ${action.identifier}'s agent in the background? [Y/n] `,
-        );
+        const answer = await rl.question(`resume ${action.identifier}'s agent in the background? [Y/n] `);
         rl.close();
-        if (!/^n/i.test(answer.trim())) dispatcher.resume(action.issueId);
+        if (!/^n/i.test(answer.trim())) conn.dispatcher.resume(action.issueId);
       }
     } else if (action.kind === 'edit-config') {
       const editPath = ensureConfigFile(cfg);
       spawnSync(process.env.EDITOR ?? 'vi', [editPath], { stdio: 'inherit' });
-      // hot-apply: cfg is shared by reference, so mutating it updates the
-      // dispatcher and all views on the next render
       Object.assign(cfg, loadConfig());
+      conn.dispatcher.reloadConfig();
       console.log(`config reloaded from ${configPath()}`);
     }
   }
-  // abort live agents (their sessions resume with r next run), flush state,
-  // then exit hard — lingering SDK/child handles otherwise keep the event
-  // loop alive and ctrl-c appears to hang
-  dispatcher.shutdown();
-  await sleep(200); // let aborts propagate + interrupted statuses land in the store
-  stopPersistence();
-  process.exit(0);
+
+  conn.close();
+  // agents keep running in the daemon; only this client goes away
+  process.exit(reload ? RELOAD_EXIT : 0);
 }
 
-void main();
+/**
+ * Default entry: a thin supervisor around the TUI, so `R` can restart the
+ * frontend on new code without disturbing the daemon (and its agents).
+ */
+function supervise(): never {
+  const script = fileURLToPath(import.meta.url);
+  for (;;) {
+    // execArgv carries the loader in dev (tsx), where the script is .tsx
+    const result = spawnSync(process.execPath, [...process.execArgv, script, '--tui'], { stdio: 'inherit' });
+    if (result.status !== RELOAD_EXIT) process.exit(result.status ?? 0);
+  }
+}
+
+const [command, sub] = process.argv.slice(2);
+if (command === 'daemon') await daemonCommand(sub);
+else if (command === '--tui') await runTui();
+else supervise();

@@ -13,6 +13,12 @@ class Store {
   private log: Delta[] = [];
   /** set on a mirror: rebuilds the answer callback stripped for the wire */
   private onAnswer?: (id: string, text: string) => void;
+  /**
+   * Set on a mirror: writes are forwarded to the owner instead of applied
+   * locally, and come back as deltas. Views keep calling store.update() —
+   * they don't know whether they're holding the real store or a mirror.
+   */
+  private remote?: (change: Change) => void;
 
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn);
@@ -32,8 +38,10 @@ class Store {
   }
 
   upsert(task: Task) {
+    const change: Change = { kind: 'upsert', task: toWire(task) as WireTask };
+    if (this.remote) return this.remote(change);
     this.tasks.set(task.issue.id, task);
-    this.emit({ kind: 'upsert', task: toWire(task) as WireTask });
+    this.emit(change);
   }
 
   get(id: string): Task | undefined {
@@ -41,10 +49,11 @@ class Store {
   }
 
   update(id: string, patch: Partial<Task>) {
+    const { patch: wire, clear } = encodePatch(patch);
+    if (this.remote) return this.remote({ kind: 'update', id, patch: wire, clear });
     const task = this.tasks.get(id);
     if (!task) return;
     Object.assign(task, patch);
-    const { patch: wire, clear } = encodePatch(patch);
     this.emit({ kind: 'update', id, patch: wire, clear });
   }
 
@@ -53,6 +62,7 @@ class Store {
   }
 
   addActivity(id: string, line: string) {
+    if (this.remote) return this.remote({ kind: 'activity', id, line });
     const task = this.tasks.get(id);
     if (!task) return;
     appendActivity(task, line);
@@ -77,6 +87,26 @@ class Store {
     const oldest = this.log[0];
     if (!oldest || oldest.v > version + 1) return null;
     return this.log.filter((d) => d.v > version);
+  }
+
+  /**
+   * Turn this store into a mirror: writes forward to the owner, and the
+   * pending-question callback round-trips instead of running locally.
+   */
+  attach(remote: (change: Change) => void, onAnswer: (id: string, text: string) => void) {
+    this.remote = remote;
+    this.onAnswer = onAnswer;
+  }
+
+  /** Apply a change locally (daemon side, on behalf of a client). */
+  applyChange(change: Change) {
+    if (change.kind === 'upsert') this.upsert(change.task as unknown as Task);
+    else if (change.kind === 'activity') this.addActivity(change.id, change.line);
+    else {
+      const patch = { ...change.patch } as Partial<Task>;
+      for (const key of change.clear) (patch as Record<string, unknown>)[key] = undefined;
+      this.update(change.id, patch);
+    }
   }
 
   /** Mirror side: replace all state with a snapshot. */

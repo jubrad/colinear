@@ -1,12 +1,12 @@
 import { createContext, useContext } from 'react';
-import type { Dispatcher } from '../core/dispatcher.js';
+import type { DispatcherApi } from '../client.js';
 import type { Config, LinearTeam } from '../core/types.js';
 
 export type ToastKind = 'info' | 'ok' | 'err';
 
 export interface AppCtx {
   cfg: Config;
-  dispatcher: Dispatcher;
+  dispatcher: DispatcherApi;
   viewer?: { id: string; displayName: string };
   teams: LinearTeam[];
   size: { columns: number; rows: number };
