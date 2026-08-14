@@ -17,23 +17,44 @@ const REVIEW_FILE = '.colinear-review.md';
 /** ~64KB of review is already far more than anyone reads; refuse to mirror more. */
 const DOC_LIMIT = 64_000;
 
+const SEVERITIES = new Set(['blocking', 'consider', 'nit', 'praise']);
+
+/** Fenced block holding the findings — ```findings preferred, ```json accepted. */
+const FENCE = /```(?:findings|json)\s*([\s\S]*?)```/g;
+
+/** Drop anything that isn't a finding rather than posting malformed comments. */
+function validFindings(value: unknown): ReviewFinding[] {
+  const list = Array.isArray(value)
+    ? value
+    : Array.isArray((value as { findings?: unknown })?.findings)
+      ? (value as { findings: unknown[] }).findings
+      : [];
+  return list.flatMap((raw) => {
+    const f = raw as Partial<ReviewFinding>;
+    if (typeof f?.file !== 'string' || typeof f?.comment !== 'string') return [];
+    const severity = SEVERITIES.has(f.severity as string) ? (f.severity as ReviewFinding['severity']) : 'consider';
+    const line = typeof f.line === 'number' && Number.isFinite(f.line) ? f.line : undefined;
+    return [{ file: f.file, line, severity, comment: f.comment }];
+  });
+}
+
 /**
  * The doc carries the prose AND a fenced findings block, so one artifact stays
  * the source of truth. Structured output would have split them, and every chat
  * turn afterwards would need a second pass to keep the two in sync.
  */
 function parseDoc(text: string): { summary: string; findings: ReviewFinding[] } {
-  const fence = [...text.matchAll(/```json\s*([\s\S]*?)```/g)].pop();
+  const fence = [...text.matchAll(FENCE)].pop();
   let findings: ReviewFinding[] = [];
   if (fence) {
     try {
-      const parsed = JSON.parse(fence[1]) as { findings?: ReviewFinding[] };
-      if (Array.isArray(parsed.findings)) findings = parsed.findings;
+      // both shapes turn up: a bare array, and { "findings": [...] }
+      findings = validFindings(JSON.parse(fence[1]));
     } catch {
       // a malformed fence costs the findings list, not the review itself
     }
   }
-  const prose = text.replace(/```json[\s\S]*?```/g, '').trim();
+  const prose = text.replace(FENCE, '').trim();
   const summary =
     prose
       .split(/\n{2,}/)
@@ -445,7 +466,13 @@ export class Reviewer {
  * machine-readable fence, plus any finding we couldn't anchor to a line.
  */
 function reviewBody(review: Review, inBody: ReviewFinding[]): string {
-  const doc = (review.doc ?? review.summary ?? '').replace(/```json[\s\S]*?```/g, '').trim();
+  // everything above the findings section: the findings themselves go out as
+  // inline comments, and repeating them in the body is what turned a review
+  // into one enormous comment
+  const doc = (review.doc ?? review.summary ?? '')
+    .replace(FENCE, '')
+    .split(/^##\s+Findings\s*$/im)[0]
+    .trim();
   const extra = inBody.length
     ? `\n\n## Further notes\n\n${inBody
         .map((f) => `- **${f.severity}** ${f.file}${f.line ? `:${f.line}` : ''} — ${f.comment}`)
@@ -498,11 +525,15 @@ Why it matters, and the comment as you would write it to the author.
 
 Write prose as prose — paragraphs, not bullet fragments — and use fenced code blocks for any code you quote. Don't wrap lines by hand; the reader reflows them.
 
-End the file with a fenced block listing the same findings in machine-readable form — colinear posts these as line-anchored comments, so the two must always agree:
+End the file with a \`findings\` block: a JSON **array**, one object per finding. This is what actually reaches GitHub — colinear posts each entry as an inline comment on that file and line, so write \`comment\` as the complete review comment you want the author to read, in markdown. The prose above is context for the operator; the array is the review.
 
-\`\`\`json
-{"findings": [{"file": "src/x.rs", "line": 42, "severity": "blocking", "comment": "..."}]}
+\`\`\`findings
+[
+  {"file": "src/x.rs", "line": 42, "severity": "blocking", "comment": "Full comment to the author, in markdown.\\n\\nParagraphs are fine."}
+]
 \`\`\`
+
+Rules for the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches (omit it only if the point isn't about a specific line — those go in the review body instead); \`severity\` is one of blocking, consider, nit, praise. Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
 
 Severity means:
 - "blocking": a bug, a security or data-loss risk, or a contract change that would break callers. Something you would hold the PR for.
