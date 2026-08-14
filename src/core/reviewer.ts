@@ -318,11 +318,23 @@ export class Reviewer {
         const review = store.getReview(id);
         if (!review) return;
         notify(this.cfg, `${review.repository}#${review.number}`, `needs input: ${question.text.slice(0, 80)}`, review.url);
+        const asked: ChatTurn = {
+          role: 'agent',
+          text: question.options.length
+            ? `${question.text}\n${question.options.map((o, i) => `  ${i + 1}. ${o}`).join('\n')}`
+            : question.text,
+          at: Date.now(),
+        };
         store.updateReview(id, {
+          chat: [...(review.chat ?? []), asked],
           question: {
             ...question,
             answer: (a: string) => {
-              store.updateReview(id, { question: undefined });
+              const current = store.getReview(id);
+              store.updateReview(id, {
+                question: undefined,
+                chat: [...(current?.chat ?? []), { role: 'operator', text: a, at: Date.now() }],
+              });
               store.addReviewActivity(id, `↩ answered: ${a.slice(0, 80)}`);
               question.answer(a);
             },

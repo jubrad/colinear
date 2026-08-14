@@ -60,7 +60,8 @@ export function ReviewDocModal(props: {
       (line, i) => ({ role: turn.role, line, first: i === 0 }),
     ),
   );
-  const chatRows = Math.max(1, paneHeight - 5);
+  // borders (2) + title (1) + input and its margin (2) + the activity line
+  const chatRows = Math.max(1, paneHeight - (busy ? 6 : 5));
   const chatBody = chatLines.slice(-chatRows);
 
   return (
@@ -101,8 +102,13 @@ export function ReviewDocModal(props: {
           overflow="hidden"
           flexShrink={0}
         >
-          <Text bold color={theme.header}>
-            talk to the reviewer{busy ? <Text color={theme.warn}> · thinking…</Text> : null}
+          <Text bold color={theme.header} wrap="truncate">
+            discuss
+            {review.question ? (
+              <Text color={theme.info}> · it asked you something</Text>
+            ) : busy ? (
+              <Text color={theme.warn}> · thinking…</Text>
+            ) : null}
           </Text>
           {!chat.length &&
             wrap(
@@ -126,24 +132,45 @@ export function ReviewDocModal(props: {
               {entry.line}
             </Text>
           ))}
-          <Box marginTop={1}>
+          {busy && review.activity.length ? (
+            <Text dimColor wrap="truncate">
+              ⋯ {review.activity[review.activity.length - 1]}
+            </Text>
+          ) : null}
+          <Box marginTop={busy ? 0 : 1}>
             <Text color={focus === 'chat' ? theme.accent : theme.dim}>{'> '}</Text>
             <TextInput
               focus={focus === 'chat'}
               value={draft}
-              placeholder={focus === 'chat' ? 'ask or instruct…' : 'tab to type'}
+              placeholder={
+                focus !== 'chat'
+                  ? 'tab to type'
+                  : review.question
+                    ? 'answer it (or 1-9)…'
+                    : 'ask or instruct…'
+              }
               onChange={setDraft}
               onSubmit={(value) => {
-                if (!value.trim()) return;
-                onSend(value.trim());
+                const text = value.trim();
+                if (!text) return;
                 setDraft('');
+                // a pending question takes the reply; a bare number picks an option
+                const question = review.question;
+                if (question) {
+                  const pick = Number.parseInt(text, 10);
+                  question.answer(
+                    !Number.isNaN(pick) && question.options[pick - 1] ? question.options[pick - 1] : text,
+                  );
+                  return;
+                }
+                onSend(text);
               }}
             />
           </Box>
         </Box>
       </Box>
-      <Text dimColor>
-        tab: {focus === 'doc' ? 'chat' : 'doc'} · j/k g/G: scroll · e: edit in $EDITOR · esc: back
+      <Text dimColor wrap="truncate">
+        tab: {focus === 'doc' ? 'discuss' : 'doc'} · j/k g/G: scroll · e: edit in $EDITOR · esc: back
       </Text>
     </Box>
   );
