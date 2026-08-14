@@ -31,10 +31,13 @@ function validFindings(value: unknown): ReviewFinding[] {
       : [];
   return list.flatMap((raw) => {
     const f = raw as Partial<ReviewFinding>;
-    if (typeof f?.file !== 'string' || typeof f?.comment !== 'string') return [];
+    // the comment is the finding; a missing file just means it can't be
+    // anchored, which is the body's job — dropping it would lose real review
+    if (typeof f?.comment !== 'string' || !f.comment.trim()) return [];
     const severity = SEVERITIES.has(f.severity as string) ? (f.severity as ReviewFinding['severity']) : 'consider';
     const line = typeof f.line === 'number' && Number.isFinite(f.line) ? f.line : undefined;
-    return [{ file: f.file, line, severity, comment: f.comment }];
+    const file = typeof f.file === 'string' && f.file.trim() ? f.file.trim() : undefined;
+    return [{ file, line, severity, comment: f.comment }];
   });
 }
 
@@ -481,7 +484,8 @@ function reviewBody(
   const parts: string[] = [];
   if (!hasInlineComments && review.summary?.trim()) parts.push(review.summary.trim());
   for (const f of unanchored) {
-    parts.push(`**${f.severity}** — \`${f.file}\`\n\n${f.comment.trim()}`);
+    const where = f.file ? ` — \`${f.file}${f.line ? `:${f.line}` : ''}\`` : '';
+    parts.push(`**${f.severity}**${where}\n\n${f.comment.trim()}`);
   }
   if (review.note?.trim()) parts.push(review.note.trim());
   const body = parts.join('\n\n');
@@ -491,7 +495,7 @@ function reviewBody(
 
 function findingsBlock(review: Review): string {
   return (review.findings ?? [])
-    .map((f) => `- [${f.severity}] ${f.file}${f.line ? `:${f.line}` : ''} — ${f.comment}`)
+    .map((f) => `- [${f.severity}] ${f.file ?? 'general'}${f.line ? `:${f.line}` : ''} — ${f.comment}`)
     .join('\n');
 }
 

@@ -389,7 +389,7 @@ function Detail(props: { review: Review; now: number }) {
             <Text key={`${f.file}-${i}`} wrap="truncate">
               <Text color={SEVERITY_COLOR[f.severity] ?? theme.dim}>{f.severity.padEnd(9)}</Text>
               <Text dimColor>
-                {f.file}
+                {f.file ?? 'general'}
                 {f.line ? `:${f.line}` : ''}{' '}
               </Text>
               {f.comment}

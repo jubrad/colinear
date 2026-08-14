@@ -186,7 +186,8 @@ export interface ChatTurn {
 }
 
 export interface ReviewFinding {
-  file: string;
+  /** unset when the point isn't about a particular file — it goes in the body */
+  file?: string;
   line?: number;
   /** blocking = would request changes over it; nit = optional polish */
   severity: 'blocking' | 'consider' | 'nit' | 'praise';
