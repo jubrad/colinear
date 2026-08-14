@@ -1,6 +1,7 @@
 import { query, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { createIssue } from './linear.js';
 import { log } from './log.js';
+import { guidanceFor } from './guidance.js';
 import type { Config, LinearIssue, LinearProject } from './types.js';
 
 export interface ChatMessage {
@@ -224,7 +225,7 @@ Whenever you propose or revise the subtask breakdown, END your reply with a sing
 {"subtasks": [{"title": "...", "description": "context + acceptance criteria, markdown", "priority": 2}]}
 \`\`\`
 
-priority: 1 urgent, 2 high, 3 medium, 4 low. Titles must be actionable and self-contained. The user will review, toggle, and approve them into Linear — never create anything yourself.`;
+priority: 1 urgent, 2 high, 3 medium, 4 low. Titles must be actionable and self-contained. The user will review, toggle, and approve them into Linear — never create anything yourself.${guidanceFor(this.cfg.guidance, 'plan')}`;
   }
 }
 

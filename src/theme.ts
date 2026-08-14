@@ -30,3 +30,17 @@ export const STATUS_COLORS: Record<string, string> = {
   tracking: '#5fafff',
   cancelled: 'gray',
 };
+
+/** Review statuses get their own scale: idle → working → decided. */
+export const REVIEW_COLORS: Record<string, string> = {
+  pending: 'gray',
+  queued: 'gray',
+  reviewing: 'yellow',
+  ready: '#87d7ff',
+  posting: 'yellow',
+  posted: 'cyan',
+  approved: 'green',
+  changes_requested: '#ff8700',
+  stale: 'gray',
+  error: 'red',
+};

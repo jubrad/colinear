@@ -32,6 +32,12 @@ export interface DispatcherApi {
   applyEdits(id: string, edits: TaskEdits): void;
   setViewer(viewer: { id: string; displayName: string }): void;
   reloadConfig(): void;
+  /** PR review flow — see Reviewer; nothing reaches GitHub until asked */
+  startReview(id: string): void;
+  cancelReview(id: string): void;
+  postReview(id: string): void;
+  reviewVerdict(id: string, verdict: 'approve' | 'request-changes'): void;
+  pollReviews(): void;
 }
 
 export interface Connection {
@@ -133,6 +139,11 @@ export async function connectToDaemon(): Promise<Connection> {
             applyEdits: (id, edits) => command({ name: 'applyEdits', id, edits }),
             setViewer: (viewer) => command({ name: 'setViewer', viewer }),
             reloadConfig: () => command({ name: 'reloadConfig' }),
+            startReview: (id) => command({ name: 'startReview', id }),
+            cancelReview: (id) => command({ name: 'cancelReview', id }),
+            postReview: (id) => command({ name: 'postReview', id }),
+            reviewVerdict: (id, verdict) => command({ name: 'reviewVerdict', id, verdict }),
+            pollReviews: () => command({ name: 'pollReviews' }),
           },
         });
       } else if (msg.t === 'toast') {

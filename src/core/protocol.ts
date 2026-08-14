@@ -20,6 +20,11 @@ export type Command =
   | { name: 'applyEdits'; id: string; edits: TaskEdits }
   | { name: 'setViewer'; viewer: { id: string; displayName: string } }
   | { name: 'reloadConfig' }
+  | { name: 'startReview'; id: string }
+  | { name: 'cancelReview'; id: string }
+  | { name: 'postReview'; id: string }
+  | { name: 'reviewVerdict'; id: string; verdict: 'approve' | 'request-changes' }
+  | { name: 'pollReviews' }
   /** store writes the UI makes directly (escalation flags, task edits, …) */
   | { name: 'change'; change: Change };
 

@@ -1,4 +1,4 @@
-import type { Task } from './types.js';
+import type { Review, Task } from './types.js';
 
 /**
  * Change data capture for the task store.
@@ -11,7 +11,10 @@ import type { Task } from './types.js';
 export type Change =
   | { kind: 'upsert'; task: WireTask }
   | { kind: 'update'; id: string; patch: WirePatch; clear: string[] }
-  | { kind: 'activity'; id: string; line: string };
+  | { kind: 'activity'; id: string; line: string }
+  | { kind: 'review-upsert'; review: WireReview }
+  | { kind: 'review-update'; id: string; patch: Partial<WireReview>; clear: string[] }
+  | { kind: 'review-activity'; id: string; line: string };
 
 /** A change stamped with the version it produced. */
 export type Delta = Change & { v: number };
@@ -23,15 +26,23 @@ export type WireTask = Omit<Task, 'question'> & {
 
 export type WirePatch = Partial<WireTask>;
 
+/** Same treatment for reviews: the pending question loses its callback. */
+export type WireReview = Omit<Review, 'question'> & {
+  question?: { text: string; options: string[] };
+};
+
 export interface Snapshot {
   version: number;
   tasks: WireTask[];
+  reviews: WireReview[];
 }
 
-/** Drop the answer callback; everything else on a task is already JSON. */
-export function toWire<T extends Partial<Task>>(value: T): Partial<WireTask> {
+/** Drop the answer callback; everything else on a task or review is JSON. */
+export function toWire<T extends Partial<Task> | Partial<Review>>(
+  value: T,
+): Partial<WireTask> & Partial<WireReview> {
   const { question, ...rest } = value;
-  const wire = structuredClone(rest) as Partial<WireTask>;
+  const wire = structuredClone(rest) as Partial<WireTask> & Partial<WireReview>;
   if (question) wire.question = { text: question.text, options: [...question.options] };
   return wire;
 }
@@ -41,12 +52,14 @@ export function toWire<T extends Partial<Task>>(value: T): Partial<WireTask> {
  * `undefined`, but callers rely on `{ error: undefined }` meaning "clear it",
  * so those keys travel separately.
  */
-export function encodePatch(patch: Partial<Task>): { patch: WirePatch; clear: string[] } {
+export function encodePatch(
+  patch: Partial<Task> | Partial<Review>,
+): { patch: WirePatch & Partial<WireReview>; clear: string[] } {
   const clear: string[] = [];
-  const keep: Partial<Task> = {};
+  const keep: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) clear.push(key);
-    else (keep as Record<string, unknown>)[key] = value;
+    else keep[key] = value;
   }
   return { patch: toWire(keep), clear };
 }

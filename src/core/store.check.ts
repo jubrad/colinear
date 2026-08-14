@@ -5,7 +5,7 @@
  */
 import { store } from './store.js';
 import type { Delta } from './delta.js';
-import type { Task } from './types.js';
+import type { Review, Task } from './types.js';
 
 const mirror = new (Object.getPrototypeOf(store).constructor as new () => typeof store)();
 const captured: Delta[] = [];
@@ -44,8 +44,19 @@ store.update('B', {
 });
 for (let i = 0; i < 250; i++) store.addActivity('B', `line ${i}`);
 
+// reviews ride the same CDC path as tasks
+store.upsertReview({
+  id: 'o/r#7', number: 7, repository: 'o/r', title: 'a PR', url: 'u', author: 'someone',
+  headRefName: 'h', baseRefName: 'main', isDraft: false, additions: 10, deletions: 2,
+  changedFiles: 3, updatedAt: '2026-01-01', status: 'pending', activity: [],
+  tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 0,
+} as Review);
+store.updateReview('o/r#7', { status: 'ready', summary: 'looks fine', findings: [{ file: 'a.ts', line: 3, severity: 'nit', comment: 'naming' }] });
+store.addReviewActivity('o/r#7', 'pre-review complete');
+store.updateReview('o/r#7', { status: 'approved', error: undefined });
+
 let answered: string | undefined;
-mirror.hydrate({ version: 0, tasks: [] }, (id, text) => {
+mirror.hydrate({ version: 0, tasks: [], reviews: [] }, (id, text) => {
   answered = `${id}:${text}`;
 });
 for (const delta of captured) {
@@ -53,8 +64,8 @@ for (const delta of captured) {
 }
 
 const strip = (t: Task) => ({ ...t, question: t.question ? { text: t.question.text, options: t.question.options } : undefined });
-const left = JSON.stringify(store.list().map(strip));
-const right = JSON.stringify(mirror.list().map(strip));
+const left = JSON.stringify([store.list().map(strip), store.listReviews()]);
+const right = JSON.stringify([mirror.list().map(strip), mirror.listReviews()]);
 if (left !== right) {
   console.error('DIVERGED\n source:', left, '\n mirror:', right);
   process.exit(1);
@@ -77,4 +88,7 @@ for (let i = 0; i < 1100; i++) store.addActivity('A', `overflow ${i}`);
 if (store.since(0) !== null) throw new Error('since() should refuse a version off the back of the log');
 if (store.since(store.version - 10)?.length !== 10) throw new Error('since() broke after truncation');
 
-console.log(`ok — ${captured.length} deltas replayed, ${store.list().length} tasks identical`);
+if (mirror.getReview('o/r#7')?.status !== 'approved') throw new Error('review deltas did not land');
+console.log(
+  `ok — ${captured.length} deltas replayed, ${store.list().length} tasks + ${store.listReviews().length} reviews identical`,
+);

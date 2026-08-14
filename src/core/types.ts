@@ -160,6 +160,67 @@ export interface Task {
   sessionHistory?: Array<{ sessionId: string; worktree?: string; at: number }>;
 }
 
+export type ReviewStatus =
+  /** listed as awaiting my review; nothing done yet */
+  | 'pending'
+  | 'queued'
+  /** agent is reading the diff */
+  | 'reviewing'
+  /** findings are ready for the operator to look over */
+  | 'ready'
+  /** agent is posting the findings to GitHub */
+  | 'posting'
+  | 'posted'
+  | 'approved'
+  | 'changes_requested'
+  /** no longer requesting my review (someone else took it, or it was withdrawn) */
+  | 'stale'
+  | 'error';
+
+export interface ReviewFinding {
+  file: string;
+  line?: number;
+  /** blocking = would request changes over it; nit = optional polish */
+  severity: 'blocking' | 'consider' | 'nit' | 'praise';
+  comment: string;
+}
+
+/** An LLM pre-review of someone else's PR; the operator decides what to post. */
+export interface Review {
+  /** stable key: "<owner>/<repo>#<number>" */
+  id: string;
+  number: number;
+  /** owner/repo as GitHub reports it */
+  repository: string;
+  title: string;
+  url: string;
+  author: string;
+  headRefName: string;
+  baseRefName: string;
+  isDraft: boolean;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  updatedAt: string;
+  status: ReviewStatus;
+  activity: string[];
+  /** local repo the diff was reviewed in, when one is configured */
+  repo?: { name: string; path: string; worktreeRoot: string };
+  worktree?: string;
+  sessionId?: string;
+  /** the pre-review itself */
+  summary?: string;
+  findings?: ReviewFinding[];
+  /** operator's own note, appended to whatever gets posted */
+  note?: string;
+  startedAt?: number;
+  endedAt?: number;
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  costUsd: number;
+  error?: string;
+  question?: PendingQuestion;
+}
+
 /** Operator's edits from the board's `m` modal; applied by the dispatcher. */
 export interface TaskEdits {
   repo: RepoConfig;
@@ -173,6 +234,11 @@ export interface TaskEdits {
   /** true when the operator asked to requeue (ctrl+r) */
   requeue: boolean;
 }
+
+/** Which prompt a piece of standing guidance applies to. */
+export type GuidanceScope = 'triage' | 'work' | 'review' | 'plan';
+
+export type Guidance = { general?: string } & Partial<Record<GuidanceScope, string>>;
 
 export interface CheckConfig {
   name: string;
@@ -209,11 +275,11 @@ export interface Config {
   checks: CheckConfig[];
   model?: string;
   /**
-   * Operator's standing guidance, appended to every agent prompt (triage,
-   * work, CI fix). House rules that outlive any one issue — code style,
-   * what a good PR looks like. Per-task `instructions` outrank it.
+   * Operator's standing guidance. `general` reaches every agent; the rest add
+   * to it for one kind of work. House rules that outlive any one issue —
+   * code style, what a good PR looks like. Per-task `instructions` outrank it.
    */
-  guidance?: string;
+  guidance: Guidance;
   /** Linear team key (e.g. "CLOUD") to browse; unset = my assigned issues */
   team?: string;
   /** macOS notifications on needs_input / done / error (default true) */

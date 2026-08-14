@@ -3,12 +3,13 @@ import { join } from 'node:path';
 import { STATE_DIR, log } from './log.js';
 import { restorePlanners, serializePlanners, type PlannerSnapshot } from './planner.js';
 import { store } from './store.js';
-import type { Config, Task, TaskStatus } from './types.js';
+import type { Config, Review, Task, TaskStatus } from './types.js';
 
 const STATE_FILE = join(STATE_DIR, 'state.json');
 const LIVE_STATUSES: TaskStatus[] = ['queued', 'triage', 'working', 'checks', 'needs_input'];
 
 type PersistedTask = Omit<Task, 'question'>;
+type PersistedReview = Omit<Review, 'question'>;
 
 export interface UiState {
   /** last picker team: 'mine', '*', or a team key */
@@ -18,6 +19,7 @@ export interface UiState {
 interface PersistedState {
   version: number;
   tasks?: PersistedTask[];
+  reviews?: PersistedReview[];
   planners?: PlannerSnapshot[];
   ui?: UiState;
 }
@@ -34,7 +36,8 @@ export function setUiState(patch: Partial<UiState>): void {
 
 function serialize(): string {
   const tasks: PersistedTask[] = store.list().map(({ question: _q, ...rest }) => rest);
-  const state: PersistedState = { version: 2, tasks, planners: serializePlanners(), ui: uiState };
+  const reviews: PersistedReview[] = store.listReviews().map(({ question: _q, ...rest }) => rest);
+  const state: PersistedState = { version: 3, tasks, reviews, planners: serializePlanners(), ui: uiState };
   return JSON.stringify(state, null, 2);
 }
 
@@ -61,6 +64,13 @@ export function loadState(cfg: Config): void {
       if (status === 'interrupted') {
         store.addActivity(t.issue.id, 'colinear restarted — press r to resume');
       }
+    }
+    for (const r of data.reviews ?? []) {
+      // a review that was mid-flight comes back idle; findings survive
+      const status = r.status === 'reviewing' || r.status === 'posting' || r.status === 'queued'
+        ? (r.summary ? 'ready' : 'pending')
+        : r.status;
+      store.upsertReview({ ...r, status, question: undefined });
     }
     restorePlanners(cfg, data.planners ?? []);
     uiState = data.ui ?? {};

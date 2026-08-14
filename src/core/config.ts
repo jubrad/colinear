@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import type { CheckConfig, Config, RepoConfig } from './types.js';
+import type { CheckConfig, Config, Guidance, GuidanceScope, RepoConfig } from './types.js';
 
 const CONFIG_PATHS = [
   join(homedir(), '.config', 'colinear', 'config.json'),
@@ -54,8 +54,8 @@ interface RawRepo {
 }
 
 export function loadConfig(): Config {
-  // guidance widened: config.json may write it as a list of lines
-  let raw: Partial<Config> & { repos?: RawRepo[]; guidance?: string | string[] } = {};
+  // guidance is normalized below: a string, a list of lines, or a scope map
+  let raw: Partial<Config> & { repos?: RawRepo[]; guidance?: RawGuidance } = {};
   for (const path of CONFIG_PATHS) {
     try {
       raw = JSON.parse(readFileSync(path, 'utf8'));
@@ -125,8 +125,7 @@ export function loadConfig(): Config {
     checks: repos[0].checks,
     concurrency: raw.concurrency ?? 3,
     model: raw.model,
-    // accepts a string or a list of lines, so config.json stays readable
-    guidance: Array.isArray(raw.guidance) ? raw.guidance.join('\n') : raw.guidance,
+    guidance: normalizeGuidance(raw.guidance),
     notifications: raw.notifications ?? true,
     stateSync: raw.stateSync ?? true,
     ciAutofix: raw.ciAutofix ?? true,
@@ -134,6 +133,27 @@ export function loadConfig(): Config {
     attachPermissionMode: raw.attachPermissionMode ?? 'auto',
     terminal: raw.terminal,
   };
+}
+
+type RawText = string | string[] | undefined;
+type RawGuidance = RawText | ({ general?: RawText } & Partial<Record<GuidanceScope, RawText>>);
+
+const joinLines = (v: RawText): string | undefined => (Array.isArray(v) ? v.join('\n') : v);
+
+/**
+ * Guidance accepts three shapes, all of which stay readable in JSON: a string,
+ * a list of lines, or a map of scopes ({ general, triage, work, review, plan })
+ * whose values are themselves a string or a list of lines.
+ */
+function normalizeGuidance(raw: RawGuidance): Guidance {
+  if (!raw) return {};
+  if (typeof raw === 'string' || Array.isArray(raw)) return { general: joinLines(raw) };
+  const out: Guidance = {};
+  for (const scope of ['general', 'triage', 'work', 'review', 'plan'] as const) {
+    const text = joinLines(raw[scope]);
+    if (text?.trim()) out[scope] = text;
+  }
+  return out;
 }
 
 function expandHome(p: string): string {

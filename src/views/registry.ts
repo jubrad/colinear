@@ -9,6 +9,7 @@ import { HelpView, helpKeys } from './HelpView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
 import { ProjectsView, projectsKeys } from './ProjectsView.js';
 import { ProjectView, projectKeys } from './ProjectView.js';
+import { ReviewsView, reviewsKeys } from './ReviewsView.js';
 import { TaskView, taskKeys } from './TaskView.js';
 
 export interface ViewDef {
@@ -62,6 +63,13 @@ const builtinViews: ViewDef[] = [
     describe: 'project planning chat (:plan PROJECT)',
     Component: ChatView,
     keys: chatKeys,
+  },
+  {
+    name: 'reviews',
+    aliases: ['rev', 'pr'],
+    describe: 'PRs awaiting my review + assisted pre-review',
+    Component: ReviewsView,
+    keys: reviewsKeys,
   },
   {
     name: 'costs',

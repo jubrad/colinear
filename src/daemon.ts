@@ -6,6 +6,8 @@ import { Dispatcher } from './core/dispatcher.js';
 import { STATE_DIR, log } from './core/log.js';
 import { loadState, startPersistence } from './core/persist.js';
 import { startPrPolling } from './core/prs.js';
+import { Reviewer } from './core/reviewer.js';
+import { pollReviewRequests, startReviewPolling } from './core/reviews.js';
 import {
   createDecoder,
   encode,
@@ -31,7 +33,9 @@ export async function runDaemon(): Promise<void> {
   const dispatcher = new Dispatcher(cfg);
   loadState(cfg);
   const stopPersistence = startPersistence();
+  const reviewer = new Reviewer(cfg);
   const stopPrPolling = startPrPolling(cfg, dispatcher);
+  const stopReviewPolling = startReviewPolling(cfg);
 
   const clients = new Set<Socket>();
   const broadcast = (msg: ServerMsg) => {
@@ -40,6 +44,7 @@ export async function runDaemon(): Promise<void> {
   };
 
   dispatcher.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
+  reviewer.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
 
   // every store mutation fans out to attached clients as a delta
   let sent = store.version;
@@ -73,10 +78,13 @@ export async function runDaemon(): Promise<void> {
       case 'redispatch':
         dispatcher.redispatch(cmd.id, cmd.repo, cmd.opts);
         break;
-      case 'answer':
-        // the callback lives here; the client only ever sends the text
-        store.get(cmd.id)?.question?.answer(cmd.text);
+      case 'answer': {
+        // the callback lives here; the client only ever sends the text.
+        // reviews are keyed "owner/repo#n", tasks by Linear id — no overlap
+        const pending = store.get(cmd.id)?.question ?? store.getReview(cmd.id)?.question;
+        pending?.answer(cmd.text);
         break;
+      }
       case 'applyEdits':
         void dispatcher.applyEdits(cmd.id, cmd.edits);
         break;
@@ -92,6 +100,21 @@ export async function runDaemon(): Promise<void> {
         break;
       case 'change':
         store.applyChange(cmd.change);
+        break;
+      case 'startReview':
+        void reviewer.start(cmd.id);
+        break;
+      case 'cancelReview':
+        reviewer.cancel(cmd.id);
+        break;
+      case 'postReview':
+        void reviewer.post(cmd.id);
+        break;
+      case 'reviewVerdict':
+        void reviewer.verdict(cmd.id, cmd.verdict);
+        break;
+      case 'pollReviews':
+        void pollReviewRequests(cfg);
         break;
     }
   };
@@ -135,7 +158,9 @@ export async function runDaemon(): Promise<void> {
   const shutdown = () => {
     log('daemon shutting down');
     dispatcher.shutdown();
+    reviewer.shutdown();
     stopPrPolling();
+    stopReviewPolling();
     setTimeout(() => {
       stopPersistence();
       server.close();

@@ -9,6 +9,7 @@ import { log } from './log.js';
 import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
+import { guidanceFor } from './guidance.js';
 import { store } from './store.js';
 import type { Config, LinearIssue, PrInfo, RepoConfig, Subtask, Task, TaskEdits, TriageVerdict, Verification } from './types.js';
 
@@ -494,7 +495,7 @@ export class Dispatcher {
       if (!resumeSession && !task.skipTriage) {
         store.addActivity(id, 'triage pass');
         const triage = await runSession({
-          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, this.cfg.guidance)}\n${familyBlock(issue, family)}`,
+          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, guidanceFor(this.cfg.guidance, 'triage'))}\n${familyBlock(issue, family)}`,
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: triageSchema(this.cfg.repos.map((r) => r.name)),
@@ -541,7 +542,7 @@ export class Dispatcher {
 
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
       const current = store.get(id) ?? task;
-      const ctx = taskContext(current, taskRepo, branch, family, this.cfg.guidance);
+      const ctx = taskContext(current, taskRepo, branch, family, guidanceFor(this.cfg.guidance, 'work'));
       const work = await runSession({
         prompt:
           mode === 'fixci'
@@ -846,10 +847,6 @@ function familyBlock(issue: LinearIssue, family?: IssueFamily): string {
   return lines.filter((l) => l !== '').join('\n');
 }
 
-/** Operator's standing config guidance, if any. */
-function guidanceBlock(guidance?: string): string {
-  return guidance?.trim() ? `\n## Standing guidance from the operator\n${guidance.trim()}` : '';
-}
 
 function taskContext(
   task: Task,
@@ -887,7 +884,7 @@ function taskContext(
       ? `Triage verdict: ${task.verdict.verdict}${task.verdict.verification ? ` · verification tier: ${task.verdict.verification}` : ''} — ${task.verdict.reason}`
       : '',
     task.verdict?.plan ? `\nTriage plan:\n${task.verdict.plan}` : '',
-    guidanceBlock(guidance),
+    guidance ?? '',
     task.instructions
       ? `\nOperator instructions for THIS issue (these take precedence over the standing guidance and anything else):\n${task.instructions}`
       : '',
@@ -908,7 +905,7 @@ function triagePrompt(
     .join('\n');
   return `You are triaging a Linear issue before implementation. Investigate the codebase (read-only — do not modify files) to judge scope.
 
-${issueBlock(issue)}${guidanceBlock(guidance)}
+${issueBlock(issue)}${guidance ?? ''}
 ${instructionsBlock(instructions)}
 Work for this team can live in any of these repositories:
 ${roster}
