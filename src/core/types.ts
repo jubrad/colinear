@@ -304,10 +304,16 @@ export interface Config {
    */
   guidance: Guidance;
   /**
-   * Appended to every review comment colinear posts (each inline comment and
-   * the review body) — e.g. "written by claude on behalf of @jubrad".
+   * Appended to what colinear posts on a PR — e.g. "written by claude on
+   * behalf of @jubrad". Unset posts nothing extra.
    */
   prSignoff?: string;
+  /**
+   * Where the signoff goes: "all" signs the review body and every inline
+   * comment; "body" signs only the body, so a review with six findings
+   * carries one attribution instead of seven.
+   */
+  prSignoffScope: 'all' | 'body';
   /** Linear team key (e.g. "CLOUD") to browse; unset = my assigned issues */
   team?: string;
   /** macOS notifications on needs_input / done / error (default true) */

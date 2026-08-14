@@ -51,6 +51,7 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
 - `description` (per repo) — what lives there. **Triage reads these to route each issue to the right repo** (it can inspect all allowlisted repos and returns its pick; the work pass starts there). Write them honestly.
 - `model` — default model for agents; overridable per dispatch and per task (`m`).
 - `prSignoff` — appended to every review comment colinear posts (each inline comment and the review body), so the author knows what wrote it: `"prSignoff": "_written by claude on behalf of @jubrad_"`. Markdown, a string or a list of lines. Unset posts nothing extra, and an empty body never becomes a signoff-only comment.
+- `prSignoffScope` — where that signoff goes: `"all"` (default) signs the review body and every inline comment; `"body"` signs only the body, so a review with six findings carries one attribution instead of seven.
 - `guidance` — standing house rules for agents. Either one block (a string or list of lines) that reaches every agent, or a map of scopes:
 
   ```json

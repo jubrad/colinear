@@ -127,6 +127,7 @@ export function loadConfig(): Config {
     model: raw.model,
     guidance: normalizeGuidance(raw.guidance),
     prSignoff: joinLines(raw.prSignoff),
+    prSignoffScope: raw.prSignoffScope === 'body' ? 'body' : 'all',
     notifications: raw.notifications ?? true,
     stateSync: raw.stateSync ?? true,
     ciAutofix: raw.ciAutofix ?? true,

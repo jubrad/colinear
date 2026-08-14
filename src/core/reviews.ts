@@ -222,6 +222,7 @@ export async function submitReview(
   body: string,
   comments: ReviewFinding[],
   signoff?: string,
+  scope: 'all' | 'body' = 'all',
 ): Promise<PostedReview> {
   // whoever reads a comment on their PR should know what wrote it
   const sign = (text: string) => (signoff?.trim() ? `${text}\n\n${signoff.trim()}` : text);
@@ -230,12 +231,10 @@ export async function submitReview(
     body: body.trim() ? sign(body) : body,
     comments: comments
       .filter((f) => f.line && f.file)
-      .map((f) => ({
-        path: f.file,
-        line: f.line,
-        side: 'RIGHT',
-        body: sign(f.severity ? `**${f.severity}** — ${f.comment}` : f.comment),
-      })),
+      .map((f) => {
+        const text = f.severity ? `**${f.severity}** — ${f.comment}` : f.comment;
+        return { path: f.file, line: f.line, side: 'RIGHT', body: scope === 'all' ? sign(text) : text };
+      }),
   };
   const dir = mkdtempSync(join(tmpdir(), 'coli-review-'));
   const file = join(dir, 'review.json');

@@ -239,7 +239,7 @@ export class Reviewer {
 
       let posted;
       try {
-        posted = await submitReview(review, event, body, anchored, this.cfg.prSignoff);
+        posted = await submitReview(review, event, body, anchored, this.cfg.prSignoff, this.cfg.prSignoffScope);
       } catch (err) {
         // a comment on a line outside the diff rejects the whole review, so
         // fall back to one that says everything in the body instead
@@ -252,6 +252,7 @@ export class Reviewer {
           reviewBody(review, review.findings ?? [], event, false),
           [],
           this.cfg.prSignoff,
+          this.cfg.prSignoffScope,
         );
       }
 
@@ -339,6 +340,7 @@ export class Reviewer {
         review.note?.trim() || (event === 'APPROVE' ? '' : 'Requesting changes.'),
         [],
         this.cfg.prSignoff,
+        this.cfg.prSignoffScope,
       );
       store.updateReview(id, {
         status: verdict === 'approve' ? 'approved' : 'changes_requested',
