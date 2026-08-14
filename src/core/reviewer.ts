@@ -221,7 +221,7 @@ export class Reviewer {
     }
     const anchored = (review.findings ?? []).filter((f) => f.line && f.file);
     const loose = (review.findings ?? []).filter((f) => !f.line || !f.file);
-    const body = reviewBody(review, loose);
+    const body = reviewBody(review, loose, event, anchored.length > 0);
 
     store.updateReview(id, { status: 'posting', error: undefined });
     try {
@@ -237,7 +237,7 @@ export class Reviewer {
         log(`review ${id}: inline comments rejected (${String(err).slice(0, 200)})`);
         store.addReviewActivity(id, 'inline comments rejected — posting findings in the body');
         await deletePendingReviews(review).catch(() => 0);
-        posted = await submitReview(review, event, reviewBody(review, review.findings ?? []), []);
+        posted = await submitReview(review, event, reviewBody(review, review.findings ?? [], event, false), []);
       }
 
       store.updateReview(id, {
@@ -462,24 +462,31 @@ export class Reviewer {
 }
 
 /**
- * What GitHub shows as the review body: the document as written, minus the
- * machine-readable fence, plus any finding we couldn't anchor to a line.
+ * The review body, kept deliberately small. The document is written for the
+ * operator — an overview, and where the agent's own judgement is weakest —
+ * and none of that belongs on someone else's PR. The inline comments are the
+ * review; the body carries only what has nowhere else to go:
+ *
+ * - findings with no line to anchor to
+ * - the operator's own note
+ * - a one-paragraph summary, but only when there are no inline comments at
+ *   all, so the review isn't empty
  */
-function reviewBody(review: Review, inBody: ReviewFinding[]): string {
-  // everything above the findings section: the findings themselves go out as
-  // inline comments, and repeating them in the body is what turned a review
-  // into one enormous comment
-  const doc = (review.doc ?? review.summary ?? '')
-    .replace(FENCE, '')
-    .split(/^##\s+Findings\s*$/im)[0]
-    .trim();
-  const extra = inBody.length
-    ? `\n\n## Further notes\n\n${inBody
-        .map((f) => `- **${f.severity}** ${f.file}${f.line ? `:${f.line}` : ''} — ${f.comment}`)
-        .join('\n')}`
-    : '';
-  const note = review.note?.trim() ? `\n\n---\n\n${review.note.trim()}` : '';
-  return `${doc}${extra}${note}`.trim();
+function reviewBody(
+  review: Review,
+  unanchored: ReviewFinding[],
+  event: ReviewEvent,
+  hasInlineComments: boolean,
+): string {
+  const parts: string[] = [];
+  if (!hasInlineComments && review.summary?.trim()) parts.push(review.summary.trim());
+  for (const f of unanchored) {
+    parts.push(`**${f.severity}** — \`${f.file}\`\n\n${f.comment.trim()}`);
+  }
+  if (review.note?.trim()) parts.push(review.note.trim());
+  const body = parts.join('\n\n');
+  // GitHub rejects a request-changes review with an empty body
+  return body || (event === 'REQUEST_CHANGES' ? 'Requesting changes — see comments.' : '');
 }
 
 function findingsBlock(review: Review): string {
@@ -503,7 +510,7 @@ ${details.body?.trim() || '(none)'}
 ## What to do
 Read the diff (\`git diff ${details.baseRefName}...HEAD\`, \`git log\`), then read enough of the surrounding code to judge the changes in context — a diff alone hides most real problems. Investigate; do not modify the PR's code, and do not post anything to GitHub. Your review goes to the operator first.
 
-Write your review to \`${REVIEW_FILE}\` in the working directory (it is git-excluded; never commit it, and never touch any other file). The operator reads this document — write it for them, not for a log.
+Write your review to \`${REVIEW_FILE}\` in the working directory (it is git-excluded; never commit it, and never touch any other file). **The prose in this document is for the operator only and is never posted** — it is how they decide what to send. Only the findings array at the end reaches GitHub, as one inline comment per entry.
 
 It must be **markdown**, with these three sections as \`##\` headings, in this order:
 
