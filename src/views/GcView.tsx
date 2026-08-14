@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
-import type { GcItem } from '../client.js';
+import type { GcItem, GcProgress } from '../client.js';
 import { useColinear } from '../ui/context.js';
 import { cell } from '../ui/format.js';
 import { theme } from '../theme.js';
@@ -27,8 +27,20 @@ export function GcView(_props: { param?: string }) {
   const [cursor, setCursor] = useState(0);
   const [days, setDays] = useState(7);
   const [confirming, setConfirming] = useState(false);
+  const [progress, setProgress] = useState<GcProgress>();
+  const [failures, setFailures] = useState<string[]>([]);
 
   useEffect(() => ctx.onGc?.(setItems), []);
+  useEffect(
+    () =>
+      ctx.onGcProgress?.((p) => {
+        setProgress(p.finished ? undefined : p);
+        if (!p.ok && p.path) setFailures((f) => (f.includes(p.path) ? f : [...f, p.path]));
+        // rescan when the daemon says it's done, not on a guessed timer
+        if (p.finished) ctx.dispatcher.gcScan(days);
+      }),
+    [days],
+  );
   useEffect(() => {
     setItems(undefined);
     ctx.dispatcher.gcScan(days);
@@ -49,14 +61,14 @@ export function GcView(_props: { param?: string }) {
   useInput((input, key) => {
     if (confirming) {
       if (input === 'y') {
+        setFailures([]);
+        setProgress({ done: 0, total: picked.size, path: '', ok: true, finished: false });
         ctx.dispatcher.gcRemove([...picked]);
-        ctx.toast(`removing ${picked.size} worktrees…`, 'info');
-        setItems(undefined);
-        setTimeout(() => ctx.dispatcher.gcScan(days), 2000);
       }
       setConfirming(false);
       return;
     }
+    if (progress) return; // removal in flight: the list under you is changing
     if (key.upArrow || input === 'i') setCursor((c) => Math.max(0, c - 1));
     if (key.downArrow || input === 'k') setCursor((c) => Math.min(all.length - 1, c + 1));
     if (input === ' ' && selected) {
@@ -95,6 +107,17 @@ export function GcView(_props: { param?: string }) {
       <Text dimColor>
         space picks · a all · n none · x removes · live work and reviews in play are never listed
       </Text>
+      {progress && (
+        <Text color={theme.warn} wrap="truncate">
+          removing {progress.done}/{progress.total}
+          {progress.path ? ` · ${progress.path}` : ''}
+        </Text>
+      )}
+      {failures.length > 0 && !progress && (
+        <Text color={theme.err} wrap="truncate">
+          ✖ {failures.length} could not be removed — see ~/.local/state/colinear/colinear.log
+        </Text>
+      )}
 
       <Box flexDirection="column" marginTop={1} flexGrow={1} overflow="hidden">
         <Text bold color={theme.header} wrap="truncate">

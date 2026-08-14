@@ -163,7 +163,7 @@ day a task completes), review checkouts (released when the review goes stale, me
 merged, closed, or someone else took it — *not* when it's posted, since the author may push
 again), and orphans (repo re-routes and removed tasks leave directories no task claims).
 
-The daemon removes them so the store's pointers get cleared in the same step; `coli gc` reads
+Removal reports per worktree as it goes (a 60G tree is not instant) and only counts one as reclaimed once the directory is actually gone. The daemon removes them so the store's pointers get cleared in the same step; `coli gc` reads
 state.json directly so it also works with the daemon down. Both refuse to report orphans when
 the task list is empty — that state is indistinguishable from "state failed to load", where
 every live worktree looks dead.

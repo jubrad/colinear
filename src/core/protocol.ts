@@ -37,6 +37,8 @@ export type ClientMsg = { t: 'sync'; version: number } | { t: 'cmd'; cmd: Comman
 
 export type ServerMsg =
   | { t: 'gc'; items: Array<{ path: string; kilobytes: number; label: string; reason: string; ageDays: number }> }
+  /** one per worktree as it goes, so the UI can show progress rather than hang */
+  | { t: 'gcProgress'; done: number; total: number; path: string; ok: boolean; finished: boolean }
   | { t: 'hello'; protocol: number; pid: number; cfg: Config; snapshot: Snapshot }
   | { t: 'delta'; delta: Delta }
   | { t: 'snapshot'; snapshot: Snapshot }

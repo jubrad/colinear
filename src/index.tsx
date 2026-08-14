@@ -147,7 +147,7 @@ async function runTui(): Promise<void> {
   // interactive `claude --resume` and drop back onto the board afterwards.
   for (;;) {
     enterAltScreen();
-    const app = render(<App cfg={cfg} dispatcher={conn.dispatcher} onToast={conn.onToast} onGc={conn.onGc} />, { patchConsole: true });
+    const app = render(<App cfg={cfg} dispatcher={conn.dispatcher} onToast={conn.onToast} onGc={conn.onGc} onGcProgress={conn.onGcProgress} />, { patchConsole: true });
     await app.waitUntilExit();
     leaveAltScreen();
 
