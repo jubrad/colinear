@@ -1,6 +1,19 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { store } from './store.js';
-import type { Task } from './types.js';
+import type { Review, Task } from './types.js';
+
+function useStoreVersion(): number {
+  return useSyncExternalStore(
+    (cb) => store.subscribe(cb),
+    () => store.version,
+  );
+}
+
+/** Same identity-stability contract as useTasks (see gotchas). */
+export function useReviews(): Review[] {
+  const version = useStoreVersion();
+  return useMemo(() => store.listReviews(), [version]);
+}
 
 export function useTasks(): Task[] {
   const version = useSyncExternalStore(

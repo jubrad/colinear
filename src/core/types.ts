@@ -160,6 +160,90 @@ export interface Task {
   sessionHistory?: Array<{ sessionId: string; worktree?: string; at: number }>;
 }
 
+export type ReviewStatus =
+  /** listed as awaiting my review; nothing done yet */
+  | 'pending'
+  | 'queued'
+  /** agent is reading the diff */
+  | 'reviewing'
+  /** findings are ready for the operator to look over */
+  | 'ready'
+  /** agent is posting the findings to GitHub */
+  | 'posting'
+  /** submitted as a COMMENT review — GitHub's own word for it */
+  | 'commented'
+  | 'approved'
+  | 'changes_requested'
+  /** no longer requesting my review (someone else took it, or it was withdrawn) */
+  | 'stale'
+  | 'error';
+
+export interface ChatTurn {
+  /** `note` is colinear talking, not the agent — refusals, errors, hints */
+  role: 'operator' | 'agent' | 'note';
+  text: string;
+  at: number;
+}
+
+export type Severity = 'blocking' | 'consider' | 'nit' | 'praise';
+
+export interface ReviewFinding {
+  /** unset when the point isn't about a particular file — it goes in the body */
+  file?: string;
+  line?: number;
+  /**
+   * blocking = would request changes over it; nit = optional polish. Unset on
+   * the lead entry: no file, no line, no severity, one sentence — it opens the
+   * posted review.
+   */
+  severity?: Severity;
+  comment: string;
+}
+
+/** An LLM pre-review of someone else's PR; the operator decides what to post. */
+export interface Review {
+  /** stable key: "<owner>/<repo>#<number>" */
+  id: string;
+  number: number;
+  /** owner/repo as GitHub reports it */
+  repository: string;
+  title: string;
+  url: string;
+  author: string;
+  headRefName: string;
+  baseRefName: string;
+  isDraft: boolean;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  updatedAt: string;
+  status: ReviewStatus;
+  activity: string[];
+  /** local repo the diff was reviewed in, when one is configured */
+  repo?: { name: string; path: string; worktreeRoot: string };
+  worktree?: string;
+  sessionId?: string;
+  /** the pre-review itself: prose the operator reads, parsed findings for GitHub */
+  summary?: string;
+  findings?: ReviewFinding[];
+  /** the full review document the agent wrote (.colinear-review.md) */
+  doc?: string;
+  /** conversation with the reviewing agent about this PR */
+  chat?: ChatTurn[];
+  /** a chat turn is in flight (the review's own status doesn't change) */
+  chatting?: boolean;
+  /** operator's own note, appended to whatever gets posted */
+  note?: string;
+  /** what was sent to GitHub, so a later discussion knows it's already out */
+  posted?: { at: number; event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'; url: string; comments: number };
+  startedAt?: number;
+  endedAt?: number;
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  costUsd: number;
+  error?: string;
+  question?: PendingQuestion;
+}
+
 /** Operator's edits from the board's `m` modal; applied by the dispatcher. */
 export interface TaskEdits {
   repo: RepoConfig;
@@ -173,6 +257,11 @@ export interface TaskEdits {
   /** true when the operator asked to requeue (ctrl+r) */
   requeue: boolean;
 }
+
+/** Which prompt a piece of standing guidance applies to. */
+export type GuidanceScope = 'triage' | 'work' | 'review' | 'plan';
+
+export type Guidance = { general?: string } & Partial<Record<GuidanceScope, string>>;
 
 export interface CheckConfig {
   name: string;
@@ -209,11 +298,22 @@ export interface Config {
   checks: CheckConfig[];
   model?: string;
   /**
-   * Operator's standing guidance, appended to every agent prompt (triage,
-   * work, CI fix). House rules that outlive any one issue — code style,
-   * what a good PR looks like. Per-task `instructions` outrank it.
+   * Operator's standing guidance. `general` reaches every agent; the rest add
+   * to it for one kind of work. House rules that outlive any one issue —
+   * code style, what a good PR looks like. Per-task `instructions` outrank it.
    */
-  guidance?: string;
+  guidance: Guidance;
+  /**
+   * Appended to what colinear posts on a PR — e.g. "written by claude on
+   * behalf of @jubrad". Unset posts nothing extra.
+   */
+  prSignoff?: string;
+  /**
+   * Where the signoff goes: "all" signs the review body and every inline
+   * comment; "body" signs only the body, so a review with six findings
+   * carries one attribution instead of seven.
+   */
+  prSignoffScope: 'all' | 'body';
   /** Linear team key (e.g. "CLOUD") to browse; unset = my assigned issues */
   team?: string;
   /** macOS notifications on needs_input / done / error (default true) */

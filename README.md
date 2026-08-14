@@ -50,7 +50,21 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
 - `repos` — the allowlist. Agents only ever touch these repos, and only through worktrees under each repo's `worktreeRoot`; working copies are never modified (the main checkout only sees `git fetch` and `git worktree add`). First entry is the default; custom dispatch picks per dispatch. Per repo: `defaultBranch` (worktree base, default `main`), `remote` (the upstream: worktree base + the repo PRs land in, default `origin`), `pushRemote` (where branches are pushed — set your fork here for a fork workflow, e.g. `"jubrad"`; default = `remote`), `prBase` (PR target branch, default = `defaultBranch`), `checks` (run after the work pass). `remote`/`pushRemote` are **git remote names** as they appear in `git remote -v` for that repo (`"mz"`, `"jubrad"`), not `owner/repo` slugs. In fork mode agents skip stacked PRs (they'd require pushing to the upstream). Legacy single-repo fields (`repo`, `defaultBranch`, `worktreeRoot`, `checks`) still work.
 - `description` (per repo) — what lives there. **Triage reads these to route each issue to the right repo** (it can inspect all allowlisted repos and returns its pick; the work pass starts there). Write them honestly.
 - `model` — default model for agents; overridable per dispatch and per task (`m`).
-- `guidance` — standing house rules appended to every agent prompt (triage, work, CI fix). A string, or a list of lines. Use it for what a good PR looks like here; per-task instructions (`m`) outrank it, and repo-specific conventions still belong in each repo's `CLAUDE.md`.
+- `prSignoff` — appended to every review comment colinear posts (each inline comment and the review body), so the author knows what wrote it: `"prSignoff": "_written by claude on behalf of @jubrad_"`. Markdown, a string or a list of lines. Unset posts nothing extra, and an empty body never becomes a signoff-only comment.
+- `prSignoffScope` — where that signoff goes: `"all"` (default) signs the review body and every inline comment; `"body"` signs only the body, so a review with six findings carries one attribution instead of seven.
+- `guidance` — standing house rules for agents. Either one block (a string or list of lines) that reaches every agent, or a map of scopes:
+
+  ```json
+  "guidance": {
+    "general": ["applies to every agent"],
+    "triage": "scoping an issue",
+    "work":   "implementing an issue",
+    "review": "reviewing someone else's PR",
+    "plan":   "project planning chat"
+  }
+  ```
+
+  Scoped text is **added to** `general`, not a replacement, so house rules only need saying once. Per-task instructions (`m`) outrank all of it, and repo-specific conventions still belong in each repo's `CLAUDE.md`.
 - `tickMs` — UI refresh tick; raise if your terminal repaints non-atomically.
 - `attachPermissionMode` — permission mode for `s` attach sessions: `auto` (default — classifier gates risky commands), `acceptEdits`, `bypassPermissions`, or `default`. Headless agents always run in `auto`; classifier-blocked commands surface on the board as needs-input questions (allow/deny).
 - `stateSync` — auto-move Linear states (dispatch → In Progress, PR → In Review).
@@ -82,7 +96,8 @@ Only the daemon dispatches agents, so stopping it is the one thing that interrup
 | `:task CLOUD-123` | full detail: scrollable activity log (`j/k`, `g` top, `G` follow), subtasks, check output, PR overview (draft/state, CI, review decision, URL, stack base); `d` marks the draft PR ready — the only path out of draft |
 | `:projects` / `:project NAME` | projects table (state, progress, lead, teams, target; `/` `t` `s` filters + sort) and per-project kanban; `d`/`c` dispatch, `p` planning chat |
 | `:plan PROJECT` | persistent chat with a read-only planning agent; proposes subtasks as drafts — `space` toggle, `A` create in Linear, `D` create + dispatch |
-| `:costs` (`$`) | spend per ticket, live: a bar chart sorted by cost (`s` cycles cost/tokens/recent), `/` fuzzy filter, `enter` task detail. Bars are colored by task status. Figures are what the work *would* cost on the API — subscription runs are not billed per token |
+| `:reviews` (`pr`) | PRs waiting on **your** review (`gh search prs --review-requested=@me`, all repos your gh auth can see). `r` starts an **assisted pre-review**: colinear checks the PR out in a worktree and an agent reads the diff in context, returning an overview plus findings; progress streams onto the card while it works. Nothing is posted — `enter` opens the **review document** full-screen — the agent's write-up on one side, a **discussion** with that same agent on the other (`tab` switches, `j/k` scroll, `e` edits it in `$EDITOR`). It goes both ways: your turn resumes the reviewing session so the PR is still in context, and when the agent needs a decision it asks in the same pane — answer inline, or press the option number. `p` posts it as one GitHub review — **deterministically**, since the findings are already structured: colinear clears any leftover pending review, then makes the `gh api` call itself, so posting costs no tokens and either works or says why. **Only the findings are posted** — one inline comment each. The first finding is the *lead*: no file, no line, no severity, one sentence, and it opens the review body, followed by a count of what was raised (`1 must fix / 3 considerations / 1 nit`) and an `## Other` section for anything with no line to attach to. The document's prose is written for you, to decide what to send, and never leaves your machine; the review body carries only what can't be a comment (findings with no line, your note, or a one-line summary when nothing anchored). `A` approves and `X` requests changes, sending the same review with that event, `n` attaches a note that rides along, `s` hands the terminal to that review's own claude session (suspending the agent first, as on the board), `o` opens the PR, `x` cancels a running review, `S` sorts (needs-me / updated / size / repo / author / cost — pressing it again on the same field reverses), `R` refreshes. Approve/request-changes are plain `gh` calls (no tokens) |
+| `:costs` (`$`) | spend per run — tickets **and** PR reviews — live: a bar chart sorted by cost (`s` cycles cost/tokens/recent), `/` fuzzy filter, `enter` task detail. Bars are colored by task status. Figures are what the work *would* cost on the API — subscription runs are not billed per token |
 | `:config` | resolved config (key masked), `e` to edit |
 | `:help` (`?`) | all views, keys, custom view schema |
 

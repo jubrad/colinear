@@ -1,4 +1,4 @@
-import type { PrInfo, Task } from '../core/types.js';
+import type { PrInfo } from '../core/types.js';
 
 /** Human label + color for a PR's review state. */
 export function reviewStatus(pr: PrInfo): { text: string; color: string } {
@@ -40,9 +40,10 @@ export function formatTokensFull(t: {
   return parts.join(' · ');
 }
 
-export function formatDuration(task: Task, now: number): string {
-  if (!task.startedAt) return '';
-  const secs = Math.floor(((task.endedAt ?? now) - task.startedAt) / 1000);
+/** Anything with a start (and maybe an end): tasks and reviews both qualify. */
+export function formatDuration(run: { startedAt?: number; endedAt?: number }, now: number): string {
+  if (!run.startedAt) return '';
+  const secs = Math.floor(((run.endedAt ?? now) - run.startedAt) / 1000);
   const m = Math.floor(secs / 60);
   const s = secs % 60;
   if (m >= 60) return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`;

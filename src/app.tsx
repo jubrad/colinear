@@ -1,8 +1,8 @@
 import { Box, useApp, useInput, useStdout } from 'ink';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DispatcherApi } from './client.js';
-import { setPendingAction } from './core/attach.js';
-import { useTasks } from './core/hooks.js';
+import { consumeResumeView, rememberView, setPendingAction } from './core/attach.js';
+import { useReviews, useTasks } from './core/hooks.js';
 import { fetchTeams, fetchViewer } from './core/linear.js';
 import { store } from './core/store.js';
 import type { Config, LinearTeam } from './core/types.js';
@@ -70,6 +70,7 @@ export function App(props: {
   const { exit } = useApp();
   const size = useTerminalSize();
   const tasks = useTasks();
+  const reviews = useReviews();
   // nothing on screen is timing/spinning -> stop ticking, so an idle board
   // writes zero frames (matters for unfocused panes)
   const anyTicking = tasks.some((t) => t.startedAt && !t.endedAt);
@@ -77,9 +78,12 @@ export function App(props: {
 
   const keyCounter = useRef(1);
   // land on the board when a previous run's tasks were restored
-  const [stack, setStack] = useState<StackEntry[]>([
-    { name: store.list().length ? 'board' : 'issues', key: 0 },
-  ]);
+  const [stack, setStack] = useState<StackEntry[]>(() => {
+    // coming back from an editor or an attached session: pick up where we left
+    const resume = consumeResumeView();
+    if (resume) return [{ name: resume.name, param: resume.param, key: 0 }];
+    return [{ name: store.list().length ? 'board' : 'issues', key: 0 }];
+  });
   const [cmdOpen, setCmdOpen] = useState(false);
   const [toast, setToastState] = useState<{ text: string; kind: ToastKind; at: number }>();
   const [viewer, setViewer] = useState<{ id: string; displayName: string }>();
@@ -90,6 +94,9 @@ export function App(props: {
 
   const current = stack[stack.length - 1];
   const viewDef = findView(current.name) ?? views[0];
+
+  // so a pending action (attach, $EDITOR) can restore this view afterwards
+  useEffect(() => rememberView(current.name, current.param), [current.name, current.param]);
 
   useEffect(() => {
     fetchViewer(cfg)
@@ -180,11 +187,13 @@ export function App(props: {
 
   const active = tasks.filter((t) => ['triage', 'working', 'checks'].includes(t.status)).length;
   const needsInput = tasks.filter((t) => t.status === 'needs_input').length;
-  const totalTokens = tasks.reduce(
+  // reviews burn agent sessions too — the headline figure covers both
+  const spend = [...tasks, ...reviews];
+  const totalTokens = spend.reduce(
     (acc, t) => ({ input: acc.input + t.tokens.input, output: acc.output + t.tokens.output }),
     { input: 0, output: 0 },
   );
-  const totalCost = tasks.reduce((n, t) => n + t.costUsd, 0);
+  const totalCost = spend.reduce((n, t) => n + t.costUsd, 0);
 
   const info: Array<[string, string]> = [
     ['User', viewer?.displayName ?? '…'],

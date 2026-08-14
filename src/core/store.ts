@@ -1,5 +1,13 @@
-import { encodePatch, toWire, type Change, type Delta, type Snapshot, type WireTask } from './delta.js';
-import type { Task, TaskStatus } from './types.js';
+import {
+  encodePatch,
+  toWire,
+  type Change,
+  type Delta,
+  type Snapshot,
+  type WireReview,
+  type WireTask,
+} from './delta.js';
+import type { Review, Task, TaskStatus } from './types.js';
 
 type Listener = () => void;
 
@@ -8,6 +16,8 @@ const LOG_LIMIT = 1000;
 
 class Store {
   tasks = new Map<string, Task>();
+  /** PR reviews, keyed "owner/repo#number" — same CDC contract as tasks */
+  reviews = new Map<string, Review>();
   version = 0;
   private listeners = new Set<Listener>();
   private log: Delta[] = [];
@@ -73,8 +83,44 @@ class Store {
     return [...this.tasks.values()];
   }
 
+  upsertReview(review: Review) {
+    const change: Change = { kind: 'review-upsert', review: toWire(review) as WireReview };
+    if (this.remote) return this.remote(change);
+    this.reviews.set(review.id, review);
+    this.emit(change);
+  }
+
+  getReview(id: string): Review | undefined {
+    return this.reviews.get(id);
+  }
+
+  updateReview(id: string, patch: Partial<Review>) {
+    const { patch: wire, clear } = encodePatch(patch);
+    if (this.remote) return this.remote({ kind: 'review-update', id, patch: wire, clear });
+    const review = this.reviews.get(id);
+    if (!review) return;
+    Object.assign(review, patch);
+    this.emit({ kind: 'review-update', id, patch: wire, clear });
+  }
+
+  addReviewActivity(id: string, line: string) {
+    if (this.remote) return this.remote({ kind: 'review-activity', id, line });
+    const review = this.reviews.get(id);
+    if (!review) return;
+    appendActivity(review, line);
+    this.emit({ kind: 'review-activity', id, line });
+  }
+
+  listReviews(): Review[] {
+    return [...this.reviews.values()];
+  }
+
   snapshot(): Snapshot {
-    return { version: this.version, tasks: this.list().map((t) => toWire(t) as WireTask) };
+    return {
+      version: this.version,
+      tasks: this.list().map((t) => toWire(t) as WireTask),
+      reviews: this.listReviews().map((r) => toWire(r) as WireReview),
+    };
   }
 
   /**
@@ -100,12 +146,24 @@ class Store {
 
   /** Apply a change locally (daemon side, on behalf of a client). */
   applyChange(change: Change) {
-    if (change.kind === 'upsert') this.upsert(change.task as unknown as Task);
-    else if (change.kind === 'activity') this.addActivity(change.id, change.line);
-    else {
-      const patch = { ...change.patch } as Partial<Task>;
-      for (const key of change.clear) (patch as Record<string, unknown>)[key] = undefined;
-      this.update(change.id, patch);
+    const withCleared = <T>(patch: object, clear: string[]): T => {
+      const out = { ...patch } as Record<string, unknown>;
+      for (const key of clear) out[key] = undefined;
+      return out as T;
+    };
+    switch (change.kind) {
+      case 'upsert':
+        return this.upsert(change.task as unknown as Task);
+      case 'activity':
+        return this.addActivity(change.id, change.line);
+      case 'update':
+        return this.update(change.id, withCleared<Partial<Task>>(change.patch, change.clear));
+      case 'review-upsert':
+        return this.upsertReview(change.review as unknown as Review);
+      case 'review-activity':
+        return this.addReviewActivity(change.id, change.line);
+      case 'review-update':
+        return this.updateReview(change.id, withCleared<Partial<Review>>(change.patch, change.clear));
     }
   }
 
@@ -113,6 +171,7 @@ class Store {
   hydrate(snapshot: Snapshot, onAnswer?: (id: string, text: string) => void) {
     if (onAnswer) this.onAnswer = onAnswer;
     this.tasks = new Map(snapshot.tasks.map((t) => [t.issue.id, this.fromWire(t, t.issue.id)]));
+    this.reviews = new Map(snapshot.reviews.map((r) => [r.id, this.fromWire(r, r.id) as unknown as Review]));
     this.version = snapshot.version;
     this.log = [];
     this.notify();
@@ -126,14 +185,17 @@ class Store {
     if (delta.v !== this.version + 1) return false;
     if (delta.kind === 'upsert') {
       this.tasks.set(delta.task.issue.id, this.fromWire(delta.task, delta.task.issue.id));
+    } else if (delta.kind === 'review-upsert') {
+      this.reviews.set(delta.review.id, this.fromWire(delta.review, delta.review.id) as unknown as Review);
     } else {
-      const task = this.tasks.get(delta.id);
-      if (!task) return false;
-      if (delta.kind === 'activity') {
-        appendActivity(task, delta.line);
+      const isReview = delta.kind.startsWith('review-');
+      const target = isReview ? this.reviews.get(delta.id) : this.tasks.get(delta.id);
+      if (!target) return false;
+      if (delta.kind === 'activity' || delta.kind === 'review-activity') {
+        appendActivity(target, delta.line);
       } else {
-        Object.assign(task, this.fromWire(delta.patch, delta.id));
-        for (const key of delta.clear) (task as unknown as Record<string, unknown>)[key] = undefined;
+        Object.assign(target, this.fromWire(delta.patch, delta.id));
+        for (const key of delta.clear) (target as unknown as Record<string, unknown>)[key] = undefined;
       }
     }
     this.version = delta.v;
@@ -142,7 +204,7 @@ class Store {
   }
 
   /** Re-attach the answer callback the wire format can't carry. */
-  private fromWire(wire: Partial<WireTask>, id: string): Task {
+  private fromWire(wire: Partial<WireTask> | Partial<WireReview>, id: string): Task {
     const task = wire as unknown as Task;
     if (wire.question) {
       const send = this.onAnswer;
@@ -156,9 +218,9 @@ class Store {
 }
 
 /** Same cap on both sides, so a mirror stays byte-identical without resends. */
-function appendActivity(task: Task, line: string) {
-  task.activity.push(line);
-  if (task.activity.length > 200) task.activity.splice(0, task.activity.length - 200);
+function appendActivity(target: { activity: string[] }, line: string) {
+  target.activity.push(line);
+  if (target.activity.length > 200) target.activity.splice(0, target.activity.length - 200);
 }
 
 export const store = new Store();

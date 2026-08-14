@@ -48,6 +48,13 @@ src/core/
   linear.ts          GraphQL client; queryIssuesPaged (cursor pagination, 500 cap) backs all issue
                      fetches; teams/projects/viewer/labels; mutations (create/assign/state/comment);
                      fetchBlockers (inverseRelations type "blocks")
+  reviews.ts         the GitHub side of PR review: one GraphQL search for PRs awaiting me
+                     (diff stats + branches included, archived repos excluded), repo matching
+                     by git remote (a repo's colinear name rarely equals its GitHub slug),
+                     deletePendingReviews + submitReview (deterministic posting)
+  reviewer.ts        assisted review: worktree on the PR head, one session that writes
+                     .colinear-review.md, chat turns that resume it, doc watch, and the
+                     deterministic post/approve/request-changes path
   prs.ts             gh pr list per repo w/ tasks; matching: pinnedPr > branch match > identifier in
                      head/title, ranked OPEN > MERGED > CLOSED; stack chaining by baseRef; status
                      transitions (incl. un-failing error tasks that gain a live PR); CI babysitter
@@ -55,6 +62,8 @@ src/core/
   persist.ts         state.json v2: tasks (minus live question fn) + planner snapshots + UI prefs;
                      debounced on store change + 10s heartbeat + flush on exit; atomic tmp+rename;
                      live statuses restore as `interrupted`
+  guidance.ts        guidanceFor(scope): the general block plus whatever is scoped to this
+                     prompt (triage / work / review / plan)
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
                      read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
                      approve() creates Linear sub-issues; snapshot/restore for persistence
@@ -109,6 +118,36 @@ new-issue drafting. Moving those behind the daemon is the obvious next step.
 
 Sessions are Claude Code sessions keyed by worktree cwd (`~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`). colinear stores only the session id + worktree; interactive attach (`claude --resume`) and headless resume share the same transcript.
 
+## PR review
+
+A second entity beside tasks, with the same CDC contract (`review-*` deltas, keyed
+`owner/repo#number`). `gh` search finds PRs awaiting my review every 5 minutes; `r` checks the
+PR's head out in `<repo>-worktrees/review-<n>` and runs one session.
+
+**The document is the artifact.** The agent writes `.colinear-review.md` (git-excluded) —
+prose for the operator, ending in a ```findings fence holding a JSON array. Findings are
+parsed from that fence, so a chat turn that changes the agent's mind can't leave prose and
+findings disagreeing; structured output would have needed a second pass to keep them in sync.
+The daemon watches the file, so it fills in as it's written and picks up edits made anywhere.
+
+**Posting is deterministic — no session.** The findings are already structured, so colinear
+clears any pending review of ours (GitHub allows one per user per PR, and a leftover blocks
+every new one), then calls `gh api` itself. An agent posting could finish happily with the
+`gh` call inside it having failed; this can't. Approve and request-changes are the same call
+with a different event, so a verdict carries the written review.
+
+What reaches GitHub is deliberately small, because the document is written for the operator
+and none of it belongs on someone else's PR:
+
+- **inline comments** — one per finding with a `file` and a `line`
+- **the body** — the lead finding (no file/line/severity, one sentence), a count by severity,
+  an `## Other` section for findings with no line, and the operator's `n` note
+- `prSignoff` / `prSignoffScope` append an attribution to all of that, or just the body
+
+Findings survive missing fields: no `line` or no `file` means the body rather than the bin;
+only a missing `comment` drops one. A line outside the diff makes GitHub reject the whole
+review, so the post retries once with everything in the body.
+
 ## Prompts
 
 All agent-facing text lives at the bottom of dispatcher.ts. `taskContext()` renders the shared context block (issue+description+parent, repo/remotes/branch, PRs with pin markers, triage verdict/plan, operator instructions) and heads every work/resume/fixci prompt. Invariants encoded in prompts: draft PRs only (`gh pr ready` forbidden — human presses `d`), adopt existing PRs (never duplicate), subtask checklist file `.colinear-subtasks.md` (git-excluded per worktree, polled every 2s onto the card), verification tiers, fork-workflow rules.
@@ -126,6 +165,13 @@ No unit tests (deliberate for now — UI-heavy, fast-moving). The verification l
 If adding tests someday: core/ is mostly pure-ish and dependency-injectable (store is a singleton — the main obstacle); prs.ts matching and dispatcher redispatch/adoption logic are the highest-value targets.
 
 ## Rendering gotchas (hard-won — do not relearn these)
+
+- **A pane that overflows by one row loses its title.** Ink paints the overflow over the first
+  line rather than clipping the last, so a fixed-height pane must slice its content to
+  `height - borders - header rows`. Both panes of the review modal hit this the moment an
+  error line appeared above the doc.
+- **An empty `<Text>` has no height**, so blank lines vanish and markdown paragraphs run
+  together — render `' '` for them.
 
 - **Ink full-clears every frame when output height ≥ terminal rows (equality included).** Root box renders `rows - 1` lines, `overflow="hidden"`, fixed heights on panes. Violate this and the app "vibrates".
 - **Identity stability is load-bearing.** useTasks memoizes per store.version; BoardView's cursor-clamp effect returns the same object when unchanged. A fresh-array-every-render regression once caused an infinite render loop that looked like terminal flicker (React "Maximum update depth" — found via the stderr diversion).

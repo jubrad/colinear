@@ -32,6 +32,15 @@ export interface DispatcherApi {
   applyEdits(id: string, edits: TaskEdits): void;
   setViewer(viewer: { id: string; displayName: string }): void;
   reloadConfig(): void;
+  /** PR review flow — see Reviewer; nothing reaches GitHub until asked */
+  startReview(id: string): void;
+  cancelReview(id: string): void;
+  suspendReview(id: string): void;
+  reviewChat(id: string, text: string): void;
+  reloadReviewDoc(id: string): void;
+  postReview(id: string): void;
+  reviewVerdict(id: string, verdict: 'approve' | 'request-changes'): void;
+  pollReviews(): void;
 }
 
 export interface Connection {
@@ -89,7 +98,11 @@ export async function connectToDaemon(): Promise<Connection> {
 
   socket.setEncoding('utf8');
   socket.setNoDelay(true);
-  const send = (msg: ClientMsg) => socket?.write(encode(msg));
+  const send = (msg: ClientMsg) => {
+    socket?.write(encode(msg));
+  };
+  // returns void deliberately: these are called straight from effects and
+  // handlers, and a stray return value gets mistaken for a cleanup function
   const command = (cmd: Command) => send({ t: 'cmd', cmd });
 
   const toastListeners = new Set<(text: string, kind: 'info' | 'ok' | 'err') => void>();
@@ -133,6 +146,14 @@ export async function connectToDaemon(): Promise<Connection> {
             applyEdits: (id, edits) => command({ name: 'applyEdits', id, edits }),
             setViewer: (viewer) => command({ name: 'setViewer', viewer }),
             reloadConfig: () => command({ name: 'reloadConfig' }),
+            startReview: (id) => command({ name: 'startReview', id }),
+            cancelReview: (id) => command({ name: 'cancelReview', id }),
+            suspendReview: (id) => command({ name: 'suspendReview', id }),
+            reviewChat: (id, text) => command({ name: 'reviewChat', id, text }),
+            reloadReviewDoc: (id) => command({ name: 'reloadReviewDoc', id }),
+            postReview: (id) => command({ name: 'postReview', id }),
+            reviewVerdict: (id, verdict) => command({ name: 'reviewVerdict', id, verdict }),
+            pollReviews: () => command({ name: 'pollReviews' }),
           },
         });
       } else if (msg.t === 'toast') {
