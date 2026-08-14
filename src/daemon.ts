@@ -107,6 +107,9 @@ export async function runDaemon(): Promise<void> {
       case 'cancelReview':
         reviewer.cancel(cmd.id);
         break;
+      case 'suspendReview':
+        reviewer.suspend(cmd.id);
+        break;
       case 'postReview':
         void reviewer.post(cmd.id);
         break;

@@ -59,6 +59,15 @@ export class Reviewer {
     }
   }
 
+  /** Abort so an interactive session can take the transcript over. */
+  suspend(id: string): boolean {
+    const controller = this.aborts.get(id);
+    if (!controller) return false;
+    controller.abort();
+    store.addReviewActivity(id, 'suspended — attaching an interactive session');
+    return true;
+  }
+
   cancel(id: string): boolean {
     const controller = this.aborts.get(id);
     if (!controller) return false;
@@ -89,6 +98,7 @@ export class Reviewer {
     });
 
     try {
+      store.addReviewActivity(id, `reading ${review.repository}#${review.number}`);
       const details = await fetchPrDetails(review);
       store.updateReview(id, {
         headRefName: details.headRefName,
@@ -98,9 +108,9 @@ export class Reviewer {
         changedFiles: details.changedFiles,
       });
 
-      const worktree = await this.checkout(review, details.headRefName, details.baseRefName);
+      const worktree = await this.checkout(review, id, details.headRefName, details.baseRefName);
       store.updateReview(id, { worktree });
-      store.addReviewActivity(id, `checked out ${details.headRefName} in ${worktree}`);
+      store.addReviewActivity(id, `reading the diff (${details.changedFiles} files, +${details.additions}/-${details.deletions})`);
 
       const result = await runSession({
         prompt: reviewPrompt(this.cfg, review, details),
@@ -235,20 +245,25 @@ export class Reviewer {
   }
 
   /** A worktree on the PR's head branch, reused across re-reviews. */
-  private async checkout(review: Review, head: string, base: string): Promise<string> {
+  private async checkout(review: Review, id: string, head: string, base: string): Promise<string> {
     const repo = review.repo!;
     const worktree = join(repo.worktreeRoot, `review-${review.number}`);
     const remote = await this.remoteFor(repo.path, review.repository);
+
+    // a cold fetch on a big repo runs for minutes — say so, or the card looks
+    // stuck with nothing to show for it
+    store.addReviewActivity(id, `fetching ${head} from ${remote}…`);
     await exec('git', ['-C', repo.path, 'fetch', remote, `${head}:refs/remotes/${remote}/${head}`]).catch(
       () => exec('git', ['-C', repo.path, 'fetch', remote]).catch(() => {}),
     );
     await exec('git', ['-C', repo.path, 'fetch', remote, base]).catch(() => {});
 
     if (existsSync(worktree)) {
-      // reuse it, but make sure it's on this PR's head at its latest commit
+      store.addReviewActivity(id, `reusing worktree ${worktree}`);
       await exec('git', ['-C', worktree, 'checkout', '-B', `review/${review.number}`, `${remote}/${head}`]);
       return worktree;
     }
+    store.addReviewActivity(id, `creating worktree ${worktree}…`);
     mkdirSync(repo.worktreeRoot, { recursive: true });
     await exec('git', [
       '-C', repo.path,

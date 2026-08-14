@@ -35,6 +35,7 @@ export interface DispatcherApi {
   /** PR review flow — see Reviewer; nothing reaches GitHub until asked */
   startReview(id: string): void;
   cancelReview(id: string): void;
+  suspendReview(id: string): void;
   postReview(id: string): void;
   reviewVerdict(id: string, verdict: 'approve' | 'request-changes'): void;
   pollReviews(): void;
@@ -145,6 +146,7 @@ export async function connectToDaemon(): Promise<Connection> {
             reloadConfig: () => command({ name: 'reloadConfig' }),
             startReview: (id) => command({ name: 'startReview', id }),
             cancelReview: (id) => command({ name: 'cancelReview', id }),
+            suspendReview: (id) => command({ name: 'suspendReview', id }),
             postReview: (id) => command({ name: 'postReview', id }),
             reviewVerdict: (id, verdict) => command({ name: 'reviewVerdict', id, verdict }),
             pollReviews: () => command({ name: 'pollReviews' }),

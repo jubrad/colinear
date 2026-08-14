@@ -15,19 +15,19 @@ import type { Config, Task } from './types.js';
  * preference: config `terminal` ("ghostty" | "terminal"), else Ghostty when
  * installed, else Terminal.app.
  */
-export function attachInTerminal(cfg: Config, task: Task, delayMs = 0): boolean {
-  if (!task.sessionId || !task.worktree || process.platform !== 'darwin') return false;
+export function attachInTerminal(cfg: Config, target: Attachable, delayMs = 0): boolean {
+  if (!target.sessionId || !target.worktree || process.platform !== 'darwin') return false;
 
-  const scriptPath = join(STATE_DIR, `attach-${task.issue.identifier}.sh`);
+  const scriptPath = join(STATE_DIR, `attach-${target.identifier.replace(/[^\w.-]/g, '-')}.sh`);
   try {
     mkdirSync(STATE_DIR, { recursive: true });
     writeFileSync(
       scriptPath,
       [
         '#!/bin/zsh',
-        `cd ${JSON.stringify(task.worktree)} || exit 1`,
+        `cd ${JSON.stringify(target.worktree)} || exit 1`,
         // headless agents run auto-accept; the interactive session should too
-        `exec claude --resume ${task.sessionId} --permission-mode ${cfg.attachPermissionMode}`,
+        `exec claude --resume ${target.sessionId} --permission-mode ${cfg.attachPermissionMode}`,
         '',
       ].join('\n'),
     );
@@ -50,7 +50,7 @@ export function attachInTerminal(cfg: Config, task: Task, delayMs = 0): boolean 
         'open',
         ['-na', 'Ghostty.app', '--args', '--window-save-state=never', '-e', scriptPath],
         (err) => {
-          if (err) log(`ghostty attach failed for ${task.issue.identifier}: ${err}`);
+          if (err) log(`ghostty attach failed for ${target.identifier}: ${err}`);
         },
       );
     } else {
@@ -61,7 +61,7 @@ export function attachInTerminal(cfg: Config, task: Task, delayMs = 0): boolean 
         'end tell',
       ].join('\n');
       execFile('osascript', ['-e', osa], (err) => {
-        if (err) log(`terminal attach failed for ${task.issue.identifier}: ${err}`);
+        if (err) log(`terminal attach failed for ${target.identifier}: ${err}`);
       });
     }
   }, delayMs);
@@ -69,6 +69,24 @@ export function attachInTerminal(cfg: Config, task: Task, delayMs = 0): boolean 
 }
 
 const ACTIVE_STATUSES = ['triage', 'working', 'checks'];
+
+/** What attaching needs: tasks and PR reviews both qualify. */
+export interface Attachable {
+  id: string;
+  identifier: string;
+  sessionId?: string;
+  worktree?: string;
+  /** an agent is mid-session, so it must be suspended before we take over */
+  live: boolean;
+}
+
+const asAttachable = (task: Task): Attachable => ({
+  id: task.issue.id,
+  identifier: task.issue.identifier,
+  sessionId: task.sessionId,
+  worktree: task.worktree,
+  live: ACTIVE_STATUSES.includes(task.status),
+});
 
 export type PendingAction =
   | {
@@ -112,29 +130,43 @@ export function attachSession(
     quit: () => void;
   },
 ): void {
-  if (!task.sessionId || !task.worktree) {
-    ctx.toast('no session to attach yet', 'err');
+  attachTo(asAttachable(task), ctx.cfg, (id) => ctx.dispatcher.suspend(id), ctx.toast, ctx.quit);
+}
+
+/**
+ * Hand the terminal to `claude --resume` on this session. A live agent is
+ * suspended first — one writer per transcript — and the caller decides what
+ * suspending means for its own kind of work.
+ */
+export function attachTo(
+  target: Attachable,
+  cfg: Config,
+  suspend: (id: string) => void,
+  toast: (text: string, kind?: 'info' | 'ok' | 'err') => void,
+  quit: () => void,
+): void {
+  if (!target.sessionId || !target.worktree) {
+    toast('no session to attach yet', 'err');
     return;
   }
-  const active = ACTIVE_STATUSES.includes(task.status);
-  if (active) ctx.dispatcher.suspend(task.issue.id);
+  if (target.live) suspend(target.id);
 
-  if (ctx.cfg.terminal === 'ghostty' || ctx.cfg.terminal === 'terminal') {
-    attachInTerminal(ctx.cfg, task, active ? 1500 : 0);
-    ctx.toast(`${task.issue.identifier}: opening terminal${active ? ' (agent suspended)' : ''}`, 'info');
+  if (cfg.terminal === 'ghostty' || cfg.terminal === 'terminal') {
+    attachInTerminal(cfg, target, target.live ? 1500 : 0);
+    toast(`${target.identifier}: opening terminal${target.live ? ' (agent suspended)' : ''}`, 'info');
     return;
   }
 
   pending = {
     kind: 'attach',
     mode: 'claude',
-    worktree: task.worktree,
-    sessionId: task.sessionId,
-    identifier: task.issue.identifier,
-    issueId: task.issue.id,
-    waitMs: active ? 1500 : 0,
+    worktree: target.worktree,
+    sessionId: target.sessionId,
+    identifier: target.identifier,
+    issueId: target.id,
+    waitMs: target.live ? 1500 : 0,
   };
-  ctx.quit();
+  quit();
 }
 
 /** Drop into a plain shell in the task's worktree (agent keeps running). */

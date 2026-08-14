@@ -22,6 +22,7 @@ export type Command =
   | { name: 'reloadConfig' }
   | { name: 'startReview'; id: string }
   | { name: 'cancelReview'; id: string }
+  | { name: 'suspendReview'; id: string }
   | { name: 'postReview'; id: string }
   | { name: 'reviewVerdict'; id: string; verdict: 'approve' | 'request-changes' }
   | { name: 'pollReviews' }

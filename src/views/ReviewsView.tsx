@@ -2,6 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
+import { attachTo } from '../core/attach.js';
 import { useReviews } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import type { Review } from '../core/types.js';
@@ -16,7 +17,14 @@ const ACTIVE: Review['status'][] = ['reviewing', 'posting', 'queued'];
  * Column widths. Status/PR always show; author and size drop out on narrow
  * terminals so the row never wraps (a wrapped row breaks the whole table).
  */
-const W = { status: 18, pr: 24, draft: 9, author: 18, size: 14 };
+const W = { status: 12, pr: 24, draft: 9, author: 18, size: 14 };
+
+/** Shorter than the internal names, so the column doesn't hog the row. */
+const STATUS_LABEL: Record<string, string> = {
+  changes_requested: 'changes req',
+  reviewing: 'reviewing',
+  pending: 'pending',
+};
 
 function layout(columns: number) {
   const avail = columns - 6 - 2; // view padding/border, then the status glyph
@@ -98,9 +106,25 @@ export function ReviewsView(_props: { param?: string }) {
       if (!selected) return;
       if (input === 'a' && selected.question) return; // answering handled below
       if (key.return) setExpanded((e) => !e);
-      if (input === 's') {
+      if (input === 'r') {
         ctx.dispatcher.startReview(selected.id);
         ctx.toast(`pre-reviewing ${selected.repository}#${selected.number}`, 'info');
+      }
+      if (input === 's') {
+        // same as the board: hand this terminal to the review's own session
+        attachTo(
+          {
+            id: selected.id,
+            identifier: `${shortRepo(selected.repository)}-${selected.number}`,
+            sessionId: selected.sessionId,
+            worktree: selected.worktree,
+            live: ACTIVE.includes(selected.status),
+          },
+          ctx.cfg,
+          (id) => ctx.dispatcher.suspendReview(id),
+          ctx.toast,
+          ctx.quit,
+        );
       }
       if (input === 'x' && ACTIVE.includes(selected.status)) ctx.dispatcher.cancelReview(selected.id);
       if (input === 'p' && selected.summary) setConfirm('post');
@@ -161,7 +185,8 @@ export function ReviewsView(_props: { param?: string }) {
         {window.map((r, i) => (
           <Text key={r.id} wrap="truncate" inverse={start + i === cursor}>
             <Text color={REVIEW_COLORS[r.status] ?? theme.dim}>
-              {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)} {cell(r.status, W.status)}
+              {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)}{' '}
+              {cell(STATUS_LABEL[r.status] ?? r.status, W.status)}
             </Text>
             <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
             <Text color={r.isDraft ? theme.dim : theme.ok}>{cell(r.isDraft ? 'draft' : 'ready', W.draft)}</Text>
@@ -284,12 +309,21 @@ function Detail(props: { review: Review; expanded: boolean; now: number }) {
           ))}
           {!expanded && findings.length > 4 && <Text dimColor>… {findings.length - 4} more (enter)</Text>}
         </>
+      ) : ACTIVE.includes(review.status) ? (
+        <>
+          <Text> </Text>
+          <Text dimColor>
+            {review.activity.length} step{review.activity.length === 1 ? '' : 's'} · s attaches to this session
+          </Text>
+          {review.activity.slice(-8).map((line, i) => (
+            <Text key={`${i}-${line.slice(0, 12)}`} dimColor wrap="truncate">
+              {line}
+            </Text>
+          ))}
+          {!review.activity.length && <Text dimColor>starting…</Text>}
+        </>
       ) : (
-        <Text dimColor>
-          {ACTIVE.includes(review.status)
-            ? (review.activity[review.activity.length - 1] ?? 'working…')
-            : 'no pre-review yet — press s to check the PR out and read the diff'}
-        </Text>
+        <Text dimColor>no pre-review yet — press r to check the PR out and read the diff</Text>
       )}
     </Box>
   );
@@ -311,7 +345,8 @@ function shortRepo(repository: string): string {
 
 export const reviewsKeys: Array<[string, string]> = [
   ['i/k ↑↓', 'row'],
-  ['s', 'pre-review'],
+  ['r', 'pre-review'],
+  ['s', 'attach claude'],
   ['enter', 'expand'],
   ['p', 'post comments'],
   ['A', 'approve'],
