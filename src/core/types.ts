@@ -170,7 +170,8 @@ export type ReviewStatus =
   | 'ready'
   /** agent is posting the findings to GitHub */
   | 'posting'
-  | 'posted'
+  /** submitted as a COMMENT review — GitHub's own word for it */
+  | 'commented'
   | 'approved'
   | 'changes_requested'
   /** no longer requesting my review (someone else took it, or it was withdrawn) */

@@ -87,7 +87,7 @@ export function ReviewDocModal(props: {
               {' '}
               — review{maxScroll ? ` · ${scroll}/${maxScroll}` : ''}
             </Text>
-            {review.status === 'posted' ? <Text color={theme.ok}> · posted</Text> : null}
+            {review.status === 'commented' ? <Text color={theme.ok}> · commented</Text> : null}
           </Text>
           {review.error ? (
             <Text color={theme.err} wrap="truncate">

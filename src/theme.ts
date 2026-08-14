@@ -38,7 +38,7 @@ export const REVIEW_COLORS: Record<string, string> = {
   reviewing: 'yellow',
   ready: '#87d7ff',
   posting: 'yellow',
-  posted: 'cyan',
+  commented: 'cyan',
   approved: 'green',
   changes_requested: '#ff8700',
   stale: 'gray',

@@ -20,6 +20,10 @@ const ACTIVE: Review['status'][] = ['reviewing', 'posting', 'queued'];
  */
 const W = { status: 12, pr: 24, draft: 9, author: 18, size: 14 };
 
+/** Sort fields, cycled with S; picking the same one again flips direction. */
+const SORTS = ['needs me', 'updated', 'size', 'repo', 'author', 'cost'] as const;
+type SortKey = (typeof SORTS)[number];
+
 /**
  * Shorter than the internal names, so the column doesn't hog the row — and
  * "ready" reads as "reviewed" here, because the next column over uses ready
@@ -58,6 +62,8 @@ export function ReviewsView(props: { param?: string }) {
   const [note, setNote] = useState('');
   const [confirm, setConfirm] = useState<'post' | 'approve' | 'request-changes'>();
   const [reading, setReading] = useState(false);
+  const [sort, setSort] = useState<SortKey>('needs me');
+  const [desc, setDesc] = useState(false);
 
   const rows = useMemo(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -71,8 +77,26 @@ export function ReviewsView(props: { param?: string }) {
     // needs-me-first: ready findings, then in-flight, then untouched
     const rank = (r: Review) =>
       r.status === 'ready' ? 0 : ACTIVE.includes(r.status) ? 1 : r.status === 'error' ? 2 : r.status === 'pending' ? 3 : 4;
-    return matched.sort((a, b) => rank(a) - rank(b) || b.updatedAt.localeCompare(a.updatedAt));
-  }, [reviews, query]);
+    const size = (r: Review) => r.additions + r.deletions;
+    const compare = (a: Review, b: Review) => {
+      switch (sort) {
+        case 'updated':
+          return b.updatedAt.localeCompare(a.updatedAt);
+        case 'size':
+          return size(b) - size(a);
+        case 'repo':
+          return a.repository.localeCompare(b.repository) || a.number - b.number;
+        case 'author':
+          return a.author.localeCompare(b.author) || b.updatedAt.localeCompare(a.updatedAt);
+        case 'cost':
+          return b.costUsd - a.costUsd;
+        default:
+          return rank(a) - rank(b) || b.updatedAt.localeCompare(a.updatedAt);
+      }
+    };
+    const sorted = [...matched].sort(compare);
+    return desc ? sorted.reverse() : sorted;
+  }, [reviews, query, sort, desc]);
 
   const selected = rows[Math.min(cursor, Math.max(0, rows.length - 1))];
 
@@ -154,6 +178,16 @@ export function ReviewsView(props: { param?: string }) {
         ctx.toast(`opened ${selected.repository}#${selected.number}`, 'info');
       }
       if (input === 'R') ctx.dispatcher.pollReviews();
+      if (input === 'S') {
+        // cycle the field; landing back on the current one flips direction
+        const next = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length];
+        if (desc) {
+          setDesc(false);
+          setSort(next);
+        } else {
+          setDesc(true);
+        }
+      }
     },
     { isActive: !filtering && !noting && !reading && !ctx.cmdOpen },
   );
@@ -206,6 +240,11 @@ export function ReviewsView(props: { param?: string }) {
           {rows.length} awaiting me ·{' '}
         </Text>
         {ready > 0 && <Text color={REVIEW_COLORS.ready}>{ready} pre-reviewed </Text>}
+        <Text dimColor>· sort: </Text>
+        <Text color={theme.accent}>
+          {sort}
+          {desc ? ' ↑' : ' ↓'}
+        </Text>
         {query ? <Text color={theme.accent}>/{query}</Text> : null}
       </Box>
       {filtering && (
@@ -382,7 +421,7 @@ function statusGlyph(r: Review): string {
   if (r.status === 'ready') return '◆';
   if (r.status === 'approved') return '✔';
   if (r.status === 'changes_requested') return '✖';
-  if (r.status === 'posted') return '↑';
+  if (r.status === 'commented') return '↑';
   if (r.status === 'error') return '✖';
   return '·';
 }
@@ -403,6 +442,7 @@ export const reviewsKeys: Array<[string, string]> = [
   ['n', 'note'],
   ['o', 'open PR'],
   ['x', 'cancel'],
+  ['S', 'sort'],
   ['R', 'refresh'],
   ['/', 'filter'],
 ];

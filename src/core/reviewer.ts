@@ -220,7 +220,7 @@ export class Reviewer {
       }
 
       store.updateReview(id, {
-        status: event === 'APPROVE' ? 'approved' : event === 'REQUEST_CHANGES' ? 'changes_requested' : 'posted',
+        status: event === 'APPROVE' ? 'approved' : event === 'REQUEST_CHANGES' ? 'changes_requested' : 'commented',
         posted: { at: Date.now(), event, url: posted.url, comments: anchored.length },
         error: undefined,
       });

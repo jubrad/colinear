@@ -67,9 +67,13 @@ export function loadState(cfg: Config): void {
     }
     for (const r of data.reviews ?? []) {
       // a review that was mid-flight comes back idle; findings survive
-      const status = r.status === 'reviewing' || r.status === 'posting' || r.status === 'queued'
-        ? (r.summary ? 'ready' : 'pending')
-        : r.status;
+      const status =
+        r.status === 'reviewing' || r.status === 'posting' || r.status === 'queued'
+          ? r.summary
+            ? 'ready'
+            : 'pending'
+          : // 'posted' was colinear's word before GitHub's own (COMMENTED) won
+            ((r.status as string) === 'posted' ? 'commented' : r.status);
       store.upsertReview({ ...r, status, question: undefined });
     }
     restorePlanners(cfg, data.planners ?? []);
