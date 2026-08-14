@@ -31,9 +31,10 @@ export const PID_PATH = join(STATE_DIR, 'coli.pid');
 export async function runDaemon(): Promise<void> {
   const cfg = loadConfig();
   const dispatcher = new Dispatcher(cfg);
-  loadState(cfg);
-  const stopPersistence = startPersistence();
   const reviewer = new Reviewer(cfg);
+  loadState(cfg);
+  reviewer.resumeWatching(); // reviews restored from disk keep their live doc
+  const stopPersistence = startPersistence();
   const stopPrPolling = startPrPolling(cfg, dispatcher);
   const stopReviewPolling = startReviewPolling(cfg);
 

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, watch, type FSWatcher } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
@@ -50,6 +50,8 @@ function parseDoc(text: string): { summary: string; findings: ReviewFinding[] } 
  */
 export class Reviewer {
   private aborts = new Map<string, AbortController>();
+  /** one per review with a worktree: the doc is live while anything writes it */
+  private watchers = new Map<string, FSWatcher>();
 
   constructor(private cfg: Config) {}
 
@@ -63,6 +65,31 @@ export class Reviewer {
     for (const [id, controller] of this.aborts) {
       store.addReviewActivity(id, 'colinear quit — review stopped');
       controller.abort();
+    }
+    for (const watcher of this.watchers.values()) watcher.close();
+    this.watchers.clear();
+  }
+
+  /**
+   * Mirror the doc as it's written. The agent rewrites the file mid-session
+   * and you may edit it in another window; without this it only refreshes
+   * when a turn ends, so a review appears all at once or not at all.
+   */
+  private watchDoc(id: string, worktree: string) {
+    this.watchers.get(id)?.close();
+    try {
+      let timer: NodeJS.Timeout | undefined;
+      // watch the directory: the file doesn't exist until the agent writes it
+      const watcher = watch(worktree, (_event, filename) => {
+        if (filename !== REVIEW_FILE) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => this.absorbDoc(id), 300); // editors write in bursts
+        timer.unref();
+      });
+      watcher.unref();
+      this.watchers.set(id, watcher);
+    } catch (err) {
+      log(`review ${id}: cannot watch ${worktree}: ${String(err).slice(0, 80)}`);
     }
   }
 
@@ -117,6 +144,7 @@ export class Reviewer {
 
       const worktree = await this.checkout(review, id, details.headRefName, details.baseRefName);
       store.updateReview(id, { worktree });
+      this.watchDoc(id, worktree);
       store.addReviewActivity(id, `reading the diff (${details.changedFiles} files, +${details.additions}/-${details.deletions})`);
 
       await this.excludeReviewFile(worktree);
@@ -268,8 +296,19 @@ export class Reviewer {
     }
   }
 
+  /** After a restart, pick the watches back up for reviews already checked out. */
+  resumeWatching() {
+    for (const review of store.listReviews()) {
+      if (review.worktree && existsSync(review.worktree)) this.watchDoc(review.id, review.worktree);
+    }
+  }
+
   /** Re-read the doc after the operator edited it in $EDITOR. */
   reloadDoc(id: string) {
+    // also (re)establish the watch: this is the other way a review learns it
+    // has a worktree, and an unwatched doc silently stops being live
+    const worktree = store.getReview(id)?.worktree;
+    if (worktree && existsSync(worktree)) this.watchDoc(id, worktree);
     if (this.absorbDoc(id)) store.addReviewActivity(id, 'review doc reloaded from disk');
   }
 
