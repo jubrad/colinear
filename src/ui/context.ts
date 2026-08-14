@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { DispatcherApi } from '../client.js';
+import type { DispatcherApi, GcItem } from '../client.js';
 import type { Config, LinearTeam } from '../core/types.js';
 
 export type ToastKind = 'info' | 'ok' | 'err';
@@ -7,6 +7,8 @@ export type ToastKind = 'info' | 'ok' | 'err';
 export interface AppCtx {
   cfg: Config;
   dispatcher: DispatcherApi;
+  /** gcScan results (the daemon does the scanning); returns an unsubscribe */
+  onGc?: (fn: (items: GcItem[]) => void) => () => void;
   viewer?: { id: string; displayName: string };
   teams: LinearTeam[];
   size: { columns: number; rows: number };

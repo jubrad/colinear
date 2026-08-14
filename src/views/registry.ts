@@ -5,6 +5,7 @@ import { BoardView, boardKeys } from './BoardView.js';
 import { ConfigView, configKeys } from './ConfigView.js';
 import { CostsView, costsKeys } from './CostsView.js';
 import { ChatView, chatKeys } from './ChatView.js';
+import { GcView, gcKeys } from './GcView.js';
 import { HelpView, helpKeys } from './HelpView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
 import { ProjectsView, projectsKeys } from './ProjectsView.js';
@@ -77,6 +78,13 @@ const builtinViews: ViewDef[] = [
     describe: 'spend per ticket',
     Component: CostsView,
     keys: costsKeys,
+  },
+  {
+    name: 'gc',
+    aliases: ['disk'],
+    describe: 'worktree disk — reclaim finished checkouts',
+    Component: GcView,
+    keys: gcKeys,
   },
   {
     name: 'config',

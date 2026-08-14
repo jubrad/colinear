@@ -53,7 +53,7 @@ interface RawRepo {
   checks?: CheckConfig[];
 }
 
-export function loadConfig(): Config {
+export function loadConfig(opts?: { requireKey?: boolean }): Config {
   // guidance is normalized below: a string, a list of lines, or a scope map
   let raw: Partial<Config> & { repos?: RawRepo[]; guidance?: RawGuidance; prSignoff?: RawText } = {};
   for (const path of CONFIG_PATHS) {
@@ -66,7 +66,8 @@ export function loadConfig(): Config {
   }
 
   const linearApiKey = raw.linearApiKey ?? process.env.LINEAR_API_KEY ?? '';
-  if (!linearApiKey) {
+  // chores that never touch Linear (gc) shouldn't demand a key to run
+  if (!linearApiKey && opts?.requireKey !== false) {
     console.error(
       `No Linear API key. Set LINEAR_API_KEY or add "linearApiKey" to ${CONFIG_PATHS[0]}`,
     );

@@ -64,6 +64,10 @@ src/core/
                      live statuses restore as `interrupted`
   guidance.ts        guidanceFor(scope): the general block plus whatever is scoped to this
                      prompt (triage / work / review / plan)
+  gc.ts              which worktrees can go: finished tasks past a keep-window, review
+                     checkouts of stale reviews, and directories no task claims (repo
+                     re-routes leave those). Refuses to classify anything as an orphan
+                     when no tasks loaded — empty state is indistinguishable from live work
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
                      read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
                      approve() creates Linear sub-issues; snapshot/restore for persistence
@@ -147,6 +151,22 @@ and none of it belongs on someone else's PR:
 Findings survive missing fields: no `line` or no `file` means the body rather than the bin;
 only a missing `comment` drops one. A line outside the diff makes GitHub reject the whole
 review, so the post retries once with everything in the body.
+
+## Disk
+
+A worktree is a full checkout: materialize is ~30G each, and one accumulates per task and
+per PR reviewed. Nothing reclaimed them until `coli gc` / `:gc`, which is why 249G had piled
+up by the time this was written.
+
+Three sources: finished tasks (kept for a window — a worktree is exactly what you want the
+day a task completes), review checkouts (released when the review goes stale, meaning the PR
+merged, closed, or someone else took it — *not* when it's posted, since the author may push
+again), and orphans (repo re-routes and removed tasks leave directories no task claims).
+
+The daemon removes them so the store's pointers get cleared in the same step; `coli gc` reads
+state.json directly so it also works with the daemon down. Both refuse to report orphans when
+the task list is empty — that state is indistinguishable from "state failed to load", where
+every live worktree looks dead.
 
 ## Prompts
 

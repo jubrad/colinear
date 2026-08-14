@@ -355,6 +355,42 @@ export class Reviewer {
     }
   }
 
+  /**
+   * Drop the worktrees of reviews that are done with: the PR was merged,
+   * closed, or taken by someone else. A posted review keeps its worktree —
+   * the author may push again and you'd re-review the same PR — so only
+   * `stale` releases it. Review checkouts are pure scratch and they are not
+   * small (a materialize one is ~36G).
+   */
+  async cleanupStale() {
+    for (const review of store.listReviews()) {
+      if (review.status !== 'stale' || !review.worktree) continue;
+      await this.removeWorktree(review.id);
+    }
+  }
+
+  /** Remove a review's worktree and the branch we made for it. */
+  async removeWorktree(id: string) {
+    const review = store.getReview(id);
+    if (!review?.worktree || !review.repo) return;
+    this.watchers.get(id)?.close();
+    this.watchers.delete(id);
+    const { path } = review.repo;
+    const worktree = review.worktree;
+    try {
+      if (existsSync(worktree)) {
+        await exec('git', ['-C', path, 'worktree', 'remove', '--force', worktree]);
+      }
+      await exec('git', ['-C', path, 'worktree', 'prune']).catch(() => {});
+      await exec('git', ['-C', path, 'branch', '-D', `review/${review.number}`]).catch(() => {});
+      store.updateReview(id, { worktree: undefined });
+      store.addReviewActivity(id, 'review worktree removed');
+      log(`review ${id}: removed worktree ${worktree}`);
+    } catch (err) {
+      log(`review ${id}: could not remove ${worktree}: ${String(err).slice(0, 200)}`);
+    }
+  }
+
   /** After a restart, pick the watches back up for reviews already checked out. */
   resumeWatching() {
     for (const review of store.listReviews()) {

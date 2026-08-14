@@ -28,12 +28,15 @@ export type Command =
   | { name: 'postReview'; id: string }
   | { name: 'reviewVerdict'; id: string; verdict: 'approve' | 'request-changes' }
   | { name: 'pollReviews' }
+  | { name: 'gcScan'; olderThanDays: number }
+  | { name: 'gcRemove'; paths: string[] }
   /** store writes the UI makes directly (escalation flags, task edits, …) */
   | { name: 'change'; change: Change };
 
 export type ClientMsg = { t: 'sync'; version: number } | { t: 'cmd'; cmd: Command };
 
 export type ServerMsg =
+  | { t: 'gc'; items: Array<{ path: string; kilobytes: number; label: string; reason: string; ageDays: number }> }
   | { t: 'hello'; protocol: number; pid: number; cfg: Config; snapshot: Snapshot }
   | { t: 'delta'; delta: Delta }
   | { t: 'snapshot'; snapshot: Snapshot }

@@ -156,10 +156,14 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
     });
   }
 
-  // a PR that no longer wants my review drops off, unless I've started on it
+  // A PR that stopped requesting my review is finished with: merged, closed,
+  // or someone else took it. Reviews mid-session are left alone; everything
+  // else goes stale, which is what releases its worktree.
+  const inFlight = new Set(['reviewing', 'posting', 'queued']);
   for (const review of store.listReviews()) {
-    if (seen.has(review.id) || review.status !== 'pending') continue;
+    if (seen.has(review.id) || review.status === 'stale' || inFlight.has(review.status)) continue;
     store.updateReview(review.id, { status: 'stale' });
+    store.addReviewActivity(review.id, 'no longer awaiting my review');
   }
 }
 
@@ -252,9 +256,17 @@ export async function submitReview(
   }
 }
 
-export function startReviewPolling(cfg: Config, intervalMs = 300_000): () => void {
-  void pollReviewRequests(cfg);
-  const timer = setInterval(() => void pollReviewRequests(cfg), intervalMs);
+export function startReviewPolling(
+  cfg: Config,
+  afterPoll?: () => void | Promise<void>,
+  intervalMs = 300_000,
+): () => void {
+  const poll = async () => {
+    await pollReviewRequests(cfg);
+    await afterPoll?.();
+  };
+  void poll();
+  const timer = setInterval(() => void poll(), intervalMs);
   timer.unref();
   return () => clearInterval(timer);
 }
