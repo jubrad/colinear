@@ -221,17 +221,20 @@ export async function submitReview(
   event: ReviewEvent,
   body: string,
   comments: ReviewFinding[],
+  signoff?: string,
 ): Promise<PostedReview> {
+  // whoever reads a comment on their PR should know what wrote it
+  const sign = (text: string) => (signoff?.trim() ? `${text}\n\n${signoff.trim()}` : text);
   const payload = {
     event,
-    body,
+    body: body.trim() ? sign(body) : body,
     comments: comments
       .filter((f) => f.line && f.file)
       .map((f) => ({
         path: f.file,
         line: f.line,
         side: 'RIGHT',
-        body: f.severity ? `**${f.severity}** — ${f.comment}` : f.comment,
+        body: sign(f.severity ? `**${f.severity}** — ${f.comment}` : f.comment),
       })),
   };
   const dir = mkdtempSync(join(tmpdir(), 'coli-review-'));

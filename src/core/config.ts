@@ -55,7 +55,7 @@ interface RawRepo {
 
 export function loadConfig(): Config {
   // guidance is normalized below: a string, a list of lines, or a scope map
-  let raw: Partial<Config> & { repos?: RawRepo[]; guidance?: RawGuidance } = {};
+  let raw: Partial<Config> & { repos?: RawRepo[]; guidance?: RawGuidance; prSignoff?: RawText } = {};
   for (const path of CONFIG_PATHS) {
     try {
       raw = JSON.parse(readFileSync(path, 'utf8'));
@@ -126,6 +126,7 @@ export function loadConfig(): Config {
     concurrency: raw.concurrency ?? 3,
     model: raw.model,
     guidance: normalizeGuidance(raw.guidance),
+    prSignoff: joinLines(raw.prSignoff),
     notifications: raw.notifications ?? true,
     stateSync: raw.stateSync ?? true,
     ciAutofix: raw.ciAutofix ?? true,

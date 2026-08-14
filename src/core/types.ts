@@ -303,6 +303,11 @@ export interface Config {
    * code style, what a good PR looks like. Per-task `instructions` outrank it.
    */
   guidance: Guidance;
+  /**
+   * Appended to every review comment colinear posts (each inline comment and
+   * the review body) — e.g. "written by claude on behalf of @jubrad".
+   */
+  prSignoff?: string;
   /** Linear team key (e.g. "CLOUD") to browse; unset = my assigned issues */
   team?: string;
   /** macOS notifications on needs_input / done / error (default true) */

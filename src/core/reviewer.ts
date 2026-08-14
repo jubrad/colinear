@@ -239,14 +239,20 @@ export class Reviewer {
 
       let posted;
       try {
-        posted = await submitReview(review, event, body, anchored);
+        posted = await submitReview(review, event, body, anchored, this.cfg.prSignoff);
       } catch (err) {
         // a comment on a line outside the diff rejects the whole review, so
         // fall back to one that says everything in the body instead
         log(`review ${id}: inline comments rejected (${String(err).slice(0, 200)})`);
         store.addReviewActivity(id, 'inline comments rejected — posting findings in the body');
         await deletePendingReviews(review).catch(() => 0);
-        posted = await submitReview(review, event, reviewBody(review, review.findings ?? [], event, false), []);
+        posted = await submitReview(
+          review,
+          event,
+          reviewBody(review, review.findings ?? [], event, false),
+          [],
+          this.cfg.prSignoff,
+        );
       }
 
       store.updateReview(id, {
@@ -327,7 +333,13 @@ export class Reviewer {
     // approval, which GitHub still wants a body for on request-changes
     if (review.doc || review.summary) return this.post(id, event);
     try {
-      await submitReview(review, event, review.note?.trim() || (event === 'APPROVE' ? '' : 'Requesting changes.'), []);
+      await submitReview(
+        review,
+        event,
+        review.note?.trim() || (event === 'APPROVE' ? '' : 'Requesting changes.'),
+        [],
+        this.cfg.prSignoff,
+      );
       store.updateReview(id, {
         status: verdict === 'approve' ? 'approved' : 'changes_requested',
         error: undefined,
