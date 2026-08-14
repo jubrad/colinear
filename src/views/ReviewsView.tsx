@@ -7,10 +7,23 @@ import { store } from '../core/store.js';
 import type { Review } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
 import { useColinear } from '../ui/context.js';
-import { formatDuration, formatTokens, spinner } from '../ui/format.js';
+import { cell, formatDuration, formatTokens, spinner } from '../ui/format.js';
 import { REVIEW_COLORS, theme } from '../theme.js';
 
 const ACTIVE: Review['status'][] = ['reviewing', 'posting', 'queued'];
+
+/**
+ * Column widths. Status/PR always show; author and size drop out on narrow
+ * terminals so the row never wraps (a wrapped row breaks the whole table).
+ */
+const W = { status: 18, pr: 24, author: 18, size: 14 };
+
+function layout(columns: number) {
+  const avail = columns - 6 - 2; // view padding/border, then the status glyph
+  const size = avail >= 96 ? W.size : 0;
+  const author = avail >= 82 ? W.author : 0;
+  return { size, author, title: Math.max(16, avail - W.status - W.pr - author - size) };
+}
 const SEVERITY_COLOR: Record<string, string> = {
   blocking: theme.err,
   consider: theme.warn,
@@ -94,6 +107,11 @@ export function ReviewsView(_props: { param?: string }) {
   );
 
   const ready = reviews.filter((r) => r.status === 'ready').length;
+  const cols = layout(ctx.size.columns);
+  // rows that fit: total height less the detail pane, header and chrome
+  const visible = Math.max(3, ctx.size.rows - (expanded ? 26 : 16));
+  const start = Math.max(0, Math.min(cursor - Math.floor(visible / 2), rows.length - visible));
+  const window = rows.slice(start, start + visible);
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -121,21 +139,35 @@ export function ReviewsView(_props: { param?: string }) {
       )}
 
       <Box flexDirection="column" marginTop={1} flexShrink={0}>
-        {rows.slice(0, Math.max(3, ctx.size.rows - (expanded ? 26 : 16))).map((r, i) => (
-          <Text key={r.id} wrap="truncate" inverse={i === cursor}>
+        <Text bold color={theme.header} wrap="truncate">
+          {'  '}
+          {cell('STATUS', W.status)}
+          {cell('PR', W.pr)}
+          {cell('TITLE', cols.title)}
+          {cols.author ? cell('AUTHOR', cols.author) : ''}
+          {cols.size ? cell('SIZE', cols.size) : ''}
+        </Text>
+        {window.map((r, i) => (
+          <Text key={r.id} wrap="truncate" inverse={start + i === cursor}>
             <Text color={REVIEW_COLORS[r.status] ?? theme.dim}>
-              {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)}{' '}
-              {r.status.padEnd(17)}
+              {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)} {cell(r.status, W.status)}
             </Text>
-            <Text bold>{`${shortRepo(r.repository)}#${r.number}`.padEnd(18)}</Text>
-            <Text>{r.title.slice(0, 52).padEnd(53)}</Text>
+            <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
+            <Text>{cell(r.title, cols.title)}</Text>
             <Text dimColor>
-              {r.author.slice(0, 16).padEnd(17)}
-              {r.changedFiles ? `${r.changedFiles}f +${r.additions}/-${r.deletions}` : ''}
+              {cols.author ? cell(r.author, cols.author) : ''}
+              {cols.size ? cell(r.changedFiles ? `${r.changedFiles}f +${r.additions}/-${r.deletions}` : '', cols.size) : ''}
             </Text>
           </Text>
         ))}
         {!rows.length && <Text dimColor>No PRs are waiting on your review.</Text>}
+        {rows.length > visible && (
+          <Text dimColor>
+            {start > 0 ? `↑${start} ` : ''}
+            {start + visible < rows.length ? `↓${rows.length - start - visible}` : ''}
+            {`  ${cursor + 1}/${rows.length}`}
+          </Text>
+        )}
       </Box>
 
       {selected && <Detail review={selected} expanded={expanded} now={ctx.now} />}
