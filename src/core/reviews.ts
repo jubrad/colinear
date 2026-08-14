@@ -12,8 +12,41 @@ interface SearchedPr {
   url: string;
   isDraft: boolean;
   updatedAt: string;
-  author: { login: string };
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  headRefName: string;
+  baseRefName: string;
+  author: { login: string } | null;
   repository: { nameWithOwner: string };
+}
+
+/**
+ * One GraphQL query for everything the list shows. `gh search prs` omits the
+ * diff stats and branch names, which would otherwise need a `gh pr view` per
+ * PR — 35 extra requests just to fill in a column.
+ */
+const SEARCH_QUERY = `
+query($q: String!) {
+  search(query: $q, type: ISSUE, first: 50) {
+    nodes { ... on PullRequest {
+      number title url isDraft updatedAt additions deletions changedFiles
+      headRefName baseRefName
+      author { login }
+      repository { nameWithOwner }
+    } }
+  }
+}`;
+
+let cachedLogin: string | undefined;
+
+/** GraphQL search has no @me, so resolve the login once. */
+async function viewerLogin(): Promise<string> {
+  if (!cachedLogin) {
+    const { stdout } = await exec('gh', ['api', 'user', '-q', '.login']);
+    cachedLogin = stdout.trim();
+  }
+  return cachedLogin;
 }
 
 export interface PrDetails {
@@ -65,20 +98,18 @@ export async function repoForSlug(cfg: Config, nameWithOwner: string): Promise<R
 export async function pollReviewRequests(cfg: Config): Promise<void> {
   let prs: SearchedPr[];
   try {
+    const login = await viewerLogin();
     const { stdout } = await exec(
       'gh',
       [
-        'search', 'prs',
-        '--review-requested', '@me',
-        '--state', 'open',
-        // a PR in an archived repo can't be reviewed, merged, or commented on
-        '--archived=false',
-        '--limit', '50',
-        '--json', 'number,title,url,repository,author,updatedAt,isDraft',
+        'api', 'graphql',
+        '-f', `query=${SEARCH_QUERY}`,
+        // archived repos can't be reviewed, merged, or commented on
+        '-f', `q=is:pr is:open archived:false review-requested:${login}`,
       ],
       { maxBuffer: 10 * 1024 * 1024 },
     );
-    prs = JSON.parse(stdout);
+    prs = (JSON.parse(stdout).data?.search?.nodes ?? []) as SearchedPr[];
   } catch (err) {
     log(`review request poll failed: ${String(err).slice(0, 200)}`);
     return;
@@ -92,9 +123,14 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
     const meta = {
       title: pr.title,
       url: pr.url,
-      author: pr.author.login,
+      author: pr.author?.login ?? 'unknown',
       isDraft: pr.isDraft,
       updatedAt: pr.updatedAt,
+      additions: pr.additions,
+      deletions: pr.deletions,
+      changedFiles: pr.changedFiles,
+      headRefName: pr.headRefName,
+      baseRefName: pr.baseRefName,
     };
     if (existing) {
       // metadata only: status, findings and worktree belong to the operator
@@ -108,11 +144,6 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
       id,
       number: pr.number,
       repository: pr.repository.nameWithOwner,
-      headRefName: '',
-      baseRefName: '',
-      additions: 0,
-      deletions: 0,
-      changedFiles: 0,
       status: 'pending',
       activity: [],
       tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
