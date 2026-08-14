@@ -226,6 +226,8 @@ export interface Review {
   chatting?: boolean;
   /** operator's own note, appended to whatever gets posted */
   note?: string;
+  /** what was sent to GitHub, so a later discussion knows it's already out */
+  posted?: { at: number; event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'; url: string; comments: number };
   startedAt?: number;
   endedAt?: number;
   tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };

@@ -1,8 +1,11 @@
 import { execFile } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { log } from './log.js';
 import { store } from './store.js';
-import type { Config, RepoConfig, Review } from './types.js';
+import type { Config, RepoConfig, Review, ReviewFinding } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -41,7 +44,7 @@ query($q: String!) {
 let cachedLogin: string | undefined;
 
 /** GraphQL search has no @me, so resolve the login once. */
-async function viewerLogin(): Promise<string> {
+export async function viewerLogin(): Promise<string> {
   if (!cachedLogin) {
     const { stdout } = await exec('gh', ['api', 'user', '-q', '.login']);
     cachedLogin = stdout.trim();
@@ -174,17 +177,72 @@ export async function fetchPrDetails(review: Review): Promise<PrDetails> {
   return JSON.parse(stdout) as PrDetails;
 }
 
-/** Approve or request changes — deterministic, no agent involved. */
-export async function submitVerdict(
+export type ReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
+
+/**
+ * GitHub allows one pending review per user per PR, and a leftover blocks
+ * every new one. Clear ours before posting.
+ */
+export async function deletePendingReviews(review: Review): Promise<number> {
+  const login = await viewerLogin();
+  const { stdout } = await exec(
+    'gh',
+    [
+      'api',
+      `/repos/${review.repository}/pulls/${review.number}/reviews`,
+      '--paginate',
+      '--jq',
+      `.[] | select(.user.login == "${login}" and .state == "PENDING") | .id`,
+    ],
+    { maxBuffer: 10 * 1024 * 1024 },
+  );
+  const ids = stdout.split('\n').map((l) => l.trim()).filter(Boolean);
+  for (const reviewId of ids) {
+    await exec('gh', [
+      'api', '--method', 'DELETE',
+      `/repos/${review.repository}/pulls/${review.number}/reviews/${reviewId}`,
+    ]);
+  }
+  return ids.length;
+}
+
+export interface PostedReview {
+  id: number;
+  url: string;
+}
+
+/**
+ * Post a review straight to GitHub. The findings are already structured, so
+ * this needs no model — which also means it either works or throws, instead
+ * of a session reporting success it didn't have.
+ */
+export async function submitReview(
   review: Review,
-  verdict: 'approve' | 'request-changes',
-  body?: string,
-): Promise<void> {
-  const args = ['pr', 'review', String(review.number), '--repo', review.repository, `--${verdict}`];
-  // GitHub rejects a request-changes review with no body
-  if (body?.trim()) args.push('--body', body.trim());
-  else if (verdict === 'request-changes') args.push('--body', 'Requesting changes — see comments.');
-  await exec('gh', args, { maxBuffer: 1024 * 1024 });
+  event: ReviewEvent,
+  body: string,
+  comments: ReviewFinding[],
+): Promise<PostedReview> {
+  const payload = {
+    event,
+    body,
+    comments: comments
+      .filter((f) => f.line && f.file)
+      .map((f) => ({ path: f.file, line: f.line, side: 'RIGHT', body: `**${f.severity}** — ${f.comment}` })),
+  };
+  const dir = mkdtempSync(join(tmpdir(), 'coli-review-'));
+  const file = join(dir, 'review.json');
+  try {
+    writeFileSync(file, JSON.stringify(payload));
+    const { stdout } = await exec(
+      'gh',
+      ['api', '--method', 'POST', `/repos/${review.repository}/pulls/${review.number}/reviews`, '--input', file],
+      { maxBuffer: 10 * 1024 * 1024 },
+    );
+    const posted = JSON.parse(stdout) as { id: number; html_url: string };
+    return { id: posted.id, url: posted.html_url };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 export function startReviewPolling(cfg: Config, intervalMs = 300_000): () => void {

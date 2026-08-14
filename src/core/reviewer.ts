@@ -6,7 +6,7 @@ import { runSession, type SessionCallbacks } from './agent.js';
 import { guidanceFor } from './guidance.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
-import { fetchPrDetails, submitVerdict } from './reviews.js';
+import { deletePendingReviews, fetchPrDetails, submitReview, type ReviewEvent } from './reviews.js';
 import { store } from './store.js';
 import type { ChatTurn, Config, Review, ReviewFinding } from './types.js';
 
@@ -185,38 +185,52 @@ export class Reviewer {
     }
   }
 
-  /** Post the findings as a GitHub review. Only ever runs when asked. */
-  async post(id: string) {
+  /**
+   * Post the review to GitHub. Deterministic: the findings are already
+   * structured, so this is a `gh api` call, not a session — it can't cost
+   * tokens, can't drift from the document, and can't claim a success it
+   * didn't have.
+   */
+  async post(id: string, event: ReviewEvent = 'COMMENT') {
     const review = store.getReview(id);
-    if (!review || this.aborts.has(id)) return;
-    if (!review.findings?.length && !review.summary) {
-      this.toast('nothing to post yet — run the pre-review first', 'err');
+    if (!review) return;
+    if (!review.doc && !review.summary) {
+      this.toast('nothing to post yet — press r to run a pre-review', 'err');
       return;
     }
-    const controller = new AbortController();
-    this.aborts.set(id, controller);
+    const anchored = (review.findings ?? []).filter((f) => f.line && f.file);
+    const loose = (review.findings ?? []).filter((f) => !f.line || !f.file);
+    const body = reviewBody(review, loose);
+
     store.updateReview(id, { status: 'posting', error: undefined });
     try {
-      const result = await runSession({
-        prompt: postPrompt(review),
-        cwd: review.worktree ?? review.repo?.path ?? process.cwd(),
-        model: this.cfg.model,
-        abortController: controller,
-        callbacks: this.callbacks(id),
-      });
-      if (result.isError) {
-        store.updateReview(id, { status: 'ready', error: result.errors.join('; ').slice(0, 300) });
-        this.toast(`posting failed for ${review.repository}#${review.number}`, 'err');
-        return;
+      const cleared = await deletePendingReviews(review);
+      if (cleared) store.addReviewActivity(id, `cleared ${cleared} leftover pending review(s)`);
+
+      let posted;
+      try {
+        posted = await submitReview(review, event, body, anchored);
+      } catch (err) {
+        // a comment on a line outside the diff rejects the whole review, so
+        // fall back to one that says everything in the body instead
+        log(`review ${id}: inline comments rejected (${String(err).slice(0, 200)})`);
+        store.addReviewActivity(id, 'inline comments rejected — posting findings in the body');
+        await deletePendingReviews(review).catch(() => 0);
+        posted = await submitReview(review, event, reviewBody(review, review.findings ?? []), []);
       }
+
       store.updateReview(id, {
-        status: 'posted',
-        costUsd: (store.getReview(id)?.costUsd ?? 0) + result.costUsd,
+        status: event === 'APPROVE' ? 'approved' : event === 'REQUEST_CHANGES' ? 'changes_requested' : 'posted',
+        posted: { at: Date.now(), event, url: posted.url, comments: anchored.length },
+        error: undefined,
       });
-      store.addReviewActivity(id, 'comments posted to GitHub');
-      this.toast(`posted review comments on ${review.repository}#${review.number}`, 'ok');
-    } finally {
-      this.aborts.delete(id);
+      store.addReviewActivity(id, `posted ${event.toLowerCase()} review: ${posted.url}`);
+      this.toast(`posted to ${review.repository}#${review.number}`, 'ok');
+    } catch (err) {
+      const message = String(err).slice(0, 300);
+      store.updateReview(id, { status: 'ready', error: `post failed: ${message}` });
+      store.addReviewActivity(id, `post failed: ${message}`);
+      this.toast(`post failed for ${review.repository}#${review.number} — p retries`, 'err');
     }
   }
 
@@ -251,7 +265,7 @@ export class Reviewer {
     this.aborts.set(id, controller);
     try {
       const result = await runSession({
-        prompt: chatPrompt(text),
+        prompt: chatPrompt(text, review),
         cwd: review.worktree,
         resume: review.sessionId,
         model: this.cfg.model,
@@ -274,21 +288,22 @@ export class Reviewer {
     }
   }
 
-  /** Approve / request changes — a straight gh call, no tokens spent. */
+  /** Approve / request changes — the same deterministic post, with an event. */
   async verdict(id: string, verdict: 'approve' | 'request-changes') {
     const review = store.getReview(id);
     if (!review) return;
+    const event: ReviewEvent = verdict === 'approve' ? 'APPROVE' : 'REQUEST_CHANGES';
+    // with a review written, the verdict carries it; without one it's a bare
+    // approval, which GitHub still wants a body for on request-changes
+    if (review.doc || review.summary) return this.post(id, event);
     try {
-      await submitVerdict(review, verdict, review.note);
+      await submitReview(review, event, review.note?.trim() || (event === 'APPROVE' ? '' : 'Requesting changes.'), []);
       store.updateReview(id, {
         status: verdict === 'approve' ? 'approved' : 'changes_requested',
         error: undefined,
       });
       store.addReviewActivity(id, verdict === 'approve' ? 'approved' : 'requested changes');
-      this.toast(
-        `${verdict === 'approve' ? 'approved' : 'requested changes on'} ${review.repository}#${review.number}`,
-        'ok',
-      );
+      this.toast(`${verdict === 'approve' ? 'approved' : 'requested changes on'} ${review.repository}#${review.number}`, 'ok');
     } catch (err) {
       const message = String(err).slice(0, 200);
       store.updateReview(id, { error: message });
@@ -425,6 +440,21 @@ export class Reviewer {
   }
 }
 
+/**
+ * What GitHub shows as the review body: the document as written, minus the
+ * machine-readable fence, plus any finding we couldn't anchor to a line.
+ */
+function reviewBody(review: Review, inBody: ReviewFinding[]): string {
+  const doc = (review.doc ?? review.summary ?? '').replace(/```json[\s\S]*?```/g, '').trim();
+  const extra = inBody.length
+    ? `\n\n## Further notes\n\n${inBody
+        .map((f) => `- **${f.severity}** ${f.file}${f.line ? `:${f.line}` : ''} — ${f.comment}`)
+        .join('\n')}`
+    : '';
+  const note = review.note?.trim() ? `\n\n---\n\n${review.note.trim()}` : '';
+  return `${doc}${extra}${note}`.trim();
+}
+
 function findingsBlock(review: Review): string {
   return (review.findings ?? [])
     .map((f) => `- [${f.severity}] ${f.file}${f.line ? `:${f.line}` : ''} — ${f.comment}`)
@@ -483,28 +513,14 @@ Severity means:
 Report what you actually found. An empty findings list is a fine answer for a clean PR — do not invent problems to look thorough, and do not soften a real one. Keep your chat reply short; the document is the deliverable.${guidanceFor(cfg.guidance, 'review')}`;
 }
 
-function chatPrompt(text: string): string {
+function chatPrompt(text: string, review: Review): string {
+  const posted = review.posted
+    ? `\n\nNote: this review has ALREADY been posted to GitHub (${review.posted.event.toLowerCase()}, ${review.posted.comments} inline comment(s)): ${review.posted.url}. Editing the document now does not change what is on GitHub — the operator would have to post again. Say so if they ask for a change that would need reposting.`
+    : '';
   return `The operator is reading your review and says:
 
 ${text}
 
-Answer them directly and briefly. If what they say changes your review, update \`${REVIEW_FILE}\` — including the fenced findings block at the end, which must always match the prose. If it doesn't change the review, just answer; don't rewrite the file to look busy. Never post anything to GitHub.`;
+Answer them directly and briefly. If what they say changes your review, update \`${REVIEW_FILE}\` — including the fenced findings block at the end, which must always match the prose. If it doesn't change the review, just answer; don't rewrite the file to look busy. Never post anything to GitHub yourself — colinear does that from the document when the operator asks.${posted}`;
 }
 
-function postPrompt(review: Review): string {
-  return `Post the review below to ${review.repository}#${review.number} using the \`gh\` CLI. The operator has approved it as written — post it, and change nothing.
-
-## Review document (use this as the review body, minus the fenced json)
-${review.doc ?? review.summary ?? '(none)'}
-
-## Findings to anchor as inline comments
-${findingsBlock(review) || '(none)'}
-${review.note ? `\n## Operator's note (include this verbatim in the review body)\n${review.note}` : ''}
-
-How to post:
-1. Line-anchored findings go as inline comments in a single pending review. Build them with \`gh api\` against \`/repos/${review.repository}/pulls/${review.number}/reviews\`, passing a "comments" array of {path, line, side: "RIGHT", body}. Use the review document (with the fenced json stripped, plus the operator's note if any) as the review "body", and \`"event": "COMMENT"\`.
-2. Findings without a line number belong in the review body under a short heading, not as inline comments.
-3. If the API rejects a comment because the line is not part of the diff, drop that comment's line anchor and move it into the body rather than failing the whole review.
-
-Do NOT approve or request changes — the operator does that. Post exactly one review. Report what you posted in your final message.`;
-}

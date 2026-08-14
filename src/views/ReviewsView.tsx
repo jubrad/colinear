@@ -145,7 +145,7 @@ export function ReviewsView(props: { param?: string }) {
         );
       }
       if (input === 'x' && ACTIVE.includes(selected.status)) ctx.dispatcher.cancelReview(selected.id);
-      if (input === 'p' && selected.summary) setConfirm('post');
+      if (input === 'p' && (selected.summary || selected.doc)) setConfirm('post');
       if (input === 'A') setConfirm('approve');
       if (input === 'X') setConfirm('request-changes');
       if (input === 'n') setNoting(true);
@@ -173,6 +173,10 @@ export function ReviewsView(props: { param?: string }) {
         height={Math.max(10, ctx.size.rows - 6)}
         busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
         onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
+        onPost={() => {
+          ctx.dispatcher.postReview(selected.id);
+          ctx.toast(`posting ${selected.repository}#${selected.number}…`, 'info');
+        }}
         onEdit={() => {
           if (!selected.worktree) {
             ctx.toast('no review doc on disk yet', 'err');

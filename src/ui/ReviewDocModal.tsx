@@ -17,9 +17,10 @@ export function ReviewDocModal(props: {
   busy: boolean;
   onSend: (text: string) => void;
   onEdit: () => void;
+  onPost: () => void;
   onClose: () => void;
 }) {
-  const { review, width, height, busy, onSend, onEdit, onClose } = props;
+  const { review, width, height, busy, onSend, onEdit, onPost, onClose } = props;
   const [focus, setFocus] = useState<'doc' | 'chat'>('doc');
   const [draft, setDraft] = useState('');
   const [scroll, setScroll] = useState(0);
@@ -31,9 +32,11 @@ export function ReviewDocModal(props: {
   const paneHeight = side ? height - 3 : Math.floor((height - 3) / 2);
 
   const lines = wrap(review.doc ?? review.summary ?? 'No review document yet — press r to run a pre-review.', docWidth - 4);
-  // rows inside the pane: its height less both borders, less the title line.
-  // Overflowing by even one row makes Ink paint the overflow over the title.
-  const docRows = Math.max(1, paneHeight - 3);
+  // rows inside the pane: its height less both borders, less the header rows
+  // (title, and the error line when there is one). Overflowing by even one row
+  // makes Ink paint the overflow over the header.
+  const headerRows = review.error ? 2 : 1;
+  const docRows = Math.max(1, paneHeight - 2 - headerRows);
   const maxScroll = Math.max(0, lines.length - docRows);
   useEffect(() => setScroll((s) => Math.min(s, maxScroll)), [maxScroll]);
 
@@ -51,6 +54,7 @@ export function ReviewDocModal(props: {
     if (input === 'g') setScroll(0);
     if (input === 'G') setScroll(maxScroll);
     if (input === 'e') onEdit();
+    if (input === 'p') onPost();
     if (input === 'q') onClose();
   });
 
@@ -83,7 +87,13 @@ export function ReviewDocModal(props: {
               {' '}
               — review{maxScroll ? ` · ${scroll}/${maxScroll}` : ''}
             </Text>
+            {review.status === 'posted' ? <Text color={theme.ok}> · posted</Text> : null}
           </Text>
+          {review.error ? (
+            <Text color={theme.err} wrap="truncate">
+              ✖ {review.error} — p retries
+            </Text>
+          ) : null}
           {lines.slice(scroll, scroll + docRows).map((line, i) => (
             <Text key={`${scroll}-${i}`} wrap="truncate" {...markdownStyle(line)}>
               {/* a truly empty Text has no height, which eats the blank lines */}
@@ -170,7 +180,7 @@ export function ReviewDocModal(props: {
         </Box>
       </Box>
       <Text dimColor wrap="truncate">
-        tab: {focus === 'doc' ? 'discuss' : 'doc'} · j/k g/G: scroll · e: edit in $EDITOR · esc: back
+        tab: {focus === 'doc' ? 'discuss' : 'doc'} · j/k g/G: scroll · e: edit · p: post · esc: back
       </Text>
     </Box>
   );
