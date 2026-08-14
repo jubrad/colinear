@@ -227,7 +227,12 @@ export async function submitReview(
     body,
     comments: comments
       .filter((f) => f.line && f.file)
-      .map((f) => ({ path: f.file, line: f.line, side: 'RIGHT', body: `**${f.severity}** — ${f.comment}` })),
+      .map((f) => ({
+        path: f.file,
+        line: f.line,
+        side: 'RIGHT',
+        body: f.severity ? `**${f.severity}** — ${f.comment}` : f.comment,
+      })),
   };
   const dir = mkdtempSync(join(tmpdir(), 'coli-review-'));
   const file = join(dir, 'review.json');

@@ -8,7 +8,7 @@ import { log } from './log.js';
 import { notify } from './notify.js';
 import { deletePendingReviews, fetchPrDetails, submitReview, type ReviewEvent } from './reviews.js';
 import { store } from './store.js';
-import type { ChatTurn, Config, Review, ReviewFinding } from './types.js';
+import type { ChatTurn, Config, Review, ReviewFinding, Severity } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -34,7 +34,13 @@ function validFindings(value: unknown): ReviewFinding[] {
     // the comment is the finding; a missing file just means it can't be
     // anchored, which is the body's job — dropping it would lose real review
     if (typeof f?.comment !== 'string' || !f.comment.trim()) return [];
-    const severity = SEVERITIES.has(f.severity as string) ? (f.severity as ReviewFinding['severity']) : 'consider';
+    // absent severity marks the lead entry; a wrong one is just a typo
+    const severity =
+      f.severity === undefined || f.severity === null
+        ? undefined
+        : SEVERITIES.has(f.severity as string)
+          ? (f.severity as Severity)
+          : 'consider';
     const line = typeof f.line === 'number' && Number.isFinite(f.line) ? f.line : undefined;
     const file = typeof f.file === 'string' && f.file.trim() ? f.file.trim() : undefined;
     return [{ file, line, severity, comment: f.comment }];
@@ -464,16 +470,26 @@ export class Reviewer {
   }
 }
 
+/** How a severity reads in the count line. */
+const SEVERITY_LABEL: Record<Severity, [string, string]> = {
+  blocking: ['must fix', 'must fix'],
+  consider: ['consideration', 'considerations'],
+  nit: ['nit', 'nits'],
+  praise: ['praise', 'praise'],
+};
+
+/** The lead: no file, no line, no severity — one sentence opening the review. */
+export function leadFinding(findings: ReviewFinding[]): ReviewFinding | undefined {
+  const first = findings[0];
+  return first && !first.file && !first.line && !first.severity ? first : undefined;
+}
+
 /**
  * The review body, kept deliberately small. The document is written for the
  * operator — an overview, and where the agent's own judgement is weakest —
- * and none of that belongs on someone else's PR. The inline comments are the
- * review; the body carries only what has nowhere else to go:
- *
- * - findings with no line to anchor to
- * - the operator's own note
- * - a one-paragraph summary, but only when there are no inline comments at
- *   all, so the review isn't empty
+ * and none of that belongs on someone else's PR. The body is the lead
+ * sentence, a count of what was raised, and whatever couldn't be anchored to
+ * a line; the inline comments are the review.
  */
 function reviewBody(
   review: Review,
@@ -481,12 +497,38 @@ function reviewBody(
   event: ReviewEvent,
   hasInlineComments: boolean,
 ): string {
+  const findings = review.findings ?? [];
+  const lead = leadFinding(findings);
+  const rest = findings.filter((f) => f !== lead);
   const parts: string[] = [];
-  if (!hasInlineComments && review.summary?.trim()) parts.push(review.summary.trim());
-  for (const f of unanchored) {
-    const where = f.file ? ` — \`${f.file}${f.line ? `:${f.line}` : ''}\`` : '';
-    parts.push(`**${f.severity}**${where}\n\n${f.comment.trim()}`);
+
+  if (lead) parts.push(lead.comment.trim());
+  else if (!hasInlineComments && review.summary?.trim()) parts.push(review.summary.trim());
+
+  const counts = new Map<Severity, number>();
+  for (const f of rest) if (f.severity) counts.set(f.severity, (counts.get(f.severity) ?? 0) + 1);
+  if (counts.size) {
+    const lines = (['blocking', 'consider', 'nit', 'praise'] as Severity[])
+      .filter((sev) => counts.get(sev))
+      .map((sev) => {
+        const n = counts.get(sev)!;
+        return `${n} ${SEVERITY_LABEL[sev][n === 1 ? 0 : 1]}`;
+      });
+    parts.push(`## Summary\n\n${lines.join('\n')}`);
   }
+
+  const other = unanchored.filter((f) => f !== lead);
+  if (other.length) {
+    parts.push(
+      `## Other\n\n${other
+        .map((f) => {
+          const where = f.file ? `\`${f.file}${f.line ? `:${f.line}` : ''}\` — ` : '';
+          return `**${f.severity ?? 'note'}** — ${where}${f.comment.trim()}`;
+        })
+        .join('\n\n')}`,
+    );
+  }
+
   if (review.note?.trim()) parts.push(review.note.trim());
   const body = parts.join('\n\n');
   // GitHub rejects a request-changes review with an empty body
@@ -538,13 +580,18 @@ Write prose as prose — paragraphs, not bullet fragments — and use fenced cod
 
 End the file with a \`findings\` block: a JSON **array**, one object per finding. This is what actually reaches GitHub — colinear posts each entry as an inline comment on that file and line, so write \`comment\` as the complete review comment you want the author to read, in markdown. The prose above is context for the operator; the array is the review.
 
+**The first entry is the lead**: no \`file\`, no \`line\`, no \`severity\` — one sentence that opens the posted review. Say what the PR does and whether it looks sound; the author reads this first and it is the only thing they see if they read nothing else. One sentence, not a paragraph.
+
 \`\`\`findings
 [
+  {"comment": "Solid change; the precedence rule between scoped and global values is the one thing worth a second look."},
   {"file": "src/x.rs", "line": 42, "severity": "blocking", "comment": "Full comment to the author, in markdown.\\n\\nParagraphs are fine."}
 ]
 \`\`\`
 
-Rules for the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches (omit it only if the point isn't about a specific line — those go in the review body instead); \`severity\` is one of blocking, consider, nit, praise. Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
+Rules for the rest of the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches — omit both only when the point isn't about any particular place, and it will be posted in the review body instead; \`severity\` is one of blocking, consider, nit, praise. Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
+
+colinear assembles the posted body itself: your lead sentence, then a count of what you raised (\"2 considerations, 1 nit\"), then anything that had no line to attach to. Don't write those parts yourself.
 
 Severity means:
 - "blocking": a bug, a security or data-loss risk, or a contract change that would break callers. Something you would hold the PR for.

@@ -185,12 +185,18 @@ export interface ChatTurn {
   at: number;
 }
 
+export type Severity = 'blocking' | 'consider' | 'nit' | 'praise';
+
 export interface ReviewFinding {
   /** unset when the point isn't about a particular file — it goes in the body */
   file?: string;
   line?: number;
-  /** blocking = would request changes over it; nit = optional polish */
-  severity: 'blocking' | 'consider' | 'nit' | 'praise';
+  /**
+   * blocking = would request changes over it; nit = optional polish. Unset on
+   * the lead entry: no file, no line, no severity, one sentence — it opens the
+   * posted review.
+   */
+  severity?: Severity;
   comment: string;
 }
 

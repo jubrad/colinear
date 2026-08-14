@@ -387,10 +387,11 @@ function Detail(props: { review: Review; now: number }) {
           </Text>
           {findings.slice(0, 4).map((f, i) => (
             <Text key={`${f.file}-${i}`} wrap="truncate">
-              <Text color={SEVERITY_COLOR[f.severity] ?? theme.dim}>{f.severity.padEnd(9)}</Text>
+              <Text color={f.severity ? (SEVERITY_COLOR[f.severity] ?? theme.dim) : theme.accent}>
+                {(f.severity ?? 'lead').padEnd(9)}
+              </Text>
               <Text dimColor>
-                {f.file ?? 'general'}
-                {f.line ? `:${f.line}` : ''}{' '}
+                {f.file ? `${f.file}${f.line ? `:${f.line}` : ''} ` : ''}
               </Text>
               {f.comment}
             </Text>
