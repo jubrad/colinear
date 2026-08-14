@@ -95,7 +95,11 @@ export async function connectToDaemon(): Promise<Connection> {
 
   socket.setEncoding('utf8');
   socket.setNoDelay(true);
-  const send = (msg: ClientMsg) => socket?.write(encode(msg));
+  const send = (msg: ClientMsg) => {
+    socket?.write(encode(msg));
+  };
+  // returns void deliberately: these are called straight from effects and
+  // handlers, and a stray return value gets mistaken for a cleanup function
   const command = (cmd: Command) => send({ t: 'cmd', cmd });
 
   const toastListeners = new Set<(text: string, kind: 'info' | 'ok' | 'err') => void>();

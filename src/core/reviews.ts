@@ -71,6 +71,8 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
         'search', 'prs',
         '--review-requested', '@me',
         '--state', 'open',
+        // a PR in an archived repo can't be reviewed, merged, or commented on
+        '--archived=false',
         '--limit', '50',
         '--json', 'number,title,url,repository,author,updatedAt,isDraft',
       ],

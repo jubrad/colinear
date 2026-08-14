@@ -16,13 +16,17 @@ const ACTIVE: Review['status'][] = ['reviewing', 'posting', 'queued'];
  * Column widths. Status/PR always show; author and size drop out on narrow
  * terminals so the row never wraps (a wrapped row breaks the whole table).
  */
-const W = { status: 18, pr: 24, author: 18, size: 14 };
+const W = { status: 18, pr: 24, draft: 7, author: 18, size: 14 };
 
 function layout(columns: number) {
   const avail = columns - 6 - 2; // view padding/border, then the status glyph
   const size = avail >= 96 ? W.size : 0;
   const author = avail >= 82 ? W.author : 0;
-  return { size, author, title: Math.max(16, avail - W.status - W.pr - author - size) };
+  return {
+    size,
+    author,
+    title: Math.max(16, avail - W.status - W.pr - W.draft - author - size),
+  };
 }
 const SEVERITY_COLOR: Record<string, string> = {
   blocking: theme.err,
@@ -46,6 +50,8 @@ export function ReviewsView(_props: { param?: string }) {
   const rows = useMemo(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     const matched = reviews.filter((r) => {
+      // PRs that stopped requesting me pile up otherwise; /stale finds them
+      if (r.status === 'stale' && !query.includes('stale')) return false;
       if (!terms.length) return true;
       const hay = `${r.repository} ${r.number} ${r.title} ${r.author} ${r.status}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
@@ -62,7 +68,9 @@ export function ReviewsView(_props: { param?: string }) {
     setCursor((c) => Math.max(0, Math.min(c, rows.length - 1)));
   }, [rows.length]);
 
-  useEffect(() => ctx.setCapture(filtering || noting), [filtering, noting]);
+  useEffect(() => {
+    ctx.setCapture(filtering || noting);
+  }, [filtering, noting]);
   useEffect(() => () => ctx.setCapture(false), []);
   useEffect(() => {
     ctx.setEscHandler(query ? () => (setQuery(''), true) : null);
@@ -70,7 +78,9 @@ export function ReviewsView(_props: { param?: string }) {
   }, [query]);
 
   // one poll on entry so the list isn't stale from the 5-minute cadence
-  useEffect(() => ctx.dispatcher.pollReviews(), []);
+  useEffect(() => {
+    ctx.dispatcher.pollReviews();
+  }, []);
 
   useInput(
     (input, key) => {
@@ -143,6 +153,7 @@ export function ReviewsView(_props: { param?: string }) {
           {'  '}
           {cell('STATUS', W.status)}
           {cell('PR', W.pr)}
+          {cell('', W.draft)}
           {cell('TITLE', cols.title)}
           {cols.author ? cell('AUTHOR', cols.author) : ''}
           {cols.size ? cell('SIZE', cols.size) : ''}
@@ -153,6 +164,7 @@ export function ReviewsView(_props: { param?: string }) {
               {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)} {cell(r.status, W.status)}
             </Text>
             <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
+            <Text color={r.isDraft ? theme.dim : theme.ok}>{cell(r.isDraft ? 'draft' : 'ready', W.draft)}</Text>
             <Text>{cell(r.title, cols.title)}</Text>
             <Text dimColor>
               {cols.author ? cell(r.author, cols.author) : ''}
@@ -224,7 +236,8 @@ function Detail(props: { review: Review; expanded: boolean; now: number }) {
       <Text bold wrap="truncate">
         {review.repository}#{review.number}{' '}
         <Text dimColor>
-          {review.author} · {review.headRefName || '?'} → {review.baseRefName || '?'}
+          {review.author} · {review.isDraft ? 'draft' : 'ready for review'} ·{' '}
+          {review.headRefName || '?'} → {review.baseRefName || '?'}
           {review.startedAt ? ` · ${formatDuration(review, now)}` : ''}
           {review.costUsd ? ` · $${review.costUsd.toFixed(2)} · ${formatTokens(review.tokens)} tok` : ''}
         </Text>
