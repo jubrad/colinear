@@ -22,6 +22,8 @@ Smoke boot: `LINEAR_API_KEY=lin_api_dummy script -q /dev/null timeout 5 npm run 
 - Runtime debugging: `~/.local/state/colinear/colinear.log` (includes diverted stderr — React warnings land there).
 - Never set `ANTHROPIC_API_KEY` — agents bill the Claude subscription via the logged-in CLI.
 - Rendering invariants (see DESIGN.md "Rendering gotchas"): root renders rows-1 with overflow hidden; stable identities from useTasks; DEC-2026 frame wrapping; no ambiguous-width glyphs in chrome.
+- Prompts and posting live in the daemon: a rebuild needs `coli daemon stop && coli`, since `R` only reloads the frontend.
+- Nothing reaches GitHub or Linear without the operator asking. Review posting is a deterministic `gh api` call, never a session — an agent can report a success its own tool call didn't have.
 - Two processes: the daemon owns the dispatcher/store/persistence, the TUI mirrors it over a socket. Views must stay agnostic — read through the store API, write through it (mirrors forward, never mutate locally), and put decisions that depend on backend results in the dispatcher, not the view.
 - No test suite; verification is typecheck + build + check + smoke + dogfooding.
 - Keep README.md and DESIGN.md current when behavior changes.
