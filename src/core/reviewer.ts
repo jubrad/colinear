@@ -385,11 +385,27 @@ ${details.body?.trim() || '(none)'}
 ## What to do
 Read the diff (\`git diff ${details.baseRefName}...HEAD\`, \`git log\`), then read enough of the surrounding code to judge the changes in context — a diff alone hides most real problems. Investigate; do not modify the PR's code, and do not post anything to GitHub. Your review goes to the operator first.
 
-Write your review to \`${REVIEW_FILE}\` in the working directory (it is git-excluded; never commit it, and never touch any other file). The operator reads this document — write it for them, not for a log. Structure it as:
+Write your review to \`${REVIEW_FILE}\` in the working directory (it is git-excluded; never commit it, and never touch any other file). The operator reads this document — write it for them, not for a log.
 
-1. **What this changes** — what the PR does and how it hangs together, a few sentences. Lead with the outcome.
-2. **What I'd look at yourself** — the parts where your judgement is weakest, or where the cost of being wrong is highest.
-3. **Findings** — one short section per finding: what it is, why it matters, and the comment as you would write it to the author.
+It must be **markdown**, with these three sections as \`##\` headings, in this order:
+
+\`\`\`markdown
+## What this changes
+
+Prose: what the PR does and how it hangs together, a few sentences. Lead with the outcome.
+
+## What I'd look at yourself
+
+Prose: where your judgement is weakest, or where the cost of being wrong is highest.
+
+## Findings
+
+### path/to/file.rs:42 — one-line summary (severity)
+
+Why it matters, and the comment as you would write it to the author.
+\`\`\`
+
+Write prose as prose — paragraphs, not bullet fragments — and use fenced code blocks for any code you quote. Don't wrap lines by hand; the reader reflows them.
 
 End the file with a fenced block listing the same findings in machine-readable form — colinear posts these as line-anchored comments, so the two must always agree:
 

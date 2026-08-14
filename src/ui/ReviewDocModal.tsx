@@ -31,7 +31,10 @@ export function ReviewDocModal(props: {
   const paneHeight = side ? height - 3 : Math.floor((height - 3) / 2);
 
   const lines = wrap(review.doc ?? review.summary ?? 'No review document yet — press r to run a pre-review.', docWidth - 4);
-  const maxScroll = Math.max(0, lines.length - (paneHeight - 2));
+  // rows inside the pane: its height less both borders, less the title line.
+  // Overflowing by even one row makes Ink paint the overflow over the title.
+  const docRows = Math.max(1, paneHeight - 3);
+  const maxScroll = Math.max(0, lines.length - docRows);
   useEffect(() => setScroll((s) => Math.min(s, maxScroll)), [maxScroll]);
 
   useInput((input, key) => {
@@ -43,8 +46,8 @@ export function ReviewDocModal(props: {
     if (focus !== 'doc') return; // the input owns every other key while it's focused
     if (input === 'j' || key.downArrow) setScroll((s) => Math.min(maxScroll, s + 1));
     if (input === 'k' || key.upArrow) setScroll((s) => Math.max(0, s - 1));
-    if (input === ' ' || key.pageDown) setScroll((s) => Math.min(maxScroll, s + paneHeight - 3));
-    if (key.pageUp) setScroll((s) => Math.max(0, s - (paneHeight - 3)));
+    if (input === ' ' || key.pageDown) setScroll((s) => Math.min(maxScroll, s + docRows - 1));
+    if (key.pageUp) setScroll((s) => Math.max(0, s - (docRows - 1)));
     if (input === 'g') setScroll(0);
     if (input === 'G') setScroll(maxScroll);
     if (input === 'e') onEdit();
@@ -55,7 +58,8 @@ export function ReviewDocModal(props: {
   const chatLines: Array<{ role: 'operator' | 'agent'; line: string }> = chat.flatMap((turn) =>
     wrap(turn.text, chatWidth - 4).map((line) => ({ role: turn.role, line })),
   );
-  const chatBody = chatLines.slice(-(paneHeight - 4));
+  const chatRows = Math.max(1, paneHeight - 5);
+  const chatBody = chatLines.slice(-chatRows);
 
   return (
     <Box flexDirection="column" width={width} height={height}>
@@ -77,9 +81,10 @@ export function ReviewDocModal(props: {
               — review{maxScroll ? ` · ${scroll}/${maxScroll}` : ''}
             </Text>
           </Text>
-          {lines.slice(scroll, scroll + paneHeight - 2).map((line, i) => (
-            <Text key={`${scroll}-${i}`} wrap="truncate">
-              {line}
+          {lines.slice(scroll, scroll + docRows).map((line, i) => (
+            <Text key={`${scroll}-${i}`} wrap="truncate" {...markdownStyle(line)}>
+              {/* a truly empty Text has no height, which eats the blank lines */}
+              {stripMarks(line) || ' '}
             </Text>
           ))}
         </Box>
@@ -97,12 +102,17 @@ export function ReviewDocModal(props: {
           <Text bold color={theme.header}>
             talk to the reviewer{busy ? <Text color={theme.warn}> · thinking…</Text> : null}
           </Text>
-          {!chat.length && (
-            <Text dimColor wrap="wrap">
-              It still has the whole PR in context. Ask why it flagged something, or tell it what to
-              change — it rewrites the document.
-            </Text>
-          )}
+          {!chat.length &&
+            wrap(
+              'It still has the whole PR in context. Ask why it flagged something, or tell it what to change — it rewrites the document.',
+              chatWidth - 4,
+            )
+              .slice(0, chatRows)
+              .map((line, i) => (
+                <Text key={i} dimColor wrap="truncate">
+                  {line}
+                </Text>
+              ))}
           {chatBody.map((entry, i) => (
             <Text key={i} color={entry.role === 'operator' ? theme.accent : undefined} wrap="truncate">
               {entry.line}
@@ -129,6 +139,22 @@ export function ReviewDocModal(props: {
       </Text>
     </Box>
   );
+}
+
+/** Enough markdown to read by: headings stand out, code recedes. */
+function markdownStyle(line: string): { bold?: boolean; color?: string; dimColor?: boolean } {
+  const text = line.trimStart();
+  if (/^#{1,2}\s/.test(text)) return { bold: true, color: theme.header };
+  if (/^#{3,}\s/.test(text)) return { bold: true };
+  if (text.startsWith('```') || /^\s{4}\S/.test(line)) return { dimColor: true };
+  if (/^([*-]|\d+\.)\s/.test(text)) return { color: theme.accent };
+  if (text.startsWith('>')) return { dimColor: true };
+  return {};
+}
+
+/** Heading hashes and bold markers are noise once the line is styled. */
+function stripMarks(line: string): string {
+  return line.replace(/^(\s*)#{1,6}\s+/, '$1').replace(/\*\*(.+?)\*\*/g, '$1');
 }
 
 /**
