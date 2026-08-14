@@ -107,6 +107,22 @@ export type PendingAction =
 
 let pending: PendingAction | null = null;
 
+/**
+ * The view to land on when the TUI comes back from handing the terminal to
+ * something else. Without it, editing a review doc drops you on the board.
+ */
+let resumeView: { name: string; param?: string } | null = null;
+
+export function rememberView(name: string, param?: string): void {
+  resumeView = { name, param };
+}
+
+export function consumeResumeView(): { name: string; param?: string } | null {
+  const v = resumeView;
+  resumeView = null;
+  return v;
+}
+
 export function setPendingAction(action: PendingAction): void {
   pending = action;
 }

@@ -1,7 +1,7 @@
 import { Box, useApp, useInput, useStdout } from 'ink';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DispatcherApi } from './client.js';
-import { setPendingAction } from './core/attach.js';
+import { consumeResumeView, rememberView, setPendingAction } from './core/attach.js';
 import { useReviews, useTasks } from './core/hooks.js';
 import { fetchTeams, fetchViewer } from './core/linear.js';
 import { store } from './core/store.js';
@@ -78,9 +78,12 @@ export function App(props: {
 
   const keyCounter = useRef(1);
   // land on the board when a previous run's tasks were restored
-  const [stack, setStack] = useState<StackEntry[]>([
-    { name: store.list().length ? 'board' : 'issues', key: 0 },
-  ]);
+  const [stack, setStack] = useState<StackEntry[]>(() => {
+    // coming back from an editor or an attached session: pick up where we left
+    const resume = consumeResumeView();
+    if (resume) return [{ name: resume.name, param: resume.param, key: 0 }];
+    return [{ name: store.list().length ? 'board' : 'issues', key: 0 }];
+  });
   const [cmdOpen, setCmdOpen] = useState(false);
   const [toast, setToastState] = useState<{ text: string; kind: ToastKind; at: number }>();
   const [viewer, setViewer] = useState<{ id: string; displayName: string }>();
@@ -91,6 +94,9 @@ export function App(props: {
 
   const current = stack[stack.length - 1];
   const viewDef = findView(current.name) ?? views[0];
+
+  // so a pending action (attach, $EDITOR) can restore this view afterwards
+  useEffect(() => rememberView(current.name, current.param), [current.name, current.param]);
 
   useEffect(() => {
     fetchViewer(cfg)

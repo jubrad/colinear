@@ -2,7 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
-import { attachTo, setPendingAction } from '../core/attach.js';
+import { attachTo, rememberView, setPendingAction } from '../core/attach.js';
 import { useReviews } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import type { Review } from '../core/types.js';
@@ -48,7 +48,7 @@ const SEVERITY_COLOR: Record<string, string> = {
 };
 
 /** PRs waiting on my review, with an assisted pre-review per PR. */
-export function ReviewsView(_props: { param?: string }) {
+export function ReviewsView(props: { param?: string }) {
   const ctx = useColinear();
   const reviews = useReviews();
   const [cursor, setCursor] = useState(0);
@@ -95,6 +95,18 @@ export function ReviewsView(_props: { param?: string }) {
     ctx.dispatcher.pollReviews();
   }, []);
 
+  // :reviews <id> selects that PR; "doc:<id>" reopens its document, which is
+  // how we land back where we were after $EDITOR or an attached session
+  useEffect(() => {
+    if (!props.param) return;
+    const wantsDoc = props.param.startsWith('doc:');
+    const id = wantsDoc ? props.param.slice(4) : props.param;
+    const idx = rows.findIndex((r) => r.id === id);
+    if (idx === -1) return;
+    setCursor(idx);
+    if (wantsDoc) setReading(true);
+  }, [props.param, rows.length]);
+
   useInput(
     (input, key) => {
       if (confirm) {
@@ -117,6 +129,7 @@ export function ReviewsView(_props: { param?: string }) {
       }
       if (input === 's') {
         // same as the board: hand this terminal to the review's own session
+        rememberView('reviews', selected.id);
         attachTo(
           {
             id: selected.id,
@@ -165,6 +178,7 @@ export function ReviewsView(_props: { param?: string }) {
             ctx.toast('no review doc on disk yet', 'err');
             return;
           }
+          rememberView('reviews', `doc:${selected.id}`);
           // hand the terminal to $EDITOR, then re-read what came back
           setPendingAction({
             kind: 'edit-file',
