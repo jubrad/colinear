@@ -95,7 +95,7 @@ Only the daemon dispatches agents, so stopping it is the one thing that interrup
 | `:projects` / `:project NAME` | projects table (state, progress, lead, teams, target; `/` `t` `s` filters + sort) and per-project kanban; `d`/`c` dispatch, `p` planning chat |
 | `:plan PROJECT` | persistent chat with a read-only planning agent; proposes subtasks as drafts — `space` toggle, `A` create in Linear, `D` create + dispatch |
 | `:reviews` (`pr`) | PRs waiting on **your** review (`gh search prs --review-requested=@me`, all repos your gh auth can see). `s` starts an **assisted pre-review**: colinear checks the PR out in a worktree and an agent reads the diff in context, returning an overview plus findings. Nothing is posted — `enter` expands the summary and findings, `p` posts them as one GitHub review, `A` approves, `X` requests changes, `n` attaches a note that rides along, `o` opens the PR, `x` cancels a running review, `R` refreshes. Approve/request-changes are plain `gh` calls (no tokens) |
-| `:costs` (`$`) | spend per ticket, live: a bar chart sorted by cost (`s` cycles cost/tokens/recent), `/` fuzzy filter, `enter` task detail. Bars are colored by task status. Figures are what the work *would* cost on the API — subscription runs are not billed per token |
+| `:costs` (`$`) | spend per run — tickets **and** PR reviews — live: a bar chart sorted by cost (`s` cycles cost/tokens/recent), `/` fuzzy filter, `enter` task detail. Bars are colored by task status. Figures are what the work *would* cost on the API — subscription runs are not billed per token |
 | `:config` | resolved config (key masked), `e` to edit |
 | `:help` (`?`) | all views, keys, custom view schema |
 
