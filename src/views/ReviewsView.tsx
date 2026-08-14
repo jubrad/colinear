@@ -158,7 +158,7 @@ export function ReviewsView(_props: { param?: string }) {
         review={selected}
         width={ctx.size.columns - 4}
         height={Math.max(10, ctx.size.rows - 6)}
-        busy={ACTIVE.includes(selected.status)}
+        busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
         onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
         onEdit={() => {
           if (!selected.worktree) {

@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { useEffect, useState } from 'react';
-import type { Review } from '../core/types.js';
+import type { ChatTurn, Review } from '../core/types.js';
 import { theme } from '../theme.js';
 
 /**
@@ -55,8 +55,10 @@ export function ReviewDocModal(props: {
   });
 
   const chat = review.chat ?? [];
-  const chatLines: Array<{ role: 'operator' | 'agent'; line: string }> = chat.flatMap((turn) =>
-    wrap(turn.text, chatWidth - 4).map((line) => ({ role: turn.role, line })),
+  const chatLines: Array<{ role: ChatTurn['role']; line: string; first: boolean }> = chat.flatMap((turn) =>
+    wrap(`${turn.role === 'operator' ? 'you: ' : turn.role === 'note' ? '' : ''}${turn.text}`, chatWidth - 4).map(
+      (line, i) => ({ role: turn.role, line, first: i === 0 }),
+    ),
   );
   const chatRows = Math.max(1, paneHeight - 5);
   const chatBody = chatLines.slice(-chatRows);
@@ -104,7 +106,9 @@ export function ReviewDocModal(props: {
           </Text>
           {!chat.length &&
             wrap(
-              'It still has the whole PR in context. Ask why it flagged something, or tell it what to change — it rewrites the document.',
+              review.sessionId
+                ? 'It still has the whole PR in context. Ask why it flagged something, or tell it what to change — it rewrites the document.'
+                : 'No pre-review has run yet, so there is no session to talk to. Press esc, then r.',
               chatWidth - 4,
             )
               .slice(0, chatRows)
@@ -114,7 +118,11 @@ export function ReviewDocModal(props: {
                 </Text>
               ))}
           {chatBody.map((entry, i) => (
-            <Text key={i} color={entry.role === 'operator' ? theme.accent : undefined} wrap="truncate">
+            <Text
+              key={i}
+              color={entry.role === 'operator' ? theme.accent : entry.role === 'note' ? theme.warn : undefined}
+              wrap="truncate"
+            >
               {entry.line}
             </Text>
           ))}

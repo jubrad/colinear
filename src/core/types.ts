@@ -178,7 +178,8 @@ export type ReviewStatus =
   | 'error';
 
 export interface ChatTurn {
-  role: 'operator' | 'agent';
+  /** `note` is colinear talking, not the agent — refusals, errors, hints */
+  role: 'operator' | 'agent' | 'note';
   text: string;
   at: number;
 }
@@ -221,6 +222,8 @@ export interface Review {
   doc?: string;
   /** conversation with the reviewing agent about this PR */
   chat?: ChatTurn[];
+  /** a chat turn is in flight (the review's own status doesn't change) */
+  chatting?: boolean;
   /** operator's own note, appended to whatever gets posted */
   note?: string;
   startedAt?: number;

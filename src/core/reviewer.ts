@@ -199,16 +199,25 @@ export class Reviewer {
   async chat(id: string, text: string) {
     const review = store.getReview(id);
     if (!review) return;
+    // whatever happens next, what the operator typed goes in the transcript —
+    // silently dropping it is how a message looks like it vanished
+    const withTurn = (turns: ChatTurn[]) => [...(review.chat ?? []), ...turns];
+    const now = Date.now();
+    const typed: ChatTurn = { role: 'operator', text, at: now };
+
     if (!review.sessionId || !review.worktree) {
-      this.toast('no review session to talk to yet — press r first', 'err');
+      store.updateReview(id, {
+        chat: withTurn([typed, { role: 'note', text: 'No review session yet — press r to run a pre-review, then ask again.', at: now }]),
+      });
       return;
     }
     if (this.aborts.has(id)) {
-      this.toast('the agent is busy — wait for this turn to finish', 'err');
+      store.updateReview(id, {
+        chat: withTurn([typed, { role: 'note', text: 'The agent is still working on the previous turn — this one was not sent.', at: now }]),
+      });
       return;
     }
-    const turn: ChatTurn = { role: 'operator', text, at: Date.now() };
-    store.updateReview(id, { chat: [...(review.chat ?? []), turn] });
+    store.updateReview(id, { chat: withTurn([typed]), chatting: true });
 
     const controller = new AbortController();
     this.aborts.set(id, controller);
@@ -233,6 +242,7 @@ export class Reviewer {
       this.absorbDoc(id);
     } finally {
       this.aborts.delete(id);
+      store.updateReview(id, { chatting: false });
     }
   }
 
