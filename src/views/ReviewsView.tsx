@@ -19,11 +19,14 @@ const ACTIVE: Review['status'][] = ['reviewing', 'posting', 'queued'];
  */
 const W = { status: 12, pr: 24, draft: 9, author: 18, size: 14 };
 
-/** Shorter than the internal names, so the column doesn't hog the row. */
+/**
+ * Shorter than the internal names, so the column doesn't hog the row — and
+ * "ready" reads as "reviewed" here, because the next column over uses ready
+ * for GitHub's own sense (not a draft).
+ */
 const STATUS_LABEL: Record<string, string> = {
+  ready: 'reviewed',
   changes_requested: 'changes req',
-  reviewing: 'reviewing',
-  pending: 'pending',
 };
 
 function layout(columns: number) {
@@ -189,7 +192,7 @@ export function ReviewsView(_props: { param?: string }) {
               {cell(STATUS_LABEL[r.status] ?? r.status, W.status)}
             </Text>
             <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
-            <Text color={r.isDraft ? theme.dim : theme.ok}>{cell(r.isDraft ? 'draft' : 'ready', W.draft)}</Text>
+            <Text color={r.isDraft ? theme.dim : theme.ok}>{cell(r.isDraft ? 'draft' : 'open', W.draft)}</Text>
             <Text>{cell(r.title, cols.title)}</Text>
             <Text dimColor>
               {cols.author ? cell(r.author, cols.author) : ''}
@@ -261,7 +264,7 @@ function Detail(props: { review: Review; expanded: boolean; now: number }) {
       <Text bold wrap="truncate">
         {review.repository}#{review.number}{' '}
         <Text dimColor>
-          {review.author} · {review.isDraft ? 'draft' : 'ready for review'} ·{' '}
+          {review.author} · {review.isDraft ? 'draft' : 'open'} ·{' '}
           {review.headRefName || '?'} → {review.baseRefName || '?'}
           {review.startedAt ? ` · ${formatDuration(review, now)}` : ''}
           {review.costUsd ? ` · $${review.costUsd.toFixed(2)} · ${formatTokens(review.tokens)} tok` : ''}
