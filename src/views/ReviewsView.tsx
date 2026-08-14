@@ -16,7 +16,7 @@ const ACTIVE: Review['status'][] = ['reviewing', 'posting', 'queued'];
  * Column widths. Status/PR always show; author and size drop out on narrow
  * terminals so the row never wraps (a wrapped row breaks the whole table).
  */
-const W = { status: 18, pr: 24, draft: 7, author: 18, size: 14 };
+const W = { status: 18, pr: 24, draft: 9, author: 18, size: 14 };
 
 function layout(columns: number) {
   const avail = columns - 6 - 2; // view padding/border, then the status glyph
@@ -151,9 +151,9 @@ export function ReviewsView(_props: { param?: string }) {
       <Box flexDirection="column" marginTop={1} flexShrink={0}>
         <Text bold color={theme.header} wrap="truncate">
           {'  '}
-          {cell('STATUS', W.status)}
+          {cell('REVIEW', W.status)}
           {cell('PR', W.pr)}
-          {cell('', W.draft)}
+          {cell('PR STATE', W.draft)}
           {cell('TITLE', cols.title)}
           {cols.author ? cell('AUTHOR', cols.author) : ''}
           {cols.size ? cell('SIZE', cols.size) : ''}
