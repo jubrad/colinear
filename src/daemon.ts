@@ -110,6 +110,12 @@ export async function runDaemon(): Promise<void> {
       case 'suspendReview':
         reviewer.suspend(cmd.id);
         break;
+      case 'reviewChat':
+        void reviewer.chat(cmd.id, cmd.text);
+        break;
+      case 'reloadReviewDoc':
+        reviewer.reloadDoc(cmd.id);
+        break;
       case 'postReview':
         void reviewer.post(cmd.id);
         break;

@@ -177,6 +177,12 @@ export type ReviewStatus =
   | 'stale'
   | 'error';
 
+export interface ChatTurn {
+  role: 'operator' | 'agent';
+  text: string;
+  at: number;
+}
+
 export interface ReviewFinding {
   file: string;
   line?: number;
@@ -208,9 +214,13 @@ export interface Review {
   repo?: { name: string; path: string; worktreeRoot: string };
   worktree?: string;
   sessionId?: string;
-  /** the pre-review itself */
+  /** the pre-review itself: prose the operator reads, parsed findings for GitHub */
   summary?: string;
   findings?: ReviewFinding[];
+  /** the full review document the agent wrote (.colinear-review.md) */
+  doc?: string;
+  /** conversation with the reviewing agent about this PR */
+  chat?: ChatTurn[];
   /** operator's own note, appended to whatever gets posted */
   note?: string;
   startedAt?: number;

@@ -36,6 +36,8 @@ export interface DispatcherApi {
   startReview(id: string): void;
   cancelReview(id: string): void;
   suspendReview(id: string): void;
+  reviewChat(id: string, text: string): void;
+  reloadReviewDoc(id: string): void;
   postReview(id: string): void;
   reviewVerdict(id: string, verdict: 'approve' | 'request-changes'): void;
   pollReviews(): void;
@@ -147,6 +149,8 @@ export async function connectToDaemon(): Promise<Connection> {
             startReview: (id) => command({ name: 'startReview', id }),
             cancelReview: (id) => command({ name: 'cancelReview', id }),
             suspendReview: (id) => command({ name: 'suspendReview', id }),
+            reviewChat: (id, text) => command({ name: 'reviewChat', id, text }),
+            reloadReviewDoc: (id) => command({ name: 'reloadReviewDoc', id }),
             postReview: (id) => command({ name: 'postReview', id }),
             reviewVerdict: (id, verdict) => command({ name: 'reviewVerdict', id, verdict }),
             pollReviews: () => command({ name: 'pollReviews' }),

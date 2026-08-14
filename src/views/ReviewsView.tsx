@@ -2,11 +2,12 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
-import { attachTo } from '../core/attach.js';
+import { attachTo, setPendingAction } from '../core/attach.js';
 import { useReviews } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import type { Review } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
+import { ReviewDocModal } from '../ui/ReviewDocModal.js';
 import { useColinear } from '../ui/context.js';
 import { cell, formatDuration, formatTokens, spinner } from '../ui/format.js';
 import { REVIEW_COLORS, theme } from '../theme.js';
@@ -53,10 +54,10 @@ export function ReviewsView(_props: { param?: string }) {
   const [cursor, setCursor] = useState(0);
   const [query, setQuery] = useState('');
   const [filtering, setFiltering] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [noting, setNoting] = useState(false);
   const [note, setNote] = useState('');
   const [confirm, setConfirm] = useState<'post' | 'approve' | 'request-changes'>();
+  const [reading, setReading] = useState(false);
 
   const rows = useMemo(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -80,8 +81,9 @@ export function ReviewsView(_props: { param?: string }) {
   }, [rows.length]);
 
   useEffect(() => {
-    ctx.setCapture(filtering || noting);
-  }, [filtering, noting]);
+    // the modal's chat input owns the keyboard too
+    ctx.setCapture(filtering || noting || reading);
+  }, [filtering, noting, reading]);
   useEffect(() => () => ctx.setCapture(false), []);
   useEffect(() => {
     ctx.setEscHandler(query ? () => (setQuery(''), true) : null);
@@ -108,7 +110,7 @@ export function ReviewsView(_props: { param?: string }) {
       if (input === '/') setFiltering(true);
       if (!selected) return;
       if (input === 'a' && selected.question) return; // answering handled below
-      if (key.return) setExpanded((e) => !e);
+      if (key.return || input === 'd') setReading(true);
       if (input === 'r') {
         ctx.dispatcher.startReview(selected.id);
         ctx.toast(`pre-reviewing ${selected.repository}#${selected.number}`, 'info');
@@ -140,15 +142,41 @@ export function ReviewsView(_props: { param?: string }) {
       }
       if (input === 'R') ctx.dispatcher.pollReviews();
     },
-    { isActive: !filtering && !noting && !ctx.cmdOpen },
+    { isActive: !filtering && !noting && !reading && !ctx.cmdOpen },
   );
 
   const ready = reviews.filter((r) => r.status === 'ready').length;
   const cols = layout(ctx.size.columns);
   // rows that fit: total height less the detail pane, header and chrome
-  const visible = Math.max(3, ctx.size.rows - (expanded ? 26 : 16));
+  const visible = Math.max(3, ctx.size.rows - 16);
   const start = Math.max(0, Math.min(cursor - Math.floor(visible / 2), rows.length - visible));
   const window = rows.slice(start, start + visible);
+
+  if (reading && selected) {
+    return (
+      <ReviewDocModal
+        review={selected}
+        width={ctx.size.columns - 4}
+        height={Math.max(10, ctx.size.rows - 6)}
+        busy={ACTIVE.includes(selected.status)}
+        onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
+        onEdit={() => {
+          if (!selected.worktree) {
+            ctx.toast('no review doc on disk yet', 'err');
+            return;
+          }
+          // hand the terminal to $EDITOR, then re-read what came back
+          setPendingAction({
+            kind: 'edit-file',
+            path: `${selected.worktree}/.colinear-review.md`,
+            reviewId: selected.id,
+          });
+          ctx.quit();
+        }}
+        onClose={() => setReading(false)}
+      />
+    );
+  }
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -210,7 +238,7 @@ export function ReviewsView(_props: { param?: string }) {
         )}
       </Box>
 
-      {selected && <Detail review={selected} expanded={expanded} now={ctx.now} />}
+      {selected && <Detail review={selected} now={ctx.now} />}
 
       {selected?.question && (
         <Box flexDirection="column" borderStyle="round" borderColor={theme.info} paddingX={1}>
@@ -255,8 +283,8 @@ export function ReviewsView(_props: { param?: string }) {
   );
 }
 
-function Detail(props: { review: Review; expanded: boolean; now: number }) {
-  const { review, expanded, now } = props;
+function Detail(props: { review: Review; now: number }) {
+  const { review, now } = props;
   const findings = review.findings ?? [];
   const blocking = findings.filter((f) => f.severity === 'blocking').length;
   return (
@@ -293,15 +321,15 @@ function Detail(props: { review: Review; expanded: boolean; now: number }) {
       {review.summary ? (
         <>
           <Text> </Text>
-          <Text wrap="wrap">{expanded ? review.summary : `${review.summary.slice(0, 240)}${review.summary.length > 240 ? '…' : ''}`}</Text>
+          <Text wrap="wrap">{`${review.summary.slice(0, 240)}${review.summary.length > 240 ? '…' : ''}`}</Text>
           <Text> </Text>
           <Text bold color={theme.header}>
             {findings.length} finding{findings.length === 1 ? '' : 's'}
             {blocking ? <Text color={theme.err}> · {blocking} blocking</Text> : null}
-            <Text dimColor> — enter {expanded ? 'collapses' : 'expands'}, p posts, A approves, X requests changes</Text>
+            <Text dimColor> — enter reads the full review, p posts, A approves, X requests changes</Text>
           </Text>
-          {findings.slice(0, expanded ? 40 : 4).map((f, i) => (
-            <Text key={`${f.file}-${i}`} wrap={expanded ? 'wrap' : 'truncate'}>
+          {findings.slice(0, 4).map((f, i) => (
+            <Text key={`${f.file}-${i}`} wrap="truncate">
               <Text color={SEVERITY_COLOR[f.severity] ?? theme.dim}>{f.severity.padEnd(9)}</Text>
               <Text dimColor>
                 {f.file}
@@ -310,7 +338,7 @@ function Detail(props: { review: Review; expanded: boolean; now: number }) {
               {f.comment}
             </Text>
           ))}
-          {!expanded && findings.length > 4 && <Text dimColor>… {findings.length - 4} more (enter)</Text>}
+          {findings.length > 4 && <Text dimColor>… {findings.length - 4} more (enter)</Text>}
         </>
       ) : ACTIVE.includes(review.status) ? (
         <>
@@ -349,8 +377,8 @@ function shortRepo(repository: string): string {
 export const reviewsKeys: Array<[string, string]> = [
   ['i/k ↑↓', 'row'],
   ['r', 'pre-review'],
+  ['enter', 'read + chat'],
   ['s', 'attach claude'],
-  ['enter', 'expand'],
   ['p', 'post comments'],
   ['A', 'approve'],
   ['X', 'request changes'],

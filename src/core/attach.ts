@@ -100,6 +100,8 @@ export type PendingAction =
       waitMs: number;
     }
   | { kind: 'edit-config'; path: string }
+  /** open a file in $EDITOR, then tell the daemon to re-read it */
+  | { kind: 'edit-file'; path: string; reviewId: string }
   /** restart the TUI process on new code; the daemon and its agents stay up */
   | { kind: 'reload-ui' };
 

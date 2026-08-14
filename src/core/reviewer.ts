@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
 import { guidanceFor } from './guidance.js';
@@ -8,32 +8,39 @@ import { log } from './log.js';
 import { notify } from './notify.js';
 import { fetchPrDetails, submitVerdict } from './reviews.js';
 import { store } from './store.js';
-import type { Config, Review, ReviewFinding } from './types.js';
+import type { ChatTurn, Config, Review, ReviewFinding } from './types.js';
 
 const exec = promisify(execFile);
 
-const REVIEW_SCHEMA = {
-  type: 'object',
-  properties: {
-    summary: { type: 'string' },
-    findings: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          file: { type: 'string' },
-          line: { type: 'number' },
-          severity: { type: 'string', enum: ['blocking', 'consider', 'nit', 'praise'] },
-          comment: { type: 'string' },
-        },
-        required: ['file', 'severity', 'comment'],
-        additionalProperties: false,
-      },
-    },
-  },
-  required: ['summary', 'findings'],
-  additionalProperties: false,
-};
+const REVIEW_FILE = '.colinear-review.md';
+
+/** ~64KB of review is already far more than anyone reads; refuse to mirror more. */
+const DOC_LIMIT = 64_000;
+
+/**
+ * The doc carries the prose AND a fenced findings block, so one artifact stays
+ * the source of truth. Structured output would have split them, and every chat
+ * turn afterwards would need a second pass to keep the two in sync.
+ */
+function parseDoc(text: string): { summary: string; findings: ReviewFinding[] } {
+  const fence = [...text.matchAll(/```json\s*([\s\S]*?)```/g)].pop();
+  let findings: ReviewFinding[] = [];
+  if (fence) {
+    try {
+      const parsed = JSON.parse(fence[1]) as { findings?: ReviewFinding[] };
+      if (Array.isArray(parsed.findings)) findings = parsed.findings;
+    } catch {
+      // a malformed fence costs the findings list, not the review itself
+    }
+  }
+  const prose = text.replace(/```json[\s\S]*?```/g, '').trim();
+  const summary =
+    prose
+      .split(/\n{2,}/)
+      .map((block) => block.trim())
+      .find((block) => block && !block.startsWith('#')) ?? prose.slice(0, 500);
+  return { summary, findings };
+}
 
 /**
  * Runs assisted reviews of other people's PRs: check the branch out in a
@@ -112,10 +119,10 @@ export class Reviewer {
       store.updateReview(id, { worktree });
       store.addReviewActivity(id, `reading the diff (${details.changedFiles} files, +${details.additions}/-${details.deletions})`);
 
+      await this.excludeReviewFile(worktree);
       const result = await runSession({
         prompt: reviewPrompt(this.cfg, review, details),
         cwd: worktree,
-        outputSchema: REVIEW_SCHEMA,
         model: this.cfg.model,
         abortController: controller,
         callbacks: this.callbacks(id),
@@ -134,15 +141,12 @@ export class Reviewer {
         return;
       }
 
-      const parsed = result.structured as { summary?: string; findings?: ReviewFinding[] } | undefined;
-      store.updateReview(id, {
-        status: 'ready',
-        costUsd: review.costUsd + result.costUsd,
-        summary: parsed?.summary ?? result.text.slice(0, 4000),
-        findings: parsed?.findings ?? [],
-        endedAt: Date.now(),
-      });
-      const count = parsed?.findings?.length ?? 0;
+      store.updateReview(id, { status: 'ready', costUsd: review.costUsd + result.costUsd, endedAt: Date.now() });
+      if (!this.absorbDoc(id)) {
+        // no doc written: keep the reply rather than losing the work
+        store.updateReview(id, { doc: result.text, summary: result.text.slice(0, 2000), findings: [] });
+      }
+      const count = store.getReview(id)?.findings?.length ?? 0;
       store.addReviewActivity(id, `pre-review ready: ${count} finding${count === 1 ? '' : 's'}`);
       notify(this.cfg, `${review.repository}#${review.number}`, `pre-review ready (${count})`, review.url);
     } catch (err) {
@@ -188,6 +192,50 @@ export class Reviewer {
     }
   }
 
+  /**
+   * Talk to the agent that did the review. Resuming its session id means the
+   * whole PR is still in its context, so a turn is mostly cache reads.
+   */
+  async chat(id: string, text: string) {
+    const review = store.getReview(id);
+    if (!review) return;
+    if (!review.sessionId || !review.worktree) {
+      this.toast('no review session to talk to yet — press r first', 'err');
+      return;
+    }
+    if (this.aborts.has(id)) {
+      this.toast('the agent is busy — wait for this turn to finish', 'err');
+      return;
+    }
+    const turn: ChatTurn = { role: 'operator', text, at: Date.now() };
+    store.updateReview(id, { chat: [...(review.chat ?? []), turn] });
+
+    const controller = new AbortController();
+    this.aborts.set(id, controller);
+    try {
+      const result = await runSession({
+        prompt: chatPrompt(text),
+        cwd: review.worktree,
+        resume: review.sessionId,
+        model: this.cfg.model,
+        abortController: controller,
+        callbacks: this.callbacks(id),
+      });
+      const reply = result.isError
+        ? `(the session failed: ${result.errors.join('; ').slice(0, 200)})`
+        : result.text.trim() || '(no reply)';
+      const current = store.getReview(id);
+      store.updateReview(id, {
+        chat: [...(current?.chat ?? []), { role: 'agent', text: reply, at: Date.now() }],
+        costUsd: (current?.costUsd ?? 0) + result.costUsd,
+      });
+      // the turn may have rewritten the doc; findings ride along inside it
+      this.absorbDoc(id);
+    } finally {
+      this.aborts.delete(id);
+    }
+  }
+
   /** Approve / request changes — a straight gh call, no tokens spent. */
   async verdict(id: string, verdict: 'approve' | 'request-changes') {
     const review = store.getReview(id);
@@ -207,6 +255,36 @@ export class Reviewer {
       const message = String(err).slice(0, 200);
       store.updateReview(id, { error: message });
       this.toast(`gh review failed: ${message}`, 'err');
+    }
+  }
+
+  /** Re-read the doc after the operator edited it in $EDITOR. */
+  reloadDoc(id: string) {
+    if (this.absorbDoc(id)) store.addReviewActivity(id, 'review doc reloaded from disk');
+  }
+
+  /** Pull the doc off disk into the store, where the UI mirrors it. */
+  private absorbDoc(id: string): boolean {
+    const review = store.getReview(id);
+    if (!review?.worktree) return false;
+    const path = join(review.worktree, REVIEW_FILE);
+    if (!existsSync(path)) return false;
+    const doc = readFileSync(path, 'utf8').slice(0, DOC_LIMIT);
+    const { summary, findings } = parseDoc(doc);
+    store.updateReview(id, { doc, summary, findings });
+    return true;
+  }
+
+  /** Keep the review doc out of the PR's own git status. */
+  private async excludeReviewFile(worktree: string) {
+    try {
+      const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', '--absolute-git-dir']);
+      const excludePath = join(stdout.trim(), 'info', 'exclude');
+      mkdirSync(dirname(excludePath), { recursive: true });
+      const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : '';
+      if (!existing.includes(REVIEW_FILE)) appendFileSync(excludePath, `${REVIEW_FILE}\n`);
+    } catch {
+      // non-fatal; the prompt also tells the agent never to commit it
     }
   }
 
@@ -305,11 +383,19 @@ Description:
 ${details.body?.trim() || '(none)'}
 
 ## What to do
-Read the diff (\`git diff ${details.baseRefName}...HEAD\`, \`git log\`), then read enough of the surrounding code to judge the changes in context — a diff alone hides most real problems. Investigate; do not modify anything, and do not post anything to GitHub. Your findings go to the operator first.
+Read the diff (\`git diff ${details.baseRefName}...HEAD\`, \`git log\`), then read enough of the surrounding code to judge the changes in context — a diff alone hides most real problems. Investigate; do not modify the PR's code, and do not post anything to GitHub. Your review goes to the operator first.
 
-Return:
-- "summary": what this PR does and how it hangs together, in a few sentences. Lead with the outcome. Mention risk areas the operator should look at themselves.
-- "findings": specific, actionable review comments. For each: the file, the line if you can pin one, a severity, and the comment as you would write it to the author.
+Write your review to \`${REVIEW_FILE}\` in the working directory (it is git-excluded; never commit it, and never touch any other file). The operator reads this document — write it for them, not for a log. Structure it as:
+
+1. **What this changes** — what the PR does and how it hangs together, a few sentences. Lead with the outcome.
+2. **What I'd look at yourself** — the parts where your judgement is weakest, or where the cost of being wrong is highest.
+3. **Findings** — one short section per finding: what it is, why it matters, and the comment as you would write it to the author.
+
+End the file with a fenced block listing the same findings in machine-readable form — colinear posts these as line-anchored comments, so the two must always agree:
+
+\`\`\`json
+{"findings": [{"file": "src/x.rs", "line": 42, "severity": "blocking", "comment": "..."}]}
+\`\`\`
 
 Severity means:
 - "blocking": a bug, a security or data-loss risk, or a contract change that would break callers. Something you would hold the PR for.
@@ -317,21 +403,29 @@ Severity means:
 - "nit": small polish. Be sparing.
 - "praise": worth calling out as good. Optional, at most a couple.
 
-Report what you actually found. An empty findings list is a fine answer for a clean PR — do not invent problems to look thorough, and do not soften a real one.${guidanceFor(cfg.guidance, 'review')}`;
+Report what you actually found. An empty findings list is a fine answer for a clean PR — do not invent problems to look thorough, and do not soften a real one. Keep your chat reply short; the document is the deliverable.${guidanceFor(cfg.guidance, 'review')}`;
+}
+
+function chatPrompt(text: string): string {
+  return `The operator is reading your review and says:
+
+${text}
+
+Answer them directly and briefly. If what they say changes your review, update \`${REVIEW_FILE}\` — including the fenced findings block at the end, which must always match the prose. If it doesn't change the review, just answer; don't rewrite the file to look busy. Never post anything to GitHub.`;
 }
 
 function postPrompt(review: Review): string {
-  return `Post the review below to ${review.repository}#${review.number} using the \`gh\` CLI. It has already been approved by the operator — post it as written, and change nothing.
+  return `Post the review below to ${review.repository}#${review.number} using the \`gh\` CLI. The operator has approved it as written — post it, and change nothing.
 
-## Summary
-${review.summary ?? '(none)'}
+## Review document (use this as the review body, minus the fenced json)
+${review.doc ?? review.summary ?? '(none)'}
 
-## Findings
+## Findings to anchor as inline comments
 ${findingsBlock(review) || '(none)'}
 ${review.note ? `\n## Operator's note (include this verbatim in the review body)\n${review.note}` : ''}
 
 How to post:
-1. Line-anchored findings go as inline comments in a single pending review. Build them with \`gh api\` against \`/repos/${review.repository}/pulls/${review.number}/reviews\`, passing a "comments" array of {path, line, side: "RIGHT", body}. Use the summary (plus the operator's note, if any) as the review "body", and \`"event": "COMMENT"\`.
+1. Line-anchored findings go as inline comments in a single pending review. Build them with \`gh api\` against \`/repos/${review.repository}/pulls/${review.number}/reviews\`, passing a "comments" array of {path, line, side: "RIGHT", body}. Use the review document (with the fenced json stripped, plus the operator's note if any) as the review "body", and \`"event": "COMMENT"\`.
 2. Findings without a line number belong in the review body under a short heading, not as inline comments.
 3. If the API rejects a comment because the line is not part of the diff, drop that comment's line anchor and move it into the body rather than failing the whole review.
 

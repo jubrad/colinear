@@ -23,6 +23,8 @@ export type Command =
   | { name: 'startReview'; id: string }
   | { name: 'cancelReview'; id: string }
   | { name: 'suspendReview'; id: string }
+  | { name: 'reviewChat'; id: string; text: string }
+  | { name: 'reloadReviewDoc'; id: string }
   | { name: 'postReview'; id: string }
   | { name: 'reviewVerdict'; id: string; verdict: 'approve' | 'request-changes' }
   | { name: 'pollReviews' }

@@ -126,6 +126,9 @@ async function runTui(): Promise<void> {
         rl.close();
         if (!/^n/i.test(answer.trim())) conn.dispatcher.resume(action.issueId);
       }
+    } else if (action.kind === 'edit-file') {
+      spawnSync(process.env.EDITOR ?? 'vi', [action.path], { stdio: 'inherit' });
+      conn.dispatcher.reloadReviewDoc(action.reviewId);
     } else if (action.kind === 'edit-config') {
       const editPath = ensureConfigFile(cfg);
       spawnSync(process.env.EDITOR ?? 'vi', [editPath], { stdio: 'inherit' });
