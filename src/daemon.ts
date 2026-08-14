@@ -146,20 +146,40 @@ export async function runDaemon(): Promise<void> {
         break;
       case 'gcRemove':
         void (async () => {
-          const items = await findReclaimable(cfg, store.list(), store.listReviews(), 0);
-          let freed = 0;
-          for (const item of items.filter((i) => cmd.paths.includes(i.path))) {
-            await removeWorktree(item).catch((err) => log(`gc: ${item.path}: ${err}`));
-            freed += item.kilobytes;
-            // the pointer is gone with the directory; don't leave a dead path
-            for (const task of store.list()) {
-              if (task.worktree === item.path) store.update(task.issue.id, { worktree: undefined });
+          // re-check what's reclaimable, but skip du: the sizes came with the
+          // scan, and du over a 60G checkout is most of the wait
+          const safe = await findReclaimable(cfg, store.list(), store.listReviews(), 0, { sizes: false });
+          const targets = safe.filter((i) => cmd.paths.includes(i.path));
+          let failed = 0;
+          for (const [index, item] of targets.entries()) {
+            broadcast({ t: 'gcProgress', done: index, total: targets.length, path: item.path, ok: true, finished: false });
+            const ok = await removeWorktree(item).then(
+              () => true,
+              (err) => {
+                log(`gc: ${item.path}: ${err}`);
+                failed++;
+                return false;
+              },
+            );
+            if (ok) {
+              // the pointer died with the directory; don't leave a dead path
+              for (const task of store.list()) {
+                if (task.worktree === item.path) store.update(task.issue.id, { worktree: undefined });
+              }
+              for (const review of store.listReviews()) {
+                if (review.worktree === item.path) store.updateReview(review.id, { worktree: undefined });
+              }
             }
-            for (const review of store.listReviews()) {
-              if (review.worktree === item.path) store.updateReview(review.id, { worktree: undefined });
-            }
+            broadcast({ t: 'gcProgress', done: index + 1, total: targets.length, path: item.path, ok, finished: false });
           }
-          broadcast({ t: 'toast', text: `reclaimed ${(freed / 1048576).toFixed(1)}G`, kind: 'ok' });
+          broadcast({ t: 'gcProgress', done: targets.length, total: targets.length, path: '', ok: !failed, finished: true });
+          broadcast({
+            t: 'toast',
+            text: failed
+              ? `removed ${targets.length - failed} of ${targets.length} — ${failed} failed, see the log`
+              : `removed ${targets.length} worktrees`,
+            kind: failed ? 'err' : 'ok',
+          });
         })();
         break;
     }

@@ -37,6 +37,8 @@ export async function findReclaimable(
   tasks: Task[],
   reviews: Review[],
   olderThanDays: number,
+  /** `du` over a 60G checkout is slow; skip it when only the list matters */
+  opts?: { sizes?: boolean },
 ): Promise<Reclaimable[]> {
   const byWorktree = new Map<string, Task>();
   for (const task of tasks) if (task.worktree) byWorktree.set(task.worktree, task);
@@ -88,19 +90,27 @@ export async function findReclaimable(
         continue; // live work
       }
 
-      found.push({ path, repoPath: repo.path, kilobytes: await sizeKb(path), label, reason, ageDays });
+      const kilobytes = opts?.sizes === false ? 0 : await sizeKb(path);
+      found.push({ path, repoPath: repo.path, kilobytes, label, reason, ageDays });
     }
   }
   return found.sort((a, b) => b.kilobytes - a.kilobytes);
 }
 
-/** Remove one worktree through git, so its administrative entry goes too. */
+/**
+ * Remove one worktree through git, so its administrative entry goes too.
+ * Throws if the directory is still there afterwards — the caller reports
+ * per-item success, and counting a failure as reclaimed space is a lie.
+ */
 export async function removeWorktree(item: Reclaimable): Promise<void> {
-  await exec('git', ['-C', item.repoPath, 'worktree', 'remove', '--force', item.path]).catch(async () => {
+  await exec('git', ['-C', item.repoPath, 'worktree', 'remove', '--force', item.path], {
+    maxBuffer: 4 * 1024 * 1024,
+  }).catch(async () => {
     // not a registered worktree (a stale directory): drop it directly
     await exec('rm', ['-rf', item.path]);
   });
   await exec('git', ['-C', item.repoPath, 'worktree', 'prune']).catch(() => {});
+  if (existsSync(item.path)) throw new Error(`${item.path} is still present after removal`);
 }
 
 export const formatSize = (kb: number): string =>

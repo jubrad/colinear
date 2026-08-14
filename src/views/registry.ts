@@ -8,6 +8,7 @@ import { ChatView, chatKeys } from './ChatView.js';
 import { GcView, gcKeys } from './GcView.js';
 import { HelpView, helpKeys } from './HelpView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
+import { LogsView, logsKeys } from './LogsView.js';
 import { ProjectsView, projectsKeys } from './ProjectsView.js';
 import { ProjectView, projectKeys } from './ProjectView.js';
 import { ReviewsView, reviewsKeys } from './ReviewsView.js';
@@ -78,6 +79,13 @@ const builtinViews: ViewDef[] = [
     describe: 'spend per ticket',
     Component: CostsView,
     keys: costsKeys,
+  },
+  {
+    name: 'logs',
+    aliases: ['log', 'debug'],
+    describe: 'live debug log (what colinear is actually doing)',
+    Component: LogsView,
+    keys: logsKeys,
   },
   {
     name: 'gc',

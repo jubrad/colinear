@@ -53,10 +53,20 @@ export interface GcItem {
   ageDays: number;
 }
 
+export interface GcProgress {
+  done: number;
+  total: number;
+  path: string;
+  ok: boolean;
+  finished: boolean;
+}
+
 export interface Connection {
   cfg: Config;
   /** results of a gcScan; returns an unsubscribe */
   onGc(fn: (items: GcItem[]) => void): () => void;
+  /** per-worktree progress while gcRemove runs; returns an unsubscribe */
+  onGcProgress(fn: (p: GcProgress) => void): () => void;
   /** daemon-side messages (edit results, etc.); returns an unsubscribe */
   onToast(fn: (text: string, kind: 'info' | 'ok' | 'err') => void): () => void;
   dispatcher: DispatcherApi;
@@ -119,6 +129,7 @@ export async function connectToDaemon(): Promise<Connection> {
 
   const toastListeners = new Set<(text: string, kind: 'info' | 'ok' | 'err') => void>();
   const gcListeners = new Set<(items: GcItem[]) => void>();
+  const gcProgressListeners = new Set<(p: GcProgress) => void>();
 
   return await new Promise<Connection>((resolve, reject) => {
     let ready = false;
@@ -151,6 +162,10 @@ export async function connectToDaemon(): Promise<Connection> {
             gcListeners.add(fn);
             return () => gcListeners.delete(fn);
           },
+          onGcProgress: (fn) => {
+            gcProgressListeners.add(fn);
+            return () => gcProgressListeners.delete(fn);
+          },
           dispatcher: {
             enqueue: (issues, opts) => command({ name: 'enqueue', issues, opts }),
             cancel: (id) => (command({ name: 'cancel', id }), true),
@@ -175,6 +190,8 @@ export async function connectToDaemon(): Promise<Connection> {
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),
           },
         });
+      } else if (msg.t === 'gcProgress') {
+        for (const fn of gcProgressListeners) fn(msg);
       } else if (msg.t === 'gc') {
         for (const fn of gcListeners) fn(msg.items);
       } else if (msg.t === 'toast') {

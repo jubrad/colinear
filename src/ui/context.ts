@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { DispatcherApi, GcItem } from '../client.js';
+import type { DispatcherApi, GcItem, GcProgress } from '../client.js';
 import type { Config, LinearTeam } from '../core/types.js';
 
 export type ToastKind = 'info' | 'ok' | 'err';
@@ -9,6 +9,8 @@ export interface AppCtx {
   dispatcher: DispatcherApi;
   /** gcScan results (the daemon does the scanning); returns an unsubscribe */
   onGc?: (fn: (items: GcItem[]) => void) => () => void;
+  /** per-worktree progress while a gc removal runs */
+  onGcProgress?: (fn: (p: GcProgress) => void) => () => void;
   viewer?: { id: string; displayName: string };
   teams: LinearTeam[];
   size: { columns: number; rows: number };
