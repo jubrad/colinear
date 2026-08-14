@@ -65,8 +65,9 @@ export function App(props: {
   dispatcher: DispatcherApi;
   /** daemon-side messages surface as toasts; returns an unsubscribe */
   onToast?: (fn: (text: string, kind: ToastKind) => void) => () => void;
+  onGc?: AppCtx['onGc'];
 }) {
-  const { cfg, dispatcher, onToast } = props;
+  const { cfg, dispatcher, onToast, onGc } = props;
   const { exit } = useApp();
   const size = useTerminalSize();
   const tasks = useTasks();
@@ -139,6 +140,7 @@ export function App(props: {
     () => ({
       cfg,
       dispatcher,
+      onGc,
       viewer,
       teams,
       size,
@@ -156,7 +158,7 @@ export function App(props: {
         escHandlerRef.current = fn;
       },
     }),
-    [cfg, dispatcher, viewer, teams, size, now, navigate, back, exit, cmdOpen],
+    [cfg, dispatcher, onGc, viewer, teams, size, now, navigate, back, exit, cmdOpen],
   );
 
   useInput(

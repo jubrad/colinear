@@ -41,10 +41,22 @@ export interface DispatcherApi {
   postReview(id: string): void;
   reviewVerdict(id: string, verdict: 'approve' | 'request-changes'): void;
   pollReviews(): void;
+  gcScan(olderThanDays: number): void;
+  gcRemove(paths: string[]): void;
+}
+
+export interface GcItem {
+  path: string;
+  kilobytes: number;
+  label: string;
+  reason: string;
+  ageDays: number;
 }
 
 export interface Connection {
   cfg: Config;
+  /** results of a gcScan; returns an unsubscribe */
+  onGc(fn: (items: GcItem[]) => void): () => void;
   /** daemon-side messages (edit results, etc.); returns an unsubscribe */
   onToast(fn: (text: string, kind: 'info' | 'ok' | 'err') => void): () => void;
   dispatcher: DispatcherApi;
@@ -106,6 +118,7 @@ export async function connectToDaemon(): Promise<Connection> {
   const command = (cmd: Command) => send({ t: 'cmd', cmd });
 
   const toastListeners = new Set<(text: string, kind: 'info' | 'ok' | 'err') => void>();
+  const gcListeners = new Set<(items: GcItem[]) => void>();
 
   return await new Promise<Connection>((resolve, reject) => {
     let ready = false;
@@ -134,6 +147,10 @@ export async function connectToDaemon(): Promise<Connection> {
             toastListeners.add(fn);
             return () => toastListeners.delete(fn);
           },
+          onGc: (fn) => {
+            gcListeners.add(fn);
+            return () => gcListeners.delete(fn);
+          },
           dispatcher: {
             enqueue: (issues, opts) => command({ name: 'enqueue', issues, opts }),
             cancel: (id) => (command({ name: 'cancel', id }), true),
@@ -154,8 +171,12 @@ export async function connectToDaemon(): Promise<Connection> {
             postReview: (id) => command({ name: 'postReview', id }),
             reviewVerdict: (id, verdict) => command({ name: 'reviewVerdict', id, verdict }),
             pollReviews: () => command({ name: 'pollReviews' }),
+            gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),
+            gcRemove: (paths) => command({ name: 'gcRemove', paths }),
           },
         });
+      } else if (msg.t === 'gc') {
+        for (const fn of gcListeners) fn(msg.items);
       } else if (msg.t === 'toast') {
         for (const fn of toastListeners) fn(msg.text, msg.kind);
       } else if (msg.t === 'snapshot') {

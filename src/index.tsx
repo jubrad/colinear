@@ -9,6 +9,8 @@ import { connectToDaemon } from './client.js';
 import { consumePendingAction } from './core/attach.js';
 import { configPath, ensureConfigFile, loadConfig } from './core/config.js';
 import { runDaemon, PID_PATH } from './daemon.js';
+import { findReclaimable, formatSize, removeWorktree } from './core/gc.js';
+import { loadState } from './core/persist.js';
 import { log } from './core/log.js';
 import { SOCKET_PATH } from './core/protocol.js';
 import { store } from './core/store.js';
@@ -84,6 +86,55 @@ async function daemonCommand(sub?: string): Promise<void> {
 }
 
 /**
+ * `coli gc [--yes] [--older-than N]` — reclaim worktree disk. Prints what it
+ * would remove and stops there unless told otherwise: a worktree is cheap to
+ * recreate but the printout is the only chance to notice one you still want.
+ */
+async function gcCommand(args: string[]): Promise<void> {
+  const cfg = loadConfig({ requireKey: false });
+  const yes = args.includes('--yes') || args.includes('-y');
+  const idx = args.findIndex((a) => a === '--older-than');
+  const olderThanDays = idx !== -1 ? Number.parseFloat(args[idx + 1] ?? '7') : 7;
+
+  // read the daemon's state file rather than talking to it: gc is a disk
+  // chore, and it should work whether or not colinear is running
+  loadState(cfg);
+  const tasks = store.list();
+  if (!tasks.length) {
+    console.log(
+      'no tasks in state — every worktree would look orphaned, so only stale review\n' +
+        'checkouts are considered. Is COLINEAR_STATE_DIR pointing somewhere unexpected?',
+    );
+  }
+  const items = await findReclaimable(cfg, tasks, store.listReviews(), olderThanDays);
+  if (!items.length) {
+    console.log('nothing to reclaim');
+    return;
+  }
+
+  let total = 0;
+  for (const item of items) {
+    total += item.kilobytes;
+    console.log(
+      `${formatSize(item.kilobytes).padStart(7)}  ${item.label.padEnd(12)} ${item.reason.padEnd(9)} ${Math.floor(item.ageDays)}d  ${item.path}`,
+    );
+  }
+  console.log(`\n${items.length} worktrees · ${formatSize(total)}`);
+
+  if (!yes) {
+    console.log(`\nnothing removed. re-run with --yes to reclaim it` +
+      (olderThanDays === 7 ? ' (finished tasks newer than 7d are kept; --older-than N to change)' : ''));
+    return;
+  }
+  for (const item of items) {
+    process.stdout.write(`removing ${item.path} … `);
+    await removeWorktree(item);
+    console.log('done');
+  }
+  console.log(`\nreclaimed ${formatSize(total)}`);
+}
+
+/**
  * The TUI: a client of the daemon. Everything stateful lives over there, so
  * quitting, reloading, or crashing this process leaves the agents alone.
  */
@@ -96,7 +147,7 @@ async function runTui(): Promise<void> {
   // interactive `claude --resume` and drop back onto the board afterwards.
   for (;;) {
     enterAltScreen();
-    const app = render(<App cfg={cfg} dispatcher={conn.dispatcher} onToast={conn.onToast} />, { patchConsole: true });
+    const app = render(<App cfg={cfg} dispatcher={conn.dispatcher} onToast={conn.onToast} onGc={conn.onGc} />, { patchConsole: true });
     await app.waitUntilExit();
     leaveAltScreen();
 
@@ -158,5 +209,6 @@ function supervise(): never {
 
 const [command, sub] = process.argv.slice(2);
 if (command === 'daemon') await daemonCommand(sub);
+else if (command === 'gc') await gcCommand(process.argv.slice(3));
 else if (command === '--tui') await runTui();
 else supervise();

@@ -17,6 +17,7 @@ import {
   type Command,
   type ServerMsg,
 } from './core/protocol.js';
+import { findReclaimable, removeWorktree } from './core/gc.js';
 import { store } from './core/store.js';
 
 /** Liveness marker so `coli daemon status|stop` doesn't need the socket. */
@@ -36,7 +37,10 @@ export async function runDaemon(): Promise<void> {
   reviewer.resumeWatching(); // reviews restored from disk keep their live doc
   const stopPersistence = startPersistence();
   const stopPrPolling = startPrPolling(cfg, dispatcher);
-  const stopReviewPolling = startReviewPolling(cfg);
+  const stopReviewPolling = startReviewPolling(cfg, async () => {
+    // a poll is what discovers a PR is merged or taken, so cleanup follows it
+    await reviewer.cleanupStale();
+  });
 
   const clients = new Set<Socket>();
   const broadcast = (msg: ServerMsg) => {
@@ -125,6 +129,38 @@ export async function runDaemon(): Promise<void> {
         break;
       case 'pollReviews':
         void pollReviewRequests(cfg);
+        break;
+      case 'gcScan':
+        void findReclaimable(cfg, store.list(), store.listReviews(), cmd.olderThanDays).then((items) =>
+          broadcast({
+            t: 'gc',
+            items: items.map(({ path, kilobytes, label, reason, ageDays }) => ({
+              path,
+              kilobytes,
+              label,
+              reason,
+              ageDays,
+            })),
+          }),
+        );
+        break;
+      case 'gcRemove':
+        void (async () => {
+          const items = await findReclaimable(cfg, store.list(), store.listReviews(), 0);
+          let freed = 0;
+          for (const item of items.filter((i) => cmd.paths.includes(i.path))) {
+            await removeWorktree(item).catch((err) => log(`gc: ${item.path}: ${err}`));
+            freed += item.kilobytes;
+            // the pointer is gone with the directory; don't leave a dead path
+            for (const task of store.list()) {
+              if (task.worktree === item.path) store.update(task.issue.id, { worktree: undefined });
+            }
+            for (const review of store.listReviews()) {
+              if (review.worktree === item.path) store.updateReview(review.id, { worktree: undefined });
+            }
+          }
+          broadcast({ t: 'toast', text: `reclaimed ${(freed / 1048576).toFixed(1)}G`, kind: 'ok' });
+        })();
         break;
     }
   };
