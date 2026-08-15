@@ -55,7 +55,7 @@ export class Dispatcher {
   private running = 0;
   private aborts = new Map<string, AbortController>();
   private suspended = new Set<string>();
-  private modes = new Map<string, 'fixci'>();
+  private modes = new Map<string, 'fixci' | 'rebase'>();
   private viewer?: { id: string; displayName: string };
 
   constructor(private cfg: Config) {
@@ -90,6 +90,26 @@ export class Dispatcher {
     store.update(id, { status: 'queued' });
     store.addActivity(id, 'CI failing — dispatching fix session');
     notify(this.cfg, task.issue.identifier, 'CI failing — dispatching fix', task.prs[0]?.url);
+    this.queue.push(id);
+    this.pump();
+  }
+
+  /**
+   * Rebase a conflicting PR onto its base. Runs as a session because resolving
+   * a conflict is a judgement call, not a mechanical merge — but the prompt
+   * confines it to that: no scope changes, no new work.
+   */
+  rebase(id: string) {
+    const task = store.get(id);
+    if (!task || !task.prs.length || this.aborts.has(id) || this.queue.includes(id)) return;
+    if (!task.worktree) {
+      this.toast(`${task.issue.identifier}: no worktree to rebase in`, 'err');
+      return;
+    }
+    this.modes.set(id, 'rebase');
+    store.update(id, { status: 'queued', rebasing: true });
+    store.addActivity(id, 'conflicts with base — dispatching a rebase');
+    notify(this.cfg, task.issue.identifier, 'PR conflicts — rebasing', task.prs[0]?.url);
     this.queue.push(id);
     this.pump();
   }
@@ -480,7 +500,7 @@ export class Dispatcher {
     const mode = this.modes.get(id);
     this.modes.delete(id);
     // all PRs merged = the work already landed; never burn an agent on it
-    if (mode !== 'fixci' && task.prs.length && task.prs.every((pr) => pr.state === 'MERGED')) {
+    if (mode === undefined && task.prs.length && task.prs.every((pr) => pr.state === 'MERGED')) {
       store.update(id, { status: 'done', error: undefined });
       store.addActivity(id, 'PR(s) already merged — nothing to run');
       void this.recheckBlocked();
@@ -580,11 +600,13 @@ export class Dispatcher {
       const ctx = taskContext(current, taskRepo, branch, family, guidanceFor(this.cfg.guidance, 'work'));
       const work = await runSession({
         prompt:
-          mode === 'fixci'
-            ? ciFixPrompt(ctx, issue, current.prs)
-            : resumeSession
-              ? `${ctx}\n\ncolinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
-              : workPrompt(ctx, issue, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, current.verdict?.verification, task.skipTriage, knownPr),
+          mode === 'rebase'
+            ? rebasePrompt(ctx, issue, current.prs, taskRepo.prBase ?? taskRepo.defaultBranch, taskRepo.remote ?? 'origin', taskRepo.pushRemote ?? taskRepo.remote ?? 'origin')
+            : mode === 'fixci'
+              ? ciFixPrompt(ctx, issue, current.prs)
+              : resumeSession
+                ? `${ctx}\n\ncolinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
+                : workPrompt(ctx, issue, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, current.verdict?.verification, task.skipTriage, knownPr),
         cwd: worktree,
         callbacks: this.callbacks(id),
         model: store.get(id)?.model ?? this.cfg.model,
@@ -711,7 +733,8 @@ export class Dispatcher {
     } finally {
       this.aborts.delete(id);
       stopSubtaskPoll?.();
-      store.update(id, { endedAt: Date.now() });
+      // however a rebase ends — done, failed, aborted — it is no longer running
+      store.update(id, { endedAt: Date.now(), ...(store.get(id)?.rebasing ? { rebasing: false } : {}) });
     }
   }
 
@@ -1026,6 +1049,29 @@ ${existingPr ? `- Push further commits to the "${pushRemote}" remote branch "${e
 - PRs stay DRAFT: never run "gh pr ready" or mark a PR ready for review — promoting a PR out of draft is always a human decision.
 ${forked ? '- Do NOT create stacked PRs: this repo uses a fork workflow and stacked PRs require pushing to the upstream. Keep it to a single PR.' : '- If the change is genuinely better split into stacked PRs, create stacked branches off this one and open a draft PR per layer, each based on the previous branch.'}
 - If you get blocked on a decision only a human can make, use AskUserQuestion.`;
+}
+
+function rebasePrompt(
+  ctx: string,
+  issue: LinearIssue,
+  prs: Task['prs'],
+  prBase: string,
+  remote: string,
+  pushRemote: string,
+): string {
+  const pr = prs[0];
+  return `${ctx}
+
+Your PR for ${issue.identifier}${pr ? ` (#${pr.number}, branch "${pr.headRefName}")` : ''} now conflicts with ${prBase}. Rebase it — nothing else.
+
+1. \`git -C . fetch ${remote} ${prBase}\`, then \`git rebase ${remote}/${prBase}\`.
+2. Resolve each conflict on its merits. Read enough of both sides to understand what the other change was for: the base moved for a reason, and keeping your version wholesale is usually wrong. Where the two genuinely disagree about behaviour, prefer the base's intent and adapt your change to it.
+3. Run the repository's linters and the tests around what you touched. A rebase that compiles but breaks a test the base added is a failed rebase.
+4. \`git push --force-with-lease ${pushRemote} ${pr?.headRefName ?? 'HEAD'}\`.
+
+Do NOT change scope, add features, or "improve" anything while you are in here — a rebase that also refactors is impossible to review. If a conflict cannot be resolved without a decision only a human can make (the base removed something you depend on, two features genuinely collide), stop and use AskUserQuestion rather than guessing.
+
+Never mark the PR ready; promoting it stays the operator's call. Say plainly in your final message what conflicted and how you resolved it.`;
 }
 
 function ciFixPrompt(ctx: string, issue: LinearIssue, prs: Task['prs']): string {

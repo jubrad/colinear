@@ -8,6 +8,8 @@ export const theme = {
   ok: 'green',
   /** GitHub's own merged purple — merged is not just another kind of green */
   merged: '#a371f7',
+  /** changes requested: needs work, and shouldn't read as an error */
+  changes: '#ff7ac6',
   warn: 'yellow',
   err: 'red',
   info: 'magenta',

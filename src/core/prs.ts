@@ -19,6 +19,8 @@ interface GhPr {
 
 interface GhPrDetails {
   reviewDecision: string | null;
+  /** CONFLICTING once GitHub has worked it out; UNKNOWN while it computes */
+  mergeable: string | null;
   /** mixed shapes: CheckRuns have status/conclusion, commit StatusContexts
       (Buildkite et al.) have state — both must be read or CI lies */
   statusCheckRollup: Array<{
@@ -31,6 +33,8 @@ interface GhPrDetails {
 /** Something that can dispatch a CI-fix session (the Dispatcher; injected to avoid a cycle). */
 export interface CiFixer {
   fixCi(id: string): void;
+  /** dispatch a session to rebase a conflicting PR onto its base */
+  rebase(id: string): void;
   /** called when polling detects a task's PRs all merged, so blocked dependents free up immediately */
   recheckBlocked?(): void;
 }
@@ -76,7 +80,7 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
     try {
       const { stdout } = await exec(
         'gh',
-        ['pr', 'view', String(pr.number), '--json', 'reviewDecision,statusCheckRollup'],
+        ['pr', 'view', String(pr.number), '--json', 'reviewDecision,statusCheckRollup,mergeable'],
         { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
       );
       const d = JSON.parse(stdout) as GhPrDetails;
@@ -84,7 +88,7 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
       return d;
     } catch (err) {
       log(`pr detail fetch failed for #${pr.number} in ${repoPath}: ${String(err).slice(0, 120)}`);
-      const d: GhPrDetails = { reviewDecision: null, statusCheckRollup: null };
+      const d: GhPrDetails = { reviewDecision: null, statusCheckRollup: null, mergeable: null };
       details.set(pr.number, d);
       return d;
     }
@@ -128,7 +132,10 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
     const infos: PrInfo[] = await Promise.all(
       chain.map(async (pr) => {
         // merged/closed PRs don't need live CI/review state — skip the fetch
-        const d = pr.state === 'OPEN' ? await fetchDetails(pr) : { reviewDecision: null, statusCheckRollup: null };
+        const d =
+          pr.state === 'OPEN'
+            ? await fetchDetails(pr)
+            : { reviewDecision: null, statusCheckRollup: null, mergeable: null };
         return {
           number: pr.number,
           title: pr.title,
@@ -137,6 +144,7 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
           isDraft: pr.isDraft,
           checksStatus: rollupStatus(d.statusCheckRollup),
           reviewDecision: d.reviewDecision ?? undefined,
+          mergeable: d.mergeable ?? undefined,
           headRefName: pr.headRefName,
           baseRefName: pr.baseRefName,
         };
@@ -163,6 +171,17 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
     ) {
       store.update(task.issue.id, { status: 'done', error: undefined, question: undefined });
       fixer?.recheckBlocked?.(); // free dependents now, not on the next 60s tick
+    }
+
+    // rebase babysitter: one attempt per conflict, re-armed when it's clean
+    // again. UNKNOWN means GitHub hasn't finished computing — never act on it
+    const conflicting = infos.some((pr) => pr.state === 'OPEN' && pr.mergeable === 'CONFLICTING');
+    const wantsRebase = task.autoRebase ?? cfg.autoRebase;
+    if (conflicting && wantsRebase && fixer && task.status === 'pr_open' && !task.rebaseAttempted) {
+      store.update(task.issue.id, { rebaseAttempted: true });
+      fixer.rebase(task.issue.id);
+    } else if (!conflicting && task.rebaseAttempted) {
+      store.update(task.issue.id, { rebaseAttempted: false });
     }
 
     // CI babysitter: one fix session per red rollup; re-arms once checks recover

@@ -107,6 +107,8 @@ export interface PrInfo {
   checksStatus: string;
   /** APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED (unset = no reviews yet) */
   reviewDecision?: string;
+  /** MERGEABLE / CONFLICTING / UNKNOWN — GitHub is still computing on UNKNOWN */
+  mergeable?: string;
   headRefName: string;
   baseRefName: string;
 }
@@ -148,6 +150,12 @@ export interface Task {
   repo?: { name: string; path: string; defaultBranch: string; remote?: string; pushRemote?: string; prBase?: string; worktreeRoot: string };
   /** set while a CI-failure fix has been dispatched for the current red rollup */
   ciFixAttempted?: boolean;
+  /** rebase this PR automatically when GitHub reports a conflict */
+  autoRebase?: boolean;
+  /** a rebase session is live (the task stays pr_open throughout) */
+  rebasing?: boolean;
+  /** one rebase per conflict; re-arms when the PR is mergeable again */
+  rebaseAttempted?: boolean;
   /** operator-pinned PR number: PR matching uses exactly this, never guesses */
   pinnedPr?: number;
   /** sub-issues a `tracking` parent is waiting on */
@@ -259,6 +267,8 @@ export interface TaskEdits {
   retriage: boolean;
   /** true = straight to work, false = triage wanted, undefined = keep as-is */
   skipTriage?: boolean;
+  /** rebase this task's PR automatically on conflict (undefined = follow config) */
+  autoRebase?: boolean;
   /** true when the operator asked to requeue (ctrl+r) */
   requeue: boolean;
 }
@@ -327,6 +337,8 @@ export interface Config {
   stateSync: boolean;
   /** auto-dispatch a fix session when a task's PR checks go red (default true) */
   ciAutofix: boolean;
+  /** default for a task's autoRebase; a conflicting PR gets a rebase session */
+  autoRebase: boolean;
   /** UI refresh tick in ms — raise it (e.g. 2000) if your terminal/mux flickers (default 1000) */
   tickMs: number;
   /** permission mode for interactive attach sessions (default "acceptEdits", matching headless agents) */

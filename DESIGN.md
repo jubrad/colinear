@@ -123,6 +123,10 @@ new-issue drafting. Moving those behind the daemon is the obvious next step.
 - `interrupted` (restart/suspend/attach; `r` resumes the SDK session by id)
 - `error` (failures; auto-unfails if a live PR turns up), `escalated` (legacy; verdicts now park as needs_input)
 - fixci mode: red PR rollup → resume session with failing logs, one attempt per red, re-arms on green
+- rebase mode: PR conflicts with its base → session that rebases and force-with-leases, same
+  one-attempt-per-conflict shape. `mergeable: UNKNOWN` means GitHub is still computing and never
+  triggers one. The prompt confines it to the rebase: resolve, test, push, no scope changes,
+  AskUserQuestion when a conflict needs a human decision
 
 Sessions are Claude Code sessions keyed by worktree cwd (`~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`). colinear stores only the session id + worktree; interactive attach (`claude --resume`) and headless resume share the same transcript.
 
