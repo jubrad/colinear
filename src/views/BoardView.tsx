@@ -367,7 +367,13 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
       <Box height={2} overflow="hidden">
         <Text bold wrap="wrap">
           {active && <Text color={theme.warn}>{spinner(now)} </Text>}
-          {task.rebasing && <Text color={theme.ok}>{Math.floor(now / 500) % 2 ? '●' : '○'} </Text>}
+          {task.maintenance && (
+            // blinks where the card already is: an open PR being repaired,
+            // not a task back in development
+            <Text color={task.maintenance === 'rebase' ? theme.ok : theme.warn}>
+              {Math.floor(now / 500) % 2 ? '●' : '○'}{' '}
+            </Text>
+          )}
           {task.issue.identifier} <Text dimColor>{task.issue.title}</Text>
         </Text>
       </Box>

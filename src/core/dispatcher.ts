@@ -87,7 +87,7 @@ export class Dispatcher {
     const task = store.get(id);
     if (!task || !task.prs.length || this.aborts.has(id) || this.queue.includes(id)) return;
     this.modes.set(id, 'fixci');
-    store.update(id, { status: 'queued' });
+    store.update(id, { maintenance: 'fixci' });
     store.addActivity(id, 'CI failing — dispatching fix session');
     notify(this.cfg, task.issue.identifier, 'CI failing — dispatching fix', task.prs[0]?.url);
     this.queue.push(id);
@@ -107,7 +107,7 @@ export class Dispatcher {
       return;
     }
     this.modes.set(id, 'rebase');
-    store.update(id, { status: 'queued', rebasing: true });
+    store.update(id, { maintenance: 'rebase' });
     store.addActivity(id, 'conflicts with base — dispatching a rebase');
     notify(this.cfg, task.issue.identifier, 'PR conflicts — rebasing', task.prs[0]?.url);
     this.queue.push(id);
@@ -511,7 +511,9 @@ export class Dispatcher {
     const resumeSession = task.sessionId && task.worktree && existsSync(task.worktree) ? task.sessionId : undefined;
     try {
       store.update(id, {
-        status: resumeSession || task.skipTriage ? 'working' : 'triage',
+        // maintenance runs against a PR that already exists: moving the card
+        // back to Working would read as the feature being rewritten
+        ...(mode ? {} : { status: resumeSession || task.skipTriage ? 'working' : 'triage' }),
         startedAt: task.startedAt ?? Date.now(),
         endedAt: undefined,
       });
@@ -642,7 +644,9 @@ export class Dispatcher {
         throw new Error(`work failed: ${work.errors.join('; ')}`);
       }
 
-      const repoChecks = this.cfg.repos.find((r) => r.path === taskRepo.path)?.checks ?? this.cfg.checks;
+      // maintenance sessions run the repo's checks themselves, in the prompt —
+      // re-running them here would flip the card to `checks` for no new signal
+      const repoChecks = mode ? [] : (this.cfg.repos.find((r) => r.path === taskRepo.path)?.checks ?? this.cfg.checks);
       if (repoChecks.length) {
         store.setStatus(id, 'checks');
         store.addActivity(id, 'running checks');
@@ -736,7 +740,8 @@ export class Dispatcher {
       this.aborts.delete(id);
       stopSubtaskPoll?.();
       // however a rebase ends — done, failed, aborted — it is no longer running
-      store.update(id, { endedAt: Date.now(), ...(store.get(id)?.rebasing ? { rebasing: false } : {}) });
+      // however it ended — done, failed, aborted — nothing is running now
+      store.update(id, { endedAt: Date.now(), ...(store.get(id)?.maintenance ? { maintenance: undefined } : {}) });
     }
   }
 
