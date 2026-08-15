@@ -46,6 +46,8 @@ export interface DispatcherApi {
   reviewVerdict(id: string, verdict: 'approve' | 'request-changes'): void;
   pollReviews(): void;
   gcScan(olderThanDays: number): void;
+  /** EXPERIMENTAL: operator message onto a coordination channel */
+  channelPost(channel: string, text: string): void;
   gcRemove(paths: string[]): void;
 }
 
@@ -193,6 +195,7 @@ export async function connectToDaemon(): Promise<Connection> {
             reviewVerdict: (id, verdict) => command({ name: 'reviewVerdict', id, verdict }),
             pollReviews: () => command({ name: 'pollReviews' }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),
+            channelPost: (channel, text) => command({ name: 'channelPost', channel, text }),
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),
           },
         });

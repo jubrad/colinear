@@ -277,6 +277,17 @@ export interface TaskEdits {
   requeue: boolean;
 }
 
+/**
+ * Features that work but aren't settled — shape, cost or prompt discipline
+ * may change, and they can affect what agents do. Each is off unless the
+ * master `experimental` switch AND its own flag are on.
+ */
+export type ExperimentName = 'coordination';
+
+export const EXPERIMENTS: Record<ExperimentName, string> = {
+  coordination: 'family coordination channels: sub-issue agents get a shared channel (:chan)',
+};
+
 /** Which prompt a piece of standing guidance applies to. */
 export type GuidanceScope = 'triage' | 'work' | 'review' | 'plan';
 
@@ -355,6 +366,14 @@ export interface Config {
    * you want the day a task lands, long after the card stops being interesting.
    */
   worktreeRetentionDays: number;
+  /**
+   * Master switch for unfinished features. Nothing in `experiments` runs
+   * unless this is true — one place to turn all of it off when an experiment
+   * misbehaves, without editing the per-feature flags you want to keep.
+   */
+  experimental: boolean;
+  /** per-feature opt-in; only consulted when `experimental` is true */
+  experiments: Partial<Record<ExperimentName, boolean>>;
   /** UI refresh tick in ms — raise it (e.g. 2000) if your terminal/mux flickers (default 1000) */
   tickMs: number;
   /** permission mode for interactive attach sessions (default "auto", matching headless agents) */

@@ -82,6 +82,8 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `autoRebase` | `false` | default for [auto-rebase on conflict](#auto-rebase); the `m` modal overrides it per task |
 | `retentionDays` | `30` | how long finished work stays on the board. [Details](#retention-and-disk) |
 | `worktreeRetentionDays` | `7` | how long a finished task's worktree is kept before `coli gc` offers it. [Details](#retention-and-disk) |
+| `experimental` | `false` | master switch for unfinished features. Nothing in `experiments` runs unless this is true. [Details](#experimental-features) |
+| `experiments` | none | per-feature opt-in: `{ "coordination": true }`, or a list of names |
 | `attachPermissionMode` | `"auto"` | permission mode for `s` attach sessions: `auto` (classifier gates risky commands), `acceptEdits`, `bypassPermissions`, `default`. Headless agents always run `auto`; classifier-blocked commands surface on the board as allow/deny questions |
 | `terminal` | in-place | where `s` attaches: unset hands over the current terminal (recommended), `"ghostty"` / `"terminal"` open an external window |
 | `tickMs` | `1000` | UI refresh tick. Raise it (e.g. `2000`) if your terminal or multiplexer flickers |
@@ -143,6 +145,23 @@ When GitHub reports a PR **conflicting** with its base, colinear can dispatch a 
 
 One attempt per conflict, re-armed once the PR is mergeable again. A conflict GitHub hasn't finished computing (`UNKNOWN`) never triggers one. The card keeps its column and shows a blinking dot — green rebasing, amber fixing CI — since maintenance on an open PR isn't the feature being rewritten.
 
+### Experimental features
+
+Features that work but aren't settled — the shape, the token cost or the prompt discipline may still change, and they can affect what agents do. Each needs two switches:
+
+```json
+"experimental": true,
+"experiments": { "coordination": true }
+```
+
+The master switch is separate so one line turns everything experimental off when something misbehaves, without you having to remember which features you'd enabled. Naming a feature without it — or naming something that isn't an experiment — is written to the debug log rather than silently ignored, so a feature never quietly fails to run.
+
+| experiment | what |
+|---|---|
+| `coordination` | **Family coordination channels.** Sub-issue agents in one family share an IRC-style channel (`#CLO-67`) through in-process MCP tools: `channel_read` (only what's new since that agent last read) and `channel_post` (identity stamped at spawn — an agent can't pose as a sibling or reach another family's channel). They're prompted to claim scopes, announce architectural decisions, flag shared resources they're using, and read before opening a PR. `:chan` lists channels, `:chan CLO-67` tails one with an input box — your message reaches every agent in that family at its next read. Full design, storage layout and deferred work: [COORDINATION.md](COORDINATION.md) |
+
+Turning one on changes the daemon's behavior, so it needs `coli daemon stop && coli`, not just `R`.
+
 ### Contexts
 
 A context is one config file plus its own state — **separate daemon, socket, task store and log**. Use one per Linear workspace, team, or machine role; two can run side by side without either seeing the other's tasks.
@@ -200,6 +219,7 @@ Only the daemon dispatches agents, so stopping it is the one thing that interrup
 | `:costs` (`$`) | spend per run — tickets **and** PR reviews — live: a bar chart sorted by cost (`s` cycles cost/tokens/recent), `/` fuzzy filter, `enter` task detail. Bars are colored by task status. Figures are what the work *would* cost on the API — subscription runs are not billed per token |
 | `:logs` (`debug`) | the live debug log — everything colinear is doing, including stderr diverted while the TUI owns the screen. `j/k` scroll, `space` page, `g` top, `G` follow, `/` filter |
 | `:gc` (`disk`) | worktree disk: what can be reclaimed and how much. `space` picks, `a`/`n` all/none, `+`/`-` change the keep-window (`worktreeRetentionDays`), `x` removes, showing progress per worktree as it goes. Live tasks and reviews still in play are never listed; branches and commits stay in the repo |
+| `:chan` (`channel`, `irc`) | **experimental** — coordination channels, one per issue family. `enter` opens one, `:chan CLO-67` tails it with an operator input; `esc` leaves. Empty (and read-only) unless the [`coordination` experiment](#experimental-features) is on |
 | `:config` | resolved config (key masked), available contexts, `e` to edit |
 | `:help` (`?`) | all views, keys, custom view schema |
 

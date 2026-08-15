@@ -136,6 +136,9 @@ export async function runDaemon(): Promise<void> {
       case 'pollReviews':
         void pollReviewRequests(cfg);
         break;
+      case 'channelPost':
+        dispatcher.channelPost(cmd.channel, cmd.text);
+        break;
       case 'gcScan':
         void findReclaimable(cfg, store.list(), store.listReviews(), cmd.olderThanDays).then((items) =>
           broadcast({

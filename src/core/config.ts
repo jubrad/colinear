@@ -8,7 +8,16 @@ import {
   contextConfigPath,
   listContexts,
 } from './context.js';
-import type { CheckConfig, Config, Guidance, GuidanceScope, RepoConfig } from './types.js';
+import { log } from './log.js';
+import {
+  EXPERIMENTS,
+  type CheckConfig,
+  type Config,
+  type ExperimentName,
+  type Guidance,
+  type GuidanceScope,
+  type RepoConfig,
+} from './types.js';
 
 /** the config file this run reads and `:config` edits (context-aware) */
 export function configPath(): string {
@@ -55,7 +64,12 @@ interface RawRepo {
   checks?: CheckConfig[];
 }
 
-type RawConfig = Partial<Config> & { repos?: RawRepo[]; guidance?: RawGuidance; prSignoff?: RawText };
+type RawConfig = Partial<Config> & {
+  repos?: RawRepo[];
+  guidance?: RawGuidance;
+  prSignoff?: RawText;
+  experiments?: RawExperiments;
+};
 
 /**
  * Parse a config file. Missing is fine — that's "use the defaults" — but a
@@ -157,6 +171,8 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     notifications: raw.notifications ?? true,
     stateSync: raw.stateSync ?? true,
     ciAutofix: raw.ciAutofix ?? true,
+    experimental: raw.experimental ?? false,
+    experiments: normalizeExperiments(raw.experiments, raw.experimental ?? false),
     autoRebase: raw.autoRebase ?? false,
     retentionDays: raw.retentionDays ?? 30,
     worktreeRetentionDays: raw.worktreeRetentionDays ?? 7,
@@ -185,6 +201,37 @@ function normalizeGuidance(raw: RawGuidance): Guidance {
     if (text?.trim()) out[scope] = text;
   }
   return out;
+}
+
+type RawExperiments = Partial<Record<ExperimentName, boolean>> | ExperimentName[] | undefined;
+
+/**
+ * Experiments accept a map or a list of names. An unknown name, or one asked
+ * for while the master switch is off, is said out loud: a feature that
+ * silently doesn't run is worse than one that refuses to.
+ */
+function normalizeExperiments(raw: RawExperiments, master: boolean): Partial<Record<ExperimentName, boolean>> {
+  const asked = Array.isArray(raw)
+    ? Object.fromEntries(raw.map((name) => [name, true]))
+    : (raw ?? {});
+  const out: Partial<Record<ExperimentName, boolean>> = {};
+  for (const [name, on] of Object.entries(asked)) {
+    if (!(name in EXPERIMENTS)) {
+      log(`config: unknown experiment "${name}" — known: ${Object.keys(EXPERIMENTS).join(', ')}`);
+      continue;
+    }
+    out[name as ExperimentName] = on === true;
+  }
+  const wanted = Object.entries(out).filter(([, on]) => on);
+  if (wanted.length && !master) {
+    log(`config: "experimental" is false — ${wanted.map(([n]) => n).join(', ')} stays off`);
+  }
+  return out;
+}
+
+/** An experiment runs only when the master switch and its own flag agree. */
+export function experimentOn(cfg: Config, name: ExperimentName): boolean {
+  return cfg.experimental === true && cfg.experiments[name] === true;
 }
 
 function expandHome(p: string): string {

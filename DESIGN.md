@@ -69,6 +69,9 @@ src/core/
                      live statuses restore as `interrupted`
   guidance.ts        guidanceFor(scope): the general block plus whatever is scoped to this
                      prompt (triage / work / review / plan)
+  channel.ts         EXPERIMENTAL coordination channels: per-family jsonl message log +
+                     per-reader cursors, behind a ChannelStore interface (the remote seam).
+                     Off unless config `experimental` AND `experiments.coordination`
   gc.ts              which worktrees can go: finished tasks past a keep-window, review
                      checkouts of stale reviews, and directories no task claims (repo
                      re-routes leave those). Refuses to classify anything as an orphan
@@ -90,7 +93,8 @@ src/views/           registry.ts maps names/aliases → components + hotkey help
                      task/projects/project/plan/reviews/costs/logs/gc/config/help; custom views wrap
                      IssuesView with a spec. taskActions.tsx holds the verbs a task has (cancel,
                      resume, force, rebase, attach, edit, escalate, …) plus their modals, so the
-                     board and the tasks table are two renderings of one set of actions
+                     board and the tasks table are two renderings of one set of actions.
+                     ChannelView tails a coordination channel (experimental)
 src/doctor.ts        npm run doctor — env sanity CLI
 ```
 
@@ -118,6 +122,26 @@ The split is deliberately invisible to views:
 `R` reloads the frontend: the TUI exits 75 and the supervisor respawns it on the new build, daemon
 untouched. Still client-side and therefore lost on reload: the `:plan` planner session and `n`
 new-issue drafting. Moving those behind the daemon is the obvious next step.
+
+## Experiments
+
+Features that work but aren't settled sit behind two flags: `experimental` (master) and
+`experiments.<name>`. `experimentOn(cfg, name)` is the only way to ask; both must be true.
+Two switches rather than one because the master is how you turn everything off at once
+after a bad session, without losing which features you'd chosen. A feature named while the
+master is off, or a name that isn't an experiment, is logged — an experiment that silently
+doesn't run wastes an afternoon.
+
+`EXPERIMENTS` in types.ts is the registry (name → one-line description); adding a feature
+means adding a key there, gating it with `experimentOn`, and documenting it in README's
+experiments table. Experimental views stay registered when disabled and explain how to turn
+themselves on — a `:chan` that says "unknown view" teaches nothing.
+
+Live experiment: **coordination channels** (COORDINATION.md). Worth knowing structurally:
+the agent tools are an in-process MCP server built per session with the channel and username
+closed over, so identity can't be spoofed by prompt; the message log lives in the state dir
+and is written by the daemon, which is why the TUI polls it and sends operator posts back
+over the socket instead of appending itself.
 
 ## Contexts
 
@@ -273,6 +297,7 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
 | custom views | `~/.config/colinear/views/*.json` |
 | task/planner/UI state | `~/.local/state/colinear/state.json` (pruned by `retentionDays`) |
 | debug log + diverted stderr | `~/.local/state/colinear/colinear.log` |
+| coordination channels (experimental) | `~/.local/state/colinear/channels/*.jsonl` + `cursors.json` |
 | socket + pidfile | `~/.local/state/colinear/coli.sock`, `coli.pid` |
 | attach scripts | `~/.local/state/colinear/attach-*.sh` |
 | worktrees | `<repo>-worktrees/<ISSUE-KEY>` (per repo config) |
