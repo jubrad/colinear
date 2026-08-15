@@ -13,6 +13,7 @@ import { ProjectsView, projectsKeys } from './ProjectsView.js';
 import { ProjectView, projectKeys } from './ProjectView.js';
 import { ReviewsView, reviewsKeys } from './ReviewsView.js';
 import { TaskView, taskKeys } from './TaskView.js';
+import { TasksView, tasksKeys } from './TasksView.js';
 
 export interface ViewDef {
   name: string;
@@ -39,6 +40,13 @@ const builtinViews: ViewDef[] = [
     keys: boardKeys,
   },
   {
+    name: 'tasks',
+    aliases: ['ls', 't'],
+    describe: 'every task as a searchable, sortable table',
+    Component: TasksView,
+    keys: tasksKeys,
+  },
+  {
     name: 'task',
     aliases: ['ta'],
     describe: 'task detail + live log (:task CLOUD-123)',
@@ -53,8 +61,9 @@ const builtinViews: ViewDef[] = [
     keys: projectsKeys,
   },
   {
+    // not "pr": that reads as pull request, and :reviews owns it
     name: 'project',
-    aliases: ['pr'],
+    aliases: ['p'],
     describe: 'project kanban (:project NAME)',
     Component: ProjectView,
     keys: projectKeys,

@@ -1,17 +1,13 @@
 import { Box, Text, useInput } from 'ink';
-import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
-import { attachSession, attachShell } from '../core/attach.js';
 import { useTasks } from '../core/hooks.js';
-import { fetchSubIssues, postComment } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { Task, TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
-import { EditTaskModal, type TaskEdits } from '../ui/EditTaskModal.js';
-import { SubIssueModal, type SubIssueRow } from '../ui/SubIssueModal.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
+import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
 
 interface BoardColumn {
   title: string;
@@ -39,7 +35,7 @@ const ACTIVE_STATUSES: TaskStatus[] = ['triage', 'working', 'checks'];
 const PR_STATES = ['changes', 'conflict', 'approved', 'draft', 'awaiting', 'merged', 'closed'] as const;
 type PrState = (typeof PR_STATES)[number];
 
-const PR_STATE_COLOR: Record<PrState, string> = {
+export const PR_STATE_COLOR: Record<PrState, string> = {
   conflict: theme.err,
   approved: theme.ok,
   merged: theme.merged,
@@ -49,7 +45,7 @@ const PR_STATE_COLOR: Record<PrState, string> = {
   closed: theme.err,
 };
 
-function prState(task: Task): PrState | undefined {
+export function prState(task: Task): PrState | undefined {
   const pr = task.prs[0];
   if (!pr) return undefined;
   if (pr.state === 'MERGED') return 'merged';
@@ -61,7 +57,8 @@ function prState(task: Task): PrState | undefined {
   return 'awaiting';
 }
 
-const prRank = (task: Task): number => {
+/** PR-state order for sorting; tasks with no PR sort last. */
+export const prRank = (task: Task): number => {
   const state = prState(task);
   return state ? PR_STATES.indexOf(state) : PR_STATES.length;
 };
@@ -70,13 +67,17 @@ export function columnTasks(tasks: Task[]): Task[] {
   return COLUMNS.flatMap((col) => tasks.filter((t) => col.statuses.includes(t.status)));
 }
 
+/** Which board column a task belongs to — the list view's default ordering. */
+export function boardOrder(task: Task): number {
+  const idx = COLUMNS.findIndex((col) => col.statuses.includes(task.status));
+  return idx === -1 ? COLUMNS.length : idx;
+}
+
 export function BoardView(_props: { param?: string }) {
   const ctx = useColinear();
   const tasks = useTasks();
   const [pos, setPos] = useState({ col: 0, row: 0 });
-  const [answering, setAnswering] = useState(false);
-  const [subModal, setSubModal] = useState<{ parent: Task; rows: SubIssueRow[] }>();
-  const [repoModal, setRepoModal] = useState<Task>();
+  const actions = useTaskActions();
 
   // grid[col] = tasks in that board column, in render order
   const grid = useMemo(
@@ -123,14 +124,6 @@ export function BoardView(_props: { param?: string }) {
       row: Math.max(0, Math.min((grid[p.col]?.length ?? 1) - 1, p.row + dir)),
     }));
 
-  // modals own the keyboard: without capture, global keys stay live and a
-  // ":" typed into the pin field (e.g. pasting a URL) opens the command bar
-  useEffect(
-    () => ctx.setCapture(answering || Boolean(subModal) || Boolean(repoModal)),
-    [answering, subModal, repoModal],
-  );
-  useEffect(() => () => ctx.setCapture(false), []);
-
   useInput(
     (input, key) => {
       // ijkl: i/k walk cards in a column, j/l jump columns (arrows too)
@@ -138,68 +131,11 @@ export function BoardView(_props: { param?: string }) {
       if (key.rightArrow || input === 'l') moveCol(1);
       if (key.upArrow || input === 'i') moveRow(-1);
       if (key.downArrow || input === 'k') moveRow(1);
-      if (input === 'a' && selected?.question) setAnswering(true);
-      if (input === 'n') ctx.navigate('issues');
-      if (key.return && selected) ctx.navigate('task', selected.issue.identifier);
-      if (input === 'x' && selected) {
-        if (ctx.dispatcher.cancel(selected.issue.id)) ctx.toast(`cancelling ${selected.issue.identifier}`, 'info');
-      }
-      if (input === 'r' && selected && !selected.question) {
-        ctx.dispatcher.resume(selected.issue.id);
-        ctx.toast(`requeued ${selected.issue.identifier}`, 'ok');
-      }
-      if (input === 'f' && selected?.status === 'blocked') {
-        ctx.dispatcher.force(selected.issue.id);
-        ctx.toast(`${selected.issue.identifier}: starting now — blockers still gate the merge`, 'ok');
-      }
-      if (input === 'b' && selected?.prs.length) {
-        ctx.dispatcher.rebase(selected.issue.id);
-        ctx.toast(`rebasing ${selected.issue.identifier}`, 'info');
-      }
-      if (input === 's' && selected) attachSession(selected, ctx);
-      if (input === 'S' && selected) attachShell(selected, ctx);
-      if (input === 'm' && selected) setRepoModal(selected);
-      if (input === 'u' && selected) {
-        void fetchSubIssues(ctx.cfg, selected.issue.id)
-          .then((subs) => {
-            if (!subs.length) {
-              ctx.toast(`${selected.issue.identifier} has no sub-issues`, 'info');
-              return;
-            }
-            setSubModal({
-              parent: selected,
-              rows: subs.map((issue) => ({
-                issue,
-                disabled:
-                  issue.stateType === 'completed' ? ('done' as const) : store.get(issue.id) ? ('on board' as const) : undefined,
-              })),
-            });
-          })
-          .catch(() => ctx.toast('failed to fetch sub-issues', 'err'));
-      }
-      if (input === 'o' && selected?.prs[0]) {
-        execFile('open', [selected.prs[0].url], () => {});
-        ctx.toast(`opened #${selected.prs[0].number}`, 'info');
-      }
-      if (input === 'O' && selected) {
-        execFile('open', [selected.issue.url], () => {});
-        ctx.toast(`opened ${selected.issue.identifier} in Linear`, 'info');
-      }
-      if (input === 'c' && selected?.verdict && selected.verdict.verdict !== 'do' && !selected.question && !selected.escalationCommented) {
-        const v = selected.verdict;
-        const body =
-          v.verdict === 'too_big'
-            ? `**colinear triage: too big for a single agent.**\n\n${v.reason}\n\nSuggest creating a project and splitting this up.`
-            : `**colinear triage: needs more info.**\n\n${v.reason}`;
-        void postComment(ctx.cfg, selected.issue.id, body)
-          .then(() => {
-            store.update(selected.issue.id, { escalationCommented: true });
-            ctx.toast(`escalation posted to ${selected.issue.identifier}`, 'ok');
-          })
-          .catch(() => ctx.toast('Linear comment failed', 'err'));
-      }
+      // the same board of tasks, searchable and sortable
+      if (input === '/') ctx.navigate('tasks');
+      actions.handleKey(input, key, selected);
     },
-    { isActive: !answering && !subModal && !repoModal && !ctx.cmdOpen },
+    { isActive: !actions.busy && !ctx.cmdOpen },
   );
 
   if (!tasks.length) {
@@ -227,48 +163,7 @@ export function BoardView(_props: { param?: string }) {
 
   return (
     <Box flexDirection="column" flexGrow={1}>
-      {subModal && (
-        <SubIssueModal
-          parent={subModal.parent.issue.identifier}
-          rows={subModal.rows}
-          onCancel={() => setSubModal(undefined)}
-          onSubmit={(picked) => {
-            setSubModal(undefined);
-            // sub-issues default to the parent's repo; dependency queue orders them.
-            // They came out of a split that already scoped them, so triaging
-            // each one again just pays to re-derive the same answer.
-            const repo = ctx.cfg.repos.find((r) => r.path === subModal.parent.repo?.path);
-            ctx.dispatcher.enqueue(picked, { repo, skipTriage: true });
-            // a parent with no PRs of its own is now just tracking its subs
-            if (!subModal.parent.prs.length) {
-              store.update(subModal.parent.issue.id, {
-                status: 'tracking',
-                subIssues: subModal.rows.map((r) => ({
-                  id: r.issue.id,
-                  identifier: r.issue.identifier,
-                  title: r.issue.title,
-                  done: r.disabled === 'done',
-                })),
-              });
-            }
-            ctx.toast(
-              `dispatched ${picked.length} sub-issue${picked.length > 1 ? 's' : ''} of ${subModal.parent.issue.identifier}`,
-              'ok',
-            );
-          }}
-        />
-      )}
-      {repoModal && (
-        <EditTaskModal
-          task={repoModal}
-          repos={ctx.cfg.repos}
-          onCancel={() => setRepoModal(undefined)}
-          onSubmit={(edits) => {
-            setRepoModal(undefined);
-            ctx.dispatcher.applyEdits(repoModal.issue.id, edits);
-          }}
-        />
-      )}
+      {actions.modals}
       {/* overflow clip keeps tall columns from pushing card headers off-screen */}
       <Box gap={1} flexGrow={1} overflow="hidden">
         {COLUMNS.map((col, colIdx) => {
@@ -307,12 +202,12 @@ export function BoardView(_props: { param?: string }) {
           );
         })}
       </Box>
-      {selected && !subModal && !repoModal && (
+      {selected && !actions.modalOpen && (
         // fixed-height pane: however tall the task detail gets, it clips here
         // instead of flex-squeezing the board columns (and their headers) away.
         // hidden while a modal is open so the modal always has vertical room
         <Box height={15} flexShrink={0} flexDirection="column" overflow="hidden">
-          <DetailPane task={selected} answering={answering} onAnswerDone={() => setAnswering(false)} />
+          <DetailPane task={selected} answering={actions.answering} onAnswerDone={actions.endAnswer} />
         </Box>
       )}
     </Box>
@@ -537,18 +432,7 @@ function progressBar(done: number, total: number, width = 8): string {
 export const boardKeys: Array<[string, string]> = [
   ['j/l ←→', 'column'],
   ['i/k ↑↓', 'card'],
-  ['enter', 'task detail'],
-  ['u', 'dispatch subs'],
-  ['m', 'edit task'],
-  ['a', 'answer'],
-  ['x', 'cancel'],
-  ['s', 'attach claude'],
+  ...TASK_ACTION_KEYS,
   ['S', 'shell'],
-  ['r', 'resume'],
-  ['f', 'force start'],
-  ['b', 'rebase'],
-  ['c', 'escalate'],
-  ['o', 'open PR'],
-  ['O', 'open issue'],
-  ['n', 'issues'],
+  ['/', 'search (list)'],
 ];
