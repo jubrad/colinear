@@ -36,13 +36,14 @@ const ACTIVE_STATUSES: TaskStatus[] = ['triage', 'working', 'checks'];
  * approved is yours to merge, changes-requested is yours to fix, a draft is
  * yours to promote, and awaiting review is somebody else's move.
  */
-const PR_STATES = ['approved', 'changes', 'draft', 'awaiting', 'merged', 'closed'] as const;
+const PR_STATES = ['changes', 'conflict', 'approved', 'draft', 'awaiting', 'merged', 'closed'] as const;
 type PrState = (typeof PR_STATES)[number];
 
 const PR_STATE_COLOR: Record<PrState, string> = {
+  conflict: theme.err,
   approved: theme.ok,
   merged: theme.merged,
-  changes: theme.err,
+  changes: theme.changes,
   draft: theme.dim,
   awaiting: theme.key,
   closed: theme.err,
@@ -55,6 +56,7 @@ function prState(task: Task): PrState | undefined {
   if (pr.state === 'CLOSED') return 'closed';
   if (pr.reviewDecision === 'APPROVED') return 'approved';
   if (pr.reviewDecision === 'CHANGES_REQUESTED') return 'changes';
+  if (pr.mergeable === 'CONFLICTING') return 'conflict';
   if (pr.isDraft) return 'draft';
   return 'awaiting';
 }
@@ -149,6 +151,10 @@ export function BoardView(_props: { param?: string }) {
       if (input === 'f' && selected?.status === 'blocked') {
         ctx.dispatcher.force(selected.issue.id);
         ctx.toast(`${selected.issue.identifier}: starting now — blockers still gate the merge`, 'ok');
+      }
+      if (input === 'b' && selected?.prs.length) {
+        ctx.dispatcher.rebase(selected.issue.id);
+        ctx.toast(`rebasing ${selected.issue.identifier}`, 'info');
       }
       if (input === 's' && selected) attachSession(selected, ctx);
       if (input === 'S' && selected) attachShell(selected, ctx);
@@ -361,6 +367,7 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
       <Box height={2} overflow="hidden">
         <Text bold wrap="wrap">
           {active && <Text color={theme.warn}>{spinner(now)} </Text>}
+          {task.rebasing && <Text color={theme.ok}>{Math.floor(now / 500) % 2 ? '●' : '○'} </Text>}
           {task.issue.identifier} <Text dimColor>{task.issue.title}</Text>
         </Text>
       </Box>
@@ -533,6 +540,7 @@ export const boardKeys: Array<[string, string]> = [
   ['S', 'shell'],
   ['r', 'resume'],
   ['f', 'force start'],
+  ['b', 'rebase'],
   ['c', 'escalate'],
   ['o', 'open PR'],
   ['O', 'open issue'],

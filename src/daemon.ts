@@ -80,6 +80,9 @@ export async function runDaemon(): Promise<void> {
       case 'force':
         dispatcher.force(cmd.id);
         break;
+      case 'rebase':
+        dispatcher.rebase(cmd.id);
+        break;
       case 'suspend':
         dispatcher.suspend(cmd.id);
         break;

@@ -14,6 +14,7 @@ export type Command =
   | { name: 'cancel'; id: string }
   | { name: 'resume'; id: string }
   | { name: 'force'; id: string }
+  | { name: 'rebase'; id: string }
   | { name: 'suspend'; id: string }
   | { name: 'redispatch'; id: string; repo: RepoConfig; opts?: { retriage?: boolean; skipTriage?: boolean } }
   | { name: 'answer'; id: string; text: string }
