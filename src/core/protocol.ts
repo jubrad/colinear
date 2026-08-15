@@ -13,6 +13,7 @@ export type Command =
   | { name: 'enqueue'; issues: LinearIssue[]; opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean } }
   | { name: 'cancel'; id: string }
   | { name: 'resume'; id: string }
+  | { name: 'force'; id: string }
   | { name: 'suspend'; id: string }
   | { name: 'redispatch'; id: string; repo: RepoConfig; opts?: { retriage?: boolean; skipTriage?: boolean } }
   | { name: 'answer'; id: string; text: string }

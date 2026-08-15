@@ -114,7 +114,11 @@ new-issue drafting. Moving those behind the daemon is the obvious next step.
 ## Task lifecycle
 
 `queued → triage → working → checks → done|pr_open` with detours:
-- `blocked` (Linear blockers open; rechecked every 60s + on merges/completions)
+- `blocked` (Linear blockers open; rechecked every 60s + on merges/completions). Linear has one
+  kind of "blocks"; colinear has two. A blocker starts as `start` (parks the task); `f` converts
+  it to `merge`, which dispatches the work in parallel but keeps it on the task — the agent's
+  prompt says what it is building ahead of, and `d` refuses to promote the PR until the blocker
+  lands. Deployment is outside what colinear can see, so `D` overrides.
 - `needs_input` (agent AskUserQuestion, or too_big/needs_info triage verdicts — split-plan review lives here)
 - `interrupted` (restart/suspend/attach; `r` resumes the SDK session by id)
 - `error` (failures; auto-unfails if a live PR turns up), `escalated` (legacy; verdicts now park as needs_input)

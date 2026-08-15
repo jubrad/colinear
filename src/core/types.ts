@@ -152,8 +152,13 @@ export interface Task {
   pinnedPr?: number;
   /** sub-issues a `tracking` parent is waiting on */
   subIssues?: Array<{ id: string; identifier: string; title: string; done: boolean }>;
-  /** unresolved Linear blockers keeping this task out of the queue */
-  blockedBy?: Array<{ id: string; identifier: string }>;
+  /**
+   * Linear "blocks" relations this task is subject to. `start` parks it out of
+   * the queue; `merge` lets the work happen in parallel but holds the PR in
+   * draft until the blocker lands. Linear has no such distinction — forcing a
+   * blocked task (`f`) is what converts one to the other.
+   */
+  blockedBy?: Array<{ id: string; identifier: string; kind: 'start' | 'merge'; done?: boolean }>;
   /** one automatic retry after a rate-limit failure */
   retried?: boolean;
   /** superseded session pointers — recovery when a new session clobbers a good one */

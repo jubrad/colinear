@@ -138,6 +138,27 @@ export class Dispatcher {
     this.pump();
   }
 
+  /**
+   * Start a blocked task anyway. The blockers stay on the task as merge-order
+   * dependencies: the work happens in parallel, the PR stays draft until they
+   * land, and the agent is told what it is building ahead of.
+   */
+  force(id: string): boolean {
+    const task = store.get(id);
+    if (!task || task.status !== 'blocked') return false;
+    const deps = (task.blockedBy ?? []).map((b) => ({ ...b, kind: 'merge' as const }));
+    store.update(id, { status: 'queued', blockedBy: deps, error: undefined, endedAt: undefined });
+    store.addActivity(
+      id,
+      deps.length
+        ? `forced past ${deps.map((d) => d.identifier).join(', ')} — they must still merge first`
+        : 'forced past blockers',
+    );
+    this.queue.push(id);
+    this.pump();
+    return true;
+  }
+
   enqueue(
     issues: LinearIssue[],
     opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean },
@@ -182,7 +203,7 @@ export class Dispatcher {
           if (open.length) {
             store.update(issue.id, {
               status: 'blocked',
-              blockedBy: open.map(({ id: bid, identifier }) => ({ id: bid, identifier })),
+              blockedBy: open.map(({ id: bid, identifier }) => ({ id: bid, identifier, kind: 'start' as const })),
             });
             store.addActivity(issue.id, `blocked by ${open.map((b) => b.identifier).join(', ')}`);
           } else {
@@ -361,17 +382,31 @@ export class Dispatcher {
   async recheckBlocked() {
     await this.sweepClosed().catch(() => {});
     await this.refreshTracking().catch(() => {});
-    for (const task of store.list().filter((t) => t.status === 'blocked')) {
+    // merge-order dependencies are tracked on every task, not just blocked ones:
+    // the promote gate reads them long after the work is done
+    for (const task of store.list()) {
+      if (task.status !== 'blocked' && !task.blockedBy?.length) continue;
       const blockers = await fetchBlockers(this.cfg, task.issue.id).catch(() => null);
       if (!blockers) continue;
-      const open = blockers.filter((b) => !b.done && store.get(b.id)?.status !== 'done');
-      if (open.length) {
-        store.update(task.issue.id, { blockedBy: open.map(({ id, identifier }) => ({ id, identifier })) });
+      const kinds = new Map((task.blockedBy ?? []).map((b) => [b.id, b.kind]));
+      const deps = blockers.map(({ id, identifier, done }) => ({
+        id,
+        identifier,
+        kind: kinds.get(id) ?? ('start' as const),
+        done: done || store.get(id)?.status === 'done',
+      }));
+      const holdingStart = deps.filter((d) => d.kind === 'start' && !d.done);
+
+      if (task.status === 'blocked' && !holdingStart.length) {
+        store.update(task.issue.id, { status: 'queued', blockedBy: deps.filter((d) => !d.done) });
+        store.addActivity(task.issue.id, 'blockers resolved — queued');
+        this.queue.push(task.issue.id);
         continue;
       }
-      store.update(task.issue.id, { status: 'queued', blockedBy: undefined });
-      store.addActivity(task.issue.id, 'blockers resolved — queued');
-      this.queue.push(task.issue.id);
+      const next = deps.filter((d) => !d.done);
+      if (JSON.stringify(next) !== JSON.stringify(task.blockedBy ?? [])) {
+        store.update(task.issue.id, { blockedBy: next.length ? next : undefined });
+      }
     }
     this.pump();
   }
@@ -820,6 +855,29 @@ interface IssueFamily {
   siblings?: LinearIssue[];
 }
 
+/**
+ * What this issue must land after. An agent that doesn't know it is building
+ * ahead of something else reimplements it, or writes a PR nobody can order.
+ */
+function dependencyBlock(task: Task): string {
+  const deps = (task.blockedBy ?? []).filter((d) => !d.done);
+  if (!deps.length) return '';
+  const merge = deps.filter((d) => d.kind === 'merge');
+  const start = deps.filter((d) => d.kind === 'start');
+  const lines = ['', '## Dependencies'];
+  if (merge.length) {
+    lines.push(
+      `This issue must MERGE after: ${merge.map((d) => d.identifier).join(', ')}. That work is happening in parallel — possibly in another repository — and is not merged yet.`,
+      '',
+      'So: build against the current state of your base branch, and do not wait for it or reimplement what it provides. If you depend on something it introduces that does not exist yet, code against the interface it will expose and say so plainly in the PR body — state which issue must land (and deploy) first, and why. Never mark your PR ready; the operator promotes it once the dependency has shipped.',
+    );
+  }
+  if (start.length) {
+    lines.push(`Blocked by (not yet resolved): ${start.map((d) => d.identifier).join(', ')}.`);
+  }
+  return lines.join('\n');
+}
+
 function familyBlock(issue: LinearIssue, family?: IssueFamily): string {
   if (!issue.parent || !family) return '';
   const lines: string[] = ['', `## Parent & sibling context`];
@@ -888,6 +946,7 @@ function taskContext(
     task.instructions
       ? `\nOperator instructions for THIS issue (these take precedence over the standing guidance and anything else):\n${task.instructions}`
       : '',
+    dependencyBlock(task),
     familyBlock(task.issue, family),
   ]
     .filter((line) => line !== '')

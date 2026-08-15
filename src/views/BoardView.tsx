@@ -108,6 +108,10 @@ export function BoardView(_props: { param?: string }) {
         ctx.dispatcher.resume(selected.issue.id);
         ctx.toast(`requeued ${selected.issue.identifier}`, 'ok');
       }
+      if (input === 'f' && selected?.status === 'blocked') {
+        ctx.dispatcher.force(selected.issue.id);
+        ctx.toast(`${selected.issue.identifier}: starting now — blockers still gate the merge`, 'ok');
+      }
       if (input === 's' && selected) attachSession(selected, ctx);
       if (input === 'S' && selected) attachShell(selected, ctx);
       if (input === 'm' && selected) setRepoModal(selected);
@@ -186,9 +190,11 @@ export function BoardView(_props: { param?: string }) {
           onCancel={() => setSubModal(undefined)}
           onSubmit={(picked) => {
             setSubModal(undefined);
-            // sub-issues default to the parent's repo; dependency queue orders them
+            // sub-issues default to the parent's repo; dependency queue orders them.
+            // They came out of a split that already scoped them, so triaging
+            // each one again just pays to re-derive the same answer.
             const repo = ctx.cfg.repos.find((r) => r.path === subModal.parent.repo?.path);
-            ctx.dispatcher.enqueue(picked, { repo });
+            ctx.dispatcher.enqueue(picked, { repo, skipTriage: true });
             // a parent with no PRs of its own is now just tracking its subs
             if (!subModal.parent.prs.length) {
               store.update(subModal.parent.issue.id, {
@@ -357,11 +363,14 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
           ? {task.question.text}
         </Text>
       )}
-      {task.status === 'blocked' && task.blockedBy && (
-        <Text color={STATUS_COLORS.blocked} wrap="truncate">
-          ⛓ {task.blockedBy.map((b) => b.identifier).join(', ')}
+      {task.blockedBy?.length ? (
+        // a forced task keeps its blockers as merge-order: still worth seeing
+        <Text color={task.status === 'blocked' ? STATUS_COLORS.blocked : theme.warn} wrap="truncate">
+          ⛓ {task.status === 'blocked' ? '' : 'merge after '}
+          {task.blockedBy.map((b) => b.identifier).join(', ')}
+          {task.status === 'blocked' ? <Text dimColor> · f starts anyway</Text> : null}
         </Text>
-      )}
+      ) : null}
       {task.verdict && task.verdict.verdict !== 'do' && !task.subIssues?.length && (
         <Text color={theme.err} wrap="truncate">
           {task.verdict.verdict === 'too_big' ? '⛰ too big' : '? needs info'}
@@ -459,6 +468,7 @@ export const boardKeys: Array<[string, string]> = [
   ['s', 'attach claude'],
   ['S', 'shell'],
   ['r', 'resume'],
+  ['f', 'force start'],
   ['c', 'escalate'],
   ['o', 'open PR'],
   ['O', 'open issue'],
