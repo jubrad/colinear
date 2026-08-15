@@ -36,11 +36,12 @@ const ACTIVE_STATUSES: TaskStatus[] = ['triage', 'working', 'checks'];
  * approved is yours to merge, changes-requested is yours to fix, a draft is
  * yours to promote, and awaiting review is somebody else's move.
  */
-const PR_STATES = ['approved', 'changes', 'draft', 'awaiting', 'closed'] as const;
+const PR_STATES = ['approved', 'changes', 'draft', 'awaiting', 'merged', 'closed'] as const;
 type PrState = (typeof PR_STATES)[number];
 
 const PR_STATE_COLOR: Record<PrState, string> = {
   approved: theme.ok,
+  merged: theme.merged,
   changes: theme.err,
   draft: theme.dim,
   awaiting: theme.key,
@@ -50,6 +51,7 @@ const PR_STATE_COLOR: Record<PrState, string> = {
 function prState(task: Task): PrState | undefined {
   const pr = task.prs[0];
   if (!pr) return undefined;
+  if (pr.state === 'MERGED') return 'merged';
   if (pr.state === 'CLOSED') return 'closed';
   if (pr.reviewDecision === 'APPROVED') return 'approved';
   if (pr.reviewDecision === 'CHANGES_REQUESTED') return 'changes';
@@ -336,7 +338,7 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
             ⊘ cancelled in Linear
           </Text>
         ) : (
-          <Text color={theme.ok} wrap="truncate">
+          <Text color={merged ? theme.merged : theme.ok} wrap="truncate">
             {merged ? `✓ merged #${merged.number}` : '✓ marked done'}
           </Text>
         )}
