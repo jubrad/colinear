@@ -26,6 +26,8 @@ export interface DispatcherApi {
   ): void;
   cancel(id: string): boolean;
   resume(id: string): boolean;
+  /** start a blocked task now, keeping its blockers as merge-order deps */
+  force(id: string): boolean;
   suspend(id: string): boolean;
   redispatch(id: string, repo: RepoConfig, opts?: { retriage?: boolean; skipTriage?: boolean }): boolean;
   pollPrs(): Promise<void>;
@@ -170,6 +172,7 @@ export async function connectToDaemon(): Promise<Connection> {
             enqueue: (issues, opts) => command({ name: 'enqueue', issues, opts }),
             cancel: (id) => (command({ name: 'cancel', id }), true),
             resume: (id) => (command({ name: 'resume', id }), true),
+            force: (id) => (command({ name: 'force', id }), true),
             suspend: (id) => (command({ name: 'suspend', id }), true),
             redispatch: (id, repo, opts) => (command({ name: 'redispatch', id, repo, opts }), true),
             pollPrs: async () => {

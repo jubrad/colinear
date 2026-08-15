@@ -81,7 +81,7 @@ export function TaskView(props: { param?: string }) {
             const issue = issues.find((x) => x.id === child.id);
             if (!issue) continue;
             const repo = ctx.cfg.repos.find((r) => r.name === subtasks[i].repo);
-            ctx.dispatcher.enqueue([issue], { repo });
+            ctx.dispatcher.enqueue([issue], { repo, skipTriage: true });
           }
           ctx.toast(`created + dispatched ${names.length} (dependencies queue automatically)`, 'ok');
           ctx.navigate('board');
@@ -151,11 +151,26 @@ export function TaskView(props: { param?: string }) {
       }
       if (input === 'o' && task.prs[0]) execFile('open', [task.prs[0].url], () => {});
       if (input === 'O') execFile('open', [task.issue.url], () => {});
-      if (input === 'd' && task.prs[0]?.isDraft) {
+      if ((input === 'd' || input === 'D') && task.prs[0]?.isDraft) {
+        // merge-order dependencies gate promotion, not the work. D overrides:
+        // colinear knows when a blocker MERGED, never whether it deployed
+        const holding = (task.blockedBy ?? []).filter((b) => !b.done);
+        if (holding.length && input === 'd') {
+          ctx.toast(
+            `${task.issue.identifier} must land after ${holding.map((b) => b.identifier).join(', ')} — D promotes anyway`,
+            'err',
+          );
+          return;
+        }
         execFile('gh', ['pr', 'ready', String(task.prs[0].number)], { cwd: task.repo?.path ?? ctx.cfg.repo }, (err) => {
           if (err) ctx.toast(`gh pr ready failed`, 'err');
           else ctx.toast(`#${task.prs[0].number} marked ready`, 'ok');
         });
+        if (holding.length) store.addActivity(task.issue.id, `promoted ahead of ${holding.map((b) => b.identifier).join(', ')}`);
+      }
+      if (input === 'f' && task.status === 'blocked') {
+        ctx.dispatcher.force(task.issue.id);
+        ctx.toast(`starting now — blockers still gate the merge`, 'ok');
       }
     },
     { isActive: !answering && !ctx.cmdOpen && !planMode },
@@ -257,6 +272,26 @@ export function TaskView(props: { param?: string }) {
         </Box>
       )}
 
+      {task.blockedBy?.length ? (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color={theme.header}>
+            {task.status === 'blocked' ? 'BLOCKED BY' : 'MERGE AFTER'}
+          </Text>
+          {task.blockedBy.map((b) => (
+            <Text key={b.id} color={b.done ? theme.ok : theme.warn} wrap="truncate">
+              {b.done ? '✔' : '⛓'} {b.identifier}
+              <Text dimColor>
+                {b.done
+                  ? ' — landed'
+                  : b.kind === 'merge'
+                    ? " — this PR stays draft until it lands (D promotes anyway; colinear can't see deploys)"
+                    : ' — f starts the work anyway'}
+              </Text>
+            </Text>
+          ))}
+        </Box>
+      ) : null}
+
       {(task.checks.length > 0 || task.prs.length > 0) && (
         <Box flexDirection="column" marginTop={1}>
           {task.checks.map((c) => (
@@ -345,6 +380,7 @@ export const taskKeys: Array<[string, string]> = [
   ['S', 'shell'],
   ['r', 'resume/retry'],
   ['d', 'PR ready'],
+  ['f', 'force start'],
   ['o', 'open PR'],
   ['O', 'open issue'],
 ];
