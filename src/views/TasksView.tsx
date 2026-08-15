@@ -62,7 +62,9 @@ export function TasksView(props: { param?: string }) {
         color: statusColor,
         sort: (a, b) => boardOrder(a) - boardOrder(b),
       },
-      { key: 'title', label: 'TITLE', width: 'flex', text: (t) => t.issue.title },
+      // capped: past ~50 chars the title is just pushing the columns that say
+      // what the task is *doing* off to the right edge
+      { key: 'title', label: 'TITLE', width: 'flex', max: 50, text: (t) => t.issue.title },
       { key: 'repo', label: 'REPO', width: 10, text: (t) => t.repo?.name ?? '', color: () => theme.dim },
       {
         key: 'pr',
