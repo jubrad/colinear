@@ -2,6 +2,7 @@ import { Box, useApp, useInput, useStdout } from 'ink';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DispatcherApi } from './client.js';
 import { consumeResumeView, rememberView, setPendingAction } from './core/attach.js';
+import { CONTEXT, DEFAULT_CONTEXT } from './core/context.js';
 import { useReviews, useTasks } from './core/hooks.js';
 import { fetchTeams, fetchViewer } from './core/linear.js';
 import { store } from './core/store.js';
@@ -203,7 +204,9 @@ export function App(props: {
 
   const info: Array<[string, string]> = [
     ['User', viewer?.displayName ?? '…'],
-    ['Repo', cfg.repo.split('/').slice(-1)[0]],
+    // the context rides on the repo row rather than taking a fifth: every view
+    // sizes its panes against a four-row header
+    ['Repo', cfg.repo.split('/').slice(-1)[0] + (CONTEXT === DEFAULT_CONTEXT ? '' : ` (ctx ${CONTEXT})`)],
     ['Agents', `${active} active${needsInput ? `, ${needsInput} waiting` : ''} / ${tasks.length}`],
     [
       cfg.retentionDays ? `Tokens/${cfg.retentionDays}d` : 'Tokens',

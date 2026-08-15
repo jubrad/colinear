@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
-import { loadConfig } from './core/config.js';
+import { configPath, loadConfig } from './core/config.js';
+import { CONTEXT, DEFAULT_CONTEXT } from './core/context.js';
 import { fetchIssues, fetchViewer } from './core/linear.js';
 
 const exec = promisify(execFile);
@@ -15,6 +16,9 @@ let failures = 0;
 
 console.log('colinear doctor\n');
 const cfg = loadConfig();
+// which config this run is checking — a green doctor against the wrong
+// context answers a question nobody asked
+console.log(`  · config: ${configPath()}${CONTEXT === DEFAULT_CONTEXT ? '' : ` (context ${CONTEXT})`}`);
 
 try {
   const { stdout } = await exec('claude', ['--version']);
