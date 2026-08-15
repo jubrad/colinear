@@ -6,6 +6,8 @@ export const theme = {
   border: '#5f87af',
   borderFocus: '#87d7ff',
   ok: 'green',
+  /** GitHub's own merged purple — merged is not just another kind of green */
+  merged: '#a371f7',
   warn: 'yellow',
   err: 'red',
   info: 'magenta',

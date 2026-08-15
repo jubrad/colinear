@@ -1,8 +1,9 @@
+import { theme } from '../theme.js';
 import type { PrInfo } from '../core/types.js';
 
 /** Human label + color for a PR's review state. */
 export function reviewStatus(pr: PrInfo): { text: string; color: string } {
-  if (pr.state === 'MERGED') return { text: 'merged', color: 'green' };
+  if (pr.state === 'MERGED') return { text: 'merged', color: theme.merged };
   if (pr.state === 'CLOSED') return { text: 'closed', color: 'red' };
   switch (pr.reviewDecision) {
     case 'APPROVED':
