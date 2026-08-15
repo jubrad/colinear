@@ -111,6 +111,19 @@ class Store {
     this.emit({ kind: 'review-activity', id, line });
   }
 
+  /** Forget a task entirely. Retention is the only caller; nothing undoes it. */
+  delete(id: string) {
+    if (this.remote) return this.remote({ kind: 'delete', id });
+    if (!this.tasks.delete(id)) return;
+    this.emit({ kind: 'delete', id });
+  }
+
+  deleteReview(id: string) {
+    if (this.remote) return this.remote({ kind: 'review-delete', id });
+    if (!this.reviews.delete(id)) return;
+    this.emit({ kind: 'review-delete', id });
+  }
+
   listReviews(): Review[] {
     return [...this.reviews.values()];
   }
@@ -164,6 +177,10 @@ class Store {
         return this.addReviewActivity(change.id, change.line);
       case 'review-update':
         return this.updateReview(change.id, withCleared<Partial<Review>>(change.patch, change.clear));
+      case 'delete':
+        return this.delete(change.id);
+      case 'review-delete':
+        return this.deleteReview(change.id);
     }
   }
 
@@ -183,7 +200,11 @@ class Store {
    */
   apply(delta: Delta): boolean {
     if (delta.v !== this.version + 1) return false;
-    if (delta.kind === 'upsert') {
+    if (delta.kind === 'delete') {
+      this.tasks.delete(delta.id);
+    } else if (delta.kind === 'review-delete') {
+      this.reviews.delete(delta.id);
+    } else if (delta.kind === 'upsert') {
       this.tasks.set(delta.task.issue.id, this.fromWire(delta.task, delta.task.issue.id));
     } else if (delta.kind === 'review-upsert') {
       this.reviews.set(delta.review.id, this.fromWire(delta.review, delta.review.id) as unknown as Review);

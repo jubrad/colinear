@@ -14,7 +14,10 @@ export type Change =
   | { kind: 'activity'; id: string; line: string }
   | { kind: 'review-upsert'; review: WireReview }
   | { kind: 'review-update'; id: string; patch: Partial<WireReview>; clear: string[] }
-  | { kind: 'review-activity'; id: string; line: string };
+  | { kind: 'review-activity'; id: string; line: string }
+  /** dropped by retention — the only way a row ever leaves the store */
+  | { kind: 'delete'; id: string }
+  | { kind: 'review-delete'; id: string };
 
 /** A change stamped with the version it produced. */
 export type Delta = Change & { v: number };
