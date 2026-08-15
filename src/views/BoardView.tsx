@@ -31,6 +31,37 @@ const COLUMNS: BoardColumn[] = [
 
 const ACTIVE_STATUSES: TaskStatus[] = ['triage', 'working', 'checks'];
 
+/**
+ * What a task's PR is waiting on, in the order it wants your attention:
+ * approved is yours to merge, changes-requested is yours to fix, a draft is
+ * yours to promote, and awaiting review is somebody else's move.
+ */
+const PR_STATES = ['approved', 'changes', 'draft', 'awaiting', 'closed'] as const;
+type PrState = (typeof PR_STATES)[number];
+
+const PR_STATE_COLOR: Record<PrState, string> = {
+  approved: theme.ok,
+  changes: theme.err,
+  draft: theme.dim,
+  awaiting: theme.key,
+  closed: theme.err,
+};
+
+function prState(task: Task): PrState | undefined {
+  const pr = task.prs[0];
+  if (!pr) return undefined;
+  if (pr.state === 'CLOSED') return 'closed';
+  if (pr.reviewDecision === 'APPROVED') return 'approved';
+  if (pr.reviewDecision === 'CHANGES_REQUESTED') return 'changes';
+  if (pr.isDraft) return 'draft';
+  return 'awaiting';
+}
+
+const prRank = (task: Task): number => {
+  const state = prState(task);
+  return state ? PR_STATES.indexOf(state) : PR_STATES.length;
+};
+
 export function columnTasks(tasks: Task[]): Task[] {
   return COLUMNS.flatMap((col) => tasks.filter((t) => col.statuses.includes(t.status)));
 }
@@ -45,7 +76,12 @@ export function BoardView(_props: { param?: string }) {
 
   // grid[col] = tasks in that board column, in render order
   const grid = useMemo(
-    () => COLUMNS.map((col) => tasks.filter((t) => col.statuses.includes(t.status))),
+    () =>
+      COLUMNS.map((col) =>
+        // within a column, PR state orders the cards: what needs you first.
+        // Columns whose tasks have no PRs keep their existing order.
+        tasks.filter((t) => col.statuses.includes(t.status)).sort((a, b) => prRank(a) - prRank(b)),
+      ),
     [tasks, store.version],
   );
 
@@ -236,8 +272,9 @@ export function BoardView(_props: { param?: string }) {
           const [start, end] = windowColumn(colTasks.map(cardHeight), cardBudget, selIdx);
           return (
             <Box key={col.title} flexDirection="column" width={colWidth} flexShrink={0}>
-              <Text bold color={color}>
+              <Text bold color={color} wrap="truncate">
                 {col.title}({colTasks.length})
+                {prCounts(colTasks)}
               </Text>
               {start > 0 && (
                 <Text dimColor wrap="truncate">
@@ -450,6 +487,31 @@ function windowColumn(heights: number[], budget: number, selIdx: number): [numbe
     end = endFor(start);
   }
   return [start, end];
+}
+
+/**
+ * Counts per PR state for a column header, coloured — approved / changes /
+ * draft / awaiting / closed, in the order they want your attention.
+ */
+function prCounts(tasks: Task[]) {
+  const counts = new Map<PrState, number>();
+  for (const task of tasks) {
+    const state = prState(task);
+    if (state) counts.set(state, (counts.get(state) ?? 0) + 1);
+  }
+  const present = PR_STATES.filter((state) => counts.get(state));
+  if (!present.length) return null;
+  return (
+    <Text>
+      {' '}
+      {present.map((state, i) => (
+        <Text key={state}>
+          {i > 0 ? <Text dimColor>-</Text> : null}
+          <Text color={PR_STATE_COLOR[state]}>{counts.get(state)}</Text>
+        </Text>
+      ))}
+    </Text>
+  );
 }
 
 function progressBar(done: number, total: number, width = 8): string {
