@@ -349,6 +349,12 @@ export interface Config {
    * window the header's token and cost figures cover. 0 keeps everything.
    */
   retentionDays: number;
+  /**
+   * How long a finished task's worktree is kept before `coli gc` / `:gc` offer
+   * it (default 7). Separate from `retentionDays`: a checkout is exactly what
+   * you want the day a task lands, long after the card stops being interesting.
+   */
+  worktreeRetentionDays: number;
   /** UI refresh tick in ms — raise it (e.g. 2000) if your terminal/mux flickers (default 1000) */
   tickMs: number;
   /** permission mode for interactive attach sessions (default "acceptEdits", matching headless agents) */

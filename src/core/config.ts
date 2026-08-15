@@ -134,6 +134,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     ciAutofix: raw.ciAutofix ?? true,
     autoRebase: raw.autoRebase ?? false,
     retentionDays: raw.retentionDays ?? 30,
+    worktreeRetentionDays: raw.worktreeRetentionDays ?? 7,
     tickMs: raw.tickMs ?? 1000,
     attachPermissionMode: raw.attachPermissionMode ?? 'auto',
     terminal: raw.terminal,

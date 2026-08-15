@@ -94,7 +94,8 @@ async function gcCommand(args: string[]): Promise<void> {
   const cfg = loadConfig({ requireKey: false });
   const yes = args.includes('--yes') || args.includes('-y');
   const idx = args.findIndex((a) => a === '--older-than');
-  const olderThanDays = idx !== -1 ? Number.parseFloat(args[idx + 1] ?? '7') : 7;
+  const olderThanDays =
+    idx !== -1 ? Number.parseFloat(args[idx + 1] ?? String(cfg.worktreeRetentionDays)) : cfg.worktreeRetentionDays;
 
   // read the daemon's state file rather than talking to it: gc is a disk
   // chore, and it should work whether or not colinear is running
@@ -123,7 +124,7 @@ async function gcCommand(args: string[]): Promise<void> {
 
   if (!yes) {
     console.log(`\nnothing removed. re-run with --yes to reclaim it` +
-      (olderThanDays === 7 ? ' (finished tasks newer than 7d are kept; --older-than N to change)' : ''));
+      ` (finished tasks newer than ${olderThanDays}d are kept; --older-than N to change)`);
     return;
   }
   for (const item of items) {

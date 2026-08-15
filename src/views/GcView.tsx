@@ -25,7 +25,7 @@ export function GcView(_props: { param?: string }) {
   const [items, setItems] = useState<GcItem[]>();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [cursor, setCursor] = useState(0);
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useState(ctx.cfg.worktreeRetentionDays);
   const [confirming, setConfirming] = useState(false);
   const [progress, setProgress] = useState<GcProgress>();
   const [failures, setFailures] = useState<string[]>([]);
