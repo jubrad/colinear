@@ -366,6 +366,8 @@ export class Dispatcher {
       pinnedPr: edits.pinnedPr,
       // tri-state: undefined = keep plan chosen, leave the stored flag alone
       ...(edits.skipTriage !== undefined ? { skipTriage: edits.skipTriage } : {}),
+      // also tri-state, but here undefined is a real choice: "follow config"
+      autoRebase: edits.autoRebase,
       // persist the repo even without a requeue: PR matching polls per repo,
       // so a pin can only resolve once the task points at the right one
       ...(repoChanged ? { repo: { name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot } } : {}),
