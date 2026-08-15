@@ -1,6 +1,13 @@
 # colinear
 
-A k9s-style TUI that runs Claude Code agents against Linear. Browse issues, dispatch agents (one git worktree each, subscription auth), watch a live kanban board, answer agent questions inline, attach to any agent's session and hand it back, plan projects in a chat that drafts subtask issues, and track draft PRs / stacks / CI / review state — without leaving the terminal.
+A k9s-style TUI that runs Claude Code agents against Linear. Browse issues, dispatch agents (one git worktree each, subscription auth), watch a live kanban board, answer agent questions inline, attach to any agent's session and hand it back, plan projects in a chat that drafts subtask issues, pre-review other people's PRs, and track draft PRs / stacks / CI / review state — without leaving the terminal.
+
+- [Install](#install)
+- [Configuration](#configuration) · [reference](#config-reference) · [repos](#repos) · [guidance](#guidance) · [contexts](#contexts)
+- [Daemon and CLI](#daemon-and-cli)
+- [Views](#views) · [PR review](#pr-review)
+- [How dispatch works](#how-dispatch-works) · [Sessions](#sessions-attach-chat-background)
+- [Custom views](#custom-views) · [Files](#files) · [Notes](#notes)
 
 ## Install
 
@@ -13,9 +20,9 @@ coli              # or: npm run dev
 
 Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API_KEY` unset), `gh` authenticated, Linear personal API key. Optional: `brew install terminal-notifier` makes notifications click through to the PR/issue.
 
-## Config
+## Configuration
 
-`~/.config/colinear/config.json` (or legacy `~/.colinear.json`); `LINEAR_API_KEY` env var works too. View and edit live with `:config` (`e` opens $EDITOR — seeds the file from current settings on first use; changes hot-apply on return).
+`~/.config/colinear/config.json` (legacy `~/.colinear.json` also works); `LINEAR_API_KEY` env var covers the key. View and edit live with `:config` — `e` opens `$EDITOR`, seeds the file from current settings on first use, and changes hot-apply on return. A config file that exists but doesn't parse is a startup error rather than a silent fallback to defaults.
 
 ```json
 {
@@ -31,51 +38,134 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
     },
     { "name": "materialize", "path": "~/work/materialize", "pushRemote": "jubrad" }
   ],
-  "concurrency": 3,
   "team": "CLOUD",
+  "concurrency": 3,
   "model": "sonnet",
+  "guidance": {
+    "general": [
+      "PRs should solve the problem at hand simply and clearly.",
+      "Code is debt: don't write code that isn't needed to solve and validate the problem."
+    ],
+    "review": "Flag missing tests, but don't ask for tests that only restate the implementation."
+  },
+  "prSignoff": "_written by claude on behalf of @jubrad_",
+  "prSignoffScope": "body",
   "notifications": true,
   "stateSync": true,
   "ciAutofix": true,
-  "terminal": "ghostty",
-  "tickMs": 1000,
+  "autoRebase": false,
+  "retentionDays": 30,
+  "worktreeRetentionDays": 7,
   "attachPermissionMode": "auto",
-  "guidance": [
-    "PRs should solve the problem at hand simply and clearly.",
-    "Code is debt: don't write code that isn't needed to solve and validate the problem."
-  ]
+  "terminal": "ghostty",
+  "tickMs": 1000
 }
 ```
 
-- `repos` — the allowlist. Agents only ever touch these repos, and only through worktrees under each repo's `worktreeRoot`; working copies are never modified (the main checkout only sees `git fetch` and `git worktree add`). First entry is the default; custom dispatch picks per dispatch. Per repo: `defaultBranch` (worktree base, default `main`), `remote` (the upstream: worktree base + the repo PRs land in, default `origin`), `pushRemote` (where branches are pushed — set your fork here for a fork workflow, e.g. `"jubrad"`; default = `remote`), `prBase` (PR target branch, default = `defaultBranch`), `checks` (run after the work pass). `remote`/`pushRemote` are **git remote names** as they appear in `git remote -v` for that repo (`"mz"`, `"jubrad"`), not `owner/repo` slugs. In fork mode agents skip stacked PRs (they'd require pushing to the upstream). Legacy single-repo fields (`repo`, `defaultBranch`, `worktreeRoot`, `checks`) still work.
-- `description` (per repo) — what lives there. **Triage reads these to route each issue to the right repo** (it can inspect all allowlisted repos and returns its pick; the work pass starts there). Write them honestly.
-- `model` — default model for agents; overridable per dispatch and per task (`m`).
-- `prSignoff` — appended to every review comment colinear posts (each inline comment and the review body), so the author knows what wrote it: `"prSignoff": "_written by claude on behalf of @jubrad_"`. Markdown, a string or a list of lines. Unset posts nothing extra, and an empty body never becomes a signoff-only comment.
-- `prSignoffScope` — where that signoff goes: `"all"` (default) signs the review body and every inline comment; `"body"` signs only the body, so a review with six findings carries one attribution instead of seven.
-- `guidance` — standing house rules for agents. Either one block (a string or list of lines) that reaches every agent, or a map of scopes:
+### Config reference
 
-  ```json
-  "guidance": {
-    "general": ["applies to every agent"],
-    "triage": "scoping an issue",
-    "work":   "implementing an issue",
-    "review": "reviewing someone else's PR",
-    "plan":   "project planning chat"
-  }
-  ```
+Every key is optional except a Linear API key (config or env). Defaults are what you get by leaving a key out.
 
-  Scoped text is **added to** `general`, not a replacement, so house rules only need saying once. Per-task instructions (`m`) outrank all of it, and repo-specific conventions still belong in each repo's `CLAUDE.md`.
-- `tickMs` — UI refresh tick; raise if your terminal repaints non-atomically.
-- `attachPermissionMode` — permission mode for `s` attach sessions: `auto` (default — classifier gates risky commands), `acceptEdits`, `bypassPermissions`, or `default`. Headless agents always run in `auto`; classifier-blocked commands surface on the board as needs-input questions (allow/deny).
-- `stateSync` — auto-move Linear states (dispatch → In Progress, PR → In Review).
-- `ciAutofix` — dispatch a fix session when a task's PR checks go red.
-- `worktreeRetentionDays` — how long a finished task's **worktree** is kept before `coli gc` / `:gc` offer it (default `7`). Separate from `retentionDays` on purpose: a checkout is exactly what you want the day a task lands, long after the card stops being interesting.
-- `retentionDays` — how long finished work stays on the board (default `30`, `0` keeps everything). Past it, done and cancelled tasks and settled reviews are forgotten — never anything with an agent, a question, an open PR, or an error. It's also the window the header's `Tokens/30d ($…)` figure covers, so the number and the board always agree.
-- `autoRebase` — when GitHub reports a PR **conflicting** with its base, dispatch a session that rebases it: resolve conflicts, run the linters and nearby tests, `push --force-with-lease`. Default `false`; the `m` modal sets it per task (`config default` / `auto-rebase` / `leave it`), and `b` rebases on demand whatever the setting. One attempt per conflict, re-armed once the PR is mergeable again — a conflict GitHub hasn't finished computing (`UNKNOWN`) never triggers one.
-- `terminal` — session attach target: unset = in-place (recommended), `"ghostty"` / `"terminal"` = external window.
-- `--team CLOUD` / `--team all` flags override the config; the last picker team is remembered across runs.
+| key | default | what |
+|---|---|---|
+| `linearApiKey` | `$LINEAR_API_KEY` | Linear personal API key. Leave it out of the file and export the env var if you'd rather not have it on disk |
+| `repos` | one repo (see below) | the allowlist — agents only ever touch these, and only through worktrees. First entry is the default. [Details](#repos) |
+| `team` | your assigned issues | Linear team key (`"CLOUD"`) to browse, or `"all"` for every team. `--team CLOUD` / `--team all` override it for one run, and the last team picked with `t` is remembered |
+| `concurrency` | `3` | agent sessions running at once. Above ~5 you start hitting subscription rate limits |
+| `model` | Claude Code's default | model for agents (`"opus"`, `"sonnet"`, `"fable"`, `"haiku"`). Overridable per dispatch (`c`) and per task (`m`) |
+| `guidance` | none | standing house rules injected into agent prompts, globally or per prompt. [Details](#guidance) |
+| `prSignoff` | none | markdown appended to what colinear posts on a PR, so the author knows what wrote it. String or list of lines. An empty comment never becomes a signoff-only comment |
+| `prSignoffScope` | `"all"` | `"all"` signs the review body and every inline comment; `"body"` signs only the body, so a review with six findings carries one attribution instead of seven |
+| `notifications` | `true` | macOS notifications for the events that want you: a task needs input, finishes or fails, a CI-fix or rebase session goes out, a pre-review is ready. Click-through to the PR/issue with `terminal-notifier` installed |
+| `stateSync` | `true` | move Linear states automatically: dispatch → In Progress, first PR → In Review |
+| `ciAutofix` | `true` | dispatch a fix session when a task's PR checks go red (one per red rollup, re-armed when it goes green) |
+| `autoRebase` | `false` | default for [auto-rebase on conflict](#auto-rebase); the `m` modal overrides it per task |
+| `retentionDays` | `30` | how long finished work stays on the board. [Details](#retention-and-disk) |
+| `worktreeRetentionDays` | `7` | how long a finished task's worktree is kept before `coli gc` offers it. [Details](#retention-and-disk) |
+| `attachPermissionMode` | `"auto"` | permission mode for `s` attach sessions: `auto` (classifier gates risky commands), `acceptEdits`, `bypassPermissions`, `default`. Headless agents always run `auto`; classifier-blocked commands surface on the board as allow/deny questions |
+| `terminal` | in-place | where `s` attaches: unset hands over the current terminal (recommended), `"ghostty"` / `"terminal"` open an external window |
+| `tickMs` | `1000` | UI refresh tick. Raise it (e.g. `2000`) if your terminal or multiplexer flickers |
 
-## Daemon
+Legacy single-repo keys still work in place of `repos`: `repo`, `defaultBranch`, `worktreeRoot`, `checks`.
+
+Environment: `LINEAR_API_KEY`, `COLINEAR_CONTEXT` ([contexts](#contexts)), `COLINEAR_STATE_DIR` (points state, socket, pidfile and log somewhere else — used to isolate test runs), `EDITOR`, `SHELL`.
+
+### Repos
+
+Agents only ever touch repos on this list, and only through worktrees under each repo's `worktreeRoot` — your working copy is never modified (the main checkout only sees `git fetch` and `git worktree add`). The first entry is the default; `c` (custom dispatch) and `m` (edit task) pick per task, and triage can re-route an issue on its own.
+
+| key | default | what |
+|---|---|---|
+| `path` | — | required; `~` expands |
+| `name` | basename of `path` | how the repo is named in the UI and in dispatch modals |
+| `description` | none | **what lives here.** Triage reads these to route each issue to the right repo, so write them honestly |
+| `defaultBranch` | `"main"` | branch worktrees are cut from |
+| `remote` | `"origin"` | upstream **git remote name** — worktree base, and the repo PRs land in |
+| `pushRemote` | = `remote` | remote branches are pushed to. Set your fork here for a fork workflow (`"jubrad"`) |
+| `prBase` | = `defaultBranch` | branch PRs are opened against |
+| `worktreeRoot` | `<path>-worktrees` | where per-issue worktrees are created |
+| `checks` | none | commands run in the worktree after the work pass: `[{ "name": "fmt", "cmd": "bin/fmt --check" }]`. Output lands on the task detail view |
+
+`remote` / `pushRemote` are git remote names as they appear in `git remote -v` for that repo (`"mz"`, `"jubrad"`) — not `owner/repo` slugs. In fork mode agents skip stacked PRs, since those would require pushing to the upstream.
+
+### Guidance
+
+Standing house rules for agents — the things that are true of every PR you'd merge, so you don't retype them per issue. Either one block that reaches every agent:
+
+```json
+"guidance": ["PRs should solve the problem at hand simply and clearly."]
+```
+
+or a map, where each scope's text is **added to** `general` for that one kind of work:
+
+```json
+"guidance": {
+  "general": ["applies to every agent"],
+  "triage":  "scoping an issue",
+  "work":    "implementing an issue",
+  "review":  "reviewing someone else's PR",
+  "plan":    "project planning chat"
+}
+```
+
+Every value takes a string or a list of lines. Precedence: per-task instructions (`m`, or `c` at dispatch) outrank guidance, and repo-specific conventions still belong in that repo's `CLAUDE.md`, which agents read anyway.
+
+### Retention and disk
+
+Two windows, deliberately different numbers — a checkout is exactly what you want the day a task lands, long after the card stops being interesting.
+
+- `retentionDays` (default `30`, `0` keeps everything) — how long finished work stays on the board. Past it, done and cancelled tasks and settled reviews are forgotten; never anything with a live agent, a pending question, an open PR, or an error, however old. It's also the window the header's `Tokens/30d ($…)` figure covers, so the number and the board always agree.
+- `worktreeRetentionDays` (default `7`) — how long a finished task's **worktree** survives before `coli gc` / `:gc` offer it for removal. Nothing is ever removed without you asking. `--older-than N` overrides it for one run.
+
+### Auto-rebase
+
+When GitHub reports a PR **conflicting** with its base, colinear can dispatch a session that rebases it: resolve conflicts, run the linters and nearby tests, `push --force-with-lease`. `autoRebase` is the default (`false`); the `m` modal sets it per task (`config default` / `auto-rebase` / `leave it`), and `b` rebases on demand whatever the setting says.
+
+One attempt per conflict, re-armed once the PR is mergeable again. A conflict GitHub hasn't finished computing (`UNKNOWN`) never triggers one. The card keeps its column and shows a blinking dot — green rebasing, amber fixing CI — since maintenance on an open PR isn't the feature being rewritten.
+
+### Contexts
+
+A context is one config file plus its own state — **separate daemon, socket, task store and log**. Use one per Linear workspace, team, or machine role; two can run side by side without either seeing the other's tasks.
+
+```bash
+# ~/.config/colinear/contexts/oss.json
+coli --context oss          # or -c oss, or COLINEAR_CONTEXT=oss coli
+coli contexts               # what exists, where, and which have a daemon up
+```
+
+```json
+{
+  "team": "OSS",
+  "concurrency": 1,
+  "repos": [{ "name": "colinear", "path": "~/work/colinear" }]
+}
+```
+
+A context **layers over the default config**: keys it doesn't set are inherited, so shared settings (key, guidance, signoff) get written once. Top-level keys replace wholesale rather than merging — a context that sets `repos` gets exactly those repos.
+
+Everything downstream follows the context: the daemon it starts or attaches to, `state.json`, the debug log, `coli gc`, and `:config`'s `e`. The board's header shows `(ctx oss)` next to the repo whenever you aren't in the default one, and `coli daemon status` names it — "no daemon running" is otherwise confusing when the real reason is that you're pointed at a different context. Naming a context with no config file is an error, not a quiet fallback to the default: dispatching into the wrong workspace is not a recoverable mistake.
+
+## Daemon and CLI
 
 `coli` is two processes: a **daemon** that owns the dispatcher, the task store, persistence, PR polling and the Linear sweeps, and a **TUI** that mirrors its state over a unix socket (`~/.local/state/colinear/coli.sock`). Running `coli` starts both — the daemon only if one isn't already up.
 
@@ -84,45 +174,78 @@ Agents therefore outlive the UI. Close the terminal, quit with `q`, or hit `R` t
 | command | what |
 |---|---|
 | `coli` | TUI (starts a daemon if needed) |
+| `coli --context NAME` | ...against a different config + state. `-c NAME` works too, on any command |
 | `coli daemon` | run the daemon in the foreground |
 | `coli daemon status` | pid + socket, or "no daemon running" |
 | `coli daemon stop` | stop it — live agents abort and resume with `r` |
 | `coli gc [--yes] [--older-than N]` | reclaim worktree disk; prints what it would remove and stops there without `--yes`. Works with the daemon down |
+| `coli contexts` | list contexts: config path, state dir, and which have a daemon running |
+| `npm run doctor` | env sanity: `claude` CLI, `gh` auth, Linear key, repos |
 
 Only the daemon dispatches agents, so stopping it is the one thing that interrupts work.
 
-## Views (`:` to jump, tab completes; `:reload` refreshes custom views)
+## Views
+
+`:` jumps (tab completes), `:reload` refreshes custom views.
 
 | view | what |
 |---|---|
 | `:issues [team\|all\|mine]` | sortable issue table (priority, parent link for sub-issues, labels, state, assignee); `/` fuzzy, `t` team (k9s-namespace style), `l` label, `s` sort by any column, `p` include/exclude project issues; `space` select, `enter` dispatch, `D` dispatch skipping triage, `c` custom dispatch (instructions + model + repo + triage modal), `n` **new issue from a description** (an agent drafts and files it), `o` open in Linear, `b` board. Queries paginate (500 cap); the default view shows non-project issues only |
-| `:board` | kanban: Queued / Triage / Working / Needs Input / PR Open / Done / Failed; `j/l` move columns, `i/k` move cards (arrows too); cards show live duration, tokens, repo, subtask progress, CI + review state; within a column cards sort by what wants you first — approved, changes requested, draft, awaiting review — and the header carries a coloured count per state (`PR Open(7) 1-1-2-2-1`: pink changes-requested, red conflicting, green approved, grey draft, orange awaiting, purple merged, red closed — the two that need you sort first); `a`/`1-9` answer, `enter` task detail, `m` **edit task** (repo, pinned PR, instructions, model; `ctrl+r` requeues), `u` dispatch sub-issues (picker), `s` attach claude, `S` shell, `x` cancel, `r` resume, `b` rebase a conflicting PR (the card stays in PR Open with a blinking dot — green rebasing, amber fixing CI — since maintenance on an open PR isn't the feature being rewritten), `f` **force-start a blocked task** (the work runs in parallel; its blockers become merge-order dependencies that hold the PR in draft), `c` post escalation to Linear, `o` open PR, `O` open issue, `n` issues |
+| `:board` | kanban: Queued / Triage / Working / Needs Input / PR Open / Done / Failed. `j/l` move columns, `i/k` move cards (arrows too); cards show live duration, tokens, repo, subtask progress, CI + review state. `a`/`1-9` answer, `enter` task detail, `m` **edit task** (repo, pinned PR, instructions, model, triage, auto-rebase; `ctrl+r` requeues), `u` dispatch sub-issues (picker), `s` attach claude, `S` shell, `x` cancel, `r` resume, `b` rebase a conflicting PR, `f` **force-start a blocked task**, `c` post escalation to Linear, `o` open PR, `O` open issue, `n` issues |
 | `:task CLOUD-123` | full detail: scrollable activity log (`j/k`, `g` top, `G` follow), subtasks, dependencies, check output, PR overview (draft/state, CI, review decision, URL, stack base); `d` marks the draft PR ready — the only path out of draft. `d` refuses while a merge-order dependency hasn't landed, naming it; `D` promotes anyway (colinear knows when a blocker **merged**, never whether it **deployed**) |
 | `:projects` / `:project NAME` | projects table (state, progress, lead, teams, target; `/` `t` `s` filters + sort) and per-project kanban; `d`/`c` dispatch, `p` planning chat |
 | `:plan PROJECT` | persistent chat with a read-only planning agent; proposes subtasks as drafts — `space` toggle, `A` create in Linear, `D` create + dispatch |
-| `:reviews` (`pr`) | PRs waiting on **your** review (`gh search prs --review-requested=@me`, all repos your gh auth can see). `r` starts an **assisted pre-review**: colinear checks the PR out in a worktree and an agent reads the diff in context, returning an overview plus findings; progress streams onto the card while it works. Nothing is posted — `enter` opens the **review document** full-screen — the agent's write-up on one side, a **discussion** with that same agent on the other (`tab` switches, `j/k` scroll, `e` edits it in `$EDITOR`). It goes both ways: your turn resumes the reviewing session so the PR is still in context, and when the agent needs a decision it asks in the same pane — answer inline, or press the option number. `p` posts it as one GitHub review — **deterministically**, since the findings are already structured: colinear clears any leftover pending review, then makes the `gh api` call itself, so posting costs no tokens and either works or says why. **Only the findings are posted** — one inline comment each. The first finding is the *lead*: no file, no line, no severity, one sentence, and it opens the review body, followed by a count of what was raised (`1 must fix / 3 considerations / 1 nit`) and an `## Other` section for anything with no line to attach to. The document's prose is written for you, to decide what to send, and never leaves your machine; the review body carries only what can't be a comment (findings with no line, your note, or a one-line summary when nothing anchored). `A` approves and `X` requests changes, sending the same review with that event, `n` attaches a note that rides along, `s` hands the terminal to that review's own claude session (suspending the agent first, as on the board), `o` opens the PR, `x` cancels a running review, `S` sorts (needs-me / updated / size / repo / author / cost — pressing it again on the same field reverses), `R` refreshes. Approve/request-changes are plain `gh` calls (no tokens) |
+| `:reviews` (`pr`) | PRs waiting on **your** review, and the assisted pre-review flow. [Details](#pr-review) |
 | `:costs` (`$`) | spend per run — tickets **and** PR reviews — live: a bar chart sorted by cost (`s` cycles cost/tokens/recent), `/` fuzzy filter, `enter` task detail. Bars are colored by task status. Figures are what the work *would* cost on the API — subscription runs are not billed per token |
 | `:logs` (`debug`) | the live debug log — everything colinear is doing, including stderr diverted while the TUI owns the screen. `j/k` scroll, `space` page, `g` top, `G` follow, `/` filter |
-| `:gc` (`disk`) | worktree disk: what can be reclaimed and how much. `space` picks, `a`/`n` all/none, `+`/`-` change how long finished work is kept (`worktreeRetentionDays`, 7d default), `x` removes, showing progress per worktree as it goes. Live tasks and reviews still in play are never listed; branches and commits stay in the repo |
-| `:config` | resolved config (key masked), `e` to edit |
+| `:gc` (`disk`) | worktree disk: what can be reclaimed and how much. `space` picks, `a`/`n` all/none, `+`/`-` change the keep-window (`worktreeRetentionDays`), `x` removes, showing progress per worktree as it goes. Live tasks and reviews still in play are never listed; branches and commits stay in the repo |
+| `:config` | resolved config (key masked), available contexts, `e` to edit |
 | `:help` (`?`) | all views, keys, custom view schema |
 
-Global: `esc` clears filters then goes back, `q` back/quit, `R` reloads the frontend on new code (agents keep running), `ctrl+c` quit. Crumbs + toasts at the bottom; header shows agents/tokens/cost and per-view hotkeys. Board opens first when a previous run's tasks were restored.
+Global: `esc` clears filters then goes back, `q` back/quit, `R` reloads the frontend on new code (agents keep running), `ctrl+c` quit. Crumbs + toasts at the bottom; the header shows user, repo (plus context, if any), agents and tokens/cost, alongside the current view's hotkeys. The board opens first when a previous run's tasks were restored.
+
+### Board card sorting
+
+Within a column, cards sort by what wants you first — changes requested and conflicting, then approved, draft, awaiting review — and the header carries a coloured count per state:
+
+```
+PR Open(7)  1-1-2-2-1
+```
+
+pink changes-requested · red conflicting · green approved · grey draft · orange awaiting review · purple merged · red closed. The two that need a human sort first.
+
+## PR review
+
+`:reviews` lists PRs awaiting **your** review (`gh search prs --review-requested=@me`, across every repo your `gh` auth can see), refreshed every 5 minutes. `R` refreshes on demand, `S` sorts (needs-me / updated / size / repo / author / cost — pressing it again on the same field reverses), `o` opens the PR.
+
+`r` starts an **assisted pre-review**: colinear checks the PR out in a worktree and an agent reads the diff in context, returning an overview plus findings. Progress streams onto the card while it works; `x` cancels.
+
+**The document is the artifact.** `enter` opens it full-screen — the agent's write-up on one side, a **discussion** with that same agent on the other (`tab` switches, `j/k` scroll, `e` edits it in `$EDITOR`). The discussion goes both ways: your turn resumes the reviewing session, so the PR is still in context, and when the agent needs a decision it asks in the same pane — answer inline, or press the option number. `s` hands the terminal to that review's own claude session (suspending the agent first, as on the board). `n` attaches a note of your own that rides along with whatever gets posted.
+
+**Nothing reaches GitHub until you ask.** `p` posts the review, `A` approves, `X` requests changes — the same review, with a different event. Posting is deterministic rather than agentic: the findings are already structured, so colinear clears any leftover pending review of ours (GitHub allows one per user per PR, and a stale one blocks every new review) and makes the `gh api` call itself. It costs no tokens and either works or says why — an agent doing the posting can report success its own tool call didn't have.
+
+What actually gets sent is deliberately small, because the document is written for you and none of it belongs on someone else's PR:
+
+- **inline comments** — one per finding that has a file and a line
+- **the body** — the *lead* finding (no file, no line, no severity, one sentence), then a count of what was raised (`1 must fix / 3 considerations / 1 nit`), an `## Other` section for anything with no line to attach to, and your note
+- `prSignoff` / `prSignoffScope` append attribution to all of that, or to the body alone
+
+Findings survive missing fields — no `line` or no `file` routes one to the body rather than the bin; only a missing `comment` drops it. Review worktrees are reclaimed once the PR merges or the review goes stale, not when it's posted: the author may push again.
 
 ## How dispatch works
 
-Dispatching (enter, or `c` for the custom modal) immediately self-assigns the issue and moves it to In Progress. Issues with unresolved Linear **blocking relations** park as ⛓ blocked (shown in the Queued column) and start automatically when their blockers complete — checked every minute and whenever a colinear task finishes; `r` force-starts one. Then per issue:
+Dispatching (`enter`, or `c` for the custom modal) immediately self-assigns the issue and moves it to In Progress. Issues with unresolved Linear **blocking relations** park as ⛓ blocked in the Queued column and start automatically when their blockers complete — rechecked every minute and whenever a colinear task finishes; `f` force-starts one, converting its blockers into merge-order dependencies that hold the PR in draft instead. Then per issue:
 
-1. **Worktree** off `<remote>/<defaultBranch>` under the repo's `worktreeRoot`. If the task has a pinned/open PR, the worktree checks out **that PR's branch** instead, and if any existing worktree already holds the branch, it's reused.
-2. **Triage pass** (read-only): picks the **repo** the work belongs in (from the allowlist descriptions), a JSON verdict `do` / `too_big` / `needs_info`, and a **verification tier** — `local-light` (lints + unit tests), `ci` (agent confirms the CI config covers the change, then pushes the draft PR early and lets GitHub carry the heavy suites), or `needs-env` (contended local envs: verify what's possible, list the rest in the PR body). `too_big`/`needs_info` land in **Needs Input** for you to decide. For `too_big` the agent also returns a **split plan** — single-repo sub-issues with dependencies; entering the task lands in plan review: `space` to drop items, `A` to create them as Linear sub-issues (with `blocks` relations), `D` to create **and** dispatch (later, `u` on the parent card dispatches its sub-issues via a picker). `c` posts the breakdown to Linear as a comment instead; `r` requeues after you act. `D` at dispatch time (or the modal's triage field) skips triage entirely; re-dispatch keeps a successful triage plan unless you ask for a redo.
-3. **Work pass**: every session opens with a full task-context block (issue + description, parent, repo/remotes, all PRs with pin markers, triage plan, your instructions). Existing PRs are **adopted** — the agent reviews their diff and pushes to their branch, never duplicates. Subtask checklist file drives the card's progress bar; lints/tests per the verification tier; subagent diff review; push to the repo's `pushRemote` (your fork, if configured); draft PR against `prBase` of the upstream via `gh pr create --draft`. Agents may stack PRs (chained by base branch, rendered as a stack). **Agents never mark PRs ready** — that's your `d`.
-4. **Checks** from the repo config, then PR polling: state, CI rollup, review decision (approved / changes requested / awaiting review); matching prefers open/merged PRs over closed duplicates, and `m` can pin the canonical PR (number, `#123`, or URL) — a failed task that gains a live PR un-fails automatically. With `ciAutofix`, red checks dispatch a fix session (one per red rollup) that pulls the failing logs and pushes a fix.
+1. **Worktree** off `<remote>/<defaultBranch>` under the repo's `worktreeRoot`. If the task has a pinned or open PR, the worktree checks out **that PR's branch** instead, and an existing worktree already holding the branch is reused.
+2. **Triage pass** (read-only): picks the **repo** the work belongs in (from the allowlist descriptions), a JSON verdict `do` / `too_big` / `needs_info`, and a **verification tier** — `local-light` (lints + unit tests), `ci` (agent confirms the CI config covers the change, then pushes the draft PR early and lets GitHub carry the heavy suites), or `needs-env` (contended local envs: verify what's possible, list the rest in the PR body). `too_big` / `needs_info` land in **Needs Input** for you to decide. For `too_big` the agent also returns a **split plan** — single-repo sub-issues with dependencies; entering the task lands in plan review: `space` to drop items, `A` to create them as Linear sub-issues (with `blocks` relations), `D` to create **and** dispatch (later, `u` on the parent card dispatches its sub-issues via a picker). `c` posts the breakdown to Linear as a comment instead; `r` requeues once you've acted. `D` at dispatch time (or the modal's triage field) skips triage entirely; re-dispatch keeps a successful triage plan unless you ask for a redo.
+3. **Work pass**: every session opens with a full task-context block (issue + description, parent, repo/remotes, all PRs with pin markers, triage plan, your instructions, merge-order dependencies). Existing PRs are **adopted** — the agent reviews their diff and pushes to their branch, never duplicates. A subtask checklist file drives the card's progress bar; lints and tests per the verification tier; subagent diff review; push to the repo's `pushRemote` (your fork, if configured); draft PR against `prBase` of the upstream via `gh pr create --draft`. Agents may stack PRs (chained by base branch, rendered as a stack). **Agents never mark PRs ready** — that's your `d`.
+4. **Checks** from the repo config, then PR polling: state, CI rollup, review decision, mergeability. Matching prefers open/merged PRs over closed duplicates, and `m` can pin the canonical PR (number, `#123`, or URL); a failed task that gains a live PR un-fails itself. With `ciAutofix`, red checks dispatch a fix session that pulls the failing logs and pushes a fix.
 
 ## Sessions: attach, chat, background
 
 `s` on any task hands your terminal to `claude --resume` in its worktree (a live agent is suspended first — never two writers in one worktree). Chat, steer, do work. Quit claude (`/exit`) and colinear asks **"resume agent in the background? [Y/n]"** — enter sends the conversation, including your interactive stint, back to a headless agent and returns you to the board. `S` opens a plain shell in the worktree without touching the agent.
 
-Everything persists in `~/.local/state/colinear/`: tasks (status, session ids, PRs, activity), planner chats, UI prefs. Restart and in-flight tasks return as `interrupted` (`r` resumes the same transcript); planner chats resume their sessions too. Sessions are cwd-keyed by Claude Code, but colinear pins every session to its worktree path, so you can run `coli` from anywhere.
+Restart and in-flight tasks return as `interrupted` (`r` resumes the same transcript); planner chats resume their sessions too. Sessions are cwd-keyed by Claude Code, but colinear pins every session to its worktree path, so you can run `coli` from anywhere.
 
 ## Custom views
 
@@ -141,9 +264,24 @@ Drop JSON in `~/.config/colinear/views/`, then `:reload`:
 
 `filter`: `team`, `labels[]`, `state[]` (workflow types), `assignee` (`me`/`any`), `project` (`null` = no project, or a name).
 
+## Files
+
+| what | where |
+|---|---|
+| config | `~/.config/colinear/config.json` |
+| contexts | `~/.config/colinear/contexts/<name>.json` |
+| custom views | `~/.config/colinear/views/*.json` |
+| task / planner / UI state | `~/.local/state/colinear/state.json` (pruned by `retentionDays`) |
+| debug log + diverted stderr | `~/.local/state/colinear/colinear.log` |
+| daemon socket + pidfile | `~/.local/state/colinear/coli.sock`, `coli.pid` |
+| worktrees | `<repo>-worktrees/<ISSUE-KEY>`, review checkouts `review-<n>` |
+| session transcripts | `~/.claude/projects/<encoded-worktree>/<session>.jsonl` (Claude Code's own) |
+
+A non-default context moves all the state paths under `~/.local/state/colinear/contexts/<name>/`; `COLINEAR_STATE_DIR` overrides them outright.
+
 ## Notes
 
-- Repos with multiple remotes need a gh default so PR polling/creation works non-interactively: `cd <repo> && gh repo set-default OWNER/REPO` (once per repo).
-- ~5+ concurrent sessions can hit subscription rate limits; default concurrency 3. Rate-limited sessions retry once after 30s.
-- Worktrees are left for inspection: `git worktree remove`/`prune` when done — but removing one orphans its session (resume will start fresh).
-- Debug log: `~/.local/state/colinear/colinear.log`.
+- Repos with multiple remotes need a gh default so PR polling and creation work non-interactively: `cd <repo> && gh repo set-default OWNER/REPO` (once per repo).
+- ~5+ concurrent sessions can hit subscription rate limits; default concurrency is 3. Rate-limited sessions retry once after 30s.
+- Worktrees are left behind for inspection — `coli gc` reclaims them, and removing one by hand orphans its session (resume then starts fresh).
+- Weird behavior: check `~/.local/state/colinear/colinear.log` (or `:logs`). React warnings and SDK stderr land there while the TUI owns the screen.

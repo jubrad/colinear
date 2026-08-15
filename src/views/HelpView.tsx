@@ -34,12 +34,33 @@ export function HelpView(_props: { param?: string }) {
             ['?', 'this help'],
             ['esc', 'clear filters, then back'],
             ['q', 'back / quit at root'],
+            ['R', 'reload the frontend on new code (agents keep running)'],
             ['ctrl+c', 'quit'],
           ] as Array<[string, string]>
         ).map(([k, v]) => (
           <Text key={k}>
             <Text color={theme.key} bold>
               {k.padEnd(12)}
+            </Text>
+            <Text dimColor>{v}</Text>
+          </Text>
+        ))}
+      </Box>
+      <Box flexDirection="column" marginTop={1}>
+        <Text bold color={theme.header}>
+          CLI
+        </Text>
+        {(
+          [
+            ['coli -c NAME', 'run against another context: its own config, daemon and state'],
+            ['coli contexts', 'list contexts and which have a daemon running'],
+            ['coli gc', 'reclaim worktree disk (prints first; --yes removes)'],
+            ['coli daemon', 'status | stop — the backend that keeps agents alive'],
+          ] as Array<[string, string]>
+        ).map(([k, v]) => (
+          <Text key={k} wrap="truncate">
+            <Text color={theme.key} bold>
+              {k.padEnd(16)}
             </Text>
             <Text dimColor>{v}</Text>
           </Text>

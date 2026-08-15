@@ -1,14 +1,11 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { STATE_DIR } from './context.js';
 
-/**
- * COLINEAR_STATE_DIR isolates a run — its own socket, pidfile, state and log.
- * Tests set it so they can never collide with (or clobber the socket of) the
- * daemon holding your real work.
- */
-export const STATE_DIR =
-  process.env.COLINEAR_STATE_DIR ?? join(homedir(), '.local', 'state', 'colinear');
+// re-exported because everything that writes under the state dir already
+// imports this module; the context is what decides where that is
+export { STATE_DIR };
+
 const LOG_FILE = join(STATE_DIR, 'colinear.log');
 
 let ready = false;

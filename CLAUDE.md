@@ -15,6 +15,8 @@ coli daemon status   # is the backend up? (`stop` to kill it — that aborts liv
 
 Smoke boot: `LINEAR_API_KEY=lin_api_dummy script -q /dev/null timeout 5 npm run dev >/dev/null 2>&1` — board chrome means it rendered. This **starts a daemon against your real config and state**; `coli daemon stop` when done, and never enqueue fake issues into it.
 
+To exercise anything config- or state-shaped without touching live work, run against a throwaway `HOME` (`HOME=/tmp/x npx tsx src/index.tsx contexts`) or set `COLINEAR_STATE_DIR` — both give the run its own config, socket, pidfile and state.
+
 ## Rules
 
 - Trust `npx tsc --noEmit`, not editor diagnostics (chronically stale in this repo).

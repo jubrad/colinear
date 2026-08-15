@@ -357,7 +357,7 @@ export interface Config {
   worktreeRetentionDays: number;
   /** UI refresh tick in ms — raise it (e.g. 2000) if your terminal/mux flickers (default 1000) */
   tickMs: number;
-  /** permission mode for interactive attach sessions (default "acceptEdits", matching headless agents) */
+  /** permission mode for interactive attach sessions (default "auto", matching headless agents) */
   attachPermissionMode: string;
   /** terminal for session attach: "ghostty" | "terminal" (default: Ghostty if installed) */
   terminal?: string;

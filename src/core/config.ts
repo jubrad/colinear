@@ -1,16 +1,18 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
+import {
+  BASE_CONFIG_PATHS,
+  CONTEXT,
+  DEFAULT_CONTEXT,
+  contextConfigPath,
+  listContexts,
+} from './context.js';
 import type { CheckConfig, Config, Guidance, GuidanceScope, RepoConfig } from './types.js';
 
-const CONFIG_PATHS = [
-  join(homedir(), '.config', 'colinear', 'config.json'),
-  join(homedir(), '.colinear.json'),
-];
-
-/** the config file in use (first existing, else the preferred location) */
+/** the config file this run reads and `:config` edits (context-aware) */
 export function configPath(): string {
-  return CONFIG_PATHS.find((p) => existsSync(p)) ?? CONFIG_PATHS[0];
+  return contextConfigPath();
 }
 
 /** Make sure a config file exists to edit — seed it from the resolved config. */
@@ -53,24 +55,47 @@ interface RawRepo {
   checks?: CheckConfig[];
 }
 
+type RawConfig = Partial<Config> & { repos?: RawRepo[]; guidance?: RawGuidance; prSignoff?: RawText };
+
+/**
+ * Parse a config file. Missing is fine — that's "use the defaults" — but a
+ * file that exists and doesn't parse is not: silently falling back would run
+ * agents against the default repo with none of your settings.
+ */
+function readConfigFile(path: string): RawConfig | undefined {
+  if (!existsSync(path)) return undefined;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as RawConfig;
+  } catch (err) {
+    console.error(`${path} is not valid JSON: ${err instanceof Error ? err.message : err}`);
+    process.exit(1);
+  }
+}
+
 export function loadConfig(opts?: { requireKey?: boolean }): Config {
   // guidance is normalized below: a string, a list of lines, or a scope map
-  let raw: Partial<Config> & { repos?: RawRepo[]; guidance?: RawGuidance; prSignoff?: RawText } = {};
-  for (const path of CONFIG_PATHS) {
-    try {
-      raw = JSON.parse(readFileSync(path, 'utf8'));
-      break;
-    } catch {
-      // try the next location; fall back to defaults + env
+  const base = BASE_CONFIG_PATHS.map(readConfigFile).find(Boolean) ?? {};
+  let raw: RawConfig = base;
+
+  if (CONTEXT !== DEFAULT_CONTEXT) {
+    const path = contextConfigPath();
+    const layer = readConfigFile(path);
+    if (!layer) {
+      console.error(
+        `no context "${CONTEXT}" — expected ${path}\n` +
+          `available: ${listContexts().join(', ')}`,
+      );
+      process.exit(1);
     }
+    // top-level keys replace wholesale: a context that sets `repos` gets
+    // exactly those repos, and one that doesn't inherits the base list
+    raw = { ...base, ...layer };
   }
 
   const linearApiKey = raw.linearApiKey ?? process.env.LINEAR_API_KEY ?? '';
   // chores that never touch Linear (gc) shouldn't demand a key to run
   if (!linearApiKey && opts?.requireKey !== false) {
-    console.error(
-      `No Linear API key. Set LINEAR_API_KEY or add "linearApiKey" to ${CONFIG_PATHS[0]}`,
-    );
+    console.error(`No Linear API key. Set LINEAR_API_KEY or add "linearApiKey" to ${configPath()}`);
     process.exit(1);
   }
 

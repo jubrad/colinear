@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { render } from 'ink';
@@ -8,6 +9,14 @@ import { App } from './app.js';
 import { connectToDaemon } from './client.js';
 import { consumePendingAction } from './core/attach.js';
 import { configPath, ensureConfigFile, loadConfig } from './core/config.js';
+import {
+  CONTEXT,
+  CONTEXTS_DIR,
+  DEFAULT_CONTEXT,
+  contextConfigPath,
+  listContexts,
+  stateDirFor,
+} from './core/context.js';
 import { runDaemon, PID_PATH } from './daemon.js';
 import { findReclaimable, formatSize, removeWorktree } from './core/gc.js';
 import { loadState } from './core/persist.js';
@@ -49,9 +58,9 @@ const leaveAltScreen = () => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function daemonPid(): number | undefined {
-  if (!existsSync(PID_PATH)) return undefined;
-  const pid = Number.parseInt(readFileSync(PID_PATH, 'utf8').trim(), 10);
+function daemonPid(pidPath = PID_PATH): number | undefined {
+  if (!existsSync(pidPath)) return undefined;
+  const pid = Number.parseInt(readFileSync(pidPath, 'utf8').trim(), 10);
   if (Number.isNaN(pid)) return undefined;
   try {
     process.kill(pid, 0); // signal 0 just tests liveness
@@ -75,7 +84,10 @@ async function daemonCommand(sub?: string): Promise<void> {
     return;
   }
   if (sub === 'status') {
-    console.log(pid ? `daemon running (pid ${pid}) on ${SOCKET_PATH}` : 'no daemon running');
+    // name the context: "no daemon running" is confusing when the reason is
+    // that you're pointed at a different one than the daemon you started
+    const where = CONTEXT === DEFAULT_CONTEXT ? '' : ` [context ${CONTEXT}]`;
+    console.log(pid ? `daemon running (pid ${pid}) on ${SOCKET_PATH}${where}` : `no daemon running${where}`);
     return;
   }
   if (pid) {
@@ -83,6 +95,27 @@ async function daemonCommand(sub?: string): Promise<void> {
     process.exit(1);
   }
   await runDaemon();
+}
+
+/**
+ * `coli contexts` — which configs exist, where each one's state lives, and
+ * whether it has a daemon up. Contexts are independent: one daemon, one store
+ * and one socket each, so two can run side by side.
+ */
+function contextsCommand(): void {
+  for (const name of listContexts()) {
+    const dir = stateDirFor(name);
+    const pid = daemonPid(join(dir, 'coli.pid'));
+    const mark = name === CONTEXT ? '*' : ' ';
+    console.log(
+      `${mark} ${name.padEnd(14)} ${(pid ? `daemon ${pid}` : 'stopped').padEnd(12)} ${contextConfigPath(name)}`,
+    );
+  }
+  if (CONTEXT !== DEFAULT_CONTEXT) console.log(`\nstate: ${stateDirFor(CONTEXT)}`);
+  console.log(
+    `\nadd one by writing ${join(CONTEXTS_DIR, '<name>.json')} — it layers over the default config.` +
+      `\nselect with: coli --context <name>  (or COLINEAR_CONTEXT=<name>)`,
+  );
 }
 
 /**
@@ -208,8 +241,25 @@ function supervise(): never {
   }
 }
 
-const [command, sub] = process.argv.slice(2);
+/**
+ * The context selector is resolved in core/context.ts (it has to be, so paths
+ * derive from it) and travels to children in the environment — strip it here
+ * so it can sit anywhere on the command line without becoming the command.
+ */
+function stripContextFlags(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--context' || arg === '-c') i++; // skip the flag and its value
+    else if (!arg.startsWith('--context=')) out.push(arg);
+  }
+  return out;
+}
+
+const argv = stripContextFlags(process.argv.slice(2));
+const [command, sub] = argv;
 if (command === 'daemon') await daemonCommand(sub);
-else if (command === 'gc') await gcCommand(process.argv.slice(3));
+else if (command === 'gc') await gcCommand(argv.slice(1));
+else if (command === 'contexts') contextsCommand();
 else if (command === '--tui') await runTui();
 else supervise();

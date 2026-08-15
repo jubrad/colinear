@@ -14,7 +14,8 @@ Stack: TypeScript (strict, NodeNext ESM — all internal imports use `.js` suffi
 src/index.tsx        entry + process modes: bare `coli` supervises a TUI child (respawns it on
                      exit code 75 = `R` reload); `--tui` runs the client (alt-screen, DEC-2026
                      sync-output wrapping, stderr diversion, the attach loop TUI ⇄ interactive
-                     claude/shell/editor); `daemon [status|stop]` runs/controls the backend
+                     claude/shell/editor); `daemon [status|stop]` runs/controls the backend;
+                     `gc` and `contexts` are standalone chores that work with the daemon down
 src/daemon.ts        the backend process: owns Dispatcher, store, persistence, PR polling and the
                      Linear sweeps; unix-socket server — hello(snapshot) then a delta stream per
                      client, commands in, toasts out; pidfile for status/stop
@@ -27,8 +28,12 @@ src/theme.ts         palette + STATUS_COLORS
 src/core/
   types.ts           all shared types: Task, TaskStatus, TriageVerdict (incl. split-plan subtasks,
                      verification tier, repo pick), PrInfo, RepoConfig, Config
-  config.ts          ~/.config/colinear/config.json (legacy ~/.colinear.json), repos allowlist
-                     normalization (remote/pushRemote/prBase are GIT REMOTE NAMES), --team flag
+  context.ts         which config + state dir this process uses (--context/-c, COLINEAR_CONTEXT,
+                     COLINEAR_STATE_DIR). A leaf module evaluated before anything derives a path
+                     from it; re-exports STATE_DIR through log.ts
+  config.ts          ~/.config/colinear/config.json (legacy ~/.colinear.json), the context layer
+                     over it, repos allowlist normalization (remote/pushRemote/prBase are GIT
+                     REMOTE NAMES), --team flag
   store.ts           observable Map<issueId, Task> + version counter. Two modes: the daemon's is the
                      source of truth and emits a CDC delta per mutation; a client's is a mirror
                      (hydrate + apply) whose writes forward to the daemon instead of applying locally
@@ -110,6 +115,34 @@ The split is deliberately invisible to views:
 `R` reloads the frontend: the TUI exits 75 and the supervisor respawns it on the new build, daemon
 untouched. Still client-side and therefore lost on reload: the `:plan` planner session and `n`
 new-issue drafting. Moving those behind the daemon is the obvious next step.
+
+## Contexts
+
+A context is a config file plus a state directory, and because the socket lives in that directory
+it is also a whole separate daemon — two contexts can run at once and neither sees the other's
+tasks. `--context work` / `-c work` / `COLINEAR_CONTEXT=work` select one; the default context keeps
+the historical paths exactly.
+
+Two constraints shaped the implementation:
+
+- **Resolution has to happen before any path is derived.** `STATE_DIR` and `SOCKET_PATH` are
+  module-level constants, and ESM evaluates imports before the importing module's body — so
+  parsing argv in index.tsx would be too late. `core/context.ts` is a leaf module that resolves at
+  its own evaluation time and everything path-shaped imports it.
+- **Children must inherit it.** Rather than thread a flag through the supervisor's TUI spawn and
+  the client's detached daemon spawn, resolution sets `COLINEAR_CONTEXT` in `process.env` when the
+  context isn't default. Every spawn site inherits the environment and stays unaware contexts exist.
+
+Config layering is one shallow merge of the context file over the base config (`{...base, ...ctx}`),
+so shared settings are written once and top-level keys replace wholesale — a context that sets
+`repos` gets exactly those. A named context with no file is a hard error rather than a fallback to
+the default: dispatching agents into the wrong workspace is not a recoverable mistake. So is a
+config file that exists and doesn't parse, which used to fall through to built-in defaults and run
+against `~/work/cloud` with none of your settings.
+
+Constraint on the UI side: every view sizes its panes against a **four-row header**
+(`ctx.size.rows - 12` and friends), so the context indicator rides on the existing Repo row rather
+than taking a fifth.
 
 ## Task lifecycle
 
@@ -229,12 +262,17 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
 | what | where |
 |---|---|
 | config | `~/.config/colinear/config.json` |
+| contexts | `~/.config/colinear/contexts/<name>.json` (layered over the config above) |
 | custom views | `~/.config/colinear/views/*.json` |
 | task/planner/UI state | `~/.local/state/colinear/state.json` (pruned by `retentionDays`) |
 | debug log + diverted stderr | `~/.local/state/colinear/colinear.log` |
+| socket + pidfile | `~/.local/state/colinear/coli.sock`, `coli.pid` |
 | attach scripts | `~/.local/state/colinear/attach-*.sh` |
 | worktrees | `<repo>-worktrees/<ISSUE-KEY>` (per repo config) |
 | session transcripts | `~/.claude/projects/<encoded-worktree>/<session>.jsonl` (Claude Code's, not ours) |
+
+Every `~/.local/state/colinear/` path above moves under `contexts/<name>/` in a non-default context;
+`COLINEAR_STATE_DIR` overrides the lot (tests set it so they can't touch a live daemon's socket).
 
 ## Known hacks / debt
 
