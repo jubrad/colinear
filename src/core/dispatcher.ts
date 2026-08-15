@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
+import { channels } from './channel.js';
+import { experimentOn } from './config.js';
 import { assignIssue, fetchBlockers, fetchIssuesByIds, fetchSubIssues } from './linear.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
@@ -76,6 +78,12 @@ export class Dispatcher {
 
   private toast(text: string, kind: 'info' | 'ok' | 'err') {
     this.onToast?.(text, kind);
+  }
+
+  /** operator message onto a coordination channel (experimental) */
+  channelPost(channel: string, text: string) {
+    channels.post(channel, 'operator', 'operator', text);
+    log(`channel ${channel}: operator posted`);
   }
 
   setViewer(viewer: { id: string; displayName: string }) {
@@ -577,16 +585,24 @@ export class Dispatcher {
         plan = store.get(id)?.verdict?.plan;
         store.addActivity(id, plan ? 'work pass (existing triage plan)' : 'work pass (triage skipped)');
       }
+      // EXPERIMENTAL coordination channel, one per issue family: a sub-issue
+      // joins its parent's, a tracking parent hosts its own. Sub-issue triage
+      // joins too — scope questions surface earliest there.
+      const channel = experimentOn(this.cfg, 'coordination')
+        ? channelFor(issue, store.get(id)?.subIssues?.length ? issue.identifier : undefined)
+        : undefined;
       if (!resumeSession && !task.skipTriage) {
         store.addActivity(id, 'triage pass');
+        const triageChannel = issue.parent ? channel : undefined;
         const triage = await runSession({
-          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, guidanceFor(this.cfg.guidance, 'triage'))}\n${familyBlock(issue, family)}`,
+          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, guidanceFor(this.cfg.guidance, 'triage'))}\n${familyBlock(issue, family)}${triageChannel ? channelBlock(triageChannel.id) : ''}`,
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: triageSchema(this.cfg.repos.map((r) => r.name)),
           model: store.get(id)?.model ?? this.cfg.model,
           maxTurns: 40,
           abortController: controller,
+          channel: triageChannel,
         });
         store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + triage.costUsd });
         if (triage.isError) throw new Error(`triage failed: ${triage.errors.join('; ')}`);
@@ -627,7 +643,9 @@ export class Dispatcher {
 
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
       const current = store.get(id) ?? task;
-      const ctx = taskContext(current, taskRepo, branch, family, guidanceFor(this.cfg.guidance, 'work'));
+      const ctx =
+        taskContext(current, taskRepo, branch, family, guidanceFor(this.cfg.guidance, 'work')) +
+        (channel ? channelBlock(channel.id) : '');
       const work = await runSession({
         prompt:
           mode === 'rebase'
@@ -642,6 +660,7 @@ export class Dispatcher {
         model: store.get(id)?.model ?? this.cfg.model,
         resume: resumeSession,
         abortController: controller,
+        channel,
       });
       store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + work.costUsd });
       if (work.isError) {
@@ -932,6 +951,28 @@ function dependencyBlock(task: Task): string {
     lines.push(`Blocked by (not yet resolved): ${start.map((d) => d.identifier).join(', ')}.`);
   }
   return lines.join('\n');
+}
+
+/**
+ * The channel an issue belongs to: its parent's family, or — for a parent
+ * tracking sub-issues — its own. Nothing else gets one; a lone task has
+ * nobody to coordinate with.
+ */
+function channelFor(issue: LinearIssue, ownFamily?: string): { id: string; username: string } | undefined {
+  const family = issue.parent?.identifier ?? ownFamily;
+  return family ? { id: `#${family}`, username: issue.identifier } : undefined;
+}
+
+function channelBlock(channel: string): string {
+  return `
+
+## Coordination channel ${channel} (experimental)
+You share this channel with the other agents working this issue family and with the human operator.
+Tools: mcp__colinear__channel_read (new messages since your last read — you never see duplicates) and mcp__colinear__channel_post (short message, max ~2 lines; your name is stamped automatically).
+Discipline:
+- READ at session start, before structural/architectural decisions, and before opening your PR.
+- POST: a scope claim at session start (files/dirs you own), architectural decisions siblings must know about, advisory claims on shared resources ("using the kind cluster ~20min"), your PR link when opened, and a done notice.
+- OPERATOR messages outrank everything else in this channel.`;
 }
 
 function familyBlock(issue: LinearIssue, family?: IssueFamily): string {

@@ -1,5 +1,40 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
+import { channels, formatMessages } from './channel.js';
 import type { PendingQuestion } from './types.js';
+
+/** our own in-process tools; auto-approved rather than re-asked per call */
+const COLINEAR_TOOL_PREFIX = 'mcp__colinear__';
+
+/**
+ * Per-session coordination tools (EXPERIMENTAL). Identity is enforced by
+ * construction: the channel and username are closed over at spawn, so there
+ * is no `from` or `channel` parameter for an agent to spoof.
+ */
+function coordinationServer(channel: string, username: string) {
+  return createSdkMcpServer({
+    name: 'colinear',
+    tools: [
+      tool(
+        'channel_read',
+        `Read new messages on your coordination channel ${channel} (since your last read; you never see the same message twice).`,
+        {},
+        async () => ({
+          content: [{ type: 'text' as const, text: formatMessages(channels.readSince(channel, username)) }],
+        }),
+      ),
+      tool(
+        'channel_post',
+        `Post a short message (max ~2 lines) to your coordination channel ${channel}. Your name is stamped automatically.`,
+        { message: z.string().min(1).max(500) },
+        async ({ message }) => {
+          channels.post(channel, username, 'agent', message);
+          return { content: [{ type: 'text' as const, text: 'posted' }] };
+        },
+      ),
+    ],
+  });
+}
 
 export interface SessionCallbacks {
   onActivity: (line: string) => void;
@@ -35,8 +70,10 @@ export async function runSession(opts: {
   /** session id to resume (continues its transcript) */
   resume?: string;
   abortController?: AbortController;
+  /** EXPERIMENTAL coordination channel; identity baked in at spawn */
+  channel?: { id: string; username: string };
 }): Promise<SessionResult> {
-  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController } = opts;
+  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController, channel } = opts;
 
   const q = query({
     prompt,
@@ -50,8 +87,12 @@ export async function runSession(opts: {
       // calls fall through to canUseTool below (haiku predates auto support)
       permissionMode: model?.includes('haiku') ? 'acceptEdits' : 'auto',
       settingSources: ['project'],
+      ...(channel ? { mcpServers: { colinear: coordinationServer(channel.id, channel.username) } } : {}),
       ...(outputSchema ? { outputFormat: { type: 'json_schema' as const, schema: outputSchema } } : {}),
       canUseTool: async (toolName, input) => {
+        // our own tools post to a channel this agent is already a member of —
+        // asking the operator per message would make coordination unusable
+        if (toolName.startsWith(COLINEAR_TOOL_PREFIX)) return { behavior: 'allow', updatedInput: input };
         if (toolName === 'AskUserQuestion') {
           const parsed = input as AskUserQuestionInput;
           const first = parsed.questions?.[0];

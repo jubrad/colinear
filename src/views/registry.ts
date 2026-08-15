@@ -4,6 +4,7 @@ import type { Candidate } from '../ui/CommandBar.js';
 import { BoardView, boardKeys } from './BoardView.js';
 import { ConfigView, configKeys } from './ConfigView.js';
 import { CostsView, costsKeys } from './CostsView.js';
+import { ChannelView, channelKeys } from './ChannelView.js';
 import { ChatView, chatKeys } from './ChatView.js';
 import { GcView, gcKeys } from './GcView.js';
 import { HelpView, helpKeys } from './HelpView.js';
@@ -102,6 +103,13 @@ const builtinViews: ViewDef[] = [
     describe: 'worktree disk — reclaim finished checkouts',
     Component: GcView,
     keys: gcKeys,
+  },
+  {
+    name: 'chan',
+    aliases: ['channel', 'irc'],
+    describe: 'coordination channels (experimental — :chan CLO-67)',
+    Component: ChannelView,
+    keys: channelKeys,
   },
   {
     name: 'config',
