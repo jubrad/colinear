@@ -122,6 +122,9 @@ new-issue drafting. Moving those behind the daemon is the obvious next step.
 - `needs_input` (agent AskUserQuestion, or too_big/needs_info triage verdicts — split-plan review lives here)
 - `interrupted` (restart/suspend/attach; `r` resumes the SDK session by id)
 - `error` (failures; auto-unfails if a live PR turns up), `escalated` (legacy; verdicts now park as needs_input)
+- maintenance modes (fixci, rebase) run against an already-open PR: the task keeps its status
+  and shows a blinking dot instead of moving back to Working, and the repo's checks are left to
+  the prompt rather than re-run here (which would flip the card to `checks` for no new signal)
 - fixci mode: red PR rollup → resume session with failing logs, one attempt per red, re-arms on green
 - rebase mode: PR conflicts with its base → session that rebases and force-with-leases, same
   one-attempt-per-conflict shape. `mergeable: UNKNOWN` means GitHub is still computing and never

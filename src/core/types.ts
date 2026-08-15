@@ -152,8 +152,12 @@ export interface Task {
   ciFixAttempted?: boolean;
   /** rebase this PR automatically when GitHub reports a conflict */
   autoRebase?: boolean;
-  /** a rebase session is live (the task stays pr_open throughout) */
-  rebasing?: boolean;
+  /**
+   * A maintenance session is live on an already-open PR. The task keeps its
+   * status throughout — it is not back in development — and the card shows a
+   * blinking dot instead of moving columns.
+   */
+  maintenance?: 'rebase' | 'fixci';
   /** one rebase per conflict; re-arms when the PR is mergeable again */
   rebaseAttempted?: boolean;
   /** operator-pinned PR number: PR matching uses exactly this, never guesses */
