@@ -348,6 +348,31 @@ export class Dispatcher {
     }
   }
 
+  /**
+   * Drop finished work older than the retention window. Only terminal states
+   * go — nothing with an agent, a question, or an open PR — and the window is
+   * also what the header's totals cover, so the two can't disagree.
+   */
+  sweepRetention() {
+    const days = this.cfg.retentionDays;
+    if (!days) return; // 0 keeps everything
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    for (const task of store.list()) {
+      if (!['done', 'cancelled'].includes(task.status)) continue;
+      if ((task.endedAt ?? Date.now()) > cutoff) continue;
+      store.delete(task.issue.id);
+      log(`retention: forgot ${task.issue.identifier} (${task.status})`);
+    }
+    for (const review of store.listReviews()) {
+      if (!['stale', 'commented', 'approved', 'changes_requested'].includes(review.status)) continue;
+      // a review that never ran has no endedAt; fall back to the PR's own mtime
+      const settledAt = review.endedAt ?? (Date.parse(review.updatedAt) || Date.now());
+      if (settledAt > cutoff) continue;
+      store.deleteReview(review.id);
+      log(`retention: forgot review ${review.id} (${review.status})`);
+    }
+  }
+
   /** Re-check blocked tasks; queue the ones whose Linear blockers finished. */
   /**
    * Apply the board's edit modal. The decision of whether an agent still
@@ -402,6 +427,7 @@ export class Dispatcher {
   }
 
   async recheckBlocked() {
+    this.sweepRetention();
     await this.sweepClosed().catch(() => {});
     await this.refreshTracking().catch(() => {});
     // merge-order dependencies are tracked on every task, not just blocked ones:

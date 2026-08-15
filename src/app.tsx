@@ -191,8 +191,10 @@ export function App(props: {
 
   const active = tasks.filter((t) => ['triage', 'working', 'checks'].includes(t.status)).length;
   const needsInput = tasks.filter((t) => t.status === 'needs_input').length;
-  // reviews burn agent sessions too — the headline figure covers both
-  const spend = [...tasks, ...reviews];
+  // reviews burn agent sessions too — the headline figure covers both, over
+  // the retention window, since anything older has been dropped anyway
+  const horizon = cfg.retentionDays ? Date.now() - cfg.retentionDays * 86_400_000 : 0;
+  const spend = [...tasks, ...reviews].filter((t) => (t.startedAt ?? t.endedAt ?? Date.now()) >= horizon);
   const totalTokens = spend.reduce(
     (acc, t) => ({ input: acc.input + t.tokens.input, output: acc.output + t.tokens.output }),
     { input: 0, output: 0 },
@@ -203,7 +205,10 @@ export function App(props: {
     ['User', viewer?.displayName ?? '…'],
     ['Repo', cfg.repo.split('/').slice(-1)[0]],
     ['Agents', `${active} active${needsInput ? `, ${needsInput} waiting` : ''} / ${tasks.length}`],
-    ['Tokens', `${formatTokens(totalTokens)} ($${totalCost.toFixed(2)})`],
+    [
+      cfg.retentionDays ? `Tokens/${cfg.retentionDays}d` : 'Tokens',
+      `${formatTokens(totalTokens)} ($${totalCost.toFixed(2)})`,
+    ],
   ];
 
   const ViewComponent = viewDef.Component;

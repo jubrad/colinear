@@ -69,6 +69,7 @@ Requirements: `claude` CLI logged in (subscription auth — leave `ANTHROPIC_API
 - `attachPermissionMode` — permission mode for `s` attach sessions: `auto` (default — classifier gates risky commands), `acceptEdits`, `bypassPermissions`, or `default`. Headless agents always run in `auto`; classifier-blocked commands surface on the board as needs-input questions (allow/deny).
 - `stateSync` — auto-move Linear states (dispatch → In Progress, PR → In Review).
 - `ciAutofix` — dispatch a fix session when a task's PR checks go red.
+- `retentionDays` — how long finished work stays on the board (default `30`, `0` keeps everything). Past it, done and cancelled tasks and settled reviews are forgotten — never anything with an agent, a question, an open PR, or an error. It's also the window the header's `Tokens/30d ($…)` figure covers, so the number and the board always agree.
 - `autoRebase` — when GitHub reports a PR **conflicting** with its base, dispatch a session that rebases it: resolve conflicts, run the linters and nearby tests, `push --force-with-lease`. Default `false`; the `m` modal sets it per task (`config default` / `auto-rebase` / `leave it`), and `b` rebases on demand whatever the setting. One attempt per conflict, re-armed once the PR is mergeable again — a conflict GitHub hasn't finished computing (`UNKNOWN`) never triggers one.
 - `terminal` — session attach target: unset = in-place (recommended), `"ghostty"` / `"terminal"` = external window.
 - `--team CLOUD` / `--team all` flags override the config; the last picker team is remembered across runs.

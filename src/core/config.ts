@@ -133,6 +133,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     stateSync: raw.stateSync ?? true,
     ciAutofix: raw.ciAutofix ?? true,
     autoRebase: raw.autoRebase ?? false,
+    retentionDays: raw.retentionDays ?? 30,
     tickMs: raw.tickMs ?? 1000,
     attachPermissionMode: raw.attachPermissionMode ?? 'auto',
     terminal: raw.terminal,

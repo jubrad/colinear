@@ -163,6 +163,16 @@ Findings survive missing fields: no `line` or no `file` means the body rather th
 only a missing `comment` drops one. A line outside the diff makes GitHub reject the whole
 review, so the post retries once with everything in the body.
 
+## Retention
+
+Nothing left the store until `retentionDays` (default 30): done and cancelled tasks and settled
+reviews are dropped by a sweep on the 60s tick, which is also the window the header's token and
+cost figures cover — a total over "everything colinear has ever seen" answers no question anyone
+has. Anything live, questioning, erroring or PR-open is never touched, however old.
+
+That needed the store's first delete: `delete` / `review-delete` deltas, so a mirror drops the row
+instead of keeping a ghost the daemon has forgotten.
+
 ## Disk
 
 A worktree is a full checkout: materialize is ~30G each, and one accumulates per task and
@@ -220,7 +230,7 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
 |---|---|
 | config | `~/.config/colinear/config.json` |
 | custom views | `~/.config/colinear/views/*.json` |
-| task/planner/UI state | `~/.local/state/colinear/state.json` |
+| task/planner/UI state | `~/.local/state/colinear/state.json` (pruned by `retentionDays`) |
 | debug log + diverted stderr | `~/.local/state/colinear/colinear.log` |
 | attach scripts | `~/.local/state/colinear/attach-*.sh` |
 | worktrees | `<repo>-worktrees/<ISSUE-KEY>` (per repo config) |

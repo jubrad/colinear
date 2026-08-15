@@ -343,6 +343,12 @@ export interface Config {
   ciAutofix: boolean;
   /** default for a task's autoRebase; a conflicting PR gets a rebase session */
   autoRebase: boolean;
+  /**
+   * How long finished work stays on the board, in days. Past this a done,
+   * cancelled or settled review is dropped from the store — which is also the
+   * window the header's token and cost figures cover. 0 keeps everything.
+   */
+  retentionDays: number;
   /** UI refresh tick in ms — raise it (e.g. 2000) if your terminal/mux flickers (default 1000) */
   tickMs: number;
   /** permission mode for interactive attach sessions (default "acceptEdits", matching headless agents) */

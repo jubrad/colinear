@@ -55,6 +55,18 @@ store.updateReview('o/r#7', { status: 'ready', summary: 'looks fine', findings: 
 store.addReviewActivity('o/r#7', 'pre-review complete');
 store.updateReview('o/r#7', { status: 'approved', error: undefined });
 
+// retention drops rows; a mirror must follow rather than keep ghosts
+store.upsert(task('C'));
+store.update('C', { status: 'done' });
+store.delete('C');
+store.deleteReview('o/r#7');
+store.upsertReview({
+  id: 'o/r#8', number: 8, repository: 'o/r', title: 'still here', url: 'u', author: 'a',
+  headRefName: 'h', baseRefName: 'main', isDraft: false, additions: 1, deletions: 1,
+  changedFiles: 1, updatedAt: '2026-01-01', status: 'pending', activity: [],
+  tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 0,
+} as Review);
+
 let answered: string | undefined;
 mirror.hydrate({ version: 0, tasks: [], reviews: [] }, (id, text) => {
   answered = `${id}:${text}`;
@@ -88,7 +100,9 @@ for (let i = 0; i < 1100; i++) store.addActivity('A', `overflow ${i}`);
 if (store.since(0) !== null) throw new Error('since() should refuse a version off the back of the log');
 if (store.since(store.version - 10)?.length !== 10) throw new Error('since() broke after truncation');
 
-if (mirror.getReview('o/r#7')?.status !== 'approved') throw new Error('review deltas did not land');
+if (mirror.get('C')) throw new Error('deleted task still in the mirror');
+if (mirror.getReview('o/r#7')) throw new Error('deleted review still in the mirror');
+if (!mirror.getReview('o/r#8')) throw new Error('later review missing from the mirror');
 console.log(
   `ok — ${captured.length} deltas replayed, ${store.list().length} tasks + ${store.listReviews().length} reviews identical`,
 );
