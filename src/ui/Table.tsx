@@ -8,6 +8,9 @@ export interface Column<T> {
   label: string;
   /** fixed char width, or 'flex' (exactly one column should flex) */
   width: number | 'flex';
+  /** cap on a flex column: past this the row ends early instead of stretching
+      one field across a wide terminal while the rest sit far off to the right */
+  max?: number;
   /** plain-text value: used for default rendering and sorting */
   text: (row: T) => string;
   /** optional rich cell — must render exactly `width` chars (use cell()/padding) */
@@ -37,7 +40,8 @@ export function Table<T>(props: {
   const selWidth = selectedIds ? 2 : 0;
   const fixed = columns.reduce((n, c) => n + (c.width === 'flex' ? 0 : c.width), selWidth);
   const flexWidth = Math.max(16, width - fixed);
-  const colWidth = (c: Column<T>) => (c.width === 'flex' ? flexWidth : c.width);
+  const colWidth = (c: Column<T>) =>
+    c.width === 'flex' ? Math.min(c.max ?? Number.POSITIVE_INFINITY, flexWidth) : c.width;
 
   if (!rows.length) return <Text dimColor>{emptyText ?? 'Nothing to show.'}</Text>;
 
@@ -47,10 +51,12 @@ export function Table<T>(props: {
 
   return (
     <Box flexDirection="column">
+      {/* headers are underlined rather than dimmed: a dim header on a table of
+          dim cells stops reading as a header at all */}
       <Text wrap="truncate">
         {selectedIds && ' '.repeat(selWidth)}
         {columns.map((c) => (
-          <Text key={c.key} bold color={sortKey === c.key ? theme.accent : theme.header} dimColor={sortKey !== c.key}>
+          <Text key={c.key} bold underline color={sortKey === c.key ? theme.accent : theme.header}>
             {cell(sortKey === c.key ? `${c.label}${arrow}` : c.label, colWidth(c))}
           </Text>
         ))}
