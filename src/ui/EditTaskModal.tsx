@@ -159,9 +159,8 @@ export function EditTaskModal(props: {
   );
 
   return (
-    // flexShrink 0: when vertical space is tight, yoga must squeeze the board
-    // behind us, never the modal's own rows
-    <Box flexDirection="column" flexShrink={0} borderStyle="double" borderColor={theme.key} paddingX={2}>
+    // the frame and the opaque backdrop belong to Popup; this is the contents
+    <Box flexDirection="column" flexShrink={0}>
       <Text bold color={theme.key} wrap="truncate">
         edit {task.issue.identifier} <Text dimColor>{task.issue.title}</Text>
       </Text>

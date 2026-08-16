@@ -313,10 +313,14 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
   two-question set with descriptions survives the round trip.
 - **An empty `<Text>` has no height**, so blank lines vanish and markdown paragraphs run
   together — render `' '` for them.
-- **A modal owns the view, it doesn't sit above it.** `ModalHost` (taskActions) renders the open
-  modal alone in the view's full height — centred when there are ≥32 rows, top-aligned below that
-  so a tall dialog loses its footer rather than its title. Wedging one above the board (what edit
-  used to do) just squeezed the board into the clip and capped how much the dialog could say.
+- **Modals are popups, and two things make that work.** Ink supports `position="absolute"`, so
+  `Popup` (ui/Popup.tsx) floats a dialog over the view instead of displacing it — but Ink only
+  writes cells that hold characters, so an absolute bordered box is **transparent**: the board
+  shows through every gap between its own words. Hence the backdrop, an explicit block of spaces
+  at the same coordinates drawn first. And **absolute boxes paint in tree order**: a popup
+  rendered before its siblings is silently overdrawn by them, so it goes last in the view.
+  Height is passed in rather than measured (yoga lays out after we'd need it); overshooting just
+  makes the dialog roomier, undershooting clips it, so callers round up.
 - **A view's vertical budget is `rows - 8`** (`- 4` more while the command bar is open): the
   app pane is `rows - 4 - 2 - cmd` and its border costs 2. Anything with a fixed-height
   companion — TasksView's 15-row detail pane — has to subtract it *and* the table's own header

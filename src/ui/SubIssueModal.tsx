@@ -50,7 +50,8 @@ export function SubIssueModal(props: {
   });
 
   return (
-    <Box flexDirection="column" flexShrink={0} borderStyle="double" borderColor={theme.key} paddingX={2}>
+    // the frame belongs to Popup; this is only the contents
+    <Box flexDirection="column" flexShrink={0}>
       <Text bold color={theme.key}>
         sub-issues of {parent} — {selected.size}/{selectable.length} selected
       </Text>

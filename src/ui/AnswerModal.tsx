@@ -94,7 +94,8 @@ export function AnswerModal(props: {
   const inner = Math.max(20, width - 8);
 
   return (
-    <Box flexDirection="column" flexShrink={0} borderStyle="double" borderColor={theme.info} paddingX={2}>
+    // the frame belongs to Popup; this is only the contents
+    <Box flexDirection="column" flexShrink={0}>
       <Text bold color={theme.info}>
         {question.kind === 'permission' ? 'permission' : 'question'} · {subject}
         {questions.length > 1 && (

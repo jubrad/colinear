@@ -5,9 +5,10 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { attachSession, attachShell, setPendingAction } from '../core/attach.js';
 import { fetchSubIssues, postComment } from '../core/linear.js';
 import { store } from '../core/store.js';
-import type { Task } from '../core/types.js';
+import type { PendingQuestion, Task } from '../core/types.js';
 import { theme } from '../theme.js';
 import { AnswerModal } from '../ui/AnswerModal.js';
+import { Popup, popupPlacement } from '../ui/Popup.js';
 import { useColinear } from '../ui/context.js';
 import { EditTaskModal } from '../ui/EditTaskModal.js';
 import { SubIssueModal, type SubIssueRow } from '../ui/SubIssueModal.js';
@@ -117,9 +118,13 @@ export function useTaskActions(): TaskActions {
     }
   };
 
+  const place = (width: number, height: number) =>
+    popupPlacement(ctx.size, { width, height }, ctx.cmdOpen);
+
   const modals = (
     <>
       {subModal && (
+        <Popup {...place(90, Math.min(subModal.rows.length + 6, ctx.size.rows - 10))} borderColor={theme.key}>
         <SubIssueModal
           parent={subModal.parent.issue.identifier}
           rows={subModal.rows}
@@ -149,8 +154,13 @@ export function useTaskActions(): TaskActions {
             );
           }}
         />
+        </Popup>
       )}
       {answering?.question && (
+        <Popup
+          {...place(Math.min(96, ctx.size.columns - 8), answerHeight(answering.question, Math.min(96, ctx.size.columns - 8)))}
+          borderColor={theme.info}
+        >
         <AnswerModal
           subject={answering.issue.identifier}
           question={answering.question}
@@ -170,8 +180,10 @@ export function useTaskActions(): TaskActions {
             q?.answer(answers);
           }}
         />
+        </Popup>
       )}
       {messaging && (
+        <Popup {...place(Math.min(88, ctx.size.columns - 8), 6)}>
         <MessageModal
           task={messaging}
           onCancel={() => setMessaging(undefined)}
@@ -180,8 +192,10 @@ export function useTaskActions(): TaskActions {
             ctx.dispatcher.message(messaging.issue.id, text, { wake });
           }}
         />
+        </Popup>
       )}
       {repoModal && (
+        <Popup {...place(Math.min(92, ctx.size.columns - 8), 15)}>
         <EditTaskModal
           task={repoModal}
           repos={ctx.cfg.repos}
@@ -197,6 +211,7 @@ export function useTaskActions(): TaskActions {
             ctx.dispatcher.applyEdits(repoModal.issue.id, edits);
           }}
         />
+        </Popup>
       )}
     </>
   );
@@ -211,27 +226,18 @@ export function useTaskActions(): TaskActions {
   };
 }
 
-/**
- * A modal owns the whole view while it is up, centred in it, rather than
- * being wedged above the board and squeezing it into the clip. Every one of
- * these wants the room: the edit form has seven fields, the answer form can
- * carry four questions, the sub-issue picker a whole family.
- */
-export function ModalHost(props: { children: ReactNode }) {
-  const ctx = useColinear();
-  // centre it when there is room to; on a short terminal start at the top so
-  // a dialog taller than the view loses its footer rather than its title
-  const roomy = ctx.size.rows >= 32;
-  return (
-    <Box
-      flexDirection="column"
-      flexGrow={1}
-      justifyContent={roomy ? 'center' : 'flex-start'}
-      overflow="hidden"
-    >
-      {props.children}
-    </Box>
+/** Rows a question set needs at its widest, so stepping through it doesn't resize. */
+function answerHeight(question: PendingQuestion, width: number): number {
+  const inner = Math.max(20, width - 6);
+  const tallest = Math.max(
+    ...question.questions.map((q) => {
+      const wrapped = Math.ceil((q.text.length + 1) / inner);
+      const options = q.options.reduce((n, o) => n + (o.description ? 2 : 1), 0);
+      return (q.header ? 1 : 0) + wrapped + options;
+    }),
   );
+  // title + blank + question block + own-answer row + footer + borders
+  return tallest + 6;
 }
 
 /**
@@ -260,7 +266,8 @@ function MessageModal(props: {
   });
 
   return (
-    <Box flexDirection="column" flexShrink={0} borderStyle="double" borderColor={theme.key} paddingX={2}>
+    // the frame belongs to Popup; this is only the contents
+    <Box flexDirection="column" flexShrink={0}>
       <Text bold color={theme.key}>
         message {task.issue.identifier}
       </Text>
