@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { runSession, type SessionCallbacks } from './agent.js';
+import { runSession, SessionInbox, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
 import { channels } from './channel.js';
 import { experimentOn } from './config.js';
@@ -58,6 +58,8 @@ export class Dispatcher {
   private aborts = new Map<string, AbortController>();
   private suspended = new Set<string>();
   private modes = new Map<string, 'fixci' | 'rebase'>();
+  /** mailboxes of the sessions running right now, keyed by task id */
+  private inboxes = new Map<string, SessionInbox>();
   private viewer?: { id: string; displayName: string };
 
   constructor(private cfg: Config) {
@@ -78,6 +80,26 @@ export class Dispatcher {
 
   private toast(text: string, kind: 'info' | 'ok' | 'err') {
     this.onToast?.(text, kind);
+  }
+
+  /**
+   * Say something to a task's agent without attaching. A live session takes it
+   * at its next turn boundary; otherwise it waits for the next session, since
+   * dropping it silently is the one behaviour nobody can work with.
+   */
+  message(id: string, text: string) {
+    const task = store.get(id);
+    if (!task) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if (this.inboxes.get(id)?.push(`Message from the operator: ${trimmed}`)) {
+      store.addActivity(id, `you → agent: ${trimmed.slice(0, 120)}`);
+      this.toast(`${task.issue.identifier}: delivered at the agent's next turn`, 'ok');
+      return;
+    }
+    store.update(id, { inbox: [...(task.inbox ?? []), trimmed] });
+    store.addActivity(id, `you → agent (queued): ${trimmed.slice(0, 120)}`);
+    this.toast(`${task.issue.identifier}: no live agent — queued for its next session`, 'info');
   }
 
   /** operator message onto a coordination channel (experimental) */
@@ -643,9 +665,17 @@ export class Dispatcher {
 
       stopSubtaskPoll = this.pollSubtasks(id, worktree);
       const current = store.get(id) ?? task;
+      // messages typed while nothing was running ride into the opening prompt;
+      // clear them here so a later session doesn't replay old instructions
+      const queued = store.get(id)?.inbox ?? [];
+      if (queued.length) store.update(id, { inbox: undefined });
       const ctx =
         taskContext(current, taskRepo, branch, family, guidanceFor(this.cfg.guidance, 'work')) +
-        (channel ? channelBlock(channel.id) : '');
+        (channel ? channelBlock(channel.id) : '') +
+        operatorBlock(queued);
+      // the mailbox keeps this session open between turns, so `M` can reach it
+      const inbox = new SessionInbox();
+      this.inboxes.set(id, inbox);
       const work = await runSession({
         prompt:
           mode === 'rebase'
@@ -661,7 +691,10 @@ export class Dispatcher {
         resume: resumeSession,
         abortController: controller,
         channel,
+        inbox,
       });
+      this.inboxes.delete(id);
+      inbox.close();
       store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + work.costUsd });
       if (work.isError) {
         // auto-recovery: a spawn that died before its first assistant turn
@@ -783,6 +816,10 @@ export class Dispatcher {
       }
     } finally {
       this.aborts.delete(id);
+      // a session that threw still has a registered mailbox; leaving it there
+      // would swallow every later message into a stream nobody is reading
+      this.inboxes.get(id)?.close();
+      this.inboxes.delete(id);
       stopSubtaskPoll?.();
       // however a rebase ends — done, failed, aborted — it is no longer running
       // however it ended — done, failed, aborted — nothing is running now
@@ -961,6 +998,16 @@ function dependencyBlock(task: Task): string {
 function channelFor(issue: LinearIssue, ownFamily?: string): { id: string; username: string } | undefined {
   const family = issue.parent?.identifier ?? ownFamily;
   return family ? { id: `#${family}`, username: issue.identifier } : undefined;
+}
+
+/** Operator messages that arrived while nothing was running. */
+function operatorBlock(messages: string[]): string {
+  if (!messages.length) return '';
+  return `
+
+## Messages from the operator
+These arrived while you weren't running. They come from the human running colinear and outrank the task description wherever they conflict.
+${messages.map((m) => `- ${m}`).join('\n')}`;
 }
 
 function channelBlock(channel: string): string {

@@ -49,7 +49,10 @@ src/core/
                      redispatch, blocked-task queueing on Linear "blocks" relations, shutdown
   agent.ts           runSession(): SDK query() wrapper — canUseTool intercepts AskUserQuestion and
                      relays the human answer via a deny message (hack; SDK "defer" would be cleaner),
-                     usage/token accounting, structured output via outputFormat json_schema, resume/abort
+                     usage/token accounting, structured output via outputFormat json_schema, resume/abort.
+                     SessionInbox turns the prompt into an async iterable so the operator can push a
+                     message into a live session (`M`); the session closes on `result` unless one is
+                     pending, which is what keeps a normal run from hanging open
   linear.ts          GraphQL client; queryIssuesPaged (cursor pagination, 500 cap) backs all issue
                      fetches; teams/projects/viewer/labels; mutations (create/assign/state/comment);
                      fetchBlockers (inverseRelations type "blocks")
@@ -190,6 +193,14 @@ than taking a fifth.
   one-attempt-per-conflict shape. `mergeable: UNKNOWN` means GitHub is still computing and never
   triggers one. The prompt confines it to the rebase: resolve, test, push, no scope changes,
   AskUserQuestion when a conflict needs a human decision
+
+Work sessions are **streaming-input** conversations (`SessionInbox`): the prompt is an async
+iterable that yields the opening prompt and then whatever the operator sends with `M`. The catch
+is termination — a streaming session waits for more input instead of ending, so `runSession`
+closes the stream when a `result` arrives with nothing pending. Miss that and every task hangs
+forever. Triage keeps a plain string prompt: it is short, structured-output, and nobody needs to
+message it. Messages for a task with no live session are stored on `task.inbox` and rendered into
+the next session's opening prompt.
 
 Sessions are Claude Code sessions keyed by worktree cwd (`~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`). colinear stores only the session id + worktree; interactive attach (`claude --resume`) and headless resume share the same transcript.
 

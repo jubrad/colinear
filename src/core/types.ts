@@ -173,6 +173,12 @@ export interface Task {
   blockedBy?: Array<{ id: string; identifier: string; kind: 'start' | 'merge'; done?: boolean }>;
   /** one automatic retry after a rate-limit failure */
   retried?: boolean;
+  /**
+   * Operator messages typed while no session was live (`M`). They ride into
+   * the next session's opening prompt and are cleared once delivered; a live
+   * agent gets them pushed straight into its conversation instead.
+   */
+  inbox?: string[];
   /** superseded session pointers — recovery when a new session clobbers a good one */
   sessionHistory?: Array<{ sessionId: string; worktree?: string; at: number }>;
 }

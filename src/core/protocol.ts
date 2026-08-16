@@ -6,7 +6,7 @@ import type { Config, LinearIssue, RepoConfig, TaskEdits } from './types.js';
 export const SOCKET_PATH = join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -31,6 +31,8 @@ export type Command =
   | { name: 'reviewVerdict'; id: string; verdict: 'approve' | 'request-changes' }
   | { name: 'pollReviews' }
   | { name: 'gcScan'; olderThanDays: number }
+  /** say something to a task's agent without attaching */
+  | { name: 'message'; id: string; text: string }
   /** EXPERIMENTAL: operator message onto a coordination channel */
   | { name: 'channelPost'; channel: string; text: string }
   | { name: 'gcRemove'; paths: string[] }

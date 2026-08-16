@@ -1,10 +1,12 @@
-import type { Key } from 'ink';
+import { Box, Text, useInput, type Key } from 'ink';
+import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useState, type ReactNode } from 'react';
 import { attachSession, attachShell } from '../core/attach.js';
 import { fetchSubIssues, postComment } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { Task } from '../core/types.js';
+import { theme } from '../theme.js';
 import { useColinear } from '../ui/context.js';
 import { EditTaskModal } from '../ui/EditTaskModal.js';
 import { SubIssueModal, type SubIssueRow } from '../ui/SubIssueModal.js';
@@ -34,10 +36,11 @@ export function useTaskActions(): TaskActions {
   const [answering, setAnswering] = useState(false);
   const [subModal, setSubModal] = useState<{ parent: Task; rows: SubIssueRow[] }>();
   const [repoModal, setRepoModal] = useState<Task>();
+  const [messaging, setMessaging] = useState<Task>();
 
   // modals own the keyboard: without capture, global keys stay live and a
   // ":" typed into the pin field (e.g. pasting a URL) opens the command bar
-  const modalOpen = Boolean(subModal) || Boolean(repoModal);
+  const modalOpen = Boolean(subModal) || Boolean(repoModal) || Boolean(messaging);
   useEffect(() => ctx.setCapture(answering || modalOpen), [answering, modalOpen]);
   useEffect(() => () => ctx.setCapture(false), []);
 
@@ -64,6 +67,7 @@ export function useTaskActions(): TaskActions {
     if (input === 's') attachSession(selected, ctx);
     if (input === 'S') attachShell(selected, ctx);
     if (input === 'm') setRepoModal(selected);
+    if (input === 'M') setMessaging(selected);
     if (input === 'u') {
       void fetchSubIssues(ctx.cfg, selected.issue.id)
         .then((subs) => {
@@ -138,6 +142,16 @@ export function useTaskActions(): TaskActions {
           }}
         />
       )}
+      {messaging && (
+        <MessageModal
+          task={messaging}
+          onCancel={() => setMessaging(undefined)}
+          onSubmit={(text) => {
+            setMessaging(undefined);
+            ctx.dispatcher.message(messaging.issue.id, text);
+          }}
+        />
+      )}
       {repoModal && (
         <EditTaskModal
           task={repoModal}
@@ -157,9 +171,46 @@ export function useTaskActions(): TaskActions {
     modalOpen,
     answering,
     endAnswer: () => setAnswering(false),
-    modals: subModal || repoModal ? modals : null,
+    modals: subModal || repoModal || messaging ? modals : null,
     handleKey,
   };
+}
+
+/**
+ * Say something to a task's agent. A live one takes it at its next turn
+ * boundary — it can't interrupt a bash command already running — and anything
+ * else keeps it for the next session, so the key means the same thing on any
+ * card.
+ */
+function MessageModal(props: { task: Task; onCancel: () => void; onSubmit: (text: string) => void }) {
+  const { task, onCancel, onSubmit } = props;
+  const [draft, setDraft] = useState('');
+  const live = ['triage', 'working', 'checks'].includes(task.status) || Boolean(task.maintenance);
+  useInput((_input, key) => {
+    if (key.escape) onCancel();
+  });
+  return (
+    <Box flexDirection="column" flexShrink={0} borderStyle="double" borderColor={theme.key} paddingX={2}>
+      <Text bold color={theme.key}>
+        message {task.issue.identifier}
+      </Text>
+      <Box>
+        <Text color={theme.accent}>{'> '}</Text>
+        <TextInput
+          value={draft}
+          placeholder={live ? 'the agent reads this at its next turn' : 'queued for this task\'s next session'}
+          onChange={setDraft}
+          onSubmit={(value) => (value.trim() ? onSubmit(value) : onCancel())}
+        />
+      </Box>
+      <Text dimColor>
+        {live
+          ? 'a live agent picks this up between turns — it will not interrupt a running command'
+          : 'no agent is running: this rides into the next session\'s prompt'}
+        {' · esc: cancel'}
+      </Text>
+    </Box>
+  );
 }
 
 /** Keys the two task views share, for the header's hotkey grid. */
@@ -167,6 +218,7 @@ export const TASK_ACTION_KEYS: Array<[string, string]> = [
   ['enter', 'task detail'],
   ['u', 'dispatch subs'],
   ['m', 'edit task'],
+  ['M', 'message agent'],
   ['a', 'answer'],
   ['x', 'cancel'],
   ['s', 'attach claude'],

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { store } from '../core/store.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, formatTokensFull } from '../ui/format.js';
-import { STATUS_COLORS } from '../theme.js';
+import { STATUS_COLORS, theme } from '../theme.js';
 import type { Task } from '../core/types.js';
 
 export function DetailPane(props: {
@@ -109,6 +109,16 @@ export function DetailPane(props: {
           )}
         </Box>
       )}
+
+      {task.inbox?.length ? (
+        <Box flexDirection="column">
+          {task.inbox.map((m, i) => (
+            <Text key={`${i}-${m.slice(0, 12)}`} color={theme.key} wrap="truncate">
+              → queued for the agent: {m}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
 
       {task.subIssues?.length ? (
         <Box flexDirection="column">
