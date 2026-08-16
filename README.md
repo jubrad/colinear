@@ -80,6 +80,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `stateSync` | `true` | move Linear states automatically: dispatch → In Progress, first PR → In Review |
 | `ciAutofix` | `true` | dispatch a fix session when a task's PR checks go red (one per red rollup, re-armed when it goes green) |
 | `autoRebase` | `false` | default for [auto-rebase on conflict](#auto-rebase); the `m` modal overrides it per task |
+| `autoDispatchSubs` | `false` | when a tracking parent gains a sub-issue nobody has started, dispatch it. [Details](#new-sub-issues) |
 | `retentionDays` | `30` | how long finished work stays on the board. [Details](#retention-and-disk) |
 | `worktreeRetentionDays` | `7` | how long a finished task's worktree is kept before `coli gc` offers it. [Details](#retention-and-disk) |
 | `experimental` | `false` | master switch for unfinished features. Nothing in `experiments` runs unless this is true. [Details](#experimental-features) |
@@ -138,6 +139,18 @@ Two windows, deliberately different numbers — a checkout is exactly what you w
 
 - `retentionDays` (default `30`, `0` keeps everything) — how long finished work stays on the board. Past it, done and cancelled tasks and settled reviews are forgotten; never anything with a live agent, a pending question, an open PR, or an error, however old. It's also the window the header's `Tokens/30d ($…)` figure covers, so the number and the board always agree.
 - `worktreeRetentionDays` (default `7`) — how long a finished task's **worktree** survives before `coli gc` / `:gc` offer it for removal. Nothing is ever removed without you asking. `--older-than N` overrides it for one run.
+
+### New sub-issues
+
+Creating a sub-issue and spending an agent on it are separate statements, so by default they stay separate: `A` on a proposal or split plan creates the issues, `D` creates **and** dispatches, and `u` on the parent dispatches whatever is sitting there. A sub-issue you make in Linear yourself appears on the parent within a minute and waits.
+
+`autoDispatchSubs` changes that for tracking parents: any sub-issue that colinear has no task for **and** that nobody has started in Linear gets dispatched on the next sweep. The `m` modal sets it per parent (`config default` / `auto-dispatch` / `leave them`), which is the useful granularity — one family running itself while the rest don't.
+
+Three deliberate limits:
+
+- **Linear state is the guard**, not "do we have a task". A sub-issue that was worked months ago and later dropped from the board by `retentionDays` is `started` or `completed` in Linear, so it can never be resurrected by the sweep.
+- **Five per sweep.** Nobody is watching a 60-second timer, and a bulk import shouldn't assign twenty issues to you at once; the rest follow a minute later.
+- **Auto-dispatched sub-issues get triaged.** `u` and `D` skip triage because you looked at them first; these arrive with no human in the loop, so triage stays on to catch the too-big and under-specified ones.
 
 ### Auto-rebase
 
@@ -210,7 +223,7 @@ Only the daemon dispatches agents, so stopping it is the one thing that interrup
 | view | what |
 |---|---|
 | `:issues [team\|all\|mine]` | sortable issue table (priority, parent link for sub-issues, labels, state, assignee); `/` fuzzy, `t` team (k9s-namespace style), `l` label, `s` sort by any column, `p` include/exclude project issues; `space` select, `enter` dispatch, `D` dispatch skipping triage, `c` custom dispatch (instructions + model + repo + triage modal), `n` **new issue from a description** (an agent drafts and files it), `o` open in Linear, `b` board. Queries paginate (500 cap); the default view shows non-project issues only |
-| `:board` | kanban: Queued / Triage / Working / Needs Input / PR Open / Done / Failed. `j/l` move columns, `i/k` move cards (arrows too); cards show live duration, tokens, repo, subtask progress, CI + review state. `a`/`1-9` answer, `enter` task detail, `m` **edit task** (repo, pinned PR, instructions, model, triage, auto-rebase; `ctrl+r` requeues), `u` dispatch sub-issues (picker), `s` attach claude, `S` shell, `x` cancel, `r` resume, `b` rebase a conflicting PR, `f` **force-start a blocked task**, `c` post escalation to Linear, `M` **message the agent** without attaching, `o` open PR, `O` open issue, `n` issues, `/` the same tasks as a searchable table |
+| `:board` | kanban: Queued / Triage / Working / Needs Input / PR Open / Done / Failed. `j/l` move columns, `i/k` move cards (arrows too); cards show live duration, tokens, repo, subtask progress, CI + review state. `a`/`1-9` answer, `enter` task detail, `m` **edit task** (repo, pinned PR, instructions, model, triage, auto-rebase, auto-dispatch subs; `ctrl+r` requeues), `u` dispatch sub-issues (picker), `s` attach claude, `S` shell, `x` cancel, `r` resume, `b` rebase a conflicting PR, `f` **force-start a blocked task**, `c` post escalation to Linear, `M` **message the agent** without attaching, `o` open PR, `O` open issue, `n` issues, `/` the same tasks as a searchable table |
 | `:tasks` (`ls`, `t`) | the same tasks as a **searchable, sortable table** — for when there are more cards than a column can show. `/` fuzzy filters across id, title, repo, status, PR state and CI (so `/conflict` or `/needs` works), `S` sorts by any column (again on the same one reverses), `j/k` move, `g`/`G` jump. Default order is the board's: column left-to-right, then what needs you first. Every board action works here, key for key (`enter`, `m`, `M`, `s`, `x`, `r`, `f`, `b`, `c`, `o`, `O`, `u`, `a`) — only `S` differs, since it sorts rather than opening a shell. The selected task's detail pane sits below the table when the terminal is tall enough. `/` on the board jumps straight here |
 | `:task CLOUD-123` | full detail: scrollable activity log (`j/k`, `g` top, `G` follow), subtasks, dependencies, check output, PR overview (draft/state, CI, review decision, URL, stack base); `d` marks the draft PR ready — the only path out of draft. `d` refuses while a merge-order dependency hasn't landed, naming it; `D` promotes anyway (colinear knows when a blocker **merged**, never whether it **deployed**) |
 | `:projects` / `:project NAME` | projects table (state, progress, lead, teams, target; `/` `t` `s` filters + sort) and per-project kanban; `d`/`c` dispatch, `p` planning chat |

@@ -180,6 +180,8 @@ export interface Task {
   ciFixAttempted?: boolean;
   /** rebase this PR automatically when GitHub reports a conflict */
   autoRebase?: boolean;
+  /** dispatch sub-issues that turn up on this parent (undefined = follow config) */
+  autoDispatchSubs?: boolean;
   /**
    * A maintenance session is live on an already-open PR. The task keeps its
    * status throughout — it is not back in development — and the card shows a
@@ -313,6 +315,8 @@ export interface TaskEdits {
   skipTriage?: boolean;
   /** rebase this task's PR automatically on conflict (undefined = follow config) */
   autoRebase?: boolean;
+  /** dispatch new sub-issues of this parent automatically (undefined = follow config) */
+  autoDispatchSubs?: boolean;
   /** true when the operator asked to requeue (ctrl+r) */
   requeue: boolean;
 }
@@ -394,6 +398,12 @@ export interface Config {
   ciAutofix: boolean;
   /** default for a task's autoRebase; a conflicting PR gets a rebase session */
   autoRebase: boolean;
+  /**
+   * Default for a task's autoDispatchSubs: when a tracking parent gains a
+   * sub-issue nobody has started, dispatch it. Off by default — creating an
+   * issue and spending an agent on it are not the same statement.
+   */
+  autoDispatchSubs: boolean;
   /**
    * How long finished work stays on the board, in days. Past this a done,
    * cancelled or settled review is dropped from the store — which is also the
