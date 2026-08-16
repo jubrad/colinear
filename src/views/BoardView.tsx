@@ -7,7 +7,7 @@ import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
-import { ModalHost, TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
+import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
 
 interface BoardColumn {
   title: string;
@@ -138,9 +138,6 @@ export function BoardView(_props: { param?: string }) {
     { isActive: !actions.busy && !ctx.cmdOpen },
   );
 
-  // a modal takes the view: the board behind it was only ever getting clipped
-  if (actions.modalOpen) return <ModalHost>{actions.modals}</ModalHost>;
-
   if (!tasks.length) {
     return (
       <Box flexDirection="column" flexGrow={1} justifyContent="center" alignItems="center">
@@ -204,14 +201,16 @@ export function BoardView(_props: { param?: string }) {
           );
         })}
       </Box>
-      {selected && !actions.modalOpen && (
+      {selected && (
         // fixed-height pane: however tall the task detail gets, it clips here
-        // instead of flex-squeezing the board columns (and their headers) away.
-        // hidden while a modal is open so the modal always has vertical room
+        // instead of flex-squeezing the board columns (and their headers) away
         <Box height={15} flexShrink={0} flexDirection="column" overflow="hidden">
           <DetailPane task={selected} />
         </Box>
       )}
+      {/* last on purpose: an absolute box is painted in tree order, so a popup
+          rendered before its siblings is overdrawn by them */}
+      {actions.modals}
     </Box>
   );
 }

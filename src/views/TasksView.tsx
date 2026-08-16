@@ -9,7 +9,7 @@ import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { boardOrder, prRank, prState, PR_STATE_COLOR } from './BoardView.js';
 import { DetailPane } from './DetailPane.js';
-import { ModalHost, TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
+import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
 
 /** default order: the board read left-to-right, top-to-bottom */
 const BOARD_SORT = 'board';
@@ -169,10 +169,8 @@ export function TasksView(props: { param?: string }) {
   // and count lines, and the detail pane only appears when rows are left over
   const budget = Math.max(6, ctx.size.rows - 8 - (ctx.cmdOpen ? 4 : 0));
   const chrome = 3 + (bar ? 1 : 0);
-  const showDetail = Boolean(selected) && !actions.modalOpen && budget - chrome - 15 >= 4;
+  const showDetail = Boolean(selected) && budget - chrome - 15 >= 4;
   const maxRows = Math.max(3, budget - chrome - (showDetail ? 15 : 0));
-
-  if (actions.modalOpen) return <ModalHost>{actions.modals}</ModalHost>;
 
   if (!tasks.length) {
     return (
@@ -249,6 +247,8 @@ export function TasksView(props: { param?: string }) {
           <DetailPane task={selected} />
         </Box>
       )}
+      {/* last: absolute boxes paint in tree order (see BoardView) */}
+      {actions.modals}
     </Box>
   );
 }

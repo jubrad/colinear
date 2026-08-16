@@ -6,6 +6,7 @@ import { createBlocksRelation, createIssue, fetchIssuesByIds } from '../core/lin
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import { AnswerModal } from '../ui/AnswerModal.js';
+import { Popup, popupPlacement } from '../ui/Popup.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokensFull, reviewStatus, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
@@ -359,6 +360,13 @@ export function TaskView(props: { param?: string }) {
         </Box>
       )}
       {task.question && answering && (
+        <Popup
+          {...popupPlacement(ctx.size, {
+            width: Math.min(96, ctx.size.columns - 8),
+            height: Math.min(ctx.size.rows - 12, 8 + task.question.questions[0].options.length * 2),
+          })}
+          borderColor={theme.info}
+        >
         <AnswerModal
           subject={task.issue.identifier}
           question={task.question}
@@ -376,6 +384,7 @@ export function TaskView(props: { param?: string }) {
             task.question?.answer(answers);
           }}
         />
+        </Popup>
       )}
 
       <Box flexDirection="column" marginTop={1} flexGrow={1}>
