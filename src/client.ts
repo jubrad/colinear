@@ -46,6 +46,8 @@ export interface DispatcherApi {
   reviewVerdict(id: string, verdict: 'approve' | 'request-changes'): void;
   pollReviews(): void;
   gcScan(olderThanDays: number): void;
+  /** submit answers to a pending question set (used by the $EDITOR path) */
+  answer(id: string, answers: string[]): void;
   /** say something to a task's agent without attaching (live push, else queued);
       wake:false queues it instead of starting a session to read it */
   message(id: string, text: string, opts?: { wake?: boolean }): void;
@@ -156,7 +158,7 @@ export async function connectToDaemon(): Promise<Connection> {
         store.hydrate(msg.snapshot);
         store.attach(
           (change) => command({ name: 'change', change }),
-          (id, text) => command({ name: 'answer', id, text }),
+          (id, answers) => command({ name: 'answer', id, answers }),
         );
         ready = true;
         resolve({
@@ -198,6 +200,7 @@ export async function connectToDaemon(): Promise<Connection> {
             reviewVerdict: (id, verdict) => command({ name: 'reviewVerdict', id, verdict }),
             pollReviews: () => command({ name: 'pollReviews' }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),
+            answer: (id, answers) => command({ name: 'answer', id, answers }),
             message: (id, text, opts) => command({ name: 'message', id, text, wake: opts?.wake }),
             channelPost: (channel, text) => command({ name: 'channelPost', channel, text }),
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),

@@ -167,10 +167,11 @@ export function ReviewDocModal(props: {
                 // a pending question takes the reply; a bare number picks an option
                 const question = review.question;
                 if (question) {
+                  // reviews ask one thing at a time; a bare number picks an option
                   const pick = Number.parseInt(text, 10);
-                  question.answer(
-                    !Number.isNaN(pick) && question.options[pick - 1] ? question.options[pick - 1] : text,
-                  );
+                  const options = question.questions[0]?.options ?? [];
+                  const chosen = !Number.isNaN(pick) && options[pick - 1] ? options[pick - 1].label : text;
+                  question.answer(question.questions.map((_, i) => (i === 0 ? chosen : text)));
                   return;
                 }
                 onSend(text);

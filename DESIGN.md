@@ -48,7 +48,10 @@ src/core/
                      (taskContext block shared by all sessions), fixci mode, suspend/cancel/resume/
                      redispatch, blocked-task queueing on Linear "blocks" relations, shutdown
   agent.ts           runSession(): SDK query() wrapper — canUseTool intercepts AskUserQuestion and
-                     relays the human answer via a deny message (hack; SDK "defer" would be cleaner),
+                     relays the human answers via a deny message (hack; SDK "defer" would be cleaner).
+                     The WHOLE question set is kept: AskUserQuestion carries up to four questions,
+                     each with per-option descriptions, and answering only the first made the agent
+                     re-ask the rest. Permission gates ride the same shape with allow/deny options,
                      usage/token accounting, structured output via outputFormat json_schema, resume/abort.
                      SessionInbox turns the prompt into an async iterable so the operator can push a
                      message into a live session (`M`); the session closes on `result` unless one is
@@ -82,6 +85,8 @@ src/core/
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
                      read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
                      approve() creates Linear sub-issues; snapshot/restore for persistence
+  answers.ts         the $EDITOR path for questions: renders a question set as a markdown form and
+                     parses the filled-in `Answer:` blocks back (forgiving — a human edited it)
   attach.ts          `s`/`S`: in-place terminal handoff (pending-action consumed by index.tsx loop)
                      or external window via script file (Ghostty/Terminal); suspend-first for live agents
   checks.ts          per-repo shell checks in the worktree
@@ -291,6 +296,10 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
   line rather than clipping the last, so a fixed-height pane must slice its content to
   `height - borders - header rows`. Both panes of the review modal hit this the moment an
   error line appeared above the doc.
+- **A question is a set, not a string.** `PendingQuestion` holds every question the agent asked
+  (1–4) with per-option descriptions, and `answer` takes an array in the same order. The wire
+  format carries the set minus the callback, which the mirror rebuilds; `npm run check` asserts a
+  two-question set with descriptions survives the round trip.
 - **An empty `<Text>` has no height**, so blank lines vanish and markdown paragraphs run
   together — render `' '` for them.
 - **A view's vertical budget is `rows - 8`** (`- 4` more while the command bar is open): the

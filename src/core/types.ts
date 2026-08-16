@@ -86,10 +86,38 @@ export interface TriageVerdict {
   subtasks?: PlannedSubtask[];
 }
 
-export interface PendingQuestion {
+export interface QuestionOption {
+  label: string;
+  /** what picking this means — the agent writes it, and it's most of the value */
+  description?: string;
+}
+
+export interface AskedQuestion {
+  /** short chip the agent supplies ("Auth method"), if any */
+  header?: string;
   text: string;
-  options: string[];
-  answer: (a: string) => void;
+  options: QuestionOption[];
+  multiSelect?: boolean;
+}
+
+/**
+ * What an agent is waiting on. AskUserQuestion sends up to four questions at
+ * once, each with its own options and per-option descriptions, so this models
+ * the whole set — answering one of four and discarding the rest was why the
+ * agent kept asking again.
+ */
+export interface PendingQuestion {
+  questions: AskedQuestion[];
+  /** a permission gate reads differently from a question about the work */
+  kind: 'ask' | 'permission';
+  /** one answer per question, in order */
+  answer: (answers: string[]) => void;
+}
+
+/** One-line form for cards, notifications and logs. */
+export function questionSummary(q: PendingQuestion): string {
+  const first = q.questions[0]?.text ?? 'needs input';
+  return q.questions.length > 1 ? `${first} (+${q.questions.length - 1} more)` : first;
 }
 
 export interface CheckResult {

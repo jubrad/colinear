@@ -247,7 +247,7 @@ export function TasksView(props: { param?: string }) {
       )}
       {showDetail && selected && (
         <Box height={15} flexShrink={0} flexDirection="column" overflow="hidden">
-          <DetailPane task={selected} answering={actions.answering} onAnswerDone={actions.endAnswer} />
+          <DetailPane task={selected} />
         </Box>
       )}
     </Box>

@@ -1,4 +1,4 @@
-import type { Review, Task } from './types.js';
+import type { PendingQuestion, Review, Task } from './types.js';
 
 /**
  * Change data capture for the task store.
@@ -22,16 +22,16 @@ export type Change =
 /** A change stamped with the version it produced. */
 export type Delta = Change & { v: number };
 
-/** A task on the wire: the pending question keeps its text, never its callback. */
+/** A task on the wire: the question set travels, never its callback. */
 export type WireTask = Omit<Task, 'question'> & {
-  question?: { text: string; options: string[] };
+  question?: Omit<PendingQuestion, 'answer'>;
 };
 
 export type WirePatch = Partial<WireTask>;
 
 /** Same treatment for reviews: the pending question loses its callback. */
 export type WireReview = Omit<Review, 'question'> & {
-  question?: { text: string; options: string[] };
+  question?: Omit<PendingQuestion, 'answer'>;
 };
 
 export interface Snapshot {
@@ -46,7 +46,7 @@ export function toWire<T extends Partial<Task> | Partial<Review>>(
 ): Partial<WireTask> & Partial<WireReview> {
   const { question, ...rest } = value;
   const wire = structuredClone(rest) as Partial<WireTask> & Partial<WireReview>;
-  if (question) wire.question = { text: question.text, options: [...question.options] };
+  if (question) wire.question = { questions: structuredClone(question.questions), kind: question.kind };
   return wire;
 }
 

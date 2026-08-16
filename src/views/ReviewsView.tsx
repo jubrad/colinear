@@ -299,13 +299,18 @@ export function ReviewsView(props: { param?: string }) {
 
       {selected?.question && (
         <Box flexDirection="column" borderStyle="round" borderColor={theme.info} paddingX={1}>
-          <Text color={theme.info} bold wrap="wrap">
-            ? {selected.question.text}
-          </Text>
-          {selected.question.options.map((opt, i) => (
-            <Text key={opt} color={theme.info} wrap="wrap">
-              {'  '}{i + 1}. {opt}
-            </Text>
+          {selected.question.questions.map((q, qi) => (
+            <Box key={`${qi}-${q.text.slice(0, 12)}`} flexDirection="column">
+              <Text color={theme.info} bold wrap="wrap">
+                ? {q.header ? `[${q.header}] ` : ''}{q.text}
+              </Text>
+              {q.options.map((opt, i) => (
+                <Text key={opt.label} color={theme.info} wrap="wrap">
+                  {'  '}{i + 1}. {opt.label}
+                  {opt.description ? <Text dimColor> — {opt.description}</Text> : null}
+                </Text>
+              ))}
+            </Box>
           ))}
         </Box>
       )}

@@ -2,7 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
-import type { Task, TaskStatus } from '../core/types.js';
+import { questionSummary, type Task, type TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
@@ -207,7 +207,7 @@ export function BoardView(_props: { param?: string }) {
         // instead of flex-squeezing the board columns (and their headers) away.
         // hidden while a modal is open so the modal always has vertical room
         <Box height={15} flexShrink={0} flexDirection="column" overflow="hidden">
-          <DetailPane task={selected} answering={actions.answering} onAnswerDone={actions.endAnswer} />
+          <DetailPane task={selected} />
         </Box>
       )}
     </Box>
@@ -307,7 +307,7 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
       )}
       {task.question && (
         <Text color={theme.info} wrap="truncate">
-          ? {task.question.text}
+          ? {questionSummary(task.question)}
         </Text>
       )}
       {task.inbox?.length ? (

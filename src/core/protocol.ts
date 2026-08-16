@@ -6,7 +6,7 @@ import type { Config, LinearIssue, RepoConfig, TaskEdits } from './types.js';
 export const SOCKET_PATH = join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -17,7 +17,7 @@ export type Command =
   | { name: 'rebase'; id: string }
   | { name: 'suspend'; id: string }
   | { name: 'redispatch'; id: string; repo: RepoConfig; opts?: { retriage?: boolean; skipTriage?: boolean } }
-  | { name: 'answer'; id: string; text: string }
+  | { name: 'answer'; id: string; answers: string[] }
   | { name: 'pollPrs' }
   | { name: 'applyEdits'; id: string; edits: TaskEdits }
   | { name: 'setViewer'; viewer: { id: string; displayName: string } }

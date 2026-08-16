@@ -93,7 +93,7 @@ export async function runDaemon(): Promise<void> {
         // the callback lives here; the client only ever sends the text.
         // reviews are keyed "owner/repo#n", tasks by Linear id — no overlap
         const pending = store.get(cmd.id)?.question ?? store.getReview(cmd.id)?.question;
-        pending?.answer(cmd.text);
+        pending?.answer(cmd.answers);
         break;
       }
       case 'applyEdits':

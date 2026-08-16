@@ -22,7 +22,7 @@ class Store {
   private listeners = new Set<Listener>();
   private log: Delta[] = [];
   /** set on a mirror: rebuilds the answer callback stripped for the wire */
-  private onAnswer?: (id: string, text: string) => void;
+  private onAnswer?: (id: string, answers: string[]) => void;
   /**
    * Set on a mirror: writes are forwarded to the owner instead of applied
    * locally, and come back as deltas. Views keep calling store.update() —
@@ -152,7 +152,7 @@ class Store {
    * Turn this store into a mirror: writes forward to the owner, and the
    * pending-question callback round-trips instead of running locally.
    */
-  attach(remote: (change: Change) => void, onAnswer: (id: string, text: string) => void) {
+  attach(remote: (change: Change) => void, onAnswer: (id: string, answers: string[]) => void) {
     this.remote = remote;
     this.onAnswer = onAnswer;
   }
@@ -185,7 +185,7 @@ class Store {
   }
 
   /** Mirror side: replace all state with a snapshot. */
-  hydrate(snapshot: Snapshot, onAnswer?: (id: string, text: string) => void) {
+  hydrate(snapshot: Snapshot, onAnswer?: (id: string, answers: string[]) => void) {
     if (onAnswer) this.onAnswer = onAnswer;
     this.tasks = new Map(snapshot.tasks.map((t) => [t.issue.id, this.fromWire(t, t.issue.id)]));
     this.reviews = new Map(snapshot.reviews.map((r) => [r.id, this.fromWire(r, r.id) as unknown as Review]));
@@ -231,7 +231,7 @@ class Store {
       const send = this.onAnswer;
       task.question = {
         ...wire.question,
-        answer: (text: string) => send?.(id, text),
+        answer: (answers: string[]) => send?.(id, answers),
       };
     }
     return task;
