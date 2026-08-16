@@ -46,8 +46,9 @@ export interface DispatcherApi {
   reviewVerdict(id: string, verdict: 'approve' | 'request-changes'): void;
   pollReviews(): void;
   gcScan(olderThanDays: number): void;
-  /** say something to a task's agent without attaching (live push, else queued) */
-  message(id: string, text: string): void;
+  /** say something to a task's agent without attaching (live push, else queued);
+      wake:false queues it instead of starting a session to read it */
+  message(id: string, text: string, opts?: { wake?: boolean }): void;
   /** EXPERIMENTAL: operator message onto a coordination channel */
   channelPost(channel: string, text: string): void;
   gcRemove(paths: string[]): void;
@@ -197,7 +198,7 @@ export async function connectToDaemon(): Promise<Connection> {
             reviewVerdict: (id, verdict) => command({ name: 'reviewVerdict', id, verdict }),
             pollReviews: () => command({ name: 'pollReviews' }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),
-            message: (id, text) => command({ name: 'message', id, text }),
+            message: (id, text, opts) => command({ name: 'message', id, text, wake: opts?.wake }),
             channelPost: (channel, text) => command({ name: 'channelPost', channel, text }),
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),
           },

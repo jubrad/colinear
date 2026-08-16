@@ -200,7 +200,16 @@ is termination — a streaming session waits for more input instead of ending, s
 closes the stream when a `result` arrives with nothing pending. Miss that and every task hangs
 forever. Triage keeps a plain string prompt: it is short, structured-output, and nobody needs to
 message it. Messages for a task with no live session are stored on `task.inbox` and rendered into
-the next session's opening prompt.
+the next session's opening prompt — and, unless the operator said otherwise, `Dispatcher.wake()`
+queues the task so that session happens now. Waking deliberately skips `blocked` (a message is
+not a reason to jump a dependency), `tracking` and already-queued tasks, and it pushes onto the
+queue like `resume()` rather than going through `enqueue()`, so no Linear state moves.
+
+Delivery is best-effort in one specific way worth knowing: the SDK pulls from the input stream as
+soon as something is yielded, long before the agent acts on it, so a pushed message is only
+*certainly* delivered once a turn completes behind it. `SessionInbox` tracks that window as
+`inFlight`, clears it on each `result`, and hands anything still open back to the task when the
+session ends. The bias is towards repeating a message rather than losing one.
 
 Sessions are Claude Code sessions keyed by worktree cwd (`~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`). colinear stores only the session id + worktree; interactive attach (`claude --resume`) and headless resume share the same transcript.
 

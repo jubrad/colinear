@@ -146,9 +146,9 @@ export function useTaskActions(): TaskActions {
         <MessageModal
           task={messaging}
           onCancel={() => setMessaging(undefined)}
-          onSubmit={(text) => {
+          onSubmit={(text, wake) => {
             setMessaging(undefined);
-            ctx.dispatcher.message(messaging.issue.id, text);
+            ctx.dispatcher.message(messaging.issue.id, text, { wake });
           }}
         />
       )}
@@ -182,13 +182,25 @@ export function useTaskActions(): TaskActions {
  * else keeps it for the next session, so the key means the same thing on any
  * card.
  */
-function MessageModal(props: { task: Task; onCancel: () => void; onSubmit: (text: string) => void }) {
+function MessageModal(props: {
+  task: Task;
+  onCancel: () => void;
+  onSubmit: (text: string, wake: boolean) => void;
+}) {
   const { task, onCancel, onSubmit } = props;
   const [draft, setDraft] = useState('');
   const live = ['triage', 'working', 'checks'].includes(task.status) || Boolean(task.maintenance);
-  useInput((_input, key) => {
+  // mirrors Dispatcher.wake(): parked work stays parked, and a task already on
+  // its way doesn't need starting
+  const wakeable =
+    !live && !task.question && !['queued', 'blocked', 'tracking'].includes(task.status);
+
+  // same shape as EditTaskModal's ctrl+r: a modifier alongside the text input
+  useInput((input, key) => {
     if (key.escape) onCancel();
+    if (key.ctrl && input === 'q' && draft.trim()) onSubmit(draft, false);
   });
+
   return (
     <Box flexDirection="column" flexShrink={0} borderStyle="double" borderColor={theme.key} paddingX={2}>
       <Text bold color={theme.key}>
@@ -198,15 +210,23 @@ function MessageModal(props: { task: Task; onCancel: () => void; onSubmit: (text
         <Text color={theme.accent}>{'> '}</Text>
         <TextInput
           value={draft}
-          placeholder={live ? 'the agent reads this at its next turn' : 'queued for this task\'s next session'}
+          placeholder={
+            live
+              ? 'the agent reads this at its next turn'
+              : wakeable
+                ? 'sending starts a session so the agent reads it'
+                : "queued for this task's next session"
+          }
           onChange={setDraft}
-          onSubmit={(value) => (value.trim() ? onSubmit(value) : onCancel())}
+          onSubmit={(value) => (value.trim() ? onSubmit(value, true) : onCancel())}
         />
       </Box>
       <Text dimColor>
         {live
-          ? 'a live agent picks this up between turns — it will not interrupt a running command'
-          : 'no agent is running: this rides into the next session\'s prompt'}
+          ? 'picked up between turns — it will not interrupt a running command'
+          : wakeable
+            ? 'enter: send and wake the agent · ctrl+q: just queue it for later'
+            : "parked work stays parked: this rides into the next session's prompt"}
         {' · esc: cancel'}
       </Text>
     </Box>

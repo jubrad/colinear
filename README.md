@@ -267,9 +267,18 @@ Dispatching (`enter`, or `c` for the custom modal) immediately self-assigns the 
 `M` on a card (board or `:tasks`) sends the agent a message without attaching to it — "use the existing helper", "don't touch the schema", "rebase first".
 
 - **A live agent** takes it at its next turn boundary. It can't interrupt a command already running, so a message sent during a four-minute test run lands when that finishes; usually it's seconds. The session is a streaming conversation, so your message arrives as a user turn — the agent answers it and carries on.
-- **Anything else** (queued, blocked, needs-input, failed) keeps it: the card shows `1 message waiting for its next session`, and it rides into that session's opening prompt above the task description. Nothing is dropped silently, so `M` means the same thing on every card.
+- **An idle task** — PR open, done, failed, interrupted, needs-input — is **woken**: colinear starts a session (resuming the same transcript, so the work is still in context) whose opening prompt carries your message. Sending is the whole gesture; you don't have to remember to press `r` afterwards. `ctrl+q` sends without waking if you'd rather it wait.
+- **Parked work stays parked.** A `blocked` task keeps the message but is not started — a message is not a reason to jump a dependency, `f` is — and neither is a `tracking` parent or a task already queued. Their message rides into the session they were going to have anyway.
 
-Messages land in the activity log either way, so the transcript shows what you told it and when.
+| task is | your message |
+|---|---|
+| working / triage / checks / rebasing | pushed into the live session, read at the next turn |
+| pr open, done, failed, interrupted, needs input | queued, and a session starts to read it |
+| blocked, tracking, already queued | queued for the session it was already going to have |
+
+Messages land in the activity log either way, so the transcript shows what you told it and when. Waking doesn't touch Linear — it queues the task the same way `r` does, so no state moves and nothing is posted.
+
+If a session dies between accepting a message and acting on it (an abort, a crash), the message goes back on the task rather than vanishing. That can occasionally repeat one the agent had already read: a duplicate paragraph is a cheaper mistake than a silently dropped instruction.
 
 ## Sessions: attach, chat, background
 
