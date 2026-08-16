@@ -1,20 +1,26 @@
 import { createSdkMcpServer, query, tool, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { channels, formatMessages } from './channel.js';
-import type { AskedQuestion, PendingQuestion } from './types.js';
+import type { CoordinatorTools } from './coordinator.js';
+import type { AskedQuestion, PendingQuestion, PlannedSubtask } from './types.js';
 
 /** our own in-process tools; auto-approved rather than re-asked per call */
 const COLINEAR_TOOL_PREFIX = 'mcp__colinear__';
 
 /**
- * Per-session coordination tools (EXPERIMENTAL). Identity is enforced by
- * construction: the channel and username are closed over at spawn, so there
- * is no `from` or `channel` parameter for an agent to spoof.
+ * The in-process tool server a session gets, if any. Both surfaces are built
+ * per session with their subject closed over — the channel and username for
+ * coordination, the family for a coordinator — so identity and scope are
+ * enforced by construction and there is no parameter for an agent to lie in.
  */
-function coordinationServer(channel: string, username: string) {
-  return createSdkMcpServer({
-    name: 'colinear',
-    tools: [
+function colinearServer(opts: {
+  channel?: { id: string; username: string };
+  coordinator?: CoordinatorTools;
+}) {
+  const tools = [];
+  if (opts.channel) {
+    const { id: channel, username } = opts.channel;
+    tools.push(
       tool(
         'channel_read',
         `Read new messages on your coordination channel ${channel} (since your last read; you never see the same message twice).`,
@@ -32,8 +38,53 @@ function coordinationServer(channel: string, username: string) {
           return { content: [{ type: 'text' as const, text: 'posted' }] };
         },
       ),
-    ],
-  });
+    );
+  }
+  const co = opts.coordinator;
+  if (co) {
+    tools.push(
+      tool('family_status', 'The live state of every sub-issue in this family.', {}, async () => ({
+        content: [{ type: 'text' as const, text: co.status() }],
+      })),
+      tool(
+        'family_message',
+        "Send a sub-issue's agent an instruction. A running agent reads it at its next turn; an idle one is woken to read it.",
+        { identifier: z.string().min(1), text: z.string().min(1).max(2000) },
+        async ({ identifier, text }) => ({
+          content: [{ type: 'text' as const, text: co.message(identifier, text) }],
+        }),
+      ),
+      tool(
+        'family_cancel',
+        "Stop a sub-issue's agent. The operator can resume it later; say why.",
+        { identifier: z.string().min(1), reason: z.string().min(1).max(500) },
+        async ({ identifier, reason }) => ({
+          content: [{ type: 'text' as const, text: co.cancel(identifier, reason) }],
+        }),
+      ),
+      tool(
+        'family_propose',
+        'Propose new sub-issues. This does NOT create them — the operator reviews and approves. Tell them what you proposed and that it is waiting on them.',
+        {
+          subtasks: z
+            .array(
+              z.object({
+                title: z.string().min(1),
+                description: z.string().min(1),
+                repo: z.string().optional(),
+                blockedBy: z.array(z.number()).optional(),
+              }),
+            )
+            .min(1)
+            .max(10),
+        },
+        async ({ subtasks }) => ({
+          content: [{ type: 'text' as const, text: co.propose(subtasks as PlannedSubtask[]) }],
+        }),
+      ),
+    );
+  }
+  return tools.length ? createSdkMcpServer({ name: 'colinear', tools }) : undefined;
 }
 
 /**
@@ -154,8 +205,11 @@ export async function runSession(opts: {
   channel?: { id: string; username: string };
   /** keeps the session open for operator messages (see SessionInbox) */
   inbox?: SessionInbox;
+  /** EXPERIMENTAL: family-management tools for a tracking parent */
+  coordinator?: CoordinatorTools;
 }): Promise<SessionResult> {
-  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController, channel, inbox } = opts;
+  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController, channel, inbox, coordinator } = opts;
+  const mcp = colinearServer({ channel, coordinator });
 
   const q = query({
     prompt: inbox ? inbox.stream(prompt) : prompt,
@@ -169,7 +223,7 @@ export async function runSession(opts: {
       // calls fall through to canUseTool below (haiku predates auto support)
       permissionMode: model?.includes('haiku') ? 'acceptEdits' : 'auto',
       settingSources: ['project'],
-      ...(channel ? { mcpServers: { colinear: coordinationServer(channel.id, channel.username) } } : {}),
+      ...(mcp ? { mcpServers: { colinear: mcp } } : {}),
       ...(outputSchema ? { outputFormat: { type: 'json_schema' as const, schema: outputSchema } } : {}),
       canUseTool: async (toolName, input) => {
         // our own tools post to a channel this agent is already a member of —

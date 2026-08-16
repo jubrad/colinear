@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 import { runSession, SessionInbox, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
 import { channels } from './channel.js';
+import { coordinatorCwd, coordinatorPrompt, familyStatus, type CoordinatorTools } from './coordinator.js';
 import { experimentOn } from './config.js';
 import { assignIssue, fetchBlockers, fetchIssuesByIds, fetchSubIssues } from './linear.js';
 import { log } from './log.js';
@@ -57,7 +58,7 @@ export class Dispatcher {
   private running = 0;
   private aborts = new Map<string, AbortController>();
   private suspended = new Set<string>();
-  private modes = new Map<string, 'fixci' | 'rebase'>();
+  private modes = new Map<string, 'fixci' | 'rebase' | 'coordinate'>();
   /** mailboxes of the sessions running right now, keyed by task id */
   private inboxes = new Map<string, SessionInbox>();
   private viewer?: { id: string; displayName: string };
@@ -112,14 +113,111 @@ export class Dispatcher {
     const task = store.get(id);
     if (!task) return false;
     if (this.aborts.has(id) || this.queue.includes(id)) return false; // already coming
-    if (['queued', 'blocked', 'tracking'].includes(task.status)) return false;
+    if (['queued', 'blocked'].includes(task.status)) return false;
     if (task.question) return false; // it's mid-question; the answer resumes it
-    store.update(id, { status: 'queued', error: undefined, endedAt: undefined });
-    store.addActivity(id, 'woken to read a message');
+    // a tracking parent has no work of its own: waking it means coordinating
+    // the family, which is the coordination experiment's job
+    if (task.status === 'tracking') {
+      if (!experimentOn(this.cfg, 'coordination')) return false;
+      this.modes.set(id, 'coordinate');
+    }
+    store.update(id, {
+      ...(task.status === 'tracking' ? {} : { status: 'queued' }),
+      error: undefined,
+      endedAt: undefined,
+    });
+    store.addActivity(id, task.status === 'tracking' ? 'woken to coordinate the family' : 'woken to read a message');
     this.toast(`${task.issue.identifier}: waking the agent to read it`, 'ok');
     this.queue.push(id);
     this.pump();
     return true;
+  }
+
+  /**
+   * A tracking parent's coordinator session. It manages the family rather than
+   * the code: no worktree of its own, no checks, no PR — and it stays
+   * `tracking` throughout, because coordinating is not the parent going back
+   * into development.
+   */
+  private async runCoordinator(id: string, controller: AbortController) {
+    const task = store.get(id);
+    if (!task) return;
+    const messages = task.inbox ?? [];
+    if (messages.length) store.update(id, { inbox: undefined });
+    const channel = experimentOn(this.cfg, 'coordination') ? `#${task.issue.identifier}` : undefined;
+    const inbox = new SessionInbox();
+    this.inboxes.set(id, inbox);
+    store.addActivity(id, 'coordinator session');
+    try {
+      const result = await runSession({
+        prompt: coordinatorPrompt(task, channel, messages),
+        cwd: coordinatorCwd(task),
+        callbacks: this.callbacks(id),
+        model: store.get(id)?.model ?? this.cfg.model,
+        maxTurns: 30,
+        abortController: controller,
+        channel: channel ? { id: channel, username: task.issue.identifier } : undefined,
+        inbox,
+        coordinator: this.coordinatorTools(id),
+      });
+      store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + result.costUsd });
+      if (result.isError) {
+        store.addActivity(id, `coordinator failed: ${result.errors.join('; ').slice(0, 120)}`);
+      } else if (result.text.trim()) {
+        store.addActivity(id, `coordinator: ${result.text.trim().split('\n')[0].slice(0, 140)}`);
+      }
+    } catch (err) {
+      store.addActivity(id, `coordinator failed: ${String(err).slice(0, 120)}`);
+    } finally {
+      this.inboxes.delete(id);
+      inbox.close();
+      this.requeueUndelivered(id, inbox);
+      // refreshTracking owns this status; a coordinator never changes it
+      store.update(id, { status: 'tracking', endedAt: Date.now() });
+    }
+  }
+
+  /**
+   * What a coordinator may do to its family. Everything here is something the
+   * operator can already do by hand — message, cancel, propose a split — so
+   * the agent gains reach, not authority. Creating Linear issues is absent on
+   * purpose: proposals wait for `A`.
+   */
+  private coordinatorTools(parentId: string): CoordinatorTools {
+    const sub = (identifier: string): Task | undefined => {
+      const parent = store.get(parentId);
+      const match = parent?.subIssues?.find((s) => s.identifier.toLowerCase() === identifier.toLowerCase());
+      return match ? store.get(match.id) : undefined;
+    };
+    return {
+      status: () => {
+        const parent = store.get(parentId);
+        return parent ? familyStatus(parent) : 'parent is gone';
+      },
+      message: (identifier, text) => {
+        const target = sub(identifier);
+        if (!target) return `${identifier} is not a sub-issue of this family (or was never dispatched)`;
+        this.message(target.issue.id, `${text}\n\n(relayed by the ${store.get(parentId)?.issue.identifier} coordinator)`);
+        store.addActivity(parentId, `→ ${identifier}: ${text.slice(0, 80)}`);
+        return `sent to ${identifier}`;
+      },
+      cancel: (identifier, reason) => {
+        const target = sub(identifier);
+        if (!target) return `${identifier} is not a sub-issue of this family`;
+        const stopped = this.cancel(target.issue.id);
+        store.addActivity(target.issue.id, `cancelled by the coordinator: ${reason.slice(0, 100)}`);
+        store.addActivity(parentId, `cancelled ${identifier}: ${reason.slice(0, 80)}`);
+        return stopped ? `cancelled ${identifier}` : `${identifier} had nothing running; it is parked`;
+      },
+      propose: (subtasks) => {
+        const parent = store.get(parentId);
+        if (!parent) return 'parent is gone';
+        store.update(parentId, { proposals: [...(parent.proposals ?? []), ...subtasks] });
+        store.addActivity(parentId, `proposed ${subtasks.length} sub-issue(s) — waiting on the operator`);
+        this.toast(`${parent.issue.identifier}: ${subtasks.length} proposed sub-issue(s) — enter, then A`, 'info');
+        return `proposed ${subtasks.length}; they are NOT created — the operator reviews them on the parent card and approves with A`;
+      },
+    };
   }
 
   /** A session can die between a push and the next turn; don't eat the message. */
@@ -210,6 +308,12 @@ export class Dispatcher {
    */
   resume(id: string) {
     const task = store.get(id);
+    // a tracking parent has no work of its own to resume; running it means
+    // coordinating the family (experimental — otherwise r stays a no-op)
+    if (task?.status === 'tracking') {
+      if (!this.wake(id)) this.toast(`${task.issue.identifier}: coordination is off`, 'info');
+      return;
+    }
     if (!task || !['interrupted', 'error', 'escalated', 'needs_input', 'blocked'].includes(task.status)) return;
     if (task.question) return; // a live agent is waiting on an answer, not a restart
     store.update(id, { status: 'queued', error: undefined, endedAt: undefined, blockedBy: undefined });
@@ -589,6 +693,14 @@ export class Dispatcher {
     this.aborts.set(id, controller);
     const mode = this.modes.get(id);
     this.modes.delete(id);
+    if (mode === 'coordinate') {
+      try {
+        await this.runCoordinator(id, controller);
+      } finally {
+        this.aborts.delete(id);
+      }
+      return;
+    }
     // all PRs merged = the work already landed; never burn an agent on it
     if (mode === undefined && task.prs.length && task.prs.every((pr) => pr.state === 'MERGED')) {
       store.update(id, { status: 'done', error: undefined });
