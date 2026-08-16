@@ -193,6 +193,12 @@ export interface Task {
   /** sub-issues a `tracking` parent is waiting on */
   subIssues?: Array<{ id: string; identifier: string; title: string; done: boolean }>;
   /**
+   * Sub-issues a coordinator session proposed. They are not created: the
+   * operator reviews them on the parent (`A` creates, `D` creates and
+   * dispatches), because nothing reaches Linear without being asked.
+   */
+  proposals?: PlannedSubtask[];
+  /**
    * Linear "blocks" relations this task is subject to. `start` parks it out of
    * the queue; `merge` lets the work happen in parallel but holds the PR in
    * draft until the blocker lands. Linear has no such distinction — forcing a

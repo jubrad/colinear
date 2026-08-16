@@ -75,6 +75,9 @@ src/core/
                      live statuses restore as `interrupted`
   guidance.ts        guidanceFor(scope): the general block plus whatever is scoped to this
                      prompt (triage / work / review / plan)
+  coordinator.ts     EXPERIMENTAL: a tracking parent's coordinator session — prompt, family
+                     snapshot, scratch cwd, and the CoordinatorTools interface the dispatcher
+                     implements (message/cancel/propose against its own sub-issues only)
   channel.ts         EXPERIMENTAL coordination channels: per-family jsonl message log +
                      per-reader cursors, behind a ChannelStore interface (the remote seam).
                      Off unless config `experimental` AND `experiments.coordination`
@@ -190,6 +193,10 @@ than taking a fifth.
 - `needs_input` (agent AskUserQuestion, or too_big/needs_info triage verdicts — split-plan review lives here)
 - `interrupted` (restart/suspend/attach; `r` resumes the SDK session by id)
 - `error` (failures; auto-unfails if a live PR turns up), `escalated` (legacy; verdicts now park as needs_input)
+- `coordinate` mode: a tracking parent woken by a message (or `r`) runs a coordinator session
+  instead of a work session — no worktree, no checks, no PR, and the status stays `tracking`.
+  Its tools can message and cancel its own sub-issues and propose new ones; creating them stays
+  behind the operator's `A`, which is the same review UI a too_big split uses
 - maintenance modes (fixci, rebase) run against an already-open PR: the task keeps its status
   and shows a blinking dot instead of moving back to Working, and the repo's checks are left to
   the prompt rather than re-run here (which would flip the card to `checks` for no new signal)

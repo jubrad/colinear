@@ -158,7 +158,7 @@ The master switch is separate so one line turns everything experimental off when
 
 | experiment | what |
 |---|---|
-| `coordination` | **Family coordination channels.** Sub-issue agents in one family share an IRC-style channel (`#CLO-67`) through in-process MCP tools: `channel_read` (only what's new since that agent last read) and `channel_post` (identity stamped at spawn — an agent can't pose as a sibling or reach another family's channel). They're prompted to claim scopes, announce architectural decisions, flag shared resources they're using, and read before opening a PR. `:chan` lists channels, `:chan CLO-67` tails one with an input box — your message reaches every agent in that family at its next read. Full design, storage layout and deferred work: [COORDINATION.md](COORDINATION.md) |
+| `coordination` | **Family coordination channels, and coordinator sessions for tracking parents.** Sub-issue agents in one family share an IRC-style channel (`#CLO-67`) through in-process MCP tools: `channel_read` (only what's new since that agent last read) and `channel_post` (identity stamped at spawn — an agent can't pose as a sibling or reach another family's channel). They're prompted to claim scopes, announce architectural decisions, flag shared resources they're using, and read before opening a PR. `:chan` lists channels, `:chan CLO-67` tails one with an input box — your message reaches every agent in that family at its next read. A **tracking parent** — an issue whose work happens in its sub-issues — becomes coordinatable: `M` a message to it (or `r`) starts a *coordinator* session that can read the family's live state, relay instructions to a sibling's agent, cancel one, and propose new sub-issues. It writes no code and gets no checkout. It also **cannot create Linear issues**: proposals land on the parent card and wait for your `A`. Full design, storage layout and deferred work: [COORDINATION.md](COORDINATION.md) |
 
 Turning one on changes the daemon's behavior, so it needs `coli daemon stop && coli`, not just `R`.
 
@@ -303,7 +303,8 @@ The card and detail pane show a preview — the question, its options, and how m
 |---|---|
 | working / triage / checks / rebasing | pushed into the live session, read at the next turn |
 | pr open, done, failed, interrupted, needs input | queued, and a session starts to read it |
-| blocked, tracking, already queued | queued for the session it was already going to have |
+| tracking parent (with `coordination` on) | queued, and a **coordinator** session starts to act on it |
+| blocked, tracking (experiment off), already queued | queued for the session it was already going to have |
 
 Messages land in the activity log either way, so the transcript shows what you told it and when. Waking doesn't touch Linear — it queues the task the same way `r` does, so no state moves and nothing is posted.
 

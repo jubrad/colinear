@@ -21,6 +21,8 @@ export function TaskView(props: { param?: string }) {
   const [scroll, setScroll] = useState<number | null>(null); // null = follow tail
   const [answering, setAnswering] = useState(false);
   // a parked too_big verdict is exactly why you'd open this task — land in review
+  // a split plan from triage and a coordinator's proposals review identically
+  const planned = task?.verdict?.subtasks?.length ? task.verdict.subtasks : (task?.proposals ?? []);
   const [planMode, setPlanMode] = useState(
     () => Boolean(task && task.status === 'needs_input' && task.verdict?.subtasks?.length),
   );
@@ -32,7 +34,7 @@ export function TaskView(props: { param?: string }) {
   useEffect(() => () => ctx.setCapture(false), []);
 
   const approvePlan = (dispatchAfter: boolean) => {
-    const subtasks = task?.verdict?.subtasks ?? [];
+    const subtasks = planned;
     const teamId = task?.issue.teamId;
     if (!task || !subtasks.length || creating) return;
     if (!teamId) return ctx.toast('parent issue has no team id — refresh issues', 'err');
@@ -66,12 +68,18 @@ export function TaskView(props: { param?: string }) {
         // auto-complete when they all land (refreshTracking keeps this fresh)
         store.update(task.issue.id, {
           status: 'tracking',
-          subIssues: [...created.entries()].map(([i, c]) => ({
-            id: c.id,
-            identifier: c.identifier,
-            title: subtasks[i].title,
-            done: false,
-          })),
+          // a coordinator adds to a family that already exists — replacing the
+          // list here would drop every sibling until the next Linear sweep
+          subIssues: [
+            ...(task.subIssues ?? []),
+            ...[...created.entries()].map(([i, c]) => ({
+              id: c.id,
+              identifier: c.identifier,
+              title: subtasks[i].title,
+              done: false,
+            })),
+          ],
+          proposals: undefined,
         });
         ctx.toast(`created ${names.join(', ')}`, 'ok');
         if (dispatchAfter) {
@@ -97,7 +105,7 @@ export function TaskView(props: { param?: string }) {
   // plan-review keys
   useInput(
     (input, key) => {
-      const n = task?.verdict?.subtasks?.length ?? 0;
+      const n = planned.length;
       if (key.escape || input === 'q') setPlanMode(false);
       if (key.upArrow || input === 'k') setPlanCursor((c) => Math.max(0, c - 1));
       if (key.downArrow || input === 'j') setPlanCursor((c) => Math.min(n - 1, c + 1));
@@ -142,7 +150,7 @@ export function TaskView(props: { param?: string }) {
         if (ctx.dispatcher.cancel(task.issue.id)) ctx.toast(`cancelling ${task.issue.identifier}`, 'info');
         else ctx.toast('no live session to cancel', 'err');
       }
-      if (input === 'P' && task.verdict?.subtasks?.length) setPlanMode(true);
+      if (input === 'P' && planned.length) setPlanMode(true);
       if (input === 's') attachSession(task, ctx);
       if (input === 'S') attachShell(task, ctx);
       if (input === 'r') {
@@ -229,7 +237,7 @@ export function TaskView(props: { param?: string }) {
         </Text>
       )}
 
-      {(task.verdict?.subtasks?.length ?? 0) > 0 && (
+      {planned.length > 0 && (
         <Box
           flexDirection="column"
           marginTop={1}
@@ -238,7 +246,8 @@ export function TaskView(props: { param?: string }) {
           paddingX={1}
         >
           <Text bold color={theme.header}>
-            SPLIT PLAN ({(task.verdict!.subtasks!.length - dropped.size)}/{task.verdict!.subtasks!.length}){' '}
+            {task.verdict?.subtasks?.length ? 'SPLIT PLAN' : 'PROPOSED SUB-ISSUES'} (
+            {planned.length - dropped.size}/{planned.length}){' '}
             <Text dimColor>
               {planMode
                 ? creating
@@ -247,7 +256,7 @@ export function TaskView(props: { param?: string }) {
                 : 'press P to review/approve'}
             </Text>
           </Text>
-          {task.verdict!.subtasks!.map((st, i) => (
+          {planned.map((st, i) => (
             <Text key={st.title} inverse={planMode && i === planCursor} wrap="truncate">
               {dropped.has(i) ? '○' : '◉'} {st.title}
               <Text dimColor>

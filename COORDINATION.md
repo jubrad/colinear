@@ -67,6 +67,38 @@ The work and (for sub-issues) triage prompts gain a channel block instructing:
   opened, done notice.
 - Operator messages outrank everything else in the channel.
 
+### Coordinator sessions
+
+A parent whose work happens in sub-issues has no session of its own, so there
+was nobody to tell "cancel that one" or "we need another sub-issue for the
+rollback". With the experiment on, messaging a tracking parent (`M`) — or `r`
+on its card — starts a **coordinator**: an agent that manages the family
+instead of writing code.
+
+It gets no checkout (a scratch directory, or the worktree it already had) and
+these tools beside the channel:
+
+- `family_status` — every sub-issue's live colinear state: status, PR and CI,
+  blockers, last activity. Fresher than the prompt it started with.
+- `family_message` — relay an instruction to a sibling's agent. This is the
+  same path as `M`, so a running agent reads it at its next turn and an idle
+  one is woken.
+- `family_cancel` — stop a sibling's session, with a reason. Recoverable: the
+  operator can resume it.
+- `family_propose` — offer new sub-issues.
+
+Every one of those is something the operator can already do by hand, so the
+agent gains reach, not authority. The tools are built per session with the
+family closed over, so a coordinator can only touch its own sub-issues —
+naming a stranger returns "not a sub-issue of this family".
+
+**It cannot create Linear issues.** `family_propose` puts them on the parent
+card and the operator presses `A` (or `D` to create and dispatch), through the
+same review UI a `too_big` triage split uses. Nothing reaches Linear without
+being asked, and an agent that can spawn issues unattended is exactly what that
+rule is for. The parent stays `tracking` throughout — coordinating is not the
+parent going back into development.
+
 ### Operator
 
 `:chan` lists channels; `:chan CLO-67` tails one live with an input box.

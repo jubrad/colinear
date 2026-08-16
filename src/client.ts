@@ -122,8 +122,11 @@ export async function connectToDaemon(): Promise<Connection> {
     // a socket file left by a killed daemon refuses connections forever
     if (existsSync(SOCKET_PATH)) unlinkSync(SOCKET_PATH);
     spawnDaemon();
-    for (let i = 0; i < 40 && !socket; i++) {
-      await sleep(50);
+    // 10s, not the 2s this used to allow: a cold daemon on a loaded machine
+    // (or under tsx in dev) can take several seconds to reach listen(), and
+    // failing there tells the operator colinear is broken when it is merely slow
+    for (let i = 0; i < 100 && !socket; i++) {
+      await sleep(100);
       socket = await tryConnect();
     }
   }

@@ -310,6 +310,11 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
           ? {questionSummary(task.question)}
         </Text>
       )}
+      {task.proposals?.length ? (
+        <Text color={theme.selection} wrap="truncate">
+          {task.proposals.length} proposed sub-issue{task.proposals.length > 1 ? 's' : ''} — enter, P, A
+        </Text>
+      ) : null}
       {task.inbox?.length ? (
         <Text color={theme.key} wrap="truncate">
           {task.inbox.length} message{task.inbox.length > 1 ? 's' : ''} waiting for its next session
@@ -371,6 +376,7 @@ function cardHeight(task: Task): number {
   if (task.status === 'error') h += 1;
   if (task.question) h += 1;
   if (task.inbox?.length) h += 1;
+  if (task.proposals?.length) h += 1;
   if (task.status === 'blocked' && task.blockedBy) h += 1;
   if (task.verdict && task.verdict.verdict !== 'do' && !task.subIssues?.length) h += 1;
   if (task.activity.length && !task.question) h += 1;

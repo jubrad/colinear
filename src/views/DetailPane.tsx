@@ -73,6 +73,17 @@ export function DetailPane(props: { task: Task }) {
         </Box>
       )}
 
+      {task.proposals?.length ? (
+        <Box flexDirection="column">
+          {task.proposals.slice(0, 4).map((p, i) => (
+            <Text key={`${i}-${p.title.slice(0, 12)}`} color={theme.selection} wrap="truncate">
+              ◌ proposed: {p.title}
+              {p.repo ? <Text dimColor> [{p.repo}]</Text> : null}
+            </Text>
+          ))}
+          <Text dimColor>enter → P to review, A to create them in Linear</Text>
+        </Box>
+      ) : null}
       {task.inbox?.length ? (
         <Box flexDirection="column">
           {task.inbox.map((m, i) => (
