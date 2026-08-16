@@ -1,4 +1,4 @@
-import { createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, query, tool, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { channels, formatMessages } from './channel.js';
 import type { PendingQuestion } from './types.js';
@@ -34,6 +34,57 @@ function coordinationServer(channel: string, username: string) {
       ),
     ],
   });
+}
+
+/**
+ * A live session's mailbox. Handing `query()` an async iterable instead of a
+ * string keeps the conversation open between turns, so the operator can say
+ * something to a working agent without attaching to it.
+ *
+ * Delivery is at the next turn boundary — a message can't interrupt a bash
+ * command that's already running, and pretending otherwise would just make
+ * the UI lie.
+ */
+export class SessionInbox {
+  private queue: string[] = [];
+  private wake?: () => void;
+  private closed = false;
+
+  /** false when the session has already finished — caller should queue it instead */
+  push(text: string): boolean {
+    if (this.closed) return false;
+    this.queue.push(text);
+    this.wake?.();
+    return true;
+  }
+
+  get pending(): number {
+    return this.queue.length;
+  }
+
+  close(): void {
+    this.closed = true;
+    this.wake?.();
+  }
+
+  /** The prompt stream: the opening prompt, then whatever the operator sends. */
+  async *stream(first: string): AsyncIterable<SDKUserMessage> {
+    yield userMessage(first);
+    while (!this.closed) {
+      const next = this.queue.shift();
+      if (next !== undefined) {
+        yield userMessage(next);
+        continue;
+      }
+      await new Promise<void>((resolve) => {
+        this.wake = resolve;
+      });
+    }
+  }
+}
+
+function userMessage(text: string): SDKUserMessage {
+  return { type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null, session_id: '' };
 }
 
 export interface SessionCallbacks {
@@ -72,11 +123,13 @@ export async function runSession(opts: {
   abortController?: AbortController;
   /** EXPERIMENTAL coordination channel; identity baked in at spawn */
   channel?: { id: string; username: string };
+  /** keeps the session open for operator messages (see SessionInbox) */
+  inbox?: SessionInbox;
 }): Promise<SessionResult> {
-  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController, channel } = opts;
+  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController, channel, inbox } = opts;
 
   const q = query({
-    prompt,
+    prompt: inbox ? inbox.stream(prompt) : prompt,
     options: {
       cwd,
       model,
@@ -159,6 +212,8 @@ export async function runSession(opts: {
         break;
       }
       case 'result': {
+        // total_cost_usd is the session total, so the last turn's figure is
+        // the answer — summing would double-count a multi-turn session
         result.costUsd = msg.total_cost_usd;
         if (msg.subtype === 'success') {
           result.text = msg.result;
@@ -167,6 +222,10 @@ export async function runSession(opts: {
           result.isError = true;
           result.errors = msg.errors;
         }
+        // A streaming session doesn't end on its own: it waits for more input.
+        // Close it now unless the operator got a message in first, in which
+        // case the agent takes one more turn to deal with it.
+        if (inbox && (result.isError || inbox.pending === 0)) inbox.close();
         break;
       }
       default:

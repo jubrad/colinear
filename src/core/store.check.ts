@@ -34,6 +34,9 @@ store.upsert(task('B'));
 store.update('A', { status: 'working', startedAt: 1, error: 'boom' });
 store.addActivity('A', 'started');
 store.addActivity('A', 'still going');
+// operator messages queued for a task with no live session
+store.update('A', { inbox: ['use the existing helper', 'rebase before pushing'] });
+store.update('A', { inbox: undefined });
 // the clear-a-field case: JSON drops undefined, so this is the one that breaks
 // naive serialization
 store.update('A', { status: 'done', error: undefined, endedAt: 2 });

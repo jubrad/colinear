@@ -310,6 +310,11 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
           ? {task.question.text}
         </Text>
       )}
+      {task.inbox?.length ? (
+        <Text color={theme.key} wrap="truncate">
+          {task.inbox.length} message{task.inbox.length > 1 ? 's' : ''} waiting for its next session
+        </Text>
+      ) : null}
       {task.blockedBy?.length ? (
         // a forced task keeps its blockers as merge-order: still worth seeing
         <Text color={task.status === 'blocked' ? STATUS_COLORS.blocked : theme.warn} wrap="truncate">
@@ -365,6 +370,7 @@ function cardHeight(task: Task): number {
   else if (task.subtasks.length > 0) h += 1;
   if (task.status === 'error') h += 1;
   if (task.question) h += 1;
+  if (task.inbox?.length) h += 1;
   if (task.status === 'blocked' && task.blockedBy) h += 1;
   if (task.verdict && task.verdict.verdict !== 'do' && !task.subIssues?.length) h += 1;
   if (task.activity.length && !task.question) h += 1;

@@ -105,8 +105,13 @@ Goal someday: dispatch agents to a VM/sandbox. Impact analysis:
 
 ## Deliberately deferred
 
-- Push delivery (interrupting a running agent with a message) — needs
-  streaming-input sessions; pull + prompt discipline first.
+- Pushing *channel* messages to family agents. The mechanism now exists —
+  work sessions are streaming-input, and `M` pushes an operator message into a
+  live one (see DESIGN "Task lifecycle") — so this is a wiring job: fan a
+  channel post out to the inboxes of every live session in that family instead
+  of waiting for each agent to call `channel_read`. That would also retire the
+  prompt-discipline-decay risk below. Left undone until coordination has been
+  dogfooded enough to know it earns its tokens.
 - Enforced resource leases (`claim_resource` blocking tool) — advisory claims
   in chat first; leases would ride the same MCP server with auto-release on
   session end.
