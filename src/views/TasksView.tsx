@@ -9,7 +9,7 @@ import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { boardOrder, prRank, prState, PR_STATE_COLOR } from './BoardView.js';
 import { DetailPane } from './DetailPane.js';
-import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
+import { ModalHost, TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
 
 /** default order: the board read left-to-right, top-to-bottom */
 const BOARD_SORT = 'board';
@@ -172,6 +172,8 @@ export function TasksView(props: { param?: string }) {
   const showDetail = Boolean(selected) && !actions.modalOpen && budget - chrome - 15 >= 4;
   const maxRows = Math.max(3, budget - chrome - (showDetail ? 15 : 0));
 
+  if (actions.modalOpen) return <ModalHost>{actions.modals}</ModalHost>;
+
   if (!tasks.length) {
     return (
       <Box flexDirection="column" flexGrow={1} justifyContent="center" alignItems="center">
@@ -201,7 +203,6 @@ export function TasksView(props: { param?: string }) {
         </Text>
         {query ? <Text color={theme.accent}>/{query}</Text> : <Text dimColor>/ filter · S sort</Text>}
       </Box>
-      {actions.modals}
       {bar === 'fuzzy' && (
         <CommandBar
           prefix="/"
@@ -232,19 +233,17 @@ export function TasksView(props: { param?: string }) {
           onCancel={() => setBar(null)}
         />
       )}
-      {!actions.modalOpen && (
-        <Table
-          rows={rows}
-          columns={columns}
-          getId={(t) => t.issue.id}
-          cursor={cursor}
-          width={ctx.size.columns - 2}
-          maxRows={maxRows}
-          sortKey={sortKey === BOARD_SORT ? undefined : sortKey}
-          sortDesc={sortDesc}
-          emptyText="No tasks match."
-        />
-      )}
+      <Table
+        rows={rows}
+        columns={columns}
+        getId={(t) => t.issue.id}
+        cursor={cursor}
+        width={ctx.size.columns - 2}
+        maxRows={maxRows}
+        sortKey={sortKey === BOARD_SORT ? undefined : sortKey}
+        sortDesc={sortDesc}
+        emptyText="No tasks match."
+      />
       {showDetail && selected && (
         <Box height={15} flexShrink={0} flexDirection="column" overflow="hidden">
           <DetailPane task={selected} />

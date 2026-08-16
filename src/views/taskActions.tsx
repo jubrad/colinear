@@ -185,6 +185,12 @@ export function useTaskActions(): TaskActions {
         <EditTaskModal
           task={repoModal}
           repos={ctx.cfg.repos}
+          defaults={{
+            autoRebase: ctx.cfg.autoRebase,
+            autoDispatchSubs: ctx.cfg.autoDispatchSubs,
+            model: ctx.cfg.model,
+          }}
+          width={ctx.size.columns}
           onCancel={() => setRepoModal(undefined)}
           onSubmit={(edits) => {
             setRepoModal(undefined);
@@ -203,6 +209,29 @@ export function useTaskActions(): TaskActions {
     modals: subModal || repoModal || messaging || answering ? modals : null,
     handleKey,
   };
+}
+
+/**
+ * A modal owns the whole view while it is up, centred in it, rather than
+ * being wedged above the board and squeezing it into the clip. Every one of
+ * these wants the room: the edit form has seven fields, the answer form can
+ * carry four questions, the sub-issue picker a whole family.
+ */
+export function ModalHost(props: { children: ReactNode }) {
+  const ctx = useColinear();
+  // centre it when there is room to; on a short terminal start at the top so
+  // a dialog taller than the view loses its footer rather than its title
+  const roomy = ctx.size.rows >= 32;
+  return (
+    <Box
+      flexDirection="column"
+      flexGrow={1}
+      justifyContent={roomy ? 'center' : 'flex-start'}
+      overflow="hidden"
+    >
+      {props.children}
+    </Box>
+  );
 }
 
 /**
