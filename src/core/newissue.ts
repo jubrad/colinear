@@ -31,7 +31,7 @@ Produce:
 - description: markdown with context, scope, and acceptance criteria — written for a reader who has NOT seen this conversation
 - priority (optional): 1 urgent, 2 high, 3 medium, 4 low — omit unless the request implies one`,
     cwd: cfg.repos[0].path,
-    callbacks: { onActivity: () => {}, onSessionId: () => {}, onQuestion: (q) => q.answer('use your best judgment') },
+    callbacks: { onActivity: () => {}, onSessionId: () => {}, onQuestion: (q) => q.answer(q.questions.map(() => 'use your best judgment')) },
     outputSchema: ISSUE_SCHEMA,
     model: cfg.model,
     maxTurns: 12,

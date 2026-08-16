@@ -42,7 +42,23 @@ store.update('A', { inbox: undefined });
 store.update('A', { status: 'done', error: undefined, endedAt: 2 });
 store.update('B', { prs: [{ number: 1, title: 't', url: 'u', state: 'OPEN', isDraft: true, checksStatus: 'passing', headRefName: 'h', baseRefName: 'b' }] });
 store.update('B', {
-  question: { text: 'allow?', options: ['allow', 'deny'], answer: () => {} },
+  // a two-question ask with option descriptions: the whole set has to survive
+  // the wire, or the mirror answers a question the daemon never asked
+  question: {
+    kind: 'ask',
+    questions: [
+      {
+        header: 'Auth',
+        text: 'which auth for the new endpoint?',
+        options: [
+          { label: 'mTLS', description: 'matches the controller path' },
+          { label: 'bearer', description: 'simpler, needs rotation' },
+        ],
+      },
+      { header: 'Rollout', text: 'ship behind a flag?', options: [{ label: 'yes' }, { label: 'no' }] },
+    ],
+    answer: () => {},
+  },
   status: 'needs_input',
 });
 for (let i = 0; i < 250; i++) store.addActivity('B', `line ${i}`);
@@ -71,14 +87,17 @@ store.upsertReview({
 } as Review);
 
 let answered: string | undefined;
-mirror.hydrate({ version: 0, tasks: [], reviews: [] }, (id, text) => {
-  answered = `${id}:${text}`;
+mirror.hydrate({ version: 0, tasks: [], reviews: [] }, (id, answers) => {
+  answered = `${id}:${answers.join(',')}`;
 });
 for (const delta of captured) {
   if (!mirror.apply(delta)) throw new Error(`mirror rejected delta v${delta.v} (${delta.kind})`);
 }
 
-const strip = (t: Task) => ({ ...t, question: t.question ? { text: t.question.text, options: t.question.options } : undefined });
+const strip = (t: Task) => ({
+  ...t,
+  question: t.question ? { kind: t.question.kind, questions: t.question.questions } : undefined,
+});
 const left = JSON.stringify([store.list().map(strip), store.listReviews()]);
 const right = JSON.stringify([mirror.list().map(strip), mirror.listReviews()]);
 if (left !== right) {
@@ -89,8 +108,12 @@ if (store.get('A')?.error !== undefined) throw new Error('source kept a cleared 
 if (mirror.get('A')?.error !== undefined) throw new Error('mirror kept a cleared field');
 if (mirror.get('B')?.activity.length !== 200) throw new Error('mirror activity cap drifted');
 
-mirror.get('B')?.question?.answer('allow');
-if (answered !== 'B:allow') throw new Error(`answer callback not rebuilt (got ${answered})`);
+if (mirror.get('B')?.question?.questions.length !== 2) throw new Error('mirror lost a question');
+if (mirror.get('B')?.question?.questions[0].options[0].description !== 'matches the controller path') {
+  throw new Error('mirror lost an option description');
+}
+mirror.get('B')?.question?.answer(['mTLS', 'yes']);
+if (answered !== 'B:mTLS,yes') throw new Error(`answer callback not rebuilt (got ${answered})`);
 
 // a mirror that misses a delta must ask for a snapshot rather than diverge
 if (mirror.apply({ v: mirror.version + 2, kind: 'activity', id: 'A', line: 'gap' })) {

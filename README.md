@@ -262,6 +262,35 @@ Dispatching (`enter`, or `c` for the custom modal) immediately self-assigns the 
 3. **Work pass**: every session opens with a full task-context block (issue + description, parent, repo/remotes, all PRs with pin markers, triage plan, your instructions, merge-order dependencies). Existing PRs are **adopted** — the agent reviews their diff and pushes to their branch, never duplicates. A subtask checklist file drives the card's progress bar; lints and tests per the verification tier; subagent diff review; push to the repo's `pushRemote` (your fork, if configured); draft PR against `prBase` of the upstream via `gh pr create --draft`. Agents may stack PRs (chained by base branch, rendered as a stack). **Agents never mark PRs ready** — that's your `d`.
 4. **Checks** from the repo config, then PR polling: state, CI rollup, review decision, mergeability. Matching prefers open/merged PRs over closed duplicates, and `m` can pin the canonical PR (number, `#123`, or URL); a failed task that gains a live PR un-fails itself. With `ciAutofix`, red checks dispatch a fix session that pulls the failing logs and pushes a fix.
 
+## Answering an agent's questions
+
+When an agent needs a decision it lands in **Needs Input**. `a` opens the answer form — on the board, in `:tasks`, or in the task view:
+
+```
+╔═══════════════════════════════════════════════════════════════════════╗
+║  question · CLO-142 — 1 of 2                                          ║
+║  [Auth method]                                                        ║
+║  The new /v2/sync endpoint needs to authenticate callers. Which       ║
+║  mechanism should it use, given the controller already talks to       ║
+║  sync-server over mTLS?                                               ║
+║                                                                       ║
+║  ▸ 1. mTLS                                                            ║
+║        reuses the existing trust chain; no new secrets to rotate      ║
+║    2. Bearer token                                                    ║
+║        simpler to test locally, but needs a rotation story            ║
+║    3. your own answer                                                 ║
+║  ↑↓/1-2: pick · enter: next question · e: write it in $EDITOR         ║
+╚═══════════════════════════════════════════════════════════════════════╝
+```
+
+- **Every question, not just the first.** One `AskUserQuestion` can carry up to four; colinear used to show one and drop the rest, so the agent asked the others again on its next turn. The form steps through them (`←` goes back to change an answer) and sends them together.
+- **Option descriptions are shown.** The agent explains what each choice means and what it costs — that text used to be discarded, leaving a list of bare labels.
+- **`1`–`9`** picks an option outright without opening the form, when there's a single question — the common case shouldn't need a form at all.
+- **`e` writes it in `$EDITOR`** as a markdown form: every question, its options, and an `Answer:` heading under each. Save and quit and the answers are sent. This is the one for a paragraph, or for answering four questions in one pass; anything left blank is sent as "you decide".
+- **Permission prompts** (an `auto`-mode classifier blocking a command) use the same form, with allow/deny as the options.
+
+The card and detail pane show a preview — the question, its options, and how many are waiting — but answering happens in the form, which has the room for it.
+
 ## Talking to a running agent
 
 `M` on a card (board or `:tasks`) sends the agent a message without attaching to it — "use the existing helper", "don't touch the schema", "rebase first".

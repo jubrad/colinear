@@ -2,11 +2,12 @@ import { Box, Text, useInput, type Key } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useState, type ReactNode } from 'react';
-import { attachSession, attachShell } from '../core/attach.js';
+import { attachSession, attachShell, setPendingAction } from '../core/attach.js';
 import { fetchSubIssues, postComment } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { Task } from '../core/types.js';
 import { theme } from '../theme.js';
+import { AnswerModal } from '../ui/AnswerModal.js';
 import { useColinear } from '../ui/context.js';
 import { EditTaskModal } from '../ui/EditTaskModal.js';
 import { SubIssueModal, type SubIssueRow } from '../ui/SubIssueModal.js';
@@ -33,21 +34,28 @@ export interface TaskActions {
  */
 export function useTaskActions(): TaskActions {
   const ctx = useColinear();
-  const [answering, setAnswering] = useState(false);
+  const [answering, setAnswering] = useState<Task | undefined>();
   const [subModal, setSubModal] = useState<{ parent: Task; rows: SubIssueRow[] }>();
   const [repoModal, setRepoModal] = useState<Task>();
   const [messaging, setMessaging] = useState<Task>();
 
   // modals own the keyboard: without capture, global keys stay live and a
   // ":" typed into the pin field (e.g. pasting a URL) opens the command bar
-  const modalOpen = Boolean(subModal) || Boolean(repoModal) || Boolean(messaging);
-  useEffect(() => ctx.setCapture(answering || modalOpen), [answering, modalOpen]);
+  const modalOpen = Boolean(subModal) || Boolean(repoModal) || Boolean(messaging) || Boolean(answering);
+  useEffect(() => ctx.setCapture(modalOpen), [modalOpen]);
   useEffect(() => () => ctx.setCapture(false), []);
 
   const handleKey = (input: string, key: Key, selected: Task | undefined) => {
     if (input === 'n') ctx.navigate('issues');
     if (!selected) return;
-    if (input === 'a' && selected.question) setAnswering(true);
+    if (input === 'a' && selected.question) setAnswering(selected);
+    // a bare number still answers a single-question ask outright — the common
+    // case shouldn't need the form
+    const num = Number.parseInt(input, 10);
+    const only = selected.question?.questions.length === 1 ? selected.question.questions[0] : undefined;
+    if (!Number.isNaN(num) && only?.options[num - 1]) {
+      selected.question?.answer([only.options[num - 1].label]);
+    }
     if (key.return) ctx.navigate('task', selected.issue.identifier);
     if (input === 'x') {
       if (ctx.dispatcher.cancel(selected.issue.id)) ctx.toast(`cancelling ${selected.issue.identifier}`, 'info');
@@ -142,6 +150,27 @@ export function useTaskActions(): TaskActions {
           }}
         />
       )}
+      {answering?.question && (
+        <AnswerModal
+          subject={answering.issue.identifier}
+          question={answering.question}
+          width={ctx.size.columns}
+          issueId={answering.issue.id}
+          onEdit={(path) => {
+            const id = answering.issue.id;
+            const count = answering.question?.questions.length ?? 1;
+            setAnswering(undefined);
+            setPendingAction({ kind: 'edit-answers', path, issueId: id, count });
+            ctx.quit();
+          }}
+          onCancel={() => setAnswering(undefined)}
+          onSubmit={(answers) => {
+            const q = answering.question;
+            setAnswering(undefined);
+            q?.answer(answers);
+          }}
+        />
+      )}
       {messaging && (
         <MessageModal
           task={messaging}
@@ -167,11 +196,11 @@ export function useTaskActions(): TaskActions {
   );
 
   return {
-    busy: answering || modalOpen,
+    busy: modalOpen,
     modalOpen,
-    answering,
-    endAnswer: () => setAnswering(false),
-    modals: subModal || repoModal || messaging ? modals : null,
+    answering: Boolean(answering),
+    endAnswer: () => setAnswering(undefined),
+    modals: subModal || repoModal || messaging || answering ? modals : null,
     handleKey,
   };
 }
@@ -239,7 +268,7 @@ export const TASK_ACTION_KEYS: Array<[string, string]> = [
   ['u', 'dispatch subs'],
   ['m', 'edit task'],
   ['M', 'message agent'],
-  ['a', 'answer'],
+  ['a', 'answer form'],
   ['x', 'cancel'],
   ['s', 'attach claude'],
   ['r', 'resume'],

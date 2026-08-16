@@ -8,6 +8,7 @@ import { log } from './log.js';
 import { notify } from './notify.js';
 import { deletePendingReviews, fetchPrDetails, submitReview, type ReviewEvent } from './reviews.js';
 import { store } from './store.js';
+import { questionSummary } from './types.js';
 import type { ChatTurn, Config, Review, ReviewFinding, Severity } from './types.js';
 
 const exec = promisify(execFile);
@@ -451,26 +452,30 @@ export class Reviewer {
       onQuestion: (question) => {
         const review = store.getReview(id);
         if (!review) return;
-        notify(this.cfg, `${review.repository}#${review.number}`, `needs input: ${question.text.slice(0, 80)}`, review.url);
+        notify(this.cfg, `${review.repository}#${review.number}`, `needs input: ${questionSummary(question).slice(0, 80)}`, review.url);
         const asked: ChatTurn = {
           role: 'agent',
-          text: question.options.length
-            ? `${question.text}\n${question.options.map((o, i) => `  ${i + 1}. ${o}`).join('\n')}`
-            : question.text,
+          text: question.questions
+            .map((q) =>
+              q.options.length
+                ? `${q.text}\n${q.options.map((o, i) => `  ${i + 1}. ${o.label}${o.description ? ` — ${o.description}` : ''}`).join('\n')}`
+                : q.text,
+            )
+            .join('\n\n'),
           at: Date.now(),
         };
         store.updateReview(id, {
           chat: [...(review.chat ?? []), asked],
           question: {
             ...question,
-            answer: (a: string) => {
+            answer: (answers: string[]) => {
               const current = store.getReview(id);
               store.updateReview(id, {
                 question: undefined,
-                chat: [...(current?.chat ?? []), { role: 'operator', text: a, at: Date.now() }],
+                chat: [...(current?.chat ?? []), { role: 'operator', text: answers.join(' · '), at: Date.now() }],
               });
-              store.addReviewActivity(id, `↩ answered: ${a.slice(0, 80)}`);
-              question.answer(a);
+              store.addReviewActivity(id, `↩ answered: ${answers.join(' · ').slice(0, 80)}`);
+              question.answer(answers);
             },
           },
         });

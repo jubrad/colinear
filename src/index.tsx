@@ -8,6 +8,7 @@ import { render } from 'ink';
 import { App } from './app.js';
 import { connectToDaemon } from './client.js';
 import { consumePendingAction } from './core/attach.js';
+import { parseAnswerDoc } from './core/answers.js';
 import { configPath, ensureConfigFile, loadConfig } from './core/config.js';
 import {
   CONTEXT,
@@ -211,6 +212,11 @@ async function runTui(): Promise<void> {
         rl.close();
         if (!/^n/i.test(answer.trim())) conn.dispatcher.resume(action.issueId);
       }
+    } else if (action.kind === 'edit-answers') {
+      spawnSync(process.env.EDITOR ?? 'vi', [action.path], { stdio: 'inherit' });
+      const answers = parseAnswerDoc(readFileSync(action.path, 'utf8'), action.count);
+      conn.dispatcher.answer(action.issueId, answers);
+      console.log(`sent ${answers.length} answer${answers.length > 1 ? 's' : ''}`);
     } else if (action.kind === 'edit-file') {
       spawnSync(process.env.EDITOR ?? 'vi', [action.path], { stdio: 'inherit' });
       conn.dispatcher.reloadReviewDoc(action.reviewId);

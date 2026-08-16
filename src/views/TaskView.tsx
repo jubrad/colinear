@@ -1,11 +1,11 @@
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
-import { attachSession, attachShell } from '../core/attach.js';
+import { attachSession, attachShell, setPendingAction } from '../core/attach.js';
 import { createBlocksRelation, createIssue, fetchIssuesByIds } from '../core/linear.js';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
+import { AnswerModal } from '../ui/AnswerModal.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokensFull, reviewStatus, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
@@ -20,7 +20,6 @@ export function TaskView(props: { param?: string }) {
   );
   const [scroll, setScroll] = useState<number | null>(null); // null = follow tail
   const [answering, setAnswering] = useState(false);
-  const [draft, setDraft] = useState('');
   // a parked too_big verdict is exactly why you'd open this task — land in review
   const [planMode, setPlanMode] = useState(
     () => Boolean(task && task.status === 'needs_input' && task.verdict?.subtasks?.length),
@@ -135,8 +134,9 @@ export function TaskView(props: { param?: string }) {
       if (input === 'G') setScroll(null);
       if (input === 'a' && task.question) setAnswering(true);
       const num = Number.parseInt(input, 10);
-      if (!Number.isNaN(num) && task.question?.options[num - 1] && !answering) {
-        task.question.answer(task.question.options[num - 1]);
+      const only = task.question?.questions.length === 1 ? task.question.questions[0] : undefined;
+      if (!Number.isNaN(num) && only?.options[num - 1] && !answering) {
+        task.question?.answer([only.options[num - 1].label]);
       }
       if (input === 'x') {
         if (ctx.dispatcher.cancel(task.issue.id)) ctx.toast(`cancelling ${task.issue.identifier}`, 'info');
@@ -325,35 +325,48 @@ export function TaskView(props: { param?: string }) {
         </Box>
       )}
 
-      {task.question && (
+      {task.question && !answering && (
         <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor={theme.info} paddingX={1}>
-          {/* full view has room: wrap the whole question, never truncate it */}
-          <Text color={theme.info} bold wrap="wrap">
-            ? {task.question.text}
-          </Text>
-          {task.question.options.map((opt, i) => (
-            <Text key={opt} color={theme.info} wrap="wrap">
-              {'  '}{i + 1}. {opt}
-            </Text>
-          ))}
-          {answering ? (
-            <Box>
-              <Text color={theme.info}>answer: </Text>
-              <TextInput
-                value={draft}
-                onChange={setDraft}
-                onSubmit={(value) => {
-                  if (!value.trim()) return;
-                  task.question?.answer(value.trim());
-                  setDraft('');
-                  setAnswering(false);
-                }}
-              />
+          {/* full view has room: wrap every question, never truncate them */}
+          {task.question.questions.map((q, qi) => (
+            <Box key={`${qi}-${q.text.slice(0, 12)}`} flexDirection="column">
+              <Text color={theme.info} bold wrap="wrap">
+                ? {q.header ? `[${q.header}] ` : ''}{q.text}
+              </Text>
+              {q.options.map((opt, i) => (
+                <Text key={opt.label} color={theme.info} wrap="wrap">
+                  {'  '}{i + 1}. {opt.label}
+                  {opt.description ? <Text dimColor> — {opt.description}</Text> : null}
+                </Text>
+              ))}
             </Box>
-          ) : (
-            <Text dimColor>1-{task.question.options.length || 1} pick · a type answer</Text>
-          )}
+          ))}
+          <Text dimColor>
+            a: answer{task.question.questions.length === 1 && task.question.questions[0].options.length
+              ? ` · 1-${task.question.questions[0].options.length}: pick`
+              : ''}
+            {task.question.questions.length > 1 ? ` · ${task.question.questions.length} questions` : ''}
+          </Text>
         </Box>
+      )}
+      {task.question && answering && (
+        <AnswerModal
+          subject={task.issue.identifier}
+          question={task.question}
+          width={ctx.size.columns}
+          issueId={task.issue.id}
+          onEdit={(path) => {
+            const count = task.question?.questions.length ?? 1;
+            setAnswering(false);
+            setPendingAction({ kind: 'edit-answers', path, issueId: task.issue.id, count });
+            ctx.quit();
+          }}
+          onCancel={() => setAnswering(false)}
+          onSubmit={(answers) => {
+            setAnswering(false);
+            task.question?.answer(answers);
+          }}
+        />
       )}
 
       <Box flexDirection="column" marginTop={1} flexGrow={1}>
@@ -373,7 +386,7 @@ export function TaskView(props: { param?: string }) {
 export const taskKeys: Array<[string, string]> = [
   ['j/k', 'scroll log'],
   ['g/G', 'top/follow'],
-  ['a', 'answer'],
+  ['a', 'answer form'],
   ['P', 'review split plan'],
   ['x', 'cancel agent'],
   ['s', 'attach claude'],

@@ -1,7 +1,7 @@
 import { createSdkMcpServer, query, tool, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { channels, formatMessages } from './channel.js';
-import type { PendingQuestion } from './types.js';
+import type { AskedQuestion, PendingQuestion } from './types.js';
 
 /** our own in-process tools; auto-approved rather than re-asked per call */
 const COLINEAR_TOOL_PREFIX = 'mcp__colinear__';
@@ -134,6 +134,8 @@ export interface SessionResult {
 interface AskUserQuestionInput {
   questions?: Array<{
     question?: string;
+    header?: string;
+    multiSelect?: boolean;
     options?: Array<{ label?: string; description?: string }>;
   }>;
 }
@@ -175,26 +177,47 @@ export async function runSession(opts: {
         if (toolName.startsWith(COLINEAR_TOOL_PREFIX)) return { behavior: 'allow', updatedInput: input };
         if (toolName === 'AskUserQuestion') {
           const parsed = input as AskUserQuestionInput;
-          const first = parsed.questions?.[0];
-          const answer = await new Promise<string>((resolve) => {
-            callbacks.onQuestion({
-              text: first?.question ?? JSON.stringify(input).slice(0, 300),
-              options: (first?.options ?? []).map((o) => o.label ?? '').filter(Boolean),
-              answer: resolve,
-            });
+          // keep the whole set: up to four questions, each with option
+          // descriptions. Answering one and dropping the rest just made the
+          // agent ask the others again on its next turn.
+          const questions: AskedQuestion[] = (parsed.questions ?? []).map((q) => ({
+            header: q.header,
+            text: q.question ?? '(no question text)',
+            multiSelect: q.multiSelect,
+            options: (q.options ?? [])
+              .filter((o) => o.label)
+              .map((o) => ({ label: o.label as string, description: o.description })),
+          }));
+          if (!questions.length) {
+            questions.push({ text: JSON.stringify(input).slice(0, 300), options: [] });
+          }
+          const answers = await new Promise<string[]>((resolve) => {
+            callbacks.onQuestion({ questions, kind: 'ask', answer: resolve });
           });
+          const transcript = questions
+            .map((q, i) => `Q: ${q.text}\nA: ${answers[i] ?? '(no answer)'}`)
+            .join('\n\n');
           return {
             behavior: 'deny',
-            message: `The user answered: "${answer}". This is not an error — continue working based on this answer, and do not ask this question again.`,
+            message: `The user answered:\n\n${transcript}\n\nThis is not an error — continue working based on these answers, and do not ask these questions again.`,
             interrupt: false,
           };
         }
         // only reached when the auto-mode classifier blocked the call or
         // couldn't decide — ask the operator instead of rubber-stamping
-        const answer = await new Promise<string>((resolve) => {
+        const [answer] = await new Promise<string[]>((resolve) => {
           callbacks.onQuestion({
-            text: `⚒ wants to run ${toolName}: ${describeInput(input)}`,
-            options: ['allow', 'deny'],
+            kind: 'permission',
+            questions: [
+              {
+                header: toolName,
+                text: `The agent wants to run ${toolName}: ${describeInput(input)}`,
+                options: [
+                  { label: 'allow', description: 'run it this once' },
+                  { label: 'deny', description: 'refuse; the agent is told to find another way' },
+                ],
+              },
+            ],
             answer: resolve,
           });
         });

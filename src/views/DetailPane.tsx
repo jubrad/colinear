@@ -1,32 +1,13 @@
-import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
-import { useState } from 'react';
+import { Box, Text } from 'ink';
 import { store } from '../core/store.js';
 import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens, formatTokensFull } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import type { Task } from '../core/types.js';
 
-export function DetailPane(props: {
-  task: Task;
-  answering: boolean;
-  onAnswerDone: () => void;
-}) {
-  const { task, answering, onAnswerDone } = props;
+export function DetailPane(props: { task: Task }) {
+  const { task } = props;
   const ctx = useColinear();
-  const [draft, setDraft] = useState('');
-
-  useInput(
-    (input) => {
-      // number keys pick a canned option while a question is pending
-      if (!task.question || answering) return;
-      const idx = Number.parseInt(input, 10) - 1;
-      if (!Number.isNaN(idx) && task.question.options[idx]) {
-        task.question.answer(task.question.options[idx]);
-      }
-    },
-    { isActive: Boolean(task.question) && !answering && !ctx.cmdOpen },
-  );
 
   // tracking parents roll up their sub-issues' spend
   const subTasks = (task.subIssues ?? [])
@@ -74,39 +55,21 @@ export function DetailPane(props: {
 
       {task.question && (
         <Box flexDirection="column">
-          {/* wrap the question but cap it at 3 rows — the pane is a fixed
-              15 rows and an unbounded question pushes the answer options
-              below the clip (enter for the full text in task view) */}
-          <Box
-            height={Math.max(1, Math.min(3, Math.ceil((task.question.text.length + 2) / Math.max(20, ctx.size.columns - 10))))}
-            overflow="hidden"
-          >
-            <Text color="magenta" bold wrap="wrap">
-              ? {task.question.text}
-            </Text>
-          </Box>
-          {task.question.options.map((opt, i) => (
-            <Text key={opt} color="magenta" wrap="truncate">
-              {'  '}{i + 1}. {opt}
+          {/* a preview only — `a` opens the form, which has room for the full
+              question set, the option descriptions, and a text answer */}
+          {task.question.questions.slice(0, 3).map((q, i) => (
+            <Text key={`${i}-${q.text.slice(0, 12)}`} color="magenta" wrap="truncate">
+              ? {q.header ? `[${q.header}] ` : ''}{q.text}
+              {q.options.length ? <Text dimColor> ({q.options.map((o) => o.label).join(' / ')})</Text> : null}
             </Text>
           ))}
-          {answering ? (
-            <Box>
-              <Text color="magenta">answer: </Text>
-              <TextInput
-                value={draft}
-                onChange={setDraft}
-                onSubmit={(value) => {
-                  if (!value.trim()) return;
-                  task.question?.answer(value.trim());
-                  setDraft('');
-                  onAnswerDone();
-                }}
-              />
-            </Box>
-          ) : (
-            <Text dimColor>press 1-{task.question.options.length || 1} to pick, or a to type an answer</Text>
-          )}
+          <Text dimColor>
+            press <Text color={theme.key}>a</Text> to answer
+            {task.question.questions.length === 1 && task.question.questions[0].options.length
+              ? `, or 1-${task.question.questions[0].options.length} to pick`
+              : ''}
+            {task.question.questions.length > 1 ? ` · ${task.question.questions.length} questions` : ''}
+          </Text>
         </Box>
       )}
 

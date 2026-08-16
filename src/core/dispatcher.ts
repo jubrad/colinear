@@ -13,7 +13,7 @@ import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
 import { guidanceFor } from './guidance.js';
 import { store } from './store.js';
-import type { Config, LinearIssue, PrInfo, RepoConfig, Subtask, Task, TaskEdits, TriageVerdict, Verification } from './types.js';
+import { questionSummary, type Config, type LinearIssue, type PrInfo, type RepoConfig, type Subtask, type Task, type TaskEdits, type TriageVerdict, type Verification } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -558,17 +558,19 @@ export class Dispatcher {
       onQuestion: (question) => {
         const task = store.get(id);
         if (!task) return;
-        notify(this.cfg, task.issue.identifier, `needs input: ${question.text.slice(0, 80)}`, task.issue.url);
+        notify(this.cfg, task.issue.identifier, `needs input: ${questionSummary(question).slice(0, 80)}`, task.issue.url);
         store.update(id, {
           question: {
             ...question,
-            answer: (a: string) => {
+            answer: (answers: string[]) => {
               store.update(id, {
                 question: undefined,
                 status: store.get(id)?.statusBeforeQuestion ?? 'working',
               });
-              store.addActivity(id, `↩ answered: ${a.slice(0, 80)}`);
-              question.answer(a);
+              for (const [i, a] of answers.entries()) {
+                store.addActivity(id, `↩ ${question.questions[i]?.header ?? 'answered'}: ${a.slice(0, 80)}`);
+              }
+              question.answer(answers);
             },
           },
           statusBeforeQuestion: task.status,
