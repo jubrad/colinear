@@ -47,6 +47,8 @@ function coordinationServer(channel: string, username: string) {
  */
 export class SessionInbox {
   private queue: string[] = [];
+  /** yielded to the SDK, but no turn has completed behind it yet */
+  private inFlight: string[] = [];
   private wake?: () => void;
   private closed = false;
 
@@ -67,13 +69,38 @@ export class SessionInbox {
     this.wake?.();
   }
 
+  /**
+   * Messages that may never have been read. The SDK pulls from the stream as
+   * soon as something is yielded — long before the agent acts on it — so a
+   * message is only certainly delivered once a turn has completed behind it.
+   * Anything still in flight when a session dies comes back here, and the
+   * caller puts it on the task for next time.
+   *
+   * Biased towards saying it twice rather than losing it: a repeated
+   * instruction is a wasted paragraph, a dropped one is a silent no-op.
+   */
+  drain(): string[] {
+    const out = [...this.inFlight, ...this.queue];
+    this.inFlight = [];
+    this.queue = [];
+    return out;
+  }
+
+  /** A turn completed: whatever was in flight is now part of the conversation. */
+  markDelivered(): void {
+    this.inFlight = [];
+  }
+
   /** The prompt stream: the opening prompt, then whatever the operator sends. */
   async *stream(first: string): AsyncIterable<SDKUserMessage> {
     yield userMessage(first);
     while (!this.closed) {
       const next = this.queue.shift();
       if (next !== undefined) {
-        yield userMessage(next);
+        this.inFlight.push(next);
+        // stamped here, not by the caller, so what drain() returns is the raw
+        // text and a re-queued message can't collect a second prefix
+        yield userMessage(`Message from the operator: ${next}`);
         continue;
       }
       await new Promise<void>((resolve) => {
@@ -222,6 +249,8 @@ export async function runSession(opts: {
           result.isError = true;
           result.errors = msg.errors;
         }
+        // a turn finished, so anything in flight landed in the conversation
+        inbox?.markDelivered();
         // A streaming session doesn't end on its own: it waits for more input.
         // Close it now unless the operator got a message in first, in which
         // case the agent takes one more turn to deal with it.

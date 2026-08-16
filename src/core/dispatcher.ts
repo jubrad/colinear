@@ -87,19 +87,49 @@ export class Dispatcher {
    * at its next turn boundary; otherwise it waits for the next session, since
    * dropping it silently is the one behaviour nobody can work with.
    */
-  message(id: string, text: string) {
+  message(id: string, text: string, opts?: { wake?: boolean }) {
     const task = store.get(id);
     if (!task) return;
     const trimmed = text.trim();
     if (!trimmed) return;
-    if (this.inboxes.get(id)?.push(`Message from the operator: ${trimmed}`)) {
+    if (this.inboxes.get(id)?.push(trimmed)) {
       store.addActivity(id, `you → agent: ${trimmed.slice(0, 120)}`);
       this.toast(`${task.issue.identifier}: delivered at the agent's next turn`, 'ok');
       return;
     }
     store.update(id, { inbox: [...(task.inbox ?? []), trimmed] });
     store.addActivity(id, `you → agent (queued): ${trimmed.slice(0, 120)}`);
+    if (opts?.wake !== false && this.wake(id)) return;
     this.toast(`${task.issue.identifier}: no live agent — queued for its next session`, 'info');
+  }
+
+  /**
+   * Start a session so a task reads what's waiting for it. Anything already
+   * on its way (live, queued) needs no help, and `blocked` is left alone: a
+   * message is not a reason to jump a dependency — `f` is.
+   */
+  private wake(id: string): boolean {
+    const task = store.get(id);
+    if (!task) return false;
+    if (this.aborts.has(id) || this.queue.includes(id)) return false; // already coming
+    if (['queued', 'blocked', 'tracking'].includes(task.status)) return false;
+    if (task.question) return false; // it's mid-question; the answer resumes it
+    store.update(id, { status: 'queued', error: undefined, endedAt: undefined });
+    store.addActivity(id, 'woken to read a message');
+    this.toast(`${task.issue.identifier}: waking the agent to read it`, 'ok');
+    this.queue.push(id);
+    this.pump();
+    return true;
+  }
+
+  /** A session can die between a push and the next turn; don't eat the message. */
+  private requeueUndelivered(id: string, inbox: SessionInbox) {
+    const undelivered = inbox.drain();
+    if (!undelivered.length) return;
+    const task = store.get(id);
+    if (!task) return;
+    store.update(id, { inbox: [...(task.inbox ?? []), ...undelivered] });
+    store.addActivity(id, `${undelivered.length} message(s) went unread — kept for the next session`);
   }
 
   /** operator message onto a coordination channel (experimental) */
@@ -682,7 +712,9 @@ export class Dispatcher {
             ? rebasePrompt(ctx, issue, current.prs, taskRepo.prBase ?? taskRepo.defaultBranch, taskRepo.remote ?? 'origin', taskRepo.pushRemote ?? taskRepo.remote ?? 'origin')
             : mode === 'fixci'
               ? ciFixPrompt(ctx, issue, current.prs)
-              : resumeSession
+              : resumeSession && queued.length
+                ? `${ctx}\n\nYou were idle and the operator sent you the message(s) above. Deal with them — check ${SUBTASKS_FILE} and git status to reorient first if you need to. If a message asks for a change, make it and push; if it only asks a question, answer it and stop.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
+                : resumeSession
                 ? `${ctx}\n\ncolinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
                 : workPrompt(ctx, issue, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, current.verdict?.verification, task.skipTriage, knownPr),
         cwd: worktree,
@@ -695,6 +727,7 @@ export class Dispatcher {
       });
       this.inboxes.delete(id);
       inbox.close();
+      this.requeueUndelivered(id, inbox);
       store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + work.costUsd });
       if (work.isError) {
         // auto-recovery: a spawn that died before its first assistant turn
@@ -818,8 +851,12 @@ export class Dispatcher {
       this.aborts.delete(id);
       // a session that threw still has a registered mailbox; leaving it there
       // would swallow every later message into a stream nobody is reading
-      this.inboxes.get(id)?.close();
+      const orphaned = this.inboxes.get(id);
       this.inboxes.delete(id);
+      if (orphaned) {
+        orphaned.close();
+        this.requeueUndelivered(id, orphaned);
+      }
       stopSubtaskPoll?.();
       // however a rebase ends — done, failed, aborted — it is no longer running
       // however it ended — done, failed, aborted — nothing is running now

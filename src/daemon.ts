@@ -137,7 +137,7 @@ export async function runDaemon(): Promise<void> {
         void pollReviewRequests(cfg);
         break;
       case 'message':
-        dispatcher.message(cmd.id, cmd.text);
+        dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });
         break;
       case 'channelPost':
         dispatcher.channelPost(cmd.channel, cmd.text);
