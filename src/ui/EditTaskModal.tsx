@@ -22,13 +22,28 @@ const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
 type Field = 'repo' | 'pin' | 'instructions' | 'model' | 'triage' | 'rebase' | 'subs';
 
 /** Edit a task's metadata; enter saves, ctrl+r saves and requeues. */
+/** what the focused field actually does — the room a real dialog buys us */
+const FIELD_HELP: Record<Field, string> = {
+  repo: 'which repo the agent works in. Changing it re-dispatches: the worktree is cut fresh from that repo.',
+  pin: 'the PR this task owns. Empty auto-matches by branch and identifier; set it when the guess is wrong.',
+  instructions: 'passed to the triage and work prompts on top of your standing guidance. Outranks both.',
+  model: 'model for this task, overriding the config default.',
+  triage: 'what a requeue does: keep the plan you already have, redo triage, or go straight to the work pass.',
+  rebase: "when GitHub reports the PR conflicting with its base, dispatch a rebase. One attempt per conflict, re-armed once it's mergeable again.",
+  subs: 'when this parent gains a sub-issue nobody has started, dispatch it. Five per sweep, and they get triaged.',
+};
+
 export function EditTaskModal(props: {
   task: Task;
   repos: RepoConfig[];
+  /** config values, so "config default" can say what it currently means */
+  defaults?: { autoRebase?: boolean; autoDispatchSubs?: boolean; model?: string };
+  width?: number;
   onSubmit: (edits: TaskEdits) => void;
   onCancel: () => void;
 }) {
-  const { task, repos, onSubmit, onCancel } = props;
+  const { task, repos, defaults, width = 80, onSubmit, onCancel } = props;
+  const followsConfig = (on: boolean | undefined) => `config default (${on ? 'on' : 'off'})`;
   const hasTriage = task.verdict?.verdict === 'do';
   // with a plan: keep it, redo it, or drop it and go straight to work;
   // without one: triage as usual, or skip straight to work
@@ -131,7 +146,7 @@ export function EditTaskModal(props: {
   ) => (
     <Box>
       <Text bold color={focus === field ? theme.accent : theme.dim}>
-        {label.padEnd(14)}
+        {`${label} `.padEnd(15)}
       </Text>
       <TextInput
         focus={focus === field}
@@ -147,19 +162,32 @@ export function EditTaskModal(props: {
     // flexShrink 0: when vertical space is tight, yoga must squeeze the board
     // behind us, never the modal's own rows
     <Box flexDirection="column" flexShrink={0} borderStyle="double" borderColor={theme.key} paddingX={2}>
-      <Text bold color={theme.key}>
-        edit {task.issue.identifier}
+      <Text bold color={theme.key} wrap="truncate">
+        edit {task.issue.identifier} <Text dimColor>{task.issue.title}</Text>
       </Text>
+      <Text> </Text>
       {optionRow('repo', 'repo', repos.map((r) => r.name), repoIdx)}
       {textRow('pinned PR', 'pin', pin, setPin, 'auto-match (number, #123, or PR URL to pin)')}
       {textRow('instructions', 'instructions', instructions, setInstructions, 'none')}
-      {optionRow('model', 'model', MODEL_OPTIONS.map((m) => m.label), modelIdx)}
+      {optionRow(
+        'model',
+        'model',
+        MODEL_OPTIONS.map((m) => (m.value ? m.label : `default${defaults?.model ? ` (${defaults.model})` : ''}`)),
+        modelIdx,
+      )}
       {optionRow('on requeue', 'triage', triageOptions, triageIdx)}
-      {optionRow('on conflict', 'rebase', REBASE_OPTIONS, rebaseIdx)}
-      {optionRow('new sub-issues', 'subs', SUBS_OPTIONS, subsIdx)}
+      {optionRow('on conflict', 'rebase', [followsConfig(defaults?.autoRebase), ...REBASE_OPTIONS.slice(1)], rebaseIdx)}
+      {optionRow('new sub-issues', 'subs', [followsConfig(defaults?.autoDispatchSubs), ...SUBS_OPTIONS.slice(1)], subsIdx)}
+      <Text> </Text>
+      {/* the focused field explains itself; a modal with room can afford it */}
+      <Box height={2} overflow="hidden">
+        <Text wrap="wrap">
+          <Text color={theme.accent}>▸ </Text>
+          <Text dimColor>{FIELD_HELP[focus].slice(0, Math.max(40, (width - 10) * 2))}</Text>
+        </Text>
+      </Box>
       <Text dimColor>
-        tab: field · ←→: pick · enter: save · ctrl+r: save + requeue{' '}
-        {task.repo ? `(repo change implies requeue)` : ''}
+        tab: field · ←→: pick · enter: save · ctrl+r: save + requeue · esc: cancel
       </Text>
     </Box>
   );

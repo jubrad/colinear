@@ -13,7 +13,7 @@ npm run doctor       # env sanity: claude CLI, gh, Linear key, repos
 coli daemon status   # is the backend up? (`stop` to kill it — that aborts live agents)
 ```
 
-Smoke boot: `LINEAR_API_KEY=lin_api_dummy script -q /dev/null timeout 5 npm run dev >/dev/null 2>&1` — board chrome means it rendered. **Judge it by the rendered output and the log, never by `$?`:** macOS `script` does not propagate its child's status (`script -q /dev/null timeout 2 sleep 10` exits 1, not 124), so a "failed" smoke here is usually the harness lying. This **starts a daemon against your real config and state**; `coli daemon stop` when done, and never enqueue fake issues into it.
+Smoke boot: `LINEAR_API_KEY=lin_api_dummy script -q /dev/null timeout 5 npm run dev >/dev/null 2>&1` — board chrome means it rendered. **Judge it by the rendered output and the log, never by `$?`:** macOS `script` does not propagate its child's status (`script -q /dev/null timeout 2 sleep 10` exits 1, not 124), and it sometimes fails to allocate a tty at all (`script: tcgetattr/ioctl: Operation not supported on socket`) — in both cases the harness is lying, not colinear. Grep the frame for box-drawing characters, and re-run before believing a failure. This **starts a daemon against your real config and state**; `coli daemon stop` when done, and never enqueue fake issues into it.
 
 To exercise anything config- or state-shaped without touching live work, run against a throwaway `HOME` (`HOME=/tmp/x npx tsx src/index.tsx contexts`) or set `COLINEAR_STATE_DIR` — both give the run its own config, socket, pidfile and state.
 
