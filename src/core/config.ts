@@ -174,6 +174,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     experimental: raw.experimental ?? false,
     experiments: normalizeExperiments(raw.experiments, raw.experimental ?? false),
     autoRebase: raw.autoRebase ?? false,
+    autoDispatchSubs: raw.autoDispatchSubs ?? false,
     retentionDays: raw.retentionDays ?? 30,
     worktreeRetentionDays: raw.worktreeRetentionDays ?? 7,
     tickMs: raw.tickMs ?? 1000,

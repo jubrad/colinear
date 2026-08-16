@@ -8,6 +8,8 @@ import { theme } from '../theme.js';
 
 /** follow the config default, or override it for this task alone */
 const REBASE_OPTIONS = ['config default', 'auto-rebase', 'leave it'];
+/** only meaningful on a parent tracking sub-issues */
+const SUBS_OPTIONS = ['config default', 'auto-dispatch', 'leave them'];
 
 const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
   { label: 'default' },
@@ -17,7 +19,7 @@ const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
   { label: 'haiku', value: 'haiku' },
 ];
 
-type Field = 'repo' | 'pin' | 'instructions' | 'model' | 'triage' | 'rebase';
+type Field = 'repo' | 'pin' | 'instructions' | 'model' | 'triage' | 'rebase' | 'subs';
 
 /** Edit a task's metadata; enter saves, ctrl+r saves and requeues. */
 export function EditTaskModal(props: {
@@ -44,9 +46,15 @@ export function EditTaskModal(props: {
   });
   const [triageIdx, setTriageIdx] = useState(!hasTriage && task.skipTriage ? 1 : 0);
   const [rebaseIdx, setRebaseIdx] = useState(task.autoRebase === undefined ? 0 : task.autoRebase ? 1 : 2);
+  const [subsIdx, setSubsIdx] = useState(
+    task.autoDispatchSubs === undefined ? 0 : task.autoDispatchSubs ? 1 : 2,
+  );
   const [focus, setFocus] = useState<Field>('repo');
 
-  const fields = useMemo<Field[]>(() => ['repo', 'pin', 'instructions', 'model', 'triage', 'rebase'], []);
+  const fields = useMemo<Field[]>(
+    () => ['repo', 'pin', 'instructions', 'model', 'triage', 'rebase', 'subs'],
+    [],
+  );
 
   const submit = (requeue: boolean) => {
     // accepts "123", "#123", or a full PR URL (…/pull/123)
@@ -58,6 +66,7 @@ export function EditTaskModal(props: {
       instructions: instructions.trim() || undefined,
       model: MODEL_OPTIONS[modelIdx].value,
       autoRebase: rebaseIdx === 0 ? undefined : rebaseIdx === 1,
+      autoDispatchSubs: subsIdx === 0 ? undefined : subsIdx === 1,
       retriage: choice !== 'keep plan',
       // keep plan leaves the stored flag alone (dispatcher derives it)
       skipTriage: choice === 'keep plan' ? undefined : choice === 'skip triage',
@@ -87,6 +96,10 @@ export function EditTaskModal(props: {
     }
     if (focus === 'rebase') {
       cycle(REBASE_OPTIONS.length, setRebaseIdx);
+      if (key.return) submit(false);
+    }
+    if (focus === 'subs') {
+      cycle(SUBS_OPTIONS.length, setSubsIdx);
       if (key.return) submit(false);
     }
   });
@@ -143,6 +156,7 @@ export function EditTaskModal(props: {
       {optionRow('model', 'model', MODEL_OPTIONS.map((m) => m.label), modelIdx)}
       {optionRow('on requeue', 'triage', triageOptions, triageIdx)}
       {optionRow('on conflict', 'rebase', REBASE_OPTIONS, rebaseIdx)}
+      {optionRow('new sub-issues', 'subs', SUBS_OPTIONS, subsIdx)}
       <Text dimColor>
         tab: field · ←→: pick · enter: save · ctrl+r: save + requeue{' '}
         {task.repo ? `(repo change implies requeue)` : ''}

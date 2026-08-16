@@ -193,6 +193,10 @@ than taking a fifth.
 - `needs_input` (agent AskUserQuestion, or too_big/needs_info triage verdicts — split-plan review lives here)
 - `interrupted` (restart/suspend/attach; `r` resumes the SDK session by id)
 - `error` (failures; auto-unfails if a live PR turns up), `escalated` (legacy; verdicts now park as needs_input)
+- new sub-issues: the tracking sweep dispatches ones nobody has started when `autoDispatchSubs`
+  is on for that parent (or globally). `autoDispatchable()` is the whole rule and is pure —
+  the Linear state, not the absence of a task, is what makes a sub-issue eligible, so a task
+  dropped by retention long after it finished can't be resurrected. Capped per sweep
 - `coordinate` mode: a tracking parent woken by a message (or `r`) runs a coordinator session
   instead of a work session — no worktree, no checks, no PR, and the status stays `tracking`.
   Its tools can message and cancel its own sub-issues and propose new ones; creating them stays
@@ -292,7 +296,7 @@ No unit tests (deliberate for now — UI-heavy, fast-moving). The verification l
 1. `npx tsc --noEmit` — must be clean before every commit. **Ignore editor/LSP diagnostics in this repo; they are chronically stale — trust tsc.**
 2. `npm run build` — refreshes dist so the linked `coli` binary picks up changes.
 3. `npm run check` — CDC replay: mirror must match the source store exactly.
-4. Smoke boot: `LINEAR_API_KEY=lin_api_dummy script -q /dev/null timeout 5 npm run dev >/dev/null 2>&1; echo $?` → it rendered if you see board chrome. Note this now *starts a daemon* against your real config and state — `coli daemon stop` afterwards, and don't enqueue fake issues into a daemon holding live state.
+4. Smoke boot: `LINEAR_API_KEY=lin_api_dummy script -q /dev/null timeout 5 npm run dev >/dev/null 2>&1` → it rendered if you see board chrome. Ignore the exit code: macOS `script` doesn't propagate its child's status, so it is not evidence of anything. Note this now *starts a daemon* against your real config and state — `coli daemon stop` afterwards, and don't enqueue fake issues into a daemon holding live state.
 5. Real verification is dogfooding against the live Linear workspace; `~/.local/state/colinear/colinear.log` catches runtime errors and diverted stderr (React warnings land there — check it when behavior is weird).
 
 If adding tests someday: core/ is mostly pure-ish and dependency-injectable (store is a singleton — the main obstacle); prs.ts matching and dispatcher redispatch/adoption logic are the highest-value targets.

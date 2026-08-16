@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 import { existsSync, unlinkSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { log } from './core/log.js';
+import { STATE_DIR, log } from './core/log.js';
 import {
   createDecoder,
   encode,
@@ -130,7 +131,12 @@ export async function connectToDaemon(): Promise<Connection> {
       socket = await tryConnect();
     }
   }
-  if (!socket) throw new Error(`could not reach or start the colinear daemon (${SOCKET_PATH})`);
+  if (!socket) {
+    throw new Error(
+      `could not reach or start the colinear daemon (${SOCKET_PATH}).\n` +
+        `Run \`coli daemon\` in the foreground to see why, or check ${join(STATE_DIR, 'colinear.log')}.`,
+    );
+  }
 
   socket.setEncoding('utf8');
   socket.setNoDelay(true);

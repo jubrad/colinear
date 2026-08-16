@@ -20,6 +20,25 @@ const exec = promisify(execFile);
 
 const SUBTASKS_FILE = '.colinear-subtasks.md';
 
+/** how many new sub-issues one tracking sweep will start (the rest wait a tick) */
+const AUTO_DISPATCH_BATCH = 5;
+
+/**
+ * Sub-issues a tracking parent should start on its own: ones colinear has no
+ * task for, that nobody has started in Linear either.
+ *
+ * The Linear state is the guard rather than "do we have a task": a sub-issue
+ * that was worked months ago and then dropped from the store by retention has
+ * a started/completed state, so it can never be resurrected here.
+ */
+export function autoDispatchable(parent: Task, subs: LinearIssue[], configDefault: boolean): LinearIssue[] {
+  if (parent.status !== 'tracking') return [];
+  if (!(parent.autoDispatchSubs ?? configDefault)) return [];
+  return subs.filter(
+    (sub) => !store.get(sub.id) && ['backlog', 'unstarted', 'triage'].includes(sub.stateType ?? ''),
+  );
+}
+
 /** repo fields are enum-constrained to the config allowlist so routing can't
     silently miss on a name the model made up ("materialize-cloud", a path…) */
 function triageSchema(repoNames: string[]) {
@@ -466,6 +485,26 @@ export class Dispatcher {
           s.stateType === 'canceled' ||
           store.get(s.id)?.status === 'done',
       }));
+      // a sub-issue nobody has started, on a parent set up to run them: the
+      // Linear state is the guard, so a task dropped by retention long after
+      // it finished can't be resurrected here
+      {
+        const fresh = autoDispatchable(task, subs, this.cfg.autoDispatchSubs);
+        if (fresh.length) {
+          // bounded per sweep: nobody is watching a 60s timer, and a bulk
+          // import shouldn't assign twenty issues to you at once
+          const batch = fresh.slice(0, AUTO_DISPATCH_BATCH);
+          const repo = this.cfg.repos.find((r) => r.path === task.repo?.path);
+          this.enqueue(batch, { repo });
+          store.addActivity(
+            task.issue.id,
+            `auto-dispatched ${batch.map((i) => i.identifier).join(', ')}` +
+              (fresh.length > batch.length ? ` (${fresh.length - batch.length} more next sweep)` : ''),
+          );
+          this.toast(`${task.issue.identifier}: dispatched ${batch.length} new sub-issue(s)`, 'ok');
+        }
+      }
+
       const allDone = subIssues.every((s) => s.done);
       const nextStatus = allDone ? 'done' : 'tracking';
       const changed =
@@ -557,6 +596,7 @@ export class Dispatcher {
       ...(edits.skipTriage !== undefined ? { skipTriage: edits.skipTriage } : {}),
       // also tri-state, but here undefined is a real choice: "follow config"
       autoRebase: edits.autoRebase,
+      autoDispatchSubs: edits.autoDispatchSubs,
       // persist the repo even without a requeue: PR matching polls per repo,
       // so a pin can only resolve once the task points at the right one
       ...(repoChanged ? { repo: { name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot } } : {}),
