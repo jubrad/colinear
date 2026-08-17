@@ -4,7 +4,14 @@ import type { Change, Delta, Snapshot } from './delta.js';
 import { STATE_DIR } from './log.js';
 import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 
-export const SOCKET_PATH = join(STATE_DIR, 'coli.sock');
+/**
+ * Normally the socket sits with the rest of the state. COLINEAR_SOCKET moves
+ * it, which matters in a container on macOS: Docker Desktop's file sharing
+ * cannot represent a unix socket, so one created on a bind mount is invisible
+ * from both sides. Point this at a container-internal path (/run/coli.sock)
+ * and keep the bind mount for the files you actually want on the host.
+ */
+export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
 export const PROTOCOL_VERSION = 6;

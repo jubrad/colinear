@@ -120,7 +120,7 @@ export function LogsView(_props: { param?: string }) {
         </Text>
         <Text color={follow ? theme.ok : theme.warn}>{follow ? 'following' : `${start}/${maxOffset}`}</Text>
         <Text dimColor>
-          {' '}· {remote ? `${remote.ssh}:…/colinear.log · local client log ${LOG_FILE}` : LOG_FILE}
+          {' '}· {remote ? `${remote.label}:…/colinear.log · local client log ${LOG_FILE}` : LOG_FILE}
         </Text>
       </Box>
       <Text dimColor>j/k scroll · space/pgdn page · g top · G follow · / filter</Text>

@@ -480,12 +480,15 @@ export interface Config {
   /**
    * Where this context's daemon runs. Unset — the default — means local, and
    * nothing about colinear changes. Set it and the client stops assuming the
-   * daemon's paths exist here: attach, shell and doc editing go over ssh, and
-   * anything read from the daemon's disk comes over the socket instead.
+   * daemon's paths exist here: attach, shell and doc editing run through
+   * `exec`, and anything read from the daemon's disk comes over the socket.
    *
-   * `ssh` is whatever you'd type after `ssh` — a host, user@host, or an
-   * ssh_config alias. The socket itself is forwarded separately; see
-   * docs/remote.md.
+   * `exec` is a command prefix that takes ONE shell-command argument:
+   *   ssh:     ["ssh", "-t", "vm"]
+   *   docker:  ["docker", "exec", "-it", "coli", "sh", "-lc"]
+   *   kubectl: ["kubectl", "exec", "-it", "pod/coli", "--", "sh", "-lc"]
+   *
+   * `{ "ssh": "vm" }` is sugar for the first. See docs/remote.md.
    */
-  remote?: { ssh: string };
+  remote?: { exec: string[]; label: string };
 }

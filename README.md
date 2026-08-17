@@ -61,7 +61,7 @@ Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset), `gh`
 | [Security & blast radius](docs/security.md) | what it can touch, what it can't, where your data goes |
 | [How dispatch works](docs/dispatch.md) | triage → work → checks, messaging agents, sessions |
 | [Configuration](docs/configuration.md) | every option, with defaults |
-| [Remote daemon](docs/remote.md) | run the daemon on a VM over ssh |
+| [Remote daemon](docs/remote.md) · [Docker](docs/docker.md) | run the daemon on a VM or in a container *(work in progress)* |
 | [CLI](docs/cli.md) | `coli`, `init`, `daemon`, `gc`, `contexts` |
 | [Views](docs/views/) | one page per view — `:board`, `:issues`, `:reviews`, … |
 | [Architecture](DESIGN.md) | how it works inside, and the gotchas |

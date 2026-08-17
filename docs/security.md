@@ -92,6 +92,38 @@ matters.
 
 Everything else stays local: `~/.local/state/colinear/` holds task state, the debug log (which includes diverted stderr), planner chats, coordination channels and attach scripts. The PR review document lives in the review worktree and is never sent anywhere; only the findings you post are.
 
+## Where the daemon runs (work in progress)
+
+By default the daemon — and therefore every agent — runs on your machine, as you. Two other modes
+exist and are **newer and less travelled than the rest of colinear**; treat them as work in progress.
+
+**ssh ([remote](remote.md)).** The daemon runs on another machine and the TUI drives it over a
+forwarded socket. The blast radius moves to that machine: agents use its credentials, its checkout,
+its network. `s`, `S` and review-doc editing run there over ssh rather than locally — which is the
+security-relevant part, because doing it locally would sometimes drop you in a *same-named directory
+on the wrong host* with no error.
+
+**Containers ([docker](docker.md)).** Agents run inside the daemon's process, so a containerized
+daemon means containerized agents: one image, one filesystem, one credential set. This is the
+strongest containment colinear currently offers — an agent that can only see the repos you mounted,
+with a token scoped to them, and no access to the rest of your machine. Pair it with `denyTools` for
+defense in depth.
+
+Three things to get right if you use them:
+
+- **Don't mount the Docker socket into the container.** A daemon that can drive Docker is
+  root-equivalent on the host, which discards the isolation you containerized for.
+- **Credentials become per-environment.** The container or VM needs its own `claude` login, `gh`
+  token and git credentials. Scope them: a token that can only reach the repos that machine works on
+  is most of the benefit.
+- **Egress is the other half.** A container that can reach anything on your network is contained
+  only on disk. If containment is why you're doing this, allowlist outbound to your tracker,
+  GitHub and Anthropic.
+
+With `remote` set, colinear will not start a local daemon for that context, and
+`coli daemon stop` refuses to signal a pid from another machine's namespace rather than risk killing
+an unrelated local process that happens to share the number.
+
 ## Multi-tenancy and isolation
 
 A **context** (`coli --context work`) is a separate config, daemon, store, log and state directory — the clean way to keep a work tracker and a personal one from sharing anything. `COLINEAR_STATE_DIR` overrides the lot, which is what the test suite uses so it can never touch a live daemon.
