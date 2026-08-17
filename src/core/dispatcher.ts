@@ -638,6 +638,9 @@ export class Dispatcher {
   }
 
   async recheckBlocked() {
+    // demo blockers are fabricated: the tracker has never heard of them, so a
+    // re-check would report "no blockers" and start work the board says is parked
+    if (isDemo(this.cfg)) return;
     this.sweepRetention();
     await this.sweepClosed().catch(() => {});
     await this.refreshTracking().catch(() => {});
@@ -853,7 +856,9 @@ export class Dispatcher {
         if (chosen && chosen.path !== taskRepo.path) {
           store.addActivity(id, `triage routed to repo ${chosen.name}`);
           taskRepo = chosen;
-          ({ worktree, branch } = await this.ensureWorktree(issue, chosen));
+          ({ worktree, branch } = isDemo(this.cfg)
+            ? demoWorktree(issue)
+            : await this.ensureWorktree(issue, chosen));
           store.update(id, {
             worktree,
             branch,

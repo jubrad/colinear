@@ -237,8 +237,12 @@ export async function seedDemoIssues(cfg: Config): Promise<void> {
  * Fill the board. Tasks are written straight into the store rather than
  * dispatched, because the point is to arrive at a mid-week board instantly.
  */
-export function seedDemoBoard(): void {
+export function seedDemoBoard(cfg?: Config): void {
   if (store.list().length) return;
+  // the repo the demo context actually configures — seeding a different path
+  // makes triage "re-route", which drags the real worktree code into a mode
+  // that has no repo to cut from
+  const repo = cfg?.repos?.[0];
   for (const item of BOARD) {
     const started = ago(item.minutes * 60_000 + HOUR);
     const task: Task = {
@@ -276,7 +280,9 @@ export function seedDemoBoard(): void {
           ]
         : [],
       costUsd: item.cost,
-      repo: { name: 'cadence', path: '/demo/cadence', defaultBranch: 'main', worktreeRoot: '/demo/cadence-worktrees' },
+      repo: repo
+        ? { name: repo.name, path: repo.path, defaultBranch: repo.defaultBranch, worktreeRoot: repo.worktreeRoot }
+        : { name: 'cadence', path: '/demo/cadence', defaultBranch: 'main', worktreeRoot: '/demo/cadence-worktrees' },
       maintenance: item.maintenance,
       ...(item.blockedBy
         ? { blockedBy: item.blockedBy.map((b) => ({ id: `demo-${b.identifier}`, identifier: b.identifier, kind: b.kind })) }

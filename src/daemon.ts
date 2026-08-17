@@ -63,7 +63,7 @@ export async function runDaemon(): Promise<void> {
   // demo mode fabricates a board and never reaches the network: polling would
   // ask `gh` about PRs that don't exist and wipe the fiction
   if (isDemo(cfg)) {
-    seedDemoBoard();
+    seedDemoBoard(cfg);
     void seedDemoIssues(cfg).catch((err) => log(`demo seed: ${err}`));
     log('demo mode: fabricated board, scripted agents, no network');
   }
