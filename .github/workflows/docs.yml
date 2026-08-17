@@ -1,0 +1,70 @@
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'DESIGN.md'
+      - 'COORDINATION.md'
+      - 'Dockerfile'
+      - 'mkdocs.yml'
+      - 'bin/gen-docs'
+      - 'src/tools/gen-docs.ts'
+      - 'src/views/registry.ts'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'mkdocs.yml'
+      - 'bin/gen-docs'
+      - 'src/tools/gen-docs.ts'
+      - 'src/views/registry.ts'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# a queued docs push should replace the one in flight, not race it
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install mkdocs-material==9.5.44 mkdocs-glightbox==0.4.0
+      # --check: the generated table must already match the registry, every
+      # view must have a page, and mkdocs --strict rejects a broken link
+      - name: generate and build the docs
+        run: bin/gen-docs --check
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  # only main publishes; a PR gets the build as a check and nothing more
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

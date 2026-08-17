@@ -1,3 +1,7 @@
 node_modules/
 dist/
 clo-views-export.json
+
+# bin/gen-docs output: staged sources and the built site
+site-src/
+site/

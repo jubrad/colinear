@@ -16,21 +16,24 @@
 
 ![The command bar open over the board, listing the views it can jump to with a one-line description of each](images/command-palette.png)
 
-| view | what it's for |
-|---|---|
-| [`:issues`](views/issues.md) | browse the tracker and dispatch agents |
-| [`:board`](views/board.md) | the kanban of everything running |
-| [`:tasks`](views/tasks.md) | the same tasks as a searchable, sortable table |
-| [`:task`](views/task.md) | one task in full: log, PRs, checks, plan review |
-| [`:reviews`](views/reviews.md) | PRs awaiting your review, and assisted pre-review |
-| [`:projects` / `:project`](views/projects.md) | project list and per-project board |
-| [`:plan`](views/plan.md) | planning chat that drafts sub-issues |
-| [`:costs`](views/costs.md) | spend per task and review |
-| [`:gc`](views/gc.md) | reclaim worktree disk |
-| [`:logs`](views/logs.md) | the live debug log |
-| [`:chan`](views/chan.md) | coordination channels (experimental) |
-| [`:config`](views/config.md) | resolved config, contexts, provider capabilities |
-| [`:help`](views/help.md) | every view and key, in the app |
+<!-- generated: views (bin/gen-docs) -->
+| view | aliases | what it's for |
+|---|---|---|
+| [`:issues`](views/issues.md) | `i` `is` | browse the tracker and dispatch agents |
+| [`:board`](views/board.md) | `b` `bo` | agent kanban board |
+| [`:tasks`](views/tasks.md) | `ls` `t` | every task as a searchable, sortable table |
+| [`:task`](views/task.md) | `ta` | task detail + live log (:task CLOUD-123) |
+| [`:projects`](views/projects.md) | `pj` `proj` | projects in the tracker |
+| [`:project`](views/projects.md) | `p` | project kanban (:project NAME) |
+| [`:plan`](views/plan.md) | `chat` | project planning chat (:plan PROJECT) |
+| [`:reviews`](views/reviews.md) | `rev` `pr` | PRs awaiting my review + assisted pre-review |
+| [`:costs`](views/costs.md) | `cost` `$` | spend per ticket |
+| [`:logs`](views/logs.md) | `log` `debug` | live debug log (what colinear is actually doing) |
+| [`:gc`](views/gc.md) | `disk` | worktree disk — reclaim finished checkouts |
+| [`:chan`](views/chan.md) | `channel` `irc` | coordination channels (experimental — :chan CLO-67) |
+| [`:config`](views/config.md) | `cfg` | view & edit colinear config |
+| [`:help`](views/help.md) | `h` | views, keys, custom view schema |
+<!-- /generated -->
 
 ## Global keys
 

@@ -19,13 +19,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      # the same three gates the project uses by hand on every change
-      - name: typecheck
-        run: npx tsc --noEmit
-      - name: build
-        run: npm run build
-      - name: CDC replay (client mirror must match the daemon's store)
-        run: npm run check
-        env:
-          # never touch a real state dir, even on a runner
-          COLINEAR_STATE_DIR: ${{ runner.temp }}/colinear-state
+      # the same gate the project runs by hand: typecheck, docs lint, build,
+      # and the CDC replay that proves the client mirror matches the store.
+      # It picks its own throwaway state dir, so no runner state is touched.
+      - run: bin/check

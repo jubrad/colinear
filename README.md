@@ -51,7 +51,7 @@ Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset) and `
 | [Configuration](docs/configuration.md) | every option, with defaults |
 | [Remote daemon](docs/remote.md) · [Docker](docs/docker.md) | run the daemon on a VM or in a container *(work in progress)* |
 | [CLI](docs/cli.md) | `coli`, `init`, `daemon`, `gc`, `contexts` |
-| [Views](docs/views/) | one page per view — `:board`, `:issues`, `:reviews`, … |
+| [Views](docs/README.md#views) | one page per view — `:board`, `:issues`, `:reviews`, … |
 | [Architecture](DESIGN.md) | how it works inside, and the gotchas |
 
 ## Status

@@ -1,0 +1,88 @@
+site_name: colinear
+site_description: A k9s-style terminal UI that runs Claude Code agents against your issue tracker.
+site_url: https://jubrad.github.io/colinear/
+repo_url: https://github.com/jubrad/colinear
+repo_name: jubrad/colinear
+
+# staged by bin/gen-docs, which mirrors the repo layout so the markdown needs
+# no site-specific rewriting
+docs_dir: site-src
+site_dir: site
+strict: true
+
+# the sources are staged copies, so an "edit this page" link would point at a
+# path that doesn't exist in the repo for the front page
+edit_uri: ''
+
+theme:
+  name: material
+  palette:
+    - media: '(prefers-color-scheme: light)'
+      scheme: default
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Dark
+    - media: '(prefers-color-scheme: dark)'
+      scheme: slate
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Light
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - content.code.copy
+    - search.suggest
+  font:
+    text: Inter
+    code: JetBrains Mono
+
+plugins:
+  - search
+  # terminal screenshots are dense: 183 columns shrunk to the content width is
+  # legible as a shape, not as text. Click to read one at full size.
+  - glightbox
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.details
+
+nav:
+  - Overview: index.md
+  - Start here:
+      - Demo mode: docs/demo.md
+      - Getting started: docs/getting-started.md
+      - Security & blast radius: docs/security.md
+  - Reference:
+      - Docs index: docs/README.md
+      - How dispatch works: docs/dispatch.md
+      - Configuration: docs/configuration.md
+      - CLI: docs/cli.md
+      - Remote daemon: docs/remote.md
+      - Docker: docs/docker.md
+  - Views:
+      - ':issues': docs/views/issues.md
+      - ':board': docs/views/board.md
+      - ':tasks': docs/views/tasks.md
+      - ':task': docs/views/task.md
+      - ':reviews': docs/views/reviews.md
+      - ':projects': docs/views/projects.md
+      - ':plan': docs/views/plan.md
+      - ':costs': docs/views/costs.md
+      - ':gc': docs/views/gc.md
+      - ':logs': docs/views/logs.md
+      - ':chan': docs/views/chan.md
+      - ':config': docs/views/config.md
+      - ':help': docs/views/help.md
+  - Internals:
+      - Architecture: DESIGN.md
+      - Coordination channels: COORDINATION.md

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Everything that must be true before a commit, and nothing that needs a
+# daemon, a network or a tty. CI runs this too.
+#
+#   bin/lint
+#
+# For the heavier gates — the build and the CDC replay — see bin/check.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+
+echo '── typecheck'
+npx tsc --noEmit
+
+echo
+bin/gen-docs --check
+
+echo
+echo 'ok'

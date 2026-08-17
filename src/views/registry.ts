@@ -29,7 +29,7 @@ const builtinViews: ViewDef[] = [
   {
     name: 'issues',
     aliases: ['i', 'is'],
-    describe: 'browse & dispatch Linear issues',
+    describe: 'browse the tracker and dispatch agents',
     Component: IssuesView,
     keys: issuesKeys,
   },
@@ -57,7 +57,7 @@ const builtinViews: ViewDef[] = [
   {
     name: 'projects',
     aliases: ['pj', 'proj'],
-    describe: 'Linear projects',
+    describe: 'projects in the tracker',
     Component: ProjectsView,
     keys: projectsKeys,
   },

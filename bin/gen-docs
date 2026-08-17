@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Generate the documentation: the facts the docs share with the code, and the
+# site that gets published.
+#
+#   bin/gen-docs            write what's stale, stage and build the site
+#   bin/gen-docs --check    change nothing; fail if anything is out of date
+#
+# `bin/gen-docs --check` producing no diff is the docs lint — it is what CI
+# runs, and what a pre-commit hook should run.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+
+check=''
+[[ "${1:-}" == '--check' ]] && check='--check'
+
+# the registry loads custom views from the user's config dir on import: point
+# HOME somewhere empty so a local custom view can't leak into the docs
+home="$(mktemp -d)"
+trap 'rm -rf "$home"' EXIT
+
+echo '── registry → docs'
+HOME="$home" npx tsx src/tools/gen-docs.ts $check
+
+# The site is the repository's own markdown — no duplicated copy to drift. The
+# staging directory mirrors the repo layout exactly (README at the root, docs/
+# below it, DESIGN.md and COORDINATION.md alongside), which is the whole trick:
+# every relative link that works when browsing the repo on GitHub resolves the
+# same way once mkdocs builds it.
+echo '── staging the site'
+rm -rf site-src
+mkdir -p site-src
+cp -R docs site-src/docs
+cp README.md site-src/index.md
+# linked from docs/README.md, docs/views/chan.md, docs/configuration.md and
+# docs/docker.md — copied in so those links resolve on the site too
+cp DESIGN.md COORDINATION.md Dockerfile site-src/
+
+if ! command -v mkdocs >/dev/null 2>&1; then
+  echo '── skipping the site build: mkdocs is not installed'
+  echo '   pip install mkdocs-material==9.5.44 mkdocs-glightbox==0.4.0'
+  exit 0
+fi
+
+# strict: a broken internal link fails here rather than shipping a 404
+echo '── building the site'
+mkdocs build
+echo "built site/ — open it with: mkdocs serve"
