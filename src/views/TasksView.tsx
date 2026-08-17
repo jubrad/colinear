@@ -7,34 +7,19 @@ import { useColinear } from '../ui/context.js';
 import { formatDuration, formatTokens } from '../ui/format.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { STATUS_COLORS, theme } from '../theme.js';
-import { boardOrder, prRank, prState, PR_STATE_COLOR } from './BoardView.js';
+import { prRank, prState, PR_STATE_COLOR } from './BoardView.js';
+import {
+  BOARD_SORT,
+  ciColor,
+  ciText,
+  compareTasks,
+  matchesQuery,
+  statusColor,
+  statusText,
+  tokenTotal,
+} from './taskLens.js';
 import { DetailPane } from './DetailPane.js';
 import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
-
-/** default order: the board read left-to-right, top-to-bottom */
-const BOARD_SORT = 'board';
-
-/** What the status column says — a maintenance session outranks the status,
- *  since "working" on an open PR means something different from a rewrite. */
-function statusText(task: Task): string {
-  if (task.maintenance === 'rebase') return 'rebasing';
-  if (task.maintenance === 'fixci') return 'fixing ci';
-  return task.status.replace('_', ' ');
-}
-
-const statusColor = (task: Task): string | undefined =>
-  task.maintenance ? (task.maintenance === 'rebase' ? theme.ok : theme.warn) : STATUS_COLORS[task.status];
-
-const ciText = (task: Task): string => task.prs[0]?.checksStatus ?? '';
-
-const ciColor = (task: Task): string | undefined => {
-  const status = ciText(task);
-  if (status === 'failing') return theme.err;
-  if (status === 'passing') return theme.ok;
-  return status ? theme.warn : undefined;
-};
-
-const tokenTotal = (task: Task): number => task.tokens.input + task.tokens.output;
 
 /**
  * Every task as one searchable, sortable table — the board's data without the
@@ -60,7 +45,7 @@ export function TasksView(props: { param?: string }) {
         width: 12,
         text: statusText,
         color: statusColor,
-        sort: (a, b) => boardOrder(a) - boardOrder(b),
+        sort: (a, b) => compareTasks('status', a, b),
       },
       // capped: past ~50 chars the title is just pushing the columns that say
       // what the task is *doing* off to the right edge
@@ -82,7 +67,7 @@ export function TasksView(props: { param?: string }) {
         width: 7,
         text: (t) => formatDuration(t, ctx.now),
         color: () => theme.dim,
-        sort: (a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0),
+        sort: (a, b) => compareTasks('time', a, b),
       },
       {
         key: 'tokens',
@@ -90,40 +75,17 @@ export function TasksView(props: { param?: string }) {
         width: 8,
         text: (t) => formatTokens(t.tokens),
         color: () => theme.dim,
-        sort: (a, b) => tokenTotal(b) - tokenTotal(a),
+        sort: (a, b) => compareTasks('tokens', a, b),
       },
     ],
     [ctx.now],
   );
 
   const rows = useMemo(() => {
-    const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const matched = tasks.filter((task) => {
-      // status and PR state are in the haystack: "/needs" or "/conflict"
-      // filters the list the same way the eye scans the column headers
-      const haystack = [
-        task.issue.identifier,
-        task.issue.title,
-        task.repo?.name ?? '',
-        statusText(task),
-        prState(task) ?? '',
-        ciText(task),
-      ]
-        .join(' ')
-        .toLowerCase();
-      return tokens.every((token) => fuzzyMatch(haystack, token));
-    });
-    const col = sortKey === BOARD_SORT ? undefined : columns.find((c) => c.key === sortKey);
-    const sorted = col
-      ? [...matched].sort(defaultSort(col))
-      : [...matched].sort(
-          (a, b) =>
-            boardOrder(a) - boardOrder(b) ||
-            prRank(a) - prRank(b) ||
-            a.issue.identifier.localeCompare(b.issue.identifier, undefined, { numeric: true }),
-        );
+    const matched = query ? tasks.filter((task) => matchesQuery(task, query)) : tasks;
+    const sorted = [...matched].sort((a, b) => compareTasks(sortKey, a, b));
     return sortDesc ? sorted.reverse() : sorted;
-  }, [tasks, query, sortKey, sortDesc, columns]);
+  }, [tasks, query, sortKey, sortDesc]);
 
   useEffect(() => setCursor((c) => Math.max(0, Math.min(c, rows.length - 1))), [rows.length]);
 
@@ -147,8 +109,8 @@ export function TasksView(props: { param?: string }) {
         setBar('fuzzy');
         return;
       }
-      // S sorts here, as in :reviews — s stays "attach claude", as on the board
-      if (input === 'S') {
+      // , sorts in both views; S stays shell in both, as on the board
+      if (input === ',') {
         setBar('sort');
         return;
       }
@@ -199,7 +161,7 @@ export function TasksView(props: { param?: string }) {
             {sortDesc ? ' ↓' : ' ↑'}
           </Text>
         </Text>
-        {query ? <Text color={theme.accent}>/{query}</Text> : <Text dimColor>/ filter · S sort</Text>}
+        {query ? <Text color={theme.accent}>/{query}</Text> : <Text dimColor>/ filter · , sort</Text>}
       </Box>
       {bar === 'fuzzy' && (
         <CommandBar
@@ -272,6 +234,6 @@ function PrCell(props: { task: Task; width: number }) {
 export const tasksKeys: Array<[string, string]> = [
   ['j/k ↑↓', 'move'],
   ['/', 'filter'],
-  ['S', 'sort'],
+  [',', 'sort'],
   ...TASK_ACTION_KEYS,
 ];
