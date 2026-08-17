@@ -179,7 +179,9 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     retentionDays: raw.retentionDays ?? 30,
     worktreeRetentionDays: raw.worktreeRetentionDays ?? 7,
     tickMs: raw.tickMs ?? 1000,
-    attachPermissionMode: raw.attachPermissionMode ?? 'auto',
+    agentPermissionMode: permissionMode(raw.agentPermissionMode, 'auto'),
+    attachPermissionMode: permissionMode(raw.attachPermissionMode, 'auto'),
+    denyTools: Array.isArray(raw.denyTools) ? raw.denyTools : [],
     terminal: raw.terminal,
   };
 }
@@ -229,6 +231,18 @@ function normalizeExperiments(raw: RawExperiments, master: boolean): Partial<Rec
     log(`config: "experimental" is false — ${wanted.map(([n]) => n).join(', ')} stays off`);
   }
   return out;
+}
+
+const PERMISSION_MODES = ['auto', 'acceptEdits', 'default', 'plan', 'dontAsk', 'bypassPermissions'];
+
+/** A typo here would silently widen what agents may do, so it fails loudly. */
+function permissionMode(raw: string | undefined, fallback: string): string {
+  if (!raw) return fallback;
+  if (!PERMISSION_MODES.includes(raw)) {
+    console.error(`unknown permission mode "${raw}" — one of: ${PERMISSION_MODES.join(', ')}`);
+    process.exit(1);
+  }
+  return raw;
 }
 
 /** An experiment runs only when the master switch and its own flag agree. */
