@@ -4,6 +4,7 @@
 - **[Security & blast radius](security.md)** — what colinear can touch, what it can't, where your data lives
 - **[How dispatch works](dispatch.md)** — the triage → work → checks pipeline, messaging agents, sessions
 - **[Configuration](configuration.md)** — every option and its default
+- **[Remote daemon](remote.md)** — run the daemon on a VM, drive it over ssh
 - **[CLI](cli.md)** — `coli`, `init`, `daemon`, `gc`, `contexts`, `doctor`
 - **[Architecture](../DESIGN.md)** — how it works inside
 

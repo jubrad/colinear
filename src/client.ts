@@ -13,6 +13,7 @@ import {
   type Command,
   type ServerMsg,
 } from './core/protocol.js';
+import type { ChannelMessage } from './core/channel.js';
 import { store } from './core/store.js';
 import type { Config, Issue, RepoConfig, TaskEdits } from './core/types.js';
 
@@ -54,6 +55,10 @@ export interface DispatcherApi {
   message(id: string, text: string, opts?: { wake?: boolean }): void;
   /** EXPERIMENTAL: operator message onto a coordination channel */
   channelPost(channel: string, text: string): void;
+  /** ask the daemon for things that live on its disk (see onLogTail etc.) */
+  requestLogTail(bytes?: number): void;
+  requestChannels(): void;
+  requestChannelHistory(channel: string): void;
   gcRemove(paths: string[]): void;
 }
 
@@ -81,6 +86,13 @@ export interface Connection {
   onGcProgress(fn: (p: GcProgress) => void): () => void;
   /** daemon-side messages (edit results, etc.); returns an unsubscribe */
   onToast(fn: (text: string, kind: 'info' | 'ok' | 'err') => void): () => void;
+  /** the daemon's log tail, in reply to requestLogTail */
+  onLogTail(fn: (text: string) => void): () => void;
+  /** channel list / one channel's history, in reply to the matching request */
+  onChannels(fn: (list: Array<{ name: string; messages: number }>) => void): () => void;
+  onChannelHistory(fn: (channel: string, messages: ChannelMessage[]) => void): () => void;
+  /** something worth surfacing on whichever machine has a screen */
+  onNotify(fn: (n: { title: string; body: string; url?: string }) => void): () => void;
   dispatcher: DispatcherApi;
   daemonPid: number;
   close(): void;
@@ -148,6 +160,10 @@ export async function connectToDaemon(): Promise<Connection> {
   const command = (cmd: Command) => send({ t: 'cmd', cmd });
 
   const toastListeners = new Set<(text: string, kind: 'info' | 'ok' | 'err') => void>();
+  const logListeners = new Set<(text: string) => void>();
+  const channelListeners = new Set<(list: Array<{ name: string; messages: number }>) => void>();
+  const historyListeners = new Set<(channel: string, messages: ChannelMessage[]) => void>();
+  const notifyListeners = new Set<(n: { title: string; body: string; url?: string }) => void>();
   const gcListeners = new Set<(items: GcItem[]) => void>();
   const gcProgressListeners = new Set<(p: GcProgress) => void>();
 
@@ -177,6 +193,22 @@ export async function connectToDaemon(): Promise<Connection> {
           onToast: (fn) => {
             toastListeners.add(fn);
             return () => toastListeners.delete(fn);
+          },
+          onLogTail: (fn) => {
+            logListeners.add(fn);
+            return () => logListeners.delete(fn);
+          },
+          onChannels: (fn) => {
+            channelListeners.add(fn);
+            return () => channelListeners.delete(fn);
+          },
+          onChannelHistory: (fn) => {
+            historyListeners.add(fn);
+            return () => historyListeners.delete(fn);
+          },
+          onNotify: (fn) => {
+            notifyListeners.add(fn);
+            return () => notifyListeners.delete(fn);
           },
           onGc: (fn) => {
             gcListeners.add(fn);
@@ -212,6 +244,9 @@ export async function connectToDaemon(): Promise<Connection> {
             answer: (id, answers) => command({ name: 'answer', id, answers }),
             message: (id, text, opts) => command({ name: 'message', id, text, wake: opts?.wake }),
             channelPost: (channel, text) => command({ name: 'channelPost', channel, text }),
+            requestLogTail: (bytes) => command({ name: 'logTail', bytes }),
+            requestChannels: () => command({ name: 'channelList' }),
+            requestChannelHistory: (channel) => command({ name: 'channelHistory', channel }),
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),
           },
         });
@@ -221,6 +256,14 @@ export async function connectToDaemon(): Promise<Connection> {
         for (const fn of gcListeners) fn(msg.items);
       } else if (msg.t === 'toast') {
         for (const fn of toastListeners) fn(msg.text, msg.kind);
+      } else if (msg.t === 'logTail') {
+        for (const fn of logListeners) fn(msg.text);
+      } else if (msg.t === 'channels') {
+        for (const fn of channelListeners) fn(msg.list);
+      } else if (msg.t === 'channelHistory') {
+        for (const fn of historyListeners) fn(msg.channel, msg.messages);
+      } else if (msg.t === 'notify') {
+        for (const fn of notifyListeners) fn(msg);
       } else if (msg.t === 'snapshot') {
         store.hydrate(msg.snapshot);
       } else if (msg.t === 'delta') {

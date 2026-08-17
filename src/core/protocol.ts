@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import type { ChannelMessage } from './channel.js';
 import type { Change, Delta, Snapshot } from './delta.js';
 import { STATE_DIR } from './log.js';
 import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
@@ -6,7 +7,7 @@ import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 export const SOCKET_PATH = join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -35,6 +36,10 @@ export type Command =
   | { name: 'message'; id: string; text: string; wake?: boolean }
   /** EXPERIMENTAL: operator message onto a coordination channel */
   | { name: 'channelPost'; channel: string; text: string }
+  /** the daemon's own disk, for a client that isn't on the same machine */
+  | { name: 'logTail'; bytes?: number }
+  | { name: 'channelList' }
+  | { name: 'channelHistory'; channel: string }
   | { name: 'gcRemove'; paths: string[] }
   /** store writes the UI makes directly (escalation flags, task edits, …) */
   | { name: 'change'; change: Change };
@@ -48,7 +53,12 @@ export type ServerMsg =
   | { t: 'hello'; protocol: number; pid: number; cfg: Config; snapshot: Snapshot }
   | { t: 'delta'; delta: Delta }
   | { t: 'snapshot'; snapshot: Snapshot }
-  | { t: 'toast'; text: string; kind: 'info' | 'ok' | 'err' };
+  | { t: 'toast'; text: string; kind: 'info' | 'ok' | 'err' }
+  | { t: 'logTail'; text: string }
+  | { t: 'channels'; list: Array<{ name: string; messages: number }> }
+  | { t: 'channelHistory'; channel: string; messages: ChannelMessage[] }
+  /** something the operator should see — raised by whoever has a screen */
+  | { t: 'notify'; title: string; body: string; url?: string };
 
 /** Newline-delimited JSON: one message per line, in both directions. */
 export function encode(msg: ClientMsg | ServerMsg): string {

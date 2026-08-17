@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { useEffect, useState } from 'react';
-import { channels, type ChannelMessage } from '../core/channel.js';
+import type { ChannelMessage } from '../core/channel.js';
 import { experimentOn } from '../core/config.js';
 import { useColinear } from '../ui/context.js';
 import { theme } from '../theme.js';
@@ -20,18 +20,28 @@ export function ChannelView(props: { param?: string }) {
   const name = props.param ? normalize(props.param) : undefined;
   const [cursor, setCursor] = useState(0);
   const [draft, setDraft] = useState('');
-  const [list, setList] = useState<string[]>(() => channels.channels());
-  const [history, setHistory] = useState<ChannelMessage[]>(() => (name ? channels.history(name) : []));
+  const [list, setList] = useState<Array<{ name: string; messages: number }>>([]);
+  const [history, setHistory] = useState<ChannelMessage[]>([]);
 
-  // the daemon owns the writers; a 1s re-read is the whole sync mechanism
+  // the daemon owns these files — including when its disk isn't this one — so
+  // they come over the socket rather than off local disk. A 1s poll is the
+  // whole sync mechanism; agents write far slower than that.
   useEffect(() => {
+    const stopList = ctx.onChannels?.((next) => setList(next));
+    const stopHistory = ctx.onChannelHistory?.((channel, messages) => {
+      if (!name || channel === name) setHistory(messages);
+    });
     const tick = () => {
-      setList(channels.channels());
-      setHistory(name ? channels.history(name) : []);
+      ctx.dispatcher.requestChannels();
+      if (name) ctx.dispatcher.requestChannelHistory(name);
     };
     tick();
     const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      stopList?.();
+      stopHistory?.();
+    };
   }, [name]);
 
   // the tail's text input owns the keyboard
@@ -42,7 +52,7 @@ export function ChannelView(props: { param?: string }) {
     (input, key) => {
       if (key.upArrow || input === 'k') setCursor((c) => Math.max(0, c - 1));
       if (key.downArrow || input === 'j') setCursor((c) => Math.min(list.length - 1, c + 1));
-      if (key.return && list[cursor]) ctx.navigate('chan', list[cursor]);
+      if (key.return && list[cursor]) ctx.navigate('chan', list[cursor].name);
     },
     { isActive: !name && !ctx.cmdOpen },
   );
@@ -63,10 +73,10 @@ export function ChannelView(props: { param?: string }) {
         {!enabled && <DisabledNote />}
         {list.length ? (
           list.map((c, i) => (
-            <Text key={c} inverse={i === cursor}>
-              #{c}{' '}
+            <Text key={c.name} inverse={i === cursor}>
+              #{c.name}{' '}
               <Text dimColor>
-                ({channels.history(c).length} messages · {c.startsWith('proj-') ? 'project' : 'issue family'})
+                ({c.messages} messages · {c.name.startsWith('proj-') ? 'project' : 'issue family'})
               </Text>
             </Text>
           ))
@@ -155,8 +165,8 @@ function DisabledNote() {
  */
 function normalize(param: string): string {
   const raw = param.replace(/^#/, '');
-  const existing = channels.channels().find((c) => c.toLowerCase() === raw.toLowerCase());
-  if (existing) return existing;
+  // families are upper (CLO-67), project slugs are lower, and the name is a
+  // file name on the daemon — normalize the shape we know, leave the rest
   return /^[a-z]+-\d+$/i.test(raw) ? raw.toUpperCase() : raw;
 }
 

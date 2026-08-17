@@ -1,9 +1,11 @@
 import { createServer, type Socket } from 'node:net';
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig } from './core/config.js';
+import { channels } from './core/channel.js';
 import { Dispatcher } from './core/dispatcher.js';
 import { STATE_DIR, log } from './core/log.js';
+import { onNotifyForward } from './core/notify.js';
 import { loadState, startPersistence } from './core/persist.js';
 import { startPrPolling } from './core/prs.js';
 import { Reviewer } from './core/reviewer.js';
@@ -21,6 +23,26 @@ import { findReclaimable, removeWorktree } from './core/gc.js';
 import { store } from './core/store.js';
 
 /** Liveness marker so `coli daemon status|stop` doesn't need the socket. */
+/** The tail of this daemon's log, for a client that can't read its disk. */
+function readLogTail(bytes: number): string {
+  try {
+    const file = join(STATE_DIR, 'colinear.log');
+    const { size } = statSync(file);
+    const start = Math.max(0, size - bytes);
+    const fd = openSync(file, 'r');
+    try {
+      const buffer = Buffer.alloc(Math.min(bytes, size));
+      const read = readSync(fd, buffer, 0, buffer.length, start);
+      const text = buffer.subarray(0, read).toString('utf8');
+      return start > 0 ? text.slice(text.indexOf('\n') + 1) : text;
+    } finally {
+      closeSync(fd);
+    }
+  } catch (err) {
+    return `could not read the daemon log: ${err}`;
+  }
+}
+
 export const PID_PATH = join(STATE_DIR, 'coli.pid');
 
 /**
@@ -66,7 +88,8 @@ export async function runDaemon(): Promise<void> {
     sent = store.version;
   });
 
-  const run = (cmd: Command) => {
+  /** `reply` answers just the client that asked; `broadcast` tells everyone. */
+  const run = (cmd: Command, reply: (msg: ServerMsg) => void) => {
     switch (cmd.name) {
       case 'enqueue':
         dispatcher.enqueue(cmd.issues, cmd.opts);
@@ -139,6 +162,18 @@ export async function runDaemon(): Promise<void> {
       case 'message':
         dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });
         break;
+      case 'logTail':
+        reply({ t: 'logTail', text: readLogTail(cmd.bytes ?? 512 * 1024) });
+        break;
+      case 'channelList':
+        reply({
+          t: 'channels',
+          list: channels.channels().map((name) => ({ name, messages: channels.history(name).length })),
+        });
+        break;
+      case 'channelHistory':
+        reply({ t: 'channelHistory', channel: cmd.channel, messages: channels.history(cmd.channel) });
+        break;
       case 'channelPost':
         dispatcher.channelPost(cmd.channel, cmd.text);
         break;
@@ -201,6 +236,10 @@ export async function runDaemon(): Promise<void> {
   if (existsSync(SOCKET_PATH)) unlinkSync(SOCKET_PATH); // stale socket from a killed daemon
   writeFileSync(PID_PATH, String(process.pid));
 
+  // a notification raised here also goes to connected clients, which is the
+  // only way it reaches you when the daemon is on another machine
+  onNotifyForward((n) => broadcast({ t: 'notify', ...n }));
+
   const server = createServer((socket) => {
     clients.add(socket);
     socket.setNoDelay(true);
@@ -208,7 +247,7 @@ export async function runDaemon(): Promise<void> {
       encode({ t: 'hello', protocol: PROTOCOL_VERSION, pid: process.pid, cfg, snapshot: store.snapshot() }),
     );
     const decode = createDecoder<ClientMsg>((msg) => {
-      if (msg.t === 'cmd') run(msg.cmd);
+      if (msg.t === 'cmd') run(msg.cmd, (out) => socket.write(encode(out)));
       else if (msg.t === 'sync') {
         const deltas = store.since(msg.version);
         if (deltas) for (const delta of deltas) socket.write(encode({ t: 'delta', delta }));

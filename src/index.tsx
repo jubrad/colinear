@@ -11,6 +11,7 @@ import { consumePendingAction } from './core/attach.js';
 import { parseAnswerDoc } from './core/answers.js';
 import { runInit } from './core/init.js';
 import { configPath, ensureConfigFile, loadConfig } from './core/config.js';
+import type { Config } from './core/types.js';
 import {
   CONTEXT,
   CONTEXTS_DIR,
@@ -59,6 +60,12 @@ const leaveAltScreen = () => {
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Single-quote for a remote shell: the only escape inside '' is '\''. */
+const shq = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
+
+/** " on vm" — so a handoff never leaves you guessing which machine you're on. */
+const where = (cfg: Config): string => (cfg.remote ? ` on ${cfg.remote.ssh}` : '');
 
 function daemonPid(pidPath = PID_PATH): number | undefined {
   if (!existsSync(pidPath)) return undefined;
@@ -183,7 +190,20 @@ async function runTui(): Promise<void> {
   // interactive `claude --resume` and drop back onto the board afterwards.
   for (;;) {
     enterAltScreen();
-    const app = render(<App cfg={cfg} dispatcher={conn.dispatcher} onToast={conn.onToast} onGc={conn.onGc} onGcProgress={conn.onGcProgress} />, { patchConsole: true });
+    const app = render(
+      <App
+        cfg={cfg}
+        dispatcher={conn.dispatcher}
+        onToast={conn.onToast}
+        onGc={conn.onGc}
+        onGcProgress={conn.onGcProgress}
+        onLogTail={conn.onLogTail}
+        onChannels={conn.onChannels}
+        onChannelHistory={conn.onChannelHistory}
+        onNotify={conn.onNotify}
+      />,
+      { patchConsole: true },
+    );
     await app.waitUntilExit();
     leaveAltScreen();
 
@@ -194,18 +214,32 @@ async function runTui(): Promise<void> {
       break;
     }
     if (action.kind === 'attach' && action.mode === 'shell') {
-      console.log(`shell in ${action.worktree} — exit to return to colinear\n`);
-      spawnSync(process.env.SHELL ?? 'zsh', [], { cwd: action.worktree, stdio: 'inherit' });
+      console.log(`shell in ${action.worktree}${where(cfg)} — exit to return to colinear\n`);
+      if (cfg.remote) {
+        // the worktree is on the daemon's machine. Spawning a local shell here
+        // would either fail silently or — worse, when both machines use the
+        // same layout — drop you in a same-named directory on the wrong host.
+        spawnSync('ssh', ['-t', cfg.remote.ssh, `cd ${shq(action.worktree)} && exec \$SHELL -l`], { stdio: 'inherit' });
+      } else {
+        spawnSync(process.env.SHELL ?? 'zsh', [], { cwd: action.worktree, stdio: 'inherit' });
+      }
     } else if (action.kind === 'attach') {
       if (action.waitMs) {
         console.log(`suspending ${action.identifier}'s agent…`);
         await sleep(action.waitMs);
       }
-      console.log(`attaching to ${action.identifier} — quit claude (/exit) to return to colinear\n`);
-      spawnSync('claude', ['--resume', action.sessionId ?? '', '--permission-mode', cfg.attachPermissionMode], {
-        cwd: action.worktree,
-        stdio: 'inherit',
-      });
+      console.log(`attaching to ${action.identifier}${where(cfg)} — quit claude (/exit) to return to colinear\n`);
+      if (cfg.remote) {
+        // the transcript lives in ~/.claude/projects/<encoded-cwd> on the
+        // daemon's host, so resuming has to happen there too
+        const remoteCmd = `cd ${shq(action.worktree)} && claude --resume ${shq(action.sessionId ?? '')} --permission-mode ${shq(cfg.attachPermissionMode)}`;
+        spawnSync('ssh', ['-t', cfg.remote.ssh, remoteCmd], { stdio: 'inherit' });
+      } else {
+        spawnSync('claude', ['--resume', action.sessionId ?? '', '--permission-mode', cfg.attachPermissionMode], {
+          cwd: action.worktree,
+          stdio: 'inherit',
+        });
+      }
       // "background it": hand the conversation back to a headless agent
       if (store.get(action.issueId)?.status === 'interrupted') {
         const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -219,7 +253,12 @@ async function runTui(): Promise<void> {
       conn.dispatcher.answer(action.issueId, answers);
       console.log(`sent ${answers.length} answer${answers.length > 1 ? 's' : ''}`);
     } else if (action.kind === 'edit-file') {
-      spawnSync(process.env.EDITOR ?? 'vi', [action.path], { stdio: 'inherit' });
+      if (cfg.remote) {
+        // the review doc lives in the review worktree, on the daemon's host
+        spawnSync('ssh', ['-t', cfg.remote.ssh, `\${EDITOR:-vi} ${shq(action.path)}`], { stdio: 'inherit' });
+      } else {
+        spawnSync(process.env.EDITOR ?? 'vi', [action.path], { stdio: 'inherit' });
+      }
       conn.dispatcher.reloadReviewDoc(action.reviewId);
     } else if (action.kind === 'edit-config') {
       const editPath = ensureConfigFile(cfg);

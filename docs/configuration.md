@@ -67,6 +67,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `agentPermissionMode` | `"auto"` | what headless agents may do on their own: `auto`, `acceptEdits`, `default`, `plan`, `bypassPermissions`. [Details](security.md#the-mode) |
 | `denyTools` | none | tools and command patterns no agent may use, applied as policy from outside the repo. [Details](security.md#scoping-whats-allowed) |
 | `attachPermissionMode` | `"auto"` | permission mode for `s` attach sessions: `auto` (classifier gates risky commands), `acceptEdits`, `bypassPermissions`, `default`. Headless agents always run `auto`; classifier-blocked commands surface on the board as allow/deny questions |
+| `remote` | unset (local) | run this context against a daemon on another machine: `{"ssh": "vm"}`. [Details](remote.md) |
 | `terminal` | in-place | where `s` attaches: unset hands over the current terminal (recommended), `"ghostty"` / `"terminal"` open an external window |
 | `tickMs` | `1000` | UI refresh tick. Raise it (e.g. `2000`) if your terminal or multiplexer flickers |
 

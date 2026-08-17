@@ -32,9 +32,15 @@ async function readTail(): Promise<string[]> {
 /**
  * The debug log, live. Everything colinear does lands here — including stderr
  * diverted while the TUI owns the screen, which is otherwise invisible.
+ *
+ * With a remote daemon the interesting log is on *its* disk, so the tail comes
+ * over the socket instead. The client's own log stays local (that's where this
+ * process's diverted stderr goes) and its path is shown, since a rendering bug
+ * won't appear in the daemon's copy.
  */
 export function LogsView(_props: { param?: string }) {
   const ctx = useColinear();
+  const remote = ctx.cfg.remote;
   const [lines, setLines] = useState<string[]>([]);
   const [error, setError] = useState<string>();
   const [follow, setFollow] = useState(true);
@@ -44,6 +50,19 @@ export function LogsView(_props: { param?: string }) {
 
   useEffect(() => {
     let live = true;
+    if (remote) {
+      const stop = ctx.onLogTail?.((text) => {
+        if (live) setLines(text.split('\n').filter(Boolean));
+      });
+      const tick = () => ctx.dispatcher.requestLogTail();
+      tick();
+      const timer = setInterval(tick, 1000);
+      return () => {
+        live = false;
+        clearInterval(timer);
+        stop?.();
+      };
+    }
     const tick = () =>
       readTail()
         .then((l) => live && setLines(l))
@@ -54,7 +73,7 @@ export function LogsView(_props: { param?: string }) {
       live = false;
       clearInterval(timer);
     };
-  }, []);
+  }, [remote]);
 
   useEffect(() => ctx.setCapture(filtering), [filtering]);
   useEffect(() => () => ctx.setCapture(false), []);
@@ -100,7 +119,9 @@ export function LogsView(_props: { param?: string }) {
           {shown.length} lines{query ? ` matching /${query}` : ''} ·{' '}
         </Text>
         <Text color={follow ? theme.ok : theme.warn}>{follow ? 'following' : `${start}/${maxOffset}`}</Text>
-        <Text dimColor> · {LOG_FILE}</Text>
+        <Text dimColor>
+          {' '}· {remote ? `${remote.ssh}:…/colinear.log · local client log ${LOG_FILE}` : LOG_FILE}
+        </Text>
       </Box>
       <Text dimColor>j/k scroll · space/pgdn page · g top · G follow · / filter</Text>
       {filtering && (

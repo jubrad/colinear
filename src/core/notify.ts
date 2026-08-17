@@ -17,8 +17,18 @@ function checkTerminalNotifier(cb: (ok: boolean) => void) {
  * fallback cannot set a click action — clicks open Script Editor, a macOS
  * limitation of osascript-sourced notifications.
  */
+/** Set by the daemon so a notification also reaches whoever has a screen. */
+let forward: ((n: { title: string; body: string; url?: string }) => void) | undefined;
+
+export function onNotifyForward(fn: (n: { title: string; body: string; url?: string }) => void): void {
+  forward = fn;
+}
+
 export function notify(cfg: Config, title: string, body: string, url?: string): void {
-  if (!cfg.notifications || process.platform !== 'darwin') return;
+  if (!cfg.notifications) return;
+  // tell the client too: on a remote daemon this machine has no screen
+  forward?.({ title, body, url });
+  if (process.platform !== 'darwin') return;
   const esc = (s: string) => s.replace(/["\\]/g, '');
   checkTerminalNotifier((ok) => {
     if (ok) {

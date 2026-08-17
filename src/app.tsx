@@ -5,6 +5,7 @@ import type { DispatcherApi } from './client.js';
 import { consumeResumeView, rememberView, setPendingAction } from './core/attach.js';
 import { CONTEXT, DEFAULT_CONTEXT } from './core/context.js';
 import { useReviews, useTasks } from './core/hooks.js';
+import { notify } from './core/notify.js';
 import { store } from './core/store.js';
 import type { Config, Scope } from './core/types.js';
 import { CommandBar } from './ui/CommandBar.js';
@@ -68,8 +69,12 @@ export function App(props: {
   onToast?: (fn: (text: string, kind: ToastKind) => void) => () => void;
   onGc?: AppCtx['onGc'];
   onGcProgress?: AppCtx['onGcProgress'];
+  onLogTail?: AppCtx['onLogTail'];
+  onChannels?: AppCtx['onChannels'];
+  onChannelHistory?: AppCtx['onChannelHistory'];
+  onNotify?: (fn: (n: { title: string; body: string; url?: string }) => void) => () => void;
 }) {
-  const { cfg, dispatcher, onToast, onGc, onGcProgress } = props;
+  const { cfg, dispatcher, onToast, onGc, onGcProgress, onLogTail, onChannels, onChannelHistory, onNotify } = props;
   const { exit } = useApp();
   const size = useTerminalSize();
   const tasks = useTasks();
@@ -118,6 +123,17 @@ export function App(props: {
     () => onToast?.((text, kind) => setToastState({ text, kind, at: Date.now() })),
     [onToast],
   );
+  // a remote daemon's own terminal-notifier would fire on the VM, where nobody
+  // is looking — raise it here instead, on the machine with the screen
+  useEffect(
+    () =>
+      onNotify?.((n) => {
+        if (!cfg.remote) return;
+        notify(cfg, n.title, n.body, n.url);
+        setToastState({ text: `${n.title}: ${n.body}`, kind: 'info', at: Date.now() });
+      }),
+    [onNotify, cfg],
+  );
 
   // toasts auto-expire
   useEffect(() => {
@@ -144,6 +160,9 @@ export function App(props: {
       dispatcher,
       onGc,
       onGcProgress,
+      onLogTail,
+      onChannels,
+      onChannelHistory,
       viewer,
       teams,
       size,
@@ -161,7 +180,7 @@ export function App(props: {
         escHandlerRef.current = fn;
       },
     }),
-    [cfg, dispatcher, onGc, onGcProgress, viewer, teams, size, now, navigate, back, exit, cmdOpen],
+    [cfg, dispatcher, onGc, onGcProgress, onLogTail, onChannels, onChannelHistory, viewer, teams, size, now, navigate, back, exit, cmdOpen],
   );
 
   useInput(
