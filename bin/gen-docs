@@ -3,7 +3,9 @@
 # site that gets published.
 #
 #   bin/gen-docs            write what's stale, stage and build the site
+#   bin/gen-docs --serve    the same, then serve it with live reload
 #   bin/gen-docs --check    change nothing; fail if anything is out of date
+#   bin/gen-docs --no-site  registry checks only — no mkdocs, no site build
 #
 # `bin/gen-docs --check` producing no diff is the docs lint — it is what CI
 # runs, and what a pre-commit hook should run.
@@ -13,7 +15,19 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
 check=''
-[[ "${1:-}" == '--check' ]] && check='--check'
+serve=''
+site='1'
+for arg in "$@"; do
+  case "$arg" in
+    --check) check='--check' ;;
+    --serve) serve='1' ;;
+    --no-site) site='' ;;
+    *) echo "usage: bin/gen-docs [--check] [--serve] [--no-site]" >&2; exit 2 ;;
+  esac
+done
+
+MATERIAL='mkdocs-material==9.5.44'
+GLIGHTBOX='mkdocs-glightbox==0.4.0'
 
 # the registry loads custom views from the user's config dir on import: point
 # HOME somewhere empty so a local custom view can't leak into the docs
@@ -23,27 +37,50 @@ trap 'rm -rf "$home"' EXIT
 echo '── registry → docs'
 HOME="$home" npx tsx src/tools/gen-docs.ts $check
 
-# The site is the repository's own markdown — no duplicated copy to drift. The
-# staging directory mirrors the repo layout exactly (README at the root, docs/
-# below it, DESIGN.md and COORDINATION.md alongside), which is the whole trick:
-# every relative link that works when browsing the repo on GitHub resolves the
-# same way once mkdocs builds it.
+# the registry checks are the part bin/lint needs; building the site costs a
+# python toolchain, so it stays opt-out for the fast path
+[[ -n "$site" ]] || exit 0
+
+# The site is the repository's own markdown — no duplicated copy to drift, and
+# symlinks rather than copies so `--serve` reloads on the real files. The
+# staging directory mirrors the repo layout (README at the root, docs/ below
+# it, DESIGN.md and COORDINATION.md alongside), which is the whole trick: every
+# relative link that works when browsing the repo on GitHub resolves the same
+# way once mkdocs builds it.
 echo '── staging the site'
 rm -rf site-src
 mkdir -p site-src
-cp -R docs site-src/docs
-cp README.md site-src/index.md
+ln -s ../docs site-src/docs
+ln -s ../README.md site-src/index.md
 # linked from docs/README.md, docs/views/chan.md, docs/configuration.md and
-# docs/docker.md — copied in so those links resolve on the site too
-cp DESIGN.md COORDINATION.md Dockerfile site-src/
+# docs/docker.md — staged so those links resolve on the site too
+for f in DESIGN.md COORDINATION.md Dockerfile; do ln -s "../$f" "site-src/$f"; done
 
-if ! command -v mkdocs >/dev/null 2>&1; then
-  echo '── skipping the site build: mkdocs is not installed'
-  echo '   pip install mkdocs-material==9.5.44 mkdocs-glightbox==0.4.0'
-  exit 0
+# Which mkdocs can actually build this: it needs the Material theme, so a bare
+# `mkdocs` on PATH is not enough (that fails with "Unrecognised theme name").
+# A pinned project venv is the fallback, built on demand — the same versions
+# CI installs.
+venv="$root/.venv-docs"
+mkdocs=''
+if [[ -x "$venv/bin/mkdocs" ]]; then
+  mkdocs="$venv/bin/mkdocs"
+elif command -v mkdocs >/dev/null 2>&1 && python3 -c 'import material' >/dev/null 2>&1; then
+  mkdocs='mkdocs'
+else
+  echo "── setting up $venv ($MATERIAL)"
+  python3 -m venv "$venv"
+  "$venv/bin/pip" -q install "$MATERIAL" "$GLIGHTBOX"
+  mkdocs="$venv/bin/mkdocs"
+fi
+
+if [[ -n "$serve" ]]; then
+  # docs/ is reached through a symlink, which the reloader won't follow on its
+  # own — name the real paths so an edit rebuilds
+  echo '── serving (ctrl-c to stop)'
+  exec "$mkdocs" serve --watch docs --watch README.md --watch DESIGN.md --watch COORDINATION.md
 fi
 
 # strict: a broken internal link fails here rather than shipping a 404
 echo '── building the site'
-mkdocs build
-echo "built site/ — open it with: mkdocs serve"
+"$mkdocs" build
+echo 'built site/ — bin/gen-docs --serve to browse it'
