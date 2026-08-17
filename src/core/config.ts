@@ -19,6 +19,17 @@ import {
   type RepoConfig,
 } from './types.js';
 
+/**
+ * Refuse to start, loudly and in writing. The daemon is spawned detached with
+ * stdio ignored, so a bare console.error vanishes and the operator sees only
+ * "could not reach or start the colinear daemon" with no cause.
+ */
+function fatal(message: string): never {
+  console.error(message);
+  log(`fatal: ${message}`);
+  process.exit(1);
+}
+
 /** the config file this run reads and `:config` edits (context-aware) */
 export function configPath(): string {
   return contextConfigPath();
@@ -81,8 +92,7 @@ function readConfigFile(path: string): RawConfig | undefined {
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as RawConfig;
   } catch (err) {
-    console.error(`${path} is not valid JSON: ${err instanceof Error ? err.message : err}`);
-    process.exit(1);
+    fatal(`${path} is not valid JSON: ${err instanceof Error ? err.message : err}`);
   }
 }
 
@@ -95,11 +105,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     const path = contextConfigPath();
     const layer = readConfigFile(path);
     if (!layer) {
-      console.error(
-        `no context "${CONTEXT}" — expected ${path}\n` +
-          `available: ${listContexts().join(', ')}`,
-      );
-      process.exit(1);
+      fatal(`no context "${CONTEXT}" — expected ${path}\navailable: ${listContexts().join(', ')}`);
     }
     // top-level keys replace wholesale: a context that sets `repos` gets
     // exactly those repos, and one that doesn't inherits the base list
@@ -109,8 +115,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
   const linearApiKey = raw.linearApiKey ?? process.env.LINEAR_API_KEY ?? '';
   // chores that never touch Linear (gc) shouldn't demand a key to run
   if (!linearApiKey && opts?.requireKey !== false) {
-    console.error(`No Linear API key. Set LINEAR_API_KEY or add "linearApiKey" to ${configPath()}`);
-    process.exit(1);
+    fatal(`No Linear API key. Set LINEAR_API_KEY or add "linearApiKey" to ${configPath()}`);
   }
 
   // repos allowlist; legacy single-repo fields feed the default entry
@@ -247,8 +252,7 @@ function normalizeRemote(raw: RawRemote): { exec: string[]; label: string } | un
     return { exec: raw.exec, label: raw.label ?? raw.exec[0] };
   }
   if (raw.ssh) return { exec: ['ssh', '-t', raw.ssh], label: raw.label ?? raw.ssh };
-  console.error('config: "remote" needs either { "ssh": "host" } or { "exec": ["cmd", …] }');
-  process.exit(1);
+  fatal('config: "remote" needs either { "ssh": "host" } or { "exec": ["cmd", …] }');
 }
 
 const PERMISSION_MODES = ['auto', 'acceptEdits', 'default', 'plan', 'dontAsk', 'bypassPermissions'];
@@ -257,8 +261,7 @@ const PERMISSION_MODES = ['auto', 'acceptEdits', 'default', 'plan', 'dontAsk', '
 function permissionMode(raw: string | undefined, fallback: string): string {
   if (!raw) return fallback;
   if (!PERMISSION_MODES.includes(raw)) {
-    console.error(`unknown permission mode "${raw}" — one of: ${PERMISSION_MODES.join(', ')}`);
-    process.exit(1);
+    fatal(`unknown permission mode "${raw}" — one of: ${PERMISSION_MODES.join(', ')}`);
   }
   return raw;
 }

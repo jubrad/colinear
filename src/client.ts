@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, unlinkSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -115,6 +115,21 @@ function spawnDaemon(): void {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Whatever the daemon last refused to start over, if it said so recently. */
+function recentFatal(): string {
+  try {
+    const lines = readFileSync(join(STATE_DIR, 'colinear.log'), 'utf8').trimEnd().split('\n');
+    const last = lines.filter((l) => l.includes('fatal:')).at(-1);
+    if (!last) return '';
+    const [stamp] = last.split(' ');
+    // only if it's from this attempt — an old failure would be a red herring
+    if (Date.now() - Date.parse(stamp) > 60_000) return '';
+    return `\n\n  ${last.slice(last.indexOf('fatal:') + 7).trim()}\n`;
+  } catch {
+    return '';
+  }
+}
+
 function tryConnect(): Promise<Socket | null> {
   return new Promise((resolve) => {
     const socket = connect(SOCKET_PATH);
@@ -155,9 +170,12 @@ export async function connectToDaemon(): Promise<Connection> {
     }
   }
   if (!socket) {
+    // the daemon we just spawned is detached with stdio ignored, so its own
+    // reason for dying is only in the log — quote it rather than making the
+    // operator go and find it
     throw new Error(
-      `could not reach or start the colinear daemon (${SOCKET_PATH}).\n` +
-        `Run \`coli daemon\` in the foreground to see why, or check ${join(STATE_DIR, 'colinear.log')}.`,
+      `could not reach or start the colinear daemon (${SOCKET_PATH}).${recentFatal()}\n` +
+        `Run \`coli daemon\` in the foreground for the full output, or check ${join(STATE_DIR, 'colinear.log')}.`,
     );
   }
 
