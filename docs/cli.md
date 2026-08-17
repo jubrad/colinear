@@ -30,6 +30,15 @@ LINEAR_API_KEY=… coli init --yes           # key from the env, repo from $PWD,
 An existing config is never overwritten without a yes, and a key found in the environment is not
 written into the file.
 
+## `coli demo`
+
+```bash
+coli demo
+```
+
+Writes a `demo` context and launches into it: a fabricated board, scripted agents, no network,
+nothing billed. See [demo mode](demo.md).
+
 ## `coli issue add`
 
 File an issue without leaving the shell. Works against any provider, and it's the way into the

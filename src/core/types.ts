@@ -388,6 +388,13 @@ export interface Config {
   provider: string;
   /** sqlite provider: where the tracker lives (default <state dir>/local.db) */
   sqlitePath?: string;
+  /**
+   * Demo mode: a fabricated board, scripted agents, no network. Nothing is
+   * dispatched for real, nothing is billed, and no PR or review is ever
+   * fetched or posted. For showing colinear, screenshotting it, and testing
+   * the UI without an account or an agent budget.
+   */
+  demo?: boolean;
   linearApiKey: string;
   /** repos agents may work on; first entry is the default */
   repos: RepoConfig[];

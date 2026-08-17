@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, SessionInbox, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
+import { demoChecks, demoPullRequest, demoSession, demoWorktree, isDemo } from './demo.js';
 import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { coordinatorCwd, coordinatorPrompt, familyStatus, type CoordinatorTools } from './coordinator.js';
 import { experimentOn } from './config.js';
@@ -170,7 +171,7 @@ export class Dispatcher {
     this.inboxes.set(id, inbox);
     store.addActivity(id, 'coordinator session');
     try {
-      const result = await runSession({
+      const result = await this.session({
         prompt: coordinatorPrompt(task, coordChannels?.scopes.map((c) => c.id) ?? [], messages),
         cwd: coordinatorCwd(task),
         callbacks: this.callbacks(id),
@@ -686,6 +687,14 @@ export class Dispatcher {
     return { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools };
   }
 
+  /** demo mode swaps the agent for a script; everything else is unchanged */
+  private session: typeof runSession = (opts) =>
+    isDemo(this.cfg) ? demoSession(opts) : runSession(opts);
+
+  private checks(...args: Parameters<typeof runChecks>) {
+    return isDemo(this.cfg) ? demoChecks() : runChecks(...args);
+  }
+
   private callbacks(id: string): SessionCallbacks {
     return {
       onActivity: (line) => store.addActivity(id, line),
@@ -794,7 +803,11 @@ export class Dispatcher {
         task.prs.find((pr) => pr.number === task.pinnedPr) ??
         task.prs.find((pr) => pr.state === 'OPEN');
       if (knownPr) store.addActivity(id, `adopting PR #${knownPr.number} (${knownPr.headRefName})`);
-      let { worktree, branch } = await this.ensureWorktree(issue, taskRepo, knownPr?.headRefName);
+      // demo mode has no repo to cut a worktree from, and running git here
+      // would be the one thing in it that touches your machine
+      let { worktree, branch } = isDemo(this.cfg)
+        ? demoWorktree(issue)
+        : await this.ensureWorktree(issue, taskRepo, knownPr?.headRefName);
       store.update(id, { worktree, branch });
 
       let plan: string | undefined;
@@ -812,7 +825,7 @@ export class Dispatcher {
       if (!resumeSession && !task.skipTriage) {
         store.addActivity(id, 'triage pass');
         const triageChannels = issue.parent ? sessionChannels : undefined;
-        const triage = await runSession({
+        const triage = await this.session({
           prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, guidanceFor(this.cfg.guidance, 'triage'))}\n${familyBlock(issue, family)}${triageChannels ? channelBlock(triageChannels) : ''}`,
           cwd: worktree,
           callbacks: this.callbacks(id),
@@ -873,7 +886,7 @@ export class Dispatcher {
       // the mailbox keeps this session open between turns, so `M` can reach it
       const inbox = new SessionInbox();
       this.inboxes.set(id, inbox);
-      const work = await runSession({
+      const work = await this.session({
         prompt:
           mode === 'rebase'
             ? rebasePrompt(ctx, issue, current.prs, taskRepo.prBase ?? taskRepo.defaultBranch, taskRepo.remote ?? 'origin', taskRepo.pushRemote ?? taskRepo.remote ?? 'origin')
@@ -897,6 +910,12 @@ export class Dispatcher {
       inbox.close();
       this.requeueUndelivered(id, inbox);
       store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + work.costUsd });
+      // PR polling is off in demo mode, so the PR a real agent would have
+      // opened has to come from somewhere
+      if (isDemo(this.cfg) && !work.isError && !store.get(id)?.prs.length) {
+        store.update(id, { prs: [demoPullRequest(issue)] });
+        store.addActivity(id, 'opened draft PR (demo — nothing was pushed)');
+      }
       if (work.isError) {
         // auto-recovery: a spawn that died before its first assistant turn
         // clobbered the previous (good) session pointer at init — roll it
@@ -929,7 +948,7 @@ export class Dispatcher {
       if (repoChecks.length) {
         store.setStatus(id, 'checks');
         store.addActivity(id, 'running checks');
-        const results = await runChecks(repoChecks, worktree, controller.signal);
+        const results = await this.checks(repoChecks, worktree, controller.signal);
         store.update(id, { checks: results });
       }
 

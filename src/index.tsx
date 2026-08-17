@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { render } from 'ink';
@@ -126,6 +126,44 @@ async function daemonCommand(sub?: string): Promise<void> {
     process.exit(1);
   }
   await runDaemon();
+}
+
+/**
+ * `coli demo` — colinear with nothing behind it.
+ *
+ * Writes a `demo` context (local sqlite tracker, demo mode on) if it doesn't
+ * exist and launches into it. Nothing is dispatched for real, nothing is
+ * billed, and no PR or review is ever fetched or posted.
+ */
+function demoCommand(): never {
+  const path = contextConfigPath('demo');
+  if (!existsSync(path)) {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      `${JSON.stringify(
+        {
+          provider: 'sqlite',
+          demo: true,
+          concurrency: 3,
+          // a repo that is never touched: demo mode runs no git at all
+          repos: [{ name: 'cadence', path: join(stateDirFor('demo'), 'cadence'), defaultBranch: 'main' }],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    mkdirSync(join(stateDirFor('demo'), 'cadence'), { recursive: true });
+    console.log(`wrote ${path}`);
+  }
+  console.log('starting colinear in demo mode — fabricated board, scripted agents, no network\n');
+  // re-exec as the supervisor, in that context
+  const script = fileURLToPath(import.meta.url);
+  const result = spawnSync(process.execPath, [...process.execArgv, script], {
+    stdio: 'inherit',
+    env: { ...process.env, COLINEAR_CONTEXT: 'demo' },
+  });
+  process.exit(result.status ?? 0);
 }
 
 /**
@@ -384,5 +422,6 @@ else if (command === 'gc') await gcCommand(argv.slice(1));
 else if (command === 'contexts') contextsCommand();
 else if (command === 'init') await runInit({ yes: argv.includes('--yes') || argv.includes('-y') });
 else if (command === 'issue') await issueCommand(argv.slice(1));
+else if (command === 'demo') demoCommand();
 else if (command === '--tui') await runTui();
 else supervise();

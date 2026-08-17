@@ -163,6 +163,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
   return {
     provider: raw.provider ?? 'linear',
     sqlitePath: raw.sqlitePath ? expandHome(raw.sqlitePath) : undefined,
+    demo: raw.demo === true,
     // "all" (any case) = every team, k9s-style
     team: team === undefined ? undefined : team.toLowerCase() === 'all' ? '*' : team.toUpperCase(),
     linearApiKey,
