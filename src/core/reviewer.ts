@@ -180,6 +180,7 @@ export class Reviewer {
 
       await this.excludeReviewFile(worktree);
       const result = await runSession({
+        permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         prompt: reviewPrompt(this.cfg, review, details),
         cwd: worktree,
         model: this.cfg.model,
@@ -303,6 +304,7 @@ export class Reviewer {
     this.aborts.set(id, controller);
     try {
       const result = await runSession({
+        permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         prompt: chatPrompt(text, review),
         cwd: review.worktree,
         resume: review.sessionId,

@@ -452,8 +452,29 @@ export interface Config {
   experiments: Partial<Record<ExperimentName, boolean>>;
   /** UI refresh tick in ms — raise it (e.g. 2000) if your terminal/mux flickers (default 1000) */
   tickMs: number;
+  /**
+   * Permission mode for headless agents (default "auto": a classifier approves
+   * routine work and anything risky falls through to you as an allow/deny
+   * question). "acceptEdits" is narrower, "bypassPermissions" asks nothing —
+   * that one hands an unattended agent your shell, so it is yours to choose
+   * deliberately.
+   */
+  agentPermissionMode: string;
   /** permission mode for interactive attach sessions (default "auto", matching headless agents) */
   attachPermissionMode: string;
+  /**
+   * Operator-level permission rules, applied to every agent as policy. Unlike a
+   * repo's own .claude/settings.json — which lives inside the worktree an agent
+   * can write to — these come from your config and cannot be loosened by the
+   * project, the model, or a prompt.
+   *
+   * Bare tool names ("Read", "WebFetch") or Claude Code rule patterns
+   * ("Bash(cat:*)", "Bash(git push --force:*)"). Both are refused outright —
+   * there is no "ask" tier here, because the SDK has no option that routes a
+   * matched rule to a prompt, and a knob that quietly does nothing is worse
+   * than no knob.
+   */
+  denyTools: string[];
   /** terminal for session attach: "ghostty" | "terminal" (default: Ghostty if installed) */
   terminal?: string;
 }

@@ -64,6 +64,8 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `worktreeRetentionDays` | `7` | how long a finished task's worktree is kept before `coli gc` offers it. [Details](#retention-and-disk) |
 | `experimental` | `false` | master switch for unfinished features. Nothing in `experiments` runs unless this is true. [Details](#experimental-features) |
 | `experiments` | none | per-feature opt-in: `{ "coordination": true }`, or a list of names |
+| `agentPermissionMode` | `"auto"` | what headless agents may do on their own: `auto`, `acceptEdits`, `default`, `plan`, `bypassPermissions`. [Details](security.md#the-mode) |
+| `denyTools` | none | tools and command patterns no agent may use, applied as policy from outside the repo. [Details](security.md#scoping-whats-allowed) |
 | `attachPermissionMode` | `"auto"` | permission mode for `s` attach sessions: `auto` (classifier gates risky commands), `acceptEdits`, `bypassPermissions`, `default`. Headless agents always run `auto`; classifier-blocked commands surface on the board as allow/deny questions |
 | `terminal` | in-place | where `s` attaches: unset hands over the current terminal (recommended), `"ghostty"` / `"terminal"` open an external window |
 | `tickMs` | `1000` | UI refresh tick. Raise it (e.g. `2000`) if your terminal or multiplexer flickers |

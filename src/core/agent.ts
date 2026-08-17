@@ -1,4 +1,10 @@
-import { createSdkMcpServer, query, tool, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import {
+  createSdkMcpServer,
+  query,
+  tool,
+  type PermissionMode,
+  type SDKUserMessage,
+} from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { channels, formatMessages } from './channel.js';
 import type { CoordinatorTools } from './coordinator.js';
@@ -224,8 +230,13 @@ export async function runSession(opts: {
   inbox?: SessionInbox;
   /** EXPERIMENTAL: family-management tools for a tracking parent */
   coordinator?: CoordinatorTools;
+  /** how much the agent may do on its own, and the operator's deny list */
+  permissions?: { mode?: string; deny?: string[] };
 }): Promise<SessionResult> {
-  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController, channels: membership, inbox, coordinator } = opts;
+  const {
+    prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController,
+    channels: membership, inbox, coordinator, permissions,
+  } = opts;
   const mcp = colinearServer({ channels: membership, coordinator });
 
   const q = query({
@@ -236,10 +247,20 @@ export async function runSession(opts: {
       maxTurns,
       resume,
       abortController,
-      // auto: the classifier approves routine work and only risky/uncertain
-      // calls fall through to canUseTool below (haiku predates auto support)
-      permissionMode: model?.includes('haiku') ? 'acceptEdits' : 'auto',
+      // auto (the default) has a classifier approve routine work, with risky or
+      // uncertain calls falling through to canUseTool below. haiku predates it.
+      permissionMode: (model?.includes('haiku') ? 'acceptEdits' : permissions?.mode ?? 'auto') as PermissionMode,
+      // 'project' loads the repo's own .claude/settings.json and CLAUDE.md
       settingSources: ['project'],
+      // policy tier: the operator's deny/ask rules, from a config file outside
+      // the worktree. A repo's own settings can be edited by the agent working
+      // in it; these can't be, and restrictive rules can't be loosened.
+      // The operator's deny list. `disallowedTools` is the mechanism that
+      // actually enforces: it takes bare tool names ("Read") and Claude Code
+      // rule patterns ("Bash(cat:*)"), both verified to refuse. managedSettings
+      // looked like the right home for this and silently did nothing, so it
+      // isn't used — a deny list that doesn't deny is worse than none.
+      ...(permissions?.deny?.length ? { disallowedTools: permissions.deny } : {}),
       ...(mcp ? { mcpServers: { colinear: mcp } } : {}),
       ...(outputSchema ? { outputFormat: { type: 'json_schema' as const, schema: outputSchema } } : {}),
       canUseTool: async (toolName, input) => {

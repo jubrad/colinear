@@ -20,6 +20,7 @@ export async function createIssueFromPrompt(
   request: string,
 ): Promise<{ id: string; identifier: string }> {
   const result = await runSession({
+    permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
     prompt: `Draft a Linear issue from this request by the user:
 
 "${request}"

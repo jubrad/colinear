@@ -12,11 +12,67 @@ colinear dispatches agents that write code and push branches. This page is what 
 
 ## Permissions
 
-Headless agents run in Claude Code's `auto` permission mode: a classifier approves routine work and anything risky or ambiguous falls through to you as an allow/deny question on the board. There is no bypass mode for headless work.
+An agent inside its worktree can run commands the classifier approves. The worktree is a real
+checkout with your git credentials available, so treat a dispatched agent as roughly a colleague
+with a shell on your machine and push access to your fork — and then narrow that, with the two
+levers below.
 
-Interactive attach (`s`) uses `attachPermissionMode`, `auto` by default. Setting it to `bypassPermissions` removes the gate for those sessions — that's yours to decide.
+### The mode
 
-An agent inside its worktree can still run arbitrary commands the classifier approves. The worktree is a real checkout with your git credentials available; treat a dispatched agent as roughly a colleague with a shell on your machine and push access to your fork. If that isn't a trade you want, don't point it at that repo.
+`agentPermissionMode` sets what headless agents may do on their own (`attachPermissionMode` does the
+same for `s` attach sessions). Default `auto`.
+
+| mode | what it means |
+|---|---|
+| `auto` (default) | a classifier approves routine work; risky or ambiguous calls fall through to you as an allow/deny question on the board |
+| `acceptEdits` | file edits and common filesystem commands are automatic; everything else asks |
+| `default` | asks about everything not already allowed — safe, and noisy enough that you will notice |
+| `plan` | read-only: the agent plans and cannot act |
+| `bypassPermissions` | asks nothing. This hands an unattended agent your shell — choose it deliberately or not at all |
+
+An unknown value is a startup error rather than a silent widening.
+
+### Scoping what's allowed
+
+Two levers, both verified to actually refuse:
+
+**1. `denyTools` in colinear's config — operator policy.** Applied to every agent colinear starts,
+from a file outside the worktree, so nothing an agent does can loosen it:
+
+```json
+"denyTools": [
+  "WebFetch",
+  "Bash(cat .env:*)",
+  "Bash(git push --force:*)",
+  "Bash(gh pr merge:*)",
+  "Bash(kubectl:*)",
+  "Bash(terraform apply:*)"
+]
+```
+
+Entries are bare tool names (`Read`, `WebFetch`) or Claude Code rule patterns (`Bash(cat:*)`). A
+denied tool is removed from the agent's context entirely; a denied pattern refuses that command
+while leaving the rest of the tool usable — `Bash(cat:*)` blocks `cat .env` and still allows
+`ls -la`.
+
+Mind which denials break colinear's own workflow: blocking `Bash(git push:*)` or `Bash(gh pr
+create:*)` means agents can never open the PR that is the whole point.
+
+**2. `.claude/settings.json` in the repo — per-project rules.** Colinear runs agents with
+`settingSources: ['project']`, so a repo's own permission rules are loaded and enforced:
+
+```json
+{ "permissions": { "deny": ["Read(./.env)", "Read(./secrets/**)", "Bash(cat .env:*)"] } }
+```
+
+This is the right home for rules that belong to a codebase rather than to you, and it travels with
+the repo for everyone. The caveat: it lives *inside* the worktree the agent is working in. A change
+would show up in the diff, but if you want a rule an agent cannot touch, put it in `denyTools`.
+
+Worth knowing: an agent may attempt paths **outside** its worktree — in testing, one tried
+`/Users/<me>/.env` before the local file. The worktree is where its work happens, not a sandbox
+boundary. Deny rules and the classifier are what stop it, so write path rules absolutely where it
+matters.
 
 ## Credentials
 

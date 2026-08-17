@@ -177,6 +177,7 @@ export class Dispatcher {
         model: store.get(id)?.model ?? this.cfg.model,
         maxTurns: 30,
         abortController: controller,
+        permissions: this.permissions(),
         channels: coordChannels,
         inbox,
         coordinator: this.coordinatorTools(id),
@@ -680,6 +681,11 @@ export class Dispatcher {
     }
   }
 
+  /** what every session this dispatcher starts is allowed to do */
+  private permissions() {
+    return { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools };
+  }
+
   private callbacks(id: string): SessionCallbacks {
     return {
       onActivity: (line) => store.addActivity(id, line),
@@ -814,6 +820,7 @@ export class Dispatcher {
           model: store.get(id)?.model ?? this.cfg.model,
           maxTurns: 40,
           abortController: controller,
+          permissions: this.permissions(),
           channels: triageChannels,
         });
         store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + triage.costUsd });
@@ -882,6 +889,7 @@ export class Dispatcher {
         model: store.get(id)?.model ?? this.cfg.model,
         resume: resumeSession,
         abortController: controller,
+        permissions: this.permissions(),
         channels: sessionChannels,
         inbox,
       });
