@@ -2,6 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { setPendingAction } from '../core/attach.js';
 import { configPath } from '../core/config.js';
 import { CONTEXT, DEFAULT_CONTEXT, listContexts } from '../core/context.js';
+import { providerFor } from '../core/provider.js';
 import { useColinear } from '../ui/context.js';
 import { theme } from '../theme.js';
 
@@ -11,6 +12,10 @@ export function ConfigView(_props: { param?: string }) {
   const { cfg } = ctx;
   const path = configPath();
   const contexts = listContexts();
+  const provider = providerFor(cfg);
+  const off = Object.entries(provider.capabilities)
+    .filter(([, on]) => !on)
+    .map(([name]) => name);
 
   useInput(
     (input) => {
@@ -37,6 +42,18 @@ export function ConfigView(_props: { param?: string }) {
       </Text>
       <Text dimColor>
         press <Text color={theme.key}>e</Text> to edit in $EDITOR — changes apply when colinear returns
+      </Text>
+      <Text>
+        <Text bold color={theme.header}>
+          tracker{'  '}
+        </Text>
+        <Text color={theme.selection} bold>
+          {provider.name}
+        </Text>
+        <Text dimColor>
+          {' '}— scope: {provider.scopeLabel}
+          {off.length ? ` · unsupported here: ${off.join(', ')}` : ' · all features supported'}
+        </Text>
       </Text>
       {(CONTEXT !== DEFAULT_CONTEXT || contexts.length > 1) && (
         <Text>

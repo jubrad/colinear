@@ -56,7 +56,12 @@ src/core/
                      SessionInbox turns the prompt into an async iterable so the operator can push a
                      message into a live session (`M`); the session closes on `result` unless one is
                      pending, which is what keeps a normal run from hanging open
-  linear.ts          GraphQL client; queryIssuesPaged (cursor pagination, 500 cap) backs all issue
+  provider.ts        the IssueProvider interface + ProviderCapabilities: the only thing the app
+                     knows about issue trackers. Adapters are registered in the map here rather
+                     than by import side-effect, so a refactor can't silently unregister one
+  providers/shared.ts leaf helpers every adapter needs (safeBranch, stateTypeOf, ALL_SCOPES) —
+                     a leaf so provider.ts can import adapters without a cycle
+  providers/linear.ts GraphQL client; queryIssuesPaged (cursor pagination, 500 cap) backs all issue
                      fetches; teams/projects/viewer/labels; mutations (create/assign/state/comment);
                      fetchBlockers (inverseRelations type "blocks")
   reviews.ts         the GitHub side of PR review: one GraphQL search for PRs awaiting me
@@ -264,6 +269,25 @@ and none of it belongs on someone else's PR:
 Findings survive missing fields: no `line` or no `file` means the body rather than the bin;
 only a missing `comment` drops one. A line outside the diff makes GitHub reject the whole
 review, so the post retries once with everything in the body.
+
+## Issue providers
+
+Everything above `core/provider.ts` is tracker-agnostic; everything below it is one adapter.
+`providerFor(cfg)` returns the instance for a config (cached per config object, so a
+`reloadConfig` that mutates in place keeps working), and nothing outside `providers/` imports a
+tracker's client.
+
+Features ask `capabilities` rather than assuming: `workflowStates` gates stateSync, `blockers`
+gates the blocked column and `f`, `subIssues` gates tracking parents and `u`, `priority` gates the
+PRI column, `projects` gates `:projects`, `comments` gates escalation, and `branchNames` decides
+whether the provider supplies a branch or `safeBranch()` derives one. A missing capability turns a
+feature off where the operator can see it (`:config` lists them), which is the difference between
+a tracker that isn't supported and one that is supported partially.
+
+The types are the contract: `Issue`, `Scope` (team/project/repo), `Project`, `StateType`
+(`backlog | unstarted | started | completed | canceled | triage`). Providers map their own
+vocabulary into `StateType` — anything unrecognized becomes undefined rather than a state nobody
+handles.
 
 ## Retention
 

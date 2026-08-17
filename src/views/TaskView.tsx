@@ -1,8 +1,8 @@
 import { Box, Text, useInput } from 'ink';
+import { providerFor } from '../core/provider.js';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
 import { attachSession, attachShell, setPendingAction } from '../core/attach.js';
-import { createBlocksRelation, createIssue, fetchIssuesByIds } from '../core/linear.js';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import { AnswerModal } from '../ui/AnswerModal.js';
@@ -48,8 +48,8 @@ export function TaskView(props: { param?: string }) {
           const st = subtasks[i];
           created.set(
             i,
-            await createIssue(ctx.cfg, {
-              teamId,
+            await providerFor(ctx.cfg).create({
+              scopeId: teamId,
               title: st.title,
               description: `${st.description}\n\n_Split from ${task.issue.identifier} by colinear._`,
               priority: st.priority,
@@ -60,7 +60,7 @@ export function TaskView(props: { param?: string }) {
         for (const [i, child] of created) {
           for (const dep of subtasks[i].blockedBy ?? []) {
             const blocker = created.get(dep);
-            if (blocker) await createBlocksRelation(ctx.cfg, blocker.id, child.id);
+            if (blocker) await providerFor(ctx.cfg).blockIssue(blocker.id, child.id);
           }
         }
         const names = [...created.values()].map((c) => c.identifier);
@@ -84,7 +84,7 @@ export function TaskView(props: { param?: string }) {
         });
         ctx.toast(`created ${names.join(', ')}`, 'ok');
         if (dispatchAfter) {
-          const issues = await fetchIssuesByIds(ctx.cfg, [...created.values()].map((c) => c.id));
+          const issues = await providerFor(ctx.cfg).issuesByIds([...created.values()].map((c) => c.id));
           for (const [i, child] of created) {
             const issue = issues.find((x) => x.id === child.id);
             if (!issue) continue;

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { Change, Delta, Snapshot } from './delta.js';
 import { STATE_DIR } from './log.js';
-import type { Config, LinearIssue, RepoConfig, TaskEdits } from './types.js';
+import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 
 export const SOCKET_PATH = join(STATE_DIR, 'coli.sock');
 
@@ -10,7 +10,7 @@ export const PROTOCOL_VERSION = 5;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
-  | { name: 'enqueue'; issues: LinearIssue[]; opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean } }
+  | { name: 'enqueue'; issues: Issue[]; opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean } }
   | { name: 'cancel'; id: string }
   | { name: 'resume'; id: string }
   | { name: 'force'; id: string }

@@ -1,10 +1,10 @@
 import { Box, Text, useInput } from 'ink';
 import { useMemo, useState } from 'react';
-import type { LinearIssue } from '../core/types.js';
+import type { Issue } from '../core/types.js';
 import { theme } from '../theme.js';
 
 export interface SubIssueRow {
-  issue: LinearIssue;
+  issue: Issue;
   /** why this row can't be dispatched (shown as a chip); selectable when unset */
   disabled?: 'done' | 'on board';
 }
@@ -13,7 +13,7 @@ export interface SubIssueRow {
 export function SubIssueModal(props: {
   parent: string;
   rows: SubIssueRow[];
-  onSubmit: (picked: LinearIssue[]) => void;
+  onSubmit: (picked: Issue[]) => void;
   onCancel: () => void;
 }) {
   const { parent, rows, onSubmit, onCancel } = props;

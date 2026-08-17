@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
+import { providerFor } from '../core/provider.js';
 import TextInput from 'ink-text-input';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchProjectIssues, fetchProjects } from '../core/linear.js';
 import { plannerFor, type Planner } from '../core/planner.js';
 import { fuzzyMatch } from '../ui/CommandBar.js';
 import { useColinear } from '../ui/context.js';
@@ -24,7 +24,7 @@ export function ChatView(props: { param?: string }) {
   useEffect(() => {
     const param = (props.param ?? '').toLowerCase();
     (async () => {
-      const pool = projectCache.length ? projectCache : await fetchProjects(ctx.cfg);
+      const pool = projectCache.length ? projectCache : await providerFor(ctx.cfg).projects();
       if (!param) {
         setError(
           `:plan needs a project — try ${pool.slice(0, 3).map((p) => `“${p.name}”`).join(', ')}` +
@@ -40,7 +40,7 @@ export function ChatView(props: { param?: string }) {
         setError(`no project matches “${props.param ?? ''}”`);
         return;
       }
-      const issues = await fetchProjectIssues(ctx.cfg, project.id).catch(() => []);
+      const issues = await providerFor(ctx.cfg).projectIssues(project.id).catch(() => []);
       setPlanner(plannerFor(ctx.cfg, project, issues));
     })().catch((e) => setError(String(e)));
   }, [props.param]);
@@ -62,7 +62,7 @@ export function ChatView(props: { param?: string }) {
           if (!created.length) return ctx.toast('nothing selected', 'err');
           ctx.toast(`created ${created.join(', ')}`, 'ok');
           if (dispatchAfter) {
-            const issues = await fetchProjectIssues(ctx.cfg, planner.project.id);
+            const issues = await providerFor(ctx.cfg).projectIssues(planner.project.id);
             const fresh = issues.filter((i) => created.includes(i.identifier));
             ctx.dispatcher.enqueue(fresh);
             ctx.toast(`created + dispatched ${fresh.length}`, 'ok');

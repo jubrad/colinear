@@ -1,9 +1,9 @@
 import { Box, Text, useInput } from 'ink';
+import { providerFor } from '../core/provider.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
-import { fetchProjectIssues, fetchProjects } from '../core/linear.js';
 import { store } from '../core/store.js';
-import type { LinearIssue, LinearProject } from '../core/types.js';
+import type { Issue, Project } from '../core/types.js';
 import { fuzzyMatch } from '../ui/CommandBar.js';
 import { openUrl } from '../core/open.js';
 import { projectChannel } from '../core/channel.js';
@@ -30,8 +30,8 @@ const STATE_COLUMNS: StateColumn[] = [
 export function ProjectView(props: { param?: string }) {
   const ctx = useColinear();
   useTasks(); // re-render on task changes so dispatched-status chips stay live
-  const [project, setProject] = useState<LinearProject>();
-  const [issues, setIssues] = useState<LinearIssue[]>([]);
+  const [project, setProject] = useState<Project>();
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [cursor, setCursor] = useState(0);
@@ -41,9 +41,9 @@ export function ProjectView(props: { param?: string }) {
   useEffect(() => ctx.setCapture(asking), [asking]);
   useEffect(() => () => ctx.setCapture(false), []);
 
-  const resolveProject = useCallback(async (): Promise<LinearProject | undefined> => {
+  const resolveProject = useCallback(async (): Promise<Project | undefined> => {
     const param = (props.param ?? '').toLowerCase();
-    const pool = projectCache.length ? projectCache : await fetchProjects(ctx.cfg);
+    const pool = projectCache.length ? projectCache : await providerFor(ctx.cfg).projects();
     return (
       pool.find((p) => p.id === props.param) ??
       pool.find((p) => p.name.toLowerCase() === param) ??
@@ -61,7 +61,7 @@ export function ProjectView(props: { param?: string }) {
           return;
         }
         setProject(p);
-        setIssues(await fetchProjectIssues(ctx.cfg, p.id));
+        setIssues(await providerFor(ctx.cfg).projectIssues(p.id));
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -83,7 +83,7 @@ export function ProjectView(props: { param?: string }) {
   );
 
   const dispatch = useCallback(
-    (picked: LinearIssue[], opts?: DispatchOptions) => {
+    (picked: Issue[], opts?: DispatchOptions) => {
       const eligible = picked.filter((i) => i.stateType !== 'completed');
       if (!eligible.length) return;
       // enqueue self-assigns and moves the Linear state to started

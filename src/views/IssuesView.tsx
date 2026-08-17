@@ -1,12 +1,12 @@
 import { Box, Text, useInput } from 'ink';
+import { providerFor } from '../core/provider.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CustomViewSpec } from '../core/customviews.js';
-import { fetchFilteredIssues, fetchIssues } from '../core/linear.js';
 import { openUrl } from '../core/open.js';
 import { createIssueFromPrompt } from '../core/newissue.js';
 import { getUiState, setUiState } from '../core/persist.js';
 import { store } from '../core/store.js';
-import type { LinearIssue } from '../core/types.js';
+import type { Issue } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
 import { useColinear } from '../ui/context.js';
 import { Popup, popupPlacement, formHeight } from '../ui/Popup.js';
@@ -19,7 +19,7 @@ const PRIORITY_COLORS: Array<string | undefined> = [undefined, 'red', 'yellow', 
 
 type BarMode = 'fuzzy' | 'team' | 'label' | 'sort' | 'new';
 
-export function filterIssues(issues: LinearIssue[], query: string, labelFilters: string[]): LinearIssue[] {
+export function filterIssues(issues: Issue[], query: string, labelFilters: string[]): Issue[] {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
   return issues.filter((issue) => {
     const haystack = `${issue.identifier} ${issue.title}`.toLowerCase();
@@ -52,7 +52,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const [team, setTeam] = useState<string | undefined>(() =>
     resolveTeamParam(props.param, resolveTeamParam(getUiState().team, cfg.team)),
   );
-  const [issues, setIssues] = useState<LinearIssue[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [cursor, setCursor] = useState(0);
@@ -70,8 +70,8 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       setLoading(true);
       setError(undefined);
       const fetch = spec
-        ? fetchFilteredIssues(cfg, spec.filter ?? {})
-        : fetchIssues(cfg, teamKey, { includeProjects: withProjects });
+        ? providerFor(cfg).filteredIssues(spec.filter ?? {})
+        : providerFor(cfg).issues(teamKey, { includeProjects: withProjects });
       fetch
         .then((all) => setIssues(all.filter((i) => !store.get(i.id))))
         .catch((e) => setError(String(e)))
@@ -84,7 +84,8 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   useEffect(() => ctx.setCapture(bar !== null || dispatching), [bar, dispatching]);
   useEffect(() => () => ctx.setCapture(false), []);
 
-  const columns = useMemo<Array<Column<LinearIssue>>>(
+  const provider = providerFor(cfg);
+  const columns = useMemo<Array<Column<Issue>>>(
     () => [
       { key: 'issue', label: 'ISSUE', width: 11, text: (i) => i.identifier },
       {
@@ -125,10 +126,11 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
     [],
   );
 
-  const visibleColumns = useMemo(
-    () => (spec?.columns?.length ? columns.filter((c) => spec.columns!.includes(c.key)) : columns),
-    [columns, spec],
-  );
+  const visibleColumns = useMemo(() => {
+    // a tracker without priorities shouldn't show an empty PRI column
+    const supported = columns.filter((c) => c.key !== 'priority' || provider.capabilities.priority);
+    return spec?.columns?.length ? supported.filter((c) => spec.columns!.includes(c.key)) : supported;
+  }, [columns, spec, provider]);
 
   const rows = useMemo(() => {
     const matched = filterIssues(issues, query, labelFilters);
@@ -183,7 +185,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   );
 
   const dispatch = useCallback(
-    (picked: LinearIssue[], opts?: DispatchOptions) => {
+    (picked: Issue[], opts?: DispatchOptions) => {
       if (!picked.length) return;
       // enqueue self-assigns and moves the Linear state to started
       ctx.dispatcher.enqueue(picked, opts);
@@ -231,8 +233,8 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const barCandidates = useMemo<Candidate[]>(() => {
     if (bar === 'team') {
       return [
-        { label: 'mine — my issues, any team', value: 'mine' },
-        { label: 'all — every team', value: 'all' },
+        { label: `mine — my issues, any ${provider.scopeLabel}`, value: 'mine' },
+        { label: `all — every ${provider.scopeLabel}`, value: 'all' },
         ...teams.map((t) => ({ label: `${t.key} — ${t.name}`, value: t.key })),
       ];
     }

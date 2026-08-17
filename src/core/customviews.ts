@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { IssueFilterSpec } from './linear.js';
+import type { IssueFilter } from './provider.js';
 import { log } from './log.js';
 
 export interface CustomViewSpec {
@@ -9,7 +9,7 @@ export interface CustomViewSpec {
   aliases?: string[];
   kind?: 'issues';
   describe?: string;
-  filter?: IssueFilterSpec;
+  filter?: IssueFilter;
   columns?: string[];
   sort?: string;
 }

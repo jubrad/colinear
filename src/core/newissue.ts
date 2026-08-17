@@ -1,5 +1,5 @@
 import { runSession } from './agent.js';
-import { createIssue } from './linear.js';
+import { providerFor } from './provider.js';
 import type { Config } from './types.js';
 
 const ISSUE_SCHEMA = {
@@ -16,7 +16,7 @@ const ISSUE_SCHEMA = {
 /** One-off agent pass: turn a rough request into a well-formed Linear issue. */
 export async function createIssueFromPrompt(
   cfg: Config,
-  teamId: string,
+  scopeId: string,
   request: string,
 ): Promise<{ id: string; identifier: string }> {
   const result = await runSession({
@@ -38,5 +38,5 @@ Produce:
   });
   if (result.isError) throw new Error(result.errors.join('; ') || 'draft session failed');
   const draft = result.structured as { title: string; description: string; priority?: number };
-  return createIssue(cfg, { teamId, ...draft });
+  return providerFor(cfg).create({ scopeId, ...draft });
 }

@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { DispatcherApi, GcItem, GcProgress } from '../client.js';
-import type { Config, LinearTeam } from '../core/types.js';
+import type { Config, Scope } from '../core/types.js';
 
 export type ToastKind = 'info' | 'ok' | 'err';
 
@@ -12,7 +12,7 @@ export interface AppCtx {
   /** per-worktree progress while a gc removal runs */
   onGcProgress?: (fn: (p: GcProgress) => void) => () => void;
   viewer?: { id: string; displayName: string };
-  teams: LinearTeam[];
+  teams: Scope[];
   size: { columns: number; rows: number };
   now: number;
   navigate: (name: string, param?: string) => void;

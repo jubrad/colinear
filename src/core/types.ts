@@ -1,4 +1,12 @@
-export interface LinearIssue {
+/**
+ * An issue, as colinear needs it — the shape every provider maps into.
+ *
+ * `identifier` is load-bearing well beyond display: it names branches,
+ * worktree directories and coordination channels, and PR matching looks for it
+ * in branch names and titles. A provider must supply something short, unique
+ * across the repos in play, and safe in a path and a git ref.
+ */
+export interface Issue {
   id: string;
   identifier: string;
   title: string;
@@ -10,7 +18,9 @@ export interface LinearIssue {
   labels: Array<{ name: string; color: string }>;
   assignee?: string;
   assigneeId?: string;
-  stateType?: string;
+  /** normalized lifecycle bucket; providers map their own vocabulary into it */
+  stateType?: StateType;
+  /** the scope this issue lives in — a Linear team, a Jira project, a repo */
   teamId?: string;
   projectId?: string;
   /** carried so a project channel can be named after the project, not its uuid */
@@ -19,13 +29,25 @@ export interface LinearIssue {
   parent?: { id: string; identifier: string };
 }
 
-export interface LinearTeam {
+/**
+ * The dimension above an issue: a team in Linear, a project in Jira, a repo in
+ * GitHub. `IssueProvider.scopeLabel` is what the UI calls it.
+ */
+export interface Scope {
   id: string;
   key: string;
   name: string;
 }
 
-export interface LinearProject {
+/**
+ * Issue lifecycle, normalized. Linear reports exactly these; Jira maps its
+ * status categories; GitHub has only open/closed, so it can only ever answer
+ * `unstarted` or `completed`/`canceled` — which is why anything that depends
+ * on `started` has to be capability-gated rather than assumed.
+ */
+export type StateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled' | 'triage';
+
+export interface Project {
   id: string;
   name: string;
   description?: string;
@@ -34,7 +56,7 @@ export interface LinearProject {
   progress: number;
   targetDate?: string;
   url: string;
-  teams: LinearTeam[];
+  scopes: Scope[];
   lead?: string;
 }
 
@@ -149,7 +171,7 @@ export interface Subtask {
 }
 
 export interface Task {
-  issue: LinearIssue;
+  issue: Issue;
   status: TaskStatus;
   /** status to restore when a pending question is answered */
   statusBeforeQuestion?: TaskStatus;
@@ -362,6 +384,8 @@ export interface RepoConfig {
 }
 
 export interface Config {
+  /** which issue tracker this context talks to (default "linear") */
+  provider: string;
   linearApiKey: string;
   /** repos agents may work on; first entry is the default */
   repos: RepoConfig[];
