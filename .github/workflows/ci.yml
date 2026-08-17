@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # the same three gates the project uses by hand on every change
+      - name: typecheck
+        run: npx tsc --noEmit
+      - name: build
+        run: npm run build
+      - name: CDC replay (client mirror must match the daemon's store)
+        run: npm run check
+        env:
+          # never touch a real state dir, even on a runner
+          COLINEAR_STATE_DIR: ${{ runner.temp }}/colinear-state

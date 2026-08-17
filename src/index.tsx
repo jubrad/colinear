@@ -9,6 +9,7 @@ import { App } from './app.js';
 import { connectToDaemon } from './client.js';
 import { consumePendingAction } from './core/attach.js';
 import { parseAnswerDoc } from './core/answers.js';
+import { runInit } from './core/init.js';
 import { configPath, ensureConfigFile, loadConfig } from './core/config.js';
 import {
   CONTEXT,
@@ -267,5 +268,6 @@ const [command, sub] = argv;
 if (command === 'daemon') await daemonCommand(sub);
 else if (command === 'gc') await gcCommand(argv.slice(1));
 else if (command === 'contexts') contextsCommand();
+else if (command === 'init') await runInit({ yes: argv.includes('--yes') || argv.includes('-y') });
 else if (command === '--tui') await runTui();
 else supervise();
