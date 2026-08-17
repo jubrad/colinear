@@ -11,6 +11,7 @@ import { consumePendingAction } from './core/attach.js';
 import { parseAnswerDoc } from './core/answers.js';
 import { runInit } from './core/init.js';
 import { configPath, ensureConfigFile, loadConfig } from './core/config.js';
+import { providerFor } from './core/provider.js';
 import type { Config } from './core/types.js';
 import {
   CONTEXT,
@@ -125,6 +126,57 @@ async function daemonCommand(sub?: string): Promise<void> {
     process.exit(1);
   }
   await runDaemon();
+}
+
+/**
+ * `coli issue add "title"` — file an issue from the shell.
+ *
+ * Mostly for the sqlite tracker, which otherwise has no way in that doesn't
+ * cost an agent call, but it works against any provider.
+ */
+async function issueCommand(args: string[]): Promise<void> {
+  const [sub, ...rest] = args;
+  if (sub !== 'add') {
+    console.error('usage: coli issue add "title" [--desc TEXT] [--parent KEY] [--priority 0-4] [--scope KEY]');
+    process.exit(1);
+  }
+  const flag = (name: string): string | undefined => {
+    const i = rest.indexOf(`--${name}`);
+    return i === -1 ? undefined : rest[i + 1];
+  };
+  const title = rest.find((a) => !a.startsWith('--') && rest[rest.indexOf(a) - 1]?.startsWith('--') !== true);
+  if (!title) {
+    console.error('a title is required: coli issue add "fix the thing"');
+    process.exit(1);
+  }
+  const cfg = loadConfig();
+  const provider = providerFor(cfg);
+  const scopes = await provider.scopes();
+  const wanted = flag('scope') ?? cfg.team;
+  const scope = scopes.find((s) => s.key === wanted) ?? scopes[0];
+  if (!scope) {
+    console.error(`${provider.name} has no ${provider.scopeLabel} to file into`);
+    process.exit(1);
+  }
+  const parentKey = flag('parent');
+  let parentId: string | undefined;
+  if (parentKey) {
+    const all = await provider.issues('*', { includeProjects: true });
+    const parent = all.find((i) => i.identifier.toLowerCase() === parentKey.toLowerCase());
+    if (!parent) {
+      console.error(`no open issue called ${parentKey}`);
+      process.exit(1);
+    }
+    parentId = parent.id;
+  }
+  const created = await provider.create({
+    scopeId: scope.id,
+    title,
+    description: flag('desc'),
+    priority: flag('priority') ? Number.parseInt(flag('priority')!, 10) : undefined,
+    parentId,
+  });
+  console.log(`${created.identifier}  ${title}${parentKey ? ` (sub-issue of ${parentKey})` : ''}`);
 }
 
 /**
@@ -331,5 +383,6 @@ if (command === 'daemon') await daemonCommand(sub);
 else if (command === 'gc') await gcCommand(argv.slice(1));
 else if (command === 'contexts') contextsCommand();
 else if (command === 'init') await runInit({ yes: argv.includes('--yes') || argv.includes('-y') });
+else if (command === 'issue') await issueCommand(argv.slice(1));
 else if (command === '--tui') await runTui();
 else supervise();

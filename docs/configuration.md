@@ -46,7 +46,8 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 
 | key | default | what |
 |---|---|---|
-| `provider` | `"linear"` | which issue tracker this context talks to. Linear is the only adapter today; the interface and its capability flags are what a second one plugs into. [Details](#issue-providers) |
+| `provider` | `"linear"` | which issue tracker this context talks to: `linear`, or `sqlite` for a local one. [Details](#issue-providers) |
+| `sqlitePath` | `<state dir>/local.db` | where the sqlite tracker's file lives |
 | `linearApiKey` | `$LINEAR_API_KEY` | Linear personal API key. Leave it out of the file and export the env var if you'd rather not have it on disk |
 | `repos` | one repo (see below) | the allowlist — agents only ever touch these, and only through worktrees. First entry is the default. [Details](#repos) |
 | `team` | your assigned issues | Linear team key (`"CLOUD"`) to browse, or `"all"` for every team. `--team CLOUD` / `--team all` override it for one run, and the last team picked with `t` is remembered |
@@ -146,7 +147,22 @@ Colinear talks to an issue tracker through one interface (`core/provider.ts`) wi
 
 Capabilities exist because the trackers genuinely differ — GitHub Issues has no priority field, no "blocks" relation and only open/closed. Where one is missing the feature switches off rather than breaking: no `workflowStates` means `stateSync` never fires, no `blockers` means nothing parks as ⛓ blocked, no `priority` means the column disappears, no `branchNames` means colinear derives a safe branch from the identifier.
 
-Linear is the only adapter today and supports all of it. Because a **context** is already a config plus its own daemon and store, the natural way to run two trackers is one context each — which also keeps their issue ids from ever meeting in one store.
+**Linear** supports all of it. **sqlite** is a local tracker in a file — issues, sub-issues,
+blocking relations, projects, states, priorities and comments, with no account and no network. It's
+how you try colinear in thirty seconds, it's what the demo board runs on, and it's the second
+implementation that keeps the interface honest. Its one gap is `branchNames`: there's no upstream to
+supply one, so colinear derives a safe branch from the identifier (`LOC-2` → `loc-2`).
+
+It needs `node:sqlite` — Node 24+, or Node 22 with `--experimental-sqlite`. The module is required
+lazily inside the provider, so Node 20 keeps working for everyone else.
+
+File issues into it from the shell:
+
+```bash
+coli issue add "Add a rollback path"                  # LOC-1
+coli issue add "Write the down migration" --parent LOC-1
+coli issue add "Ship it" --priority 2 --desc "after the migration lands"
+``` Because a **context** is already a config plus its own daemon and store, the natural way to run two trackers is one context each — which also keeps their issue ids from ever meeting in one store.
 
 One requirement any adapter has to meet: `identifier` is load-bearing beyond display. It names branches, worktree directories and coordination channels, and PR matching looks for it in branch names and titles — so it has to be short, unique across the repos in play, and safe in a path and a git ref.
 

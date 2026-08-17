@@ -38,12 +38,12 @@ SAS-91     pr open     Emit metering events per tenant              cloud     #1
 ```bash
 git clone https://github.com/jubrad/colinear && cd colinear
 npm install && npm link          # installs `coli` on PATH
-coli init                        # tracker, key, repos — or `coli init --yes` to infer them
+coli init                        # pick `sqlite` to try it with no account, or `linear` for the real thing
 npm run doctor                   # claude CLI, gh auth, key, repos
 coli                             # `?` for help, `:` to jump between views
 ```
 
-Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset), `gh` authenticated, and a Linear API key.
+Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset) and `gh` authenticated. A Linear API key too, unless you start with the built-in local tracker.
 
 ## What it does
 
@@ -68,6 +68,6 @@ Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset), `gh`
 
 ## Status
 
-Used daily by its author against a real Linear workspace; APIs and keybindings still move. Linear is the only issue provider today — [the interface and its capability flags](docs/configuration.md#issue-providers) are what a second one plugs into.
+Used daily by its author against a real Linear workspace; APIs and keybindings still move. Two issue providers today: **Linear**, and a **local sqlite tracker** for trying it without an account — [the interface and its capability flags](docs/configuration.md#issue-providers) are what a third one plugs into.
 
 MIT licensed.

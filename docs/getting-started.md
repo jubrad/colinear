@@ -6,7 +6,7 @@
 |---|---|
 | The **`claude` CLI**, logged in | agents run on your Claude subscription. Leave `ANTHROPIC_API_KEY` unset — setting it bills the API instead |
 | **`gh`**, authenticated | PRs, CI status, reviews |
-| A **Linear API key** | Settings → Security & access → API keys |
+| A **Linear API key** | Settings → Security & access → API keys. Not needed if you start with the local `sqlite` tracker |
 | At least one **git repo** | agents work in worktrees cut from it, never in the checkout itself |
 
 macOS is the tested platform. Node 20 or newer.
@@ -24,6 +24,10 @@ npm link          # puts `coli` (and `colinear`) on PATH, building dist first
 ```bash
 coli init
 ```
+
+It asks which tracker first. **Pick `sqlite` if you just want to see it work** — that's a local
+tracker in a file, no account and no key, and you can file issues with `coli issue add "…"`. Pick
+`linear` for the real thing.
 
 It asks for the tracker key, validates it by using it, offers a scope (your Linear team) from what comes back, and takes the repos agents may work in — suggesting the repository you're standing in and reading its default branch. Nothing is written until the end, and an existing config is never overwritten without a yes.
 

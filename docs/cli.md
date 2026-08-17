@@ -30,6 +30,19 @@ LINEAR_API_KEY=… coli init --yes           # key from the env, repo from $PWD,
 An existing config is never overwritten without a yes, and a key found in the environment is not
 written into the file.
 
+## `coli issue add`
+
+File an issue without leaving the shell. Works against any provider, and it's the way into the
+sqlite tracker that doesn't cost an agent call:
+
+```bash
+coli issue add "Add a rollback path" --priority 2
+coli issue add "Write the down migration" --parent LOC-1 --desc "reverse of the forward one"
+```
+
+`--scope KEY` picks the team/project/scope when you have more than one; otherwise it uses your
+configured one.
+
 ## `npm run doctor`
 
 Checks what colinear can't fix for you: the `claude` CLI, `gh` auth, the tracker key (by making a

@@ -1,4 +1,5 @@
 import { linearProvider } from './providers/linear.js';
+import { sqliteProvider } from './providers/sqlite.js';
 import { ALL_SCOPES, safeBranch, stateTypeOf } from './providers/shared.js';
 import type { Config, Issue, Project, Scope, WorkflowState } from './types.js';
 
@@ -102,7 +103,10 @@ type Factory = (cfg: Config) => IssueProvider;
  * silently vanishing, and the failure ("unknown issue provider") looks nothing
  * like its cause.
  */
-const registry = new Map<string, Factory>([['linear', linearProvider]]);
+const registry = new Map<string, Factory>([
+  ['linear', linearProvider],
+  ['sqlite', sqliteProvider],
+]);
 
 export function registerProvider(name: string, factory: Factory): void {
   registry.set(name, factory);
