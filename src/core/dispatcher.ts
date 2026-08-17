@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { providerFor } from './provider.js';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -7,14 +8,13 @@ import { runChecks } from './checks.js';
 import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { coordinatorCwd, coordinatorPrompt, familyStatus, type CoordinatorTools } from './coordinator.js';
 import { experimentOn } from './config.js';
-import { assignIssue, fetchBlockers, fetchIssuesByIds, fetchSubIssues } from './linear.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
 import { guidanceFor } from './guidance.js';
 import { store } from './store.js';
-import { questionSummary, type Config, type LinearIssue, type PrInfo, type RepoConfig, type Subtask, type Task, type TaskEdits, type TriageVerdict, type Verification } from './types.js';
+import { questionSummary, type Config, type Issue, type PrInfo, type RepoConfig, type Subtask, type Task, type TaskEdits, type TriageVerdict, type Verification } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -31,7 +31,7 @@ const AUTO_DISPATCH_BATCH = 5;
  * that was worked months ago and then dropped from the store by retention has
  * a started/completed state, so it can never be resurrected here.
  */
-export function autoDispatchable(parent: Task, subs: LinearIssue[], configDefault: boolean): LinearIssue[] {
+export function autoDispatchable(parent: Task, subs: Issue[], configDefault: boolean): Issue[] {
   if (parent.status !== 'tracking') return [];
   if (!(parent.autoDispatchSubs ?? configDefault)) return [];
   return subs.filter(
@@ -365,7 +365,7 @@ export class Dispatcher {
   }
 
   enqueue(
-    issues: LinearIssue[],
+    issues: Issue[],
     opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean },
   ) {
     for (const issue of issues) {
@@ -394,13 +394,15 @@ export class Dispatcher {
       // dispatch = mine + in progress, immediately (not when an agent slot frees up)
       const viewer = this.viewer;
       if (viewer && issue.assigneeId !== viewer.id) {
-        void assignIssue(this.cfg, issue.id, viewer.id)
+        void providerFor(this.cfg).assign(issue.id, viewer.id)
           .then(() => store.addActivity(issue.id, `assigned to ${viewer.displayName}`))
           .catch((err) => store.addActivity(issue.id, `assign failed: ${String(err).slice(0, 80)}`));
       }
       void syncIssueState(this.cfg, issue, 'started');
       // respect Linear "blocks" relations: park behind unresolved blockers
-      void fetchBlockers(this.cfg, issue.id)
+      void (providerFor(this.cfg).capabilities.blockers
+        ? providerFor(this.cfg).blockers(issue.id)
+        : Promise.resolve([]))
         .catch(() => [])
         .then((blockers) => {
           const open = (blockers || []).filter((b) => !b.done && store.get(b.id)?.status !== 'done');
@@ -476,7 +478,8 @@ export class Dispatcher {
         task.status === 'tracking' ||
         (['error', 'escalated'].includes(task.status) && !task.prs.length);
       if (!candidate) continue;
-      const subs = await fetchSubIssues(this.cfg, task.issue.id).catch(() => null);
+      if (!providerFor(this.cfg).capabilities.subIssues) continue;
+      const subs = await providerFor(this.cfg).subIssues(task.issue.id).catch(() => null);
       if (!subs || !subs.length) continue;
       const subIssues = subs.map((s) => ({
         id: s.id,
@@ -533,7 +536,7 @@ export class Dispatcher {
   async sweepClosed() {
     const open = store.list().filter((t) => !['done', 'cancelled'].includes(t.status));
     if (!open.length) return;
-    const fresh = await fetchIssuesByIds(this.cfg, open.map((t) => t.issue.id)).catch(() => null);
+    const fresh = await providerFor(this.cfg).issuesByIds(open.map((t) => t.issue.id)).catch(() => null);
     if (!fresh) return;
     for (const issue of fresh) {
       const closed =
@@ -640,7 +643,8 @@ export class Dispatcher {
     // the promote gate reads them long after the work is done
     for (const task of store.list()) {
       if (task.status !== 'blocked' && !task.blockedBy?.length) continue;
-      const blockers = await fetchBlockers(this.cfg, task.issue.id).catch(() => null);
+      if (!providerFor(this.cfg).capabilities.blockers) continue;
+      const blockers = await providerFor(this.cfg).blockers(task.issue.id).catch(() => null);
       if (!blockers) continue;
       const kinds = new Map((task.blockedBy ?? []).map((b) => [b.id, b.kind]));
       const deps = blockers.map(({ id, identifier, done }) => ({
@@ -761,7 +765,7 @@ export class Dispatcher {
       });
       // refresh the issue snapshot: persisted tasks carry dispatch-time data,
       // which goes stale (edited descriptions, parent links added later)
-      const freshIssue = (await fetchIssuesByIds(this.cfg, [issue.id]).catch(() => []))[0];
+      const freshIssue = (await providerFor(this.cfg).issuesByIds([issue.id]).catch(() => []))[0];
       if (freshIssue) {
         issue = freshIssue;
         store.update(id, { issue: freshIssue });
@@ -771,8 +775,8 @@ export class Dispatcher {
       let family: IssueFamily | undefined;
       if (issue.parent) {
         const [parentIssue, siblings] = await Promise.all([
-          fetchIssuesByIds(this.cfg, [issue.parent.id]).then((r) => r[0]).catch(() => undefined),
-          fetchSubIssues(this.cfg, issue.parent.id).catch(() => undefined),
+          providerFor(this.cfg).issuesByIds([issue.parent.id]).then((r) => r[0]).catch(() => undefined),
+          providerFor(this.cfg).subIssues(issue.parent.id).catch(() => undefined),
         ]);
         family = { parent: parentIssue, siblings: siblings?.filter((s) => s.id !== issue.id) };
       }
@@ -1049,14 +1053,14 @@ export class Dispatcher {
   }
 
   private async ensureWorktree(
-    issue: LinearIssue,
+    issue: Issue,
     repoCfg: { path: string; defaultBranch: string; remote?: string; pushRemote?: string; worktreeRoot: string },
     /** adopt an existing PR: check out its head branch instead of a fresh one */
     branchOverride?: string,
   ): Promise<{ worktree: string; branch: string }> {
     const { path: repo, defaultBranch, worktreeRoot } = repoCfg;
     const remote = repoCfg.remote ?? 'origin';
-    const branch = branchOverride ?? issue.branchName ?? issue.identifier.toLowerCase();
+    const branch = branchOverride ?? providerFor(this.cfg).branchFor(issue);
     // git allows one checkout per branch: if some worktree (old path scheme,
     // manual checkout, attach shell) already has it, reuse that worktree
     const existing = await this.worktreeForBranch(repo, branch);
@@ -1129,7 +1133,7 @@ export class Dispatcher {
   }
 }
 
-function issueBlock(issue: LinearIssue): string {
+function issueBlock(issue: Issue): string {
   return [
     `Linear issue ${issue.identifier}: ${issue.title}`,
     `URL: ${issue.url}`,
@@ -1156,8 +1160,8 @@ interface RepoLike {
 
 /** Everything the agent should know about this task, shared by all session prompts. */
 interface IssueFamily {
-  parent?: LinearIssue;
-  siblings?: LinearIssue[];
+  parent?: Issue;
+  siblings?: Issue[];
 }
 
 /**
@@ -1188,7 +1192,7 @@ function dependencyBlock(task: Task): string {
  * tracking sub-issues â€” its own. Nothing else gets one; a lone task has
  * nobody to coordinate with.
  */
-function channelsFor(issue: LinearIssue, ownFamily?: string): SessionChannels | undefined {
+function channelsFor(issue: Issue, ownFamily?: string): SessionChannels | undefined {
   const scopes: SessionChannels['scopes'] = [];
   const family = issue.parent?.identifier ?? ownFamily;
   if (family) scopes.push({ scope: 'family', id: `#${family}` });
@@ -1242,7 +1246,7 @@ function channelBlock(membership: SessionChannels): string {
   return lines.join('\n');
 }
 
-function familyBlock(issue: LinearIssue, family?: IssueFamily): string {
+function familyBlock(issue: Issue, family?: IssueFamily): string {
   if (!issue.parent || !family) return '';
   const lines: string[] = ['', `## Parent & sibling context`];
   if (family.parent) {
@@ -1318,7 +1322,7 @@ function taskContext(
 }
 
 function triagePrompt(
-  issue: LinearIssue,
+  issue: Issue,
   repos: RepoConfig[],
   instructions?: string,
   guidance?: string,
@@ -1361,7 +1365,7 @@ function verificationBlock(verification?: Verification): string {
 
 function workPrompt(
   ctx: string,
-  issue: LinearIssue,
+  issue: Issue,
   pushRemote: string,
   upstreamRemote: string,
   prBase: string,
@@ -1394,7 +1398,7 @@ ${forked ? '- Do NOT create stacked PRs: this repo uses a fork workflow and stac
 
 function rebasePrompt(
   ctx: string,
-  issue: LinearIssue,
+  issue: Issue,
   prs: Task['prs'],
   prBase: string,
   remote: string,
@@ -1415,7 +1419,7 @@ Do NOT change scope, add features, or "improve" anything while you are in here â
 Never mark the PR ready; promoting it stays the operator's call. Say plainly in your final message what conflicted and how you resolved it.`;
 }
 
-function ciFixPrompt(ctx: string, issue: LinearIssue, prs: Task['prs']): string {
+function ciFixPrompt(ctx: string, issue: Issue, prs: Task['prs']): string {
   const prList = prs.map((pr) => `#${pr.number} (${pr.headRefName})`).join(', ');
   return `${ctx}
 

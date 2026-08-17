@@ -1,9 +1,9 @@
 import { Box, Text, useInput, type Key } from 'ink';
+import { providerFor } from '../core/provider.js';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useState, type ReactNode } from 'react';
 import { attachSession, attachShell, setPendingAction } from '../core/attach.js';
-import { fetchSubIssues, postComment } from '../core/linear.js';
 import { store } from '../core/store.js';
 import type { PendingQuestion, Task } from '../core/types.js';
 import { theme } from '../theme.js';
@@ -78,7 +78,11 @@ export function useTaskActions(): TaskActions {
     if (input === 'm') setRepoModal(selected);
     if (input === 'M') setMessaging(selected);
     if (input === 'u') {
-      void fetchSubIssues(ctx.cfg, selected.issue.id)
+      if (!providerFor(ctx.cfg).capabilities.subIssues) {
+        ctx.toast(`${providerFor(ctx.cfg).name} has no sub-issues`, 'info');
+        return;
+      }
+      void providerFor(ctx.cfg).subIssues(selected.issue.id)
         .then((subs) => {
           if (!subs.length) {
             ctx.toast(`${selected.issue.identifier} has no sub-issues`, 'info');
@@ -103,13 +107,17 @@ export function useTaskActions(): TaskActions {
       execFile('open', [selected.issue.url], () => {});
       ctx.toast(`opened ${selected.issue.identifier} in Linear`, 'info');
     }
+    if (input === 'c' && !providerFor(ctx.cfg).capabilities.comments) {
+      ctx.toast(`${providerFor(ctx.cfg).name} has no comments to post to`, 'info');
+      return;
+    }
     if (input === 'c' && selected.verdict && selected.verdict.verdict !== 'do' && !selected.question && !selected.escalationCommented) {
       const v = selected.verdict;
       const body =
         v.verdict === 'too_big'
           ? `**colinear triage: too big for a single agent.**\n\n${v.reason}\n\nSuggest creating a project and splitting this up.`
           : `**colinear triage: needs more info.**\n\n${v.reason}`;
-      void postComment(ctx.cfg, selected.issue.id, body)
+      void providerFor(ctx.cfg).comment(selected.issue.id, body)
         .then(() => {
           store.update(selected.issue.id, { escalationCommented: true });
           ctx.toast(`escalation posted to ${selected.issue.identifier}`, 'ok');

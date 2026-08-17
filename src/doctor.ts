@@ -1,9 +1,9 @@
 import { execFile } from 'node:child_process';
+import { providerFor } from './core/provider.js';
 import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { configPath, loadConfig } from './core/config.js';
 import { CONTEXT, DEFAULT_CONTEXT } from './core/context.js';
-import { fetchIssues, fetchViewer } from './core/linear.js';
 
 const exec = promisify(execFile);
 
@@ -42,9 +42,9 @@ if (process.env.ANTHROPIC_API_KEY) {
 }
 
 try {
-  const viewer = await fetchViewer(cfg);
+  const viewer = await providerFor(cfg).viewer();
   ok('Linear auth', viewer.displayName);
-  const issues = await fetchIssues(cfg, cfg.team);
+  const issues = await providerFor(cfg).issues(cfg.team);
   ok('Linear issues', `${issues.length} in ${cfg.team === '*' ? 'all teams' : (cfg.team ?? 'my queue')}`);
   for (const i of issues.slice(0, 10)) console.log(`      ${i.identifier}  [${i.stateName}]  ${i.title}`);
 } catch (err) {

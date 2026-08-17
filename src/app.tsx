@@ -1,12 +1,12 @@
 import { Box, useApp, useInput, useStdout } from 'ink';
+import { providerFor } from './core/provider.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DispatcherApi } from './client.js';
 import { consumeResumeView, rememberView, setPendingAction } from './core/attach.js';
 import { CONTEXT, DEFAULT_CONTEXT } from './core/context.js';
 import { useReviews, useTasks } from './core/hooks.js';
-import { fetchTeams, fetchViewer } from './core/linear.js';
 import { store } from './core/store.js';
-import type { Config, LinearTeam } from './core/types.js';
+import type { Config, Scope } from './core/types.js';
 import { CommandBar } from './ui/CommandBar.js';
 import { AppContext, type AppCtx, type ToastKind } from './ui/context.js';
 import { Crumbs } from './ui/Crumbs.js';
@@ -90,7 +90,7 @@ export function App(props: {
   const [cmdOpen, setCmdOpen] = useState(false);
   const [toast, setToastState] = useState<{ text: string; kind: ToastKind; at: number }>();
   const [viewer, setViewer] = useState<{ id: string; displayName: string }>();
-  const [teams, setTeams] = useState<LinearTeam[]>([]);
+  const [teams, setTeams] = useState<Scope[]>([]);
   const captureRef = useRef(false);
   const [capture, setCaptureState] = useState(false);
   const escHandlerRef = useRef<(() => boolean) | null>(null);
@@ -102,13 +102,13 @@ export function App(props: {
   useEffect(() => rememberView(current.name, current.param), [current.name, current.param]);
 
   useEffect(() => {
-    fetchViewer(cfg)
+    providerFor(cfg).viewer()
       .then((v) => {
         setViewer(v);
         dispatcher.setViewer(v);
       })
       .catch(() => {});
-    fetchTeams(cfg)
+    providerFor(cfg).scopes()
       .then(setTeams)
       .catch(() => {});
   }, []);

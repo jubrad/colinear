@@ -1,8 +1,8 @@
 import { query, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { createIssue } from './linear.js';
+import { providerFor } from './provider.js';
 import { log } from './log.js';
 import { guidanceFor } from './guidance.js';
-import type { Config, LinearIssue, LinearProject } from './types.js';
+import type { Config, Issue, Project } from './types.js';
 
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'tool';
@@ -17,7 +17,7 @@ export interface DraftSubtask {
 }
 
 export interface PlannerSnapshot {
-  project: LinearProject;
+  project: Project;
   messages: ChatMessage[];
   drafts: DraftSubtask[];
   sessionId?: string;
@@ -49,8 +49,8 @@ export class Planner {
 
   constructor(
     private cfg: Config,
-    readonly project: LinearProject,
-    private existingIssues: LinearIssue[],
+    readonly project: Project,
+    private existingIssues: Issue[],
   ) {}
 
   /** live session id, or the one carried over from a previous run */
@@ -95,13 +95,13 @@ export class Planner {
 
   /** Create the selected drafts as Linear issues in this project. */
   async approve(): Promise<string[]> {
-    const teamId = this.project.teams[0]?.id;
-    if (!teamId) throw new Error('project has no team');
+    const scopeId = this.project.scopes[0]?.id;
+    if (!scopeId) throw new Error(`project has no ${providerFor(this.cfg).scopeLabel}`);
     const picked = this.drafts.filter((d) => d.selected);
     const created: string[] = [];
     for (const draft of picked) {
-      const issue = await createIssue(this.cfg, {
-        teamId,
+      const issue = await providerFor(this.cfg).create({
+        scopeId,
         title: draft.title,
         description: draft.description,
         projectId: this.project.id,
@@ -232,7 +232,7 @@ priority: 1 urgent, 2 high, 3 medium, 4 low. Titles must be actionable and self-
 const planners = new Map<string, Planner>();
 
 /** One persistent planner per project so navigating away keeps the conversation. */
-export function plannerFor(cfg: Config, project: LinearProject, issues: LinearIssue[]): Planner {
+export function plannerFor(cfg: Config, project: Project, issues: Issue[]): Planner {
   let p = planners.get(project.id);
   if (!p) {
     p = new Planner(cfg, project, issues);

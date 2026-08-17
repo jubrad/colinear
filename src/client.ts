@@ -14,7 +14,7 @@ import {
   type ServerMsg,
 } from './core/protocol.js';
 import { store } from './core/store.js';
-import type { Config, LinearIssue, RepoConfig, TaskEdits } from './core/types.js';
+import type { Config, Issue, RepoConfig, TaskEdits } from './core/types.js';
 
 /**
  * What the views call. The daemon implements it for real; the client just
@@ -22,7 +22,7 @@ import type { Config, LinearIssue, RepoConfig, TaskEdits } from './core/types.js
  */
 export interface DispatcherApi {
   enqueue(
-    issues: LinearIssue[],
+    issues: Issue[],
     opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean },
   ): void;
   cancel(id: string): boolean;

@@ -1,4 +1,6 @@
-import type { Config, LinearIssue, LinearTeam } from './types.js';
+import type { IssueProvider } from '../provider.js';
+import { safeBranch, stateTypeOf } from './shared.js';
+import type { Config, Issue, Scope } from '../types.js';
 
 const API = 'https://api.linear.app/graphql';
 
@@ -50,7 +52,7 @@ interface IssueNode {
   parent?: { id: string; identifier: string } | null;
 }
 
-function toIssue(n: IssueNode): LinearIssue {
+function toIssue(n: IssueNode): Issue {
   return {
     id: n.id,
     identifier: n.identifier,
@@ -60,7 +62,7 @@ function toIssue(n: IssueNode): LinearIssue {
     url: n.url,
     branchName: n.branchName,
     stateName: n.state.name,
-    stateType: n.state.type,
+    stateType: stateTypeOf(n.state.type),
     teamId: n.team?.id,
     projectId: n.project?.id,
     projectName: n.project?.name,
@@ -75,7 +77,7 @@ function toIssue(n: IssueNode): LinearIssue {
 const MAX_ISSUES = 500;
 
 /** Cursor-paginated issue query — Linear caps pages at 100 nodes. */
-async function queryIssuesPaged(cfg: Config, filter: Record<string, unknown>): Promise<LinearIssue[]> {
+async function queryIssuesPaged(cfg: Config, filter: Record<string, unknown>): Promise<Issue[]> {
   const out: IssueNode[] = [];
   let after: string | undefined;
   do {
@@ -98,7 +100,7 @@ async function queryIssuesPaged(cfg: Config, filter: Record<string, unknown>): P
 }
 
 /** Direct sub-issues of a parent issue. */
-export async function fetchSubIssues(cfg: Config, parentId: string): Promise<LinearIssue[]> {
+export async function fetchSubIssues(cfg: Config, parentId: string): Promise<Issue[]> {
   return queryIssuesPaged(cfg, { parent: { id: { eq: parentId } } });
 }
 
@@ -110,7 +112,7 @@ export async function fetchIssues(
   cfg: Config,
   teamKey?: string,
   opts?: { includeProjects?: boolean },
-): Promise<LinearIssue[]> {
+): Promise<Issue[]> {
   const filter: Record<string, unknown> = {
     state: { type: { in: ['triage', 'backlog', 'unstarted', 'started'] } },
   };
@@ -120,15 +122,15 @@ export async function fetchIssues(
   return queryIssuesPaged(cfg, filter);
 }
 
-export async function fetchTeams(cfg: Config): Promise<LinearTeam[]> {
-  const data = await gql<{ teams: { nodes: LinearTeam[] } }>(
+export async function fetchTeams(cfg: Config): Promise<Scope[]> {
+  const data = await gql<{ teams: { nodes: Scope[] } }>(
     cfg,
     `query { teams(first: 100) { nodes { id key name } } }`,
   );
   return data.teams.nodes;
 }
 
-export interface IssueFilterSpec {
+interface IssueFilterSpec {
   team?: string;
   labels?: string[];
   /** workflow state types: triage, backlog, unstarted, started, completed */
@@ -139,7 +141,7 @@ export interface IssueFilterSpec {
 }
 
 /** Declarative filter (custom views) -> Linear IssueFilter object. */
-export async function fetchFilteredIssues(cfg: Config, spec: IssueFilterSpec): Promise<LinearIssue[]> {
+export async function fetchFilteredIssues(cfg: Config, spec: IssueFilterSpec): Promise<Issue[]> {
   const filter: Record<string, unknown> = {
     state: { type: { in: spec.state ?? ['triage', 'backlog', 'unstarted', 'started'] } },
   };
@@ -152,7 +154,7 @@ export async function fetchFilteredIssues(cfg: Config, spec: IssueFilterSpec): P
   return queryIssuesPaged(cfg, filter);
 }
 
-export async function fetchProjects(cfg: Config): Promise<import('./types.js').LinearProject[]> {
+export async function fetchProjects(cfg: Config): Promise<import('../types.js').Project[]> {
   const data = await gql<{
     projects: {
       nodes: Array<{
@@ -179,10 +181,10 @@ export async function fetchProjects(cfg: Config): Promise<import('./types.js').L
       }
     }`,
   );
-  return data.projects.nodes.map((n) => ({ ...n, teams: n.teams.nodes, lead: n.lead?.displayName }));
+  return data.projects.nodes.map((n) => ({ ...n, scopes: n.teams.nodes, lead: n.lead?.displayName }));
 }
 
-export async function fetchProjectIssues(cfg: Config, projectId: string): Promise<LinearIssue[]> {
+export async function fetchProjectIssues(cfg: Config, projectId: string): Promise<Issue[]> {
   return queryIssuesPaged(cfg, { project: { id: { eq: projectId } } });
 }
 
@@ -209,8 +211,8 @@ export async function createIssue(
   return data.issueCreate.issue;
 }
 
-export async function fetchWorkflowStates(cfg: Config, teamId: string): Promise<import('./types.js').WorkflowState[]> {
-  const data = await gql<{ team: { states: { nodes: import('./types.js').WorkflowState[] } } }>(
+export async function fetchWorkflowStates(cfg: Config, teamId: string): Promise<import('../types.js').WorkflowState[]> {
+  const data = await gql<{ team: { states: { nodes: import('../types.js').WorkflowState[] } } }>(
     cfg,
     `query ($teamId: String!) {
       team(id: $teamId) { states { nodes { id name type position } } }
@@ -241,7 +243,7 @@ export async function createBlocksRelation(cfg: Config, blockerId: string, block
   );
 }
 
-export async function fetchIssuesByIds(cfg: Config, ids: string[]): Promise<LinearIssue[]> {
+export async function fetchIssuesByIds(cfg: Config, ids: string[]): Promise<Issue[]> {
   if (!ids.length) return [];
   const data = await gql<{ issues: { nodes: IssueNode[] } }>(
     cfg,
@@ -316,4 +318,45 @@ export async function postComment(cfg: Config, issueId: string, body: string): P
     }`,
     { issueId, body },
   );
+}
+
+
+/**
+ * Linear as an IssueProvider. It supports everything colinear knows how to
+ * ask for — which is not a coincidence: the feature set was built against it,
+ * and the capability flags exist so the next tracker can say no.
+ */
+export function linearProvider(cfg: Config): IssueProvider {
+  return {
+    name: 'linear',
+    scopeLabel: 'team',
+    capabilities: {
+      blockers: true,
+      subIssues: true,
+      priority: true,
+      projects: true,
+      scopes: true,
+      workflowStates: true,
+      branchNames: true,
+      comments: true,
+    },
+    issues: (scope, opts) => fetchIssues(cfg, scope, opts),
+    filteredIssues: (filter) => fetchFilteredIssues(cfg, filter),
+    issuesByIds: (ids) => fetchIssuesByIds(cfg, ids),
+    subIssues: (parentId) => fetchSubIssues(cfg, parentId),
+    blockers: (id) => fetchBlockers(cfg, id),
+    scopes: () => fetchTeams(cfg),
+    projects: () => fetchProjects(cfg),
+    projectIssues: (projectId) => fetchProjectIssues(cfg, projectId),
+    create: ({ scopeId, title, description, projectId, priority, parentId }) =>
+      createIssue(cfg, { teamId: scopeId, title, description, projectId, priority, parentId }),
+    blockIssue: (blockerId, blockedId) => createBlocksRelation(cfg, blockerId, blockedId),
+    assign: (issueId, userId) => assignIssue(cfg, issueId, userId),
+    comment: (issueId, body) => postComment(cfg, issueId, body),
+    workflowStates: (scopeId) => fetchWorkflowStates(cfg, scopeId),
+    setState: (issueId, stateId) => updateIssueState(cfg, issueId, stateId),
+    viewer: () => fetchViewer(cfg),
+    // Linear hands us a branch name per issue; only fall back if it didn't
+    branchFor: (issue) => issue.branchName || safeBranch(issue),
+  };
 }

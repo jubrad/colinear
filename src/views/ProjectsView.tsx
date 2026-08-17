@@ -1,21 +1,21 @@
 import { Box, Text, useInput } from 'ink';
+import { providerFor } from '../core/provider.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchProjects } from '../core/linear.js';
 import { openUrl } from '../core/open.js';
-import type { LinearProject } from '../core/types.js';
+import type { Project } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
 import { useColinear } from '../ui/context.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { theme } from '../theme.js';
 
 /** module cache so ProjectView/ChatView can resolve a param without refetching */
-export let projectCache: LinearProject[] = [];
+export let projectCache: Project[] = [];
 
 type BarMode = 'fuzzy' | 'team' | 'sort';
 
 export function ProjectsView(_props: { param?: string }) {
   const ctx = useColinear();
-  const [projects, setProjects] = useState<LinearProject[]>(projectCache);
+  const [projects, setProjects] = useState<Project[]>(projectCache);
   const [loading, setLoading] = useState(projectCache.length === 0);
   const [error, setError] = useState<string>();
   const [cursor, setCursor] = useState(0);
@@ -27,7 +27,7 @@ export function ProjectsView(_props: { param?: string }) {
 
   const refresh = useCallback(() => {
     setLoading(projectCache.length === 0);
-    fetchProjects(ctx.cfg)
+    providerFor(ctx.cfg).projects()
       .then((p) => {
         projectCache = p;
         setProjects(p);
@@ -54,7 +54,7 @@ export function ProjectsView(_props: { param?: string }) {
     return () => ctx.setEscHandler(null);
   }, [hasFilters]);
 
-  const columns = useMemo<Array<Column<LinearProject>>>(
+  const columns = useMemo<Array<Column<Project>>>(
     () => [
       { key: 'name', label: 'PROJECT', width: 'flex', text: (p) => p.name },
       {
@@ -77,7 +77,7 @@ export function ProjectsView(_props: { param?: string }) {
         key: 'teams',
         label: 'TEAMS',
         width: 14,
-        text: (p) => p.teams.map((t) => t.key).join(','),
+        text: (p) => p.scopes.map((t) => t.key).join(','),
         color: () => theme.dim,
       },
       { key: 'target', label: 'TARGET', width: 12, text: (p) => p.targetDate ?? '', color: () => theme.dim },
@@ -87,7 +87,7 @@ export function ProjectsView(_props: { param?: string }) {
 
   const rows = useMemo(() => {
     let matched = projects;
-    if (teamFilter) matched = matched.filter((p) => p.teams.some((t) => t.key === teamFilter));
+    if (teamFilter) matched = matched.filter((p) => p.scopes.some((t) => t.key === teamFilter));
     if (query) matched = matched.filter((p) => fuzzyMatch(p.name.toLowerCase(), query.toLowerCase()));
     const col = columns.find((c) => c.key === sortKey);
     const sorted = col ? [...matched].sort(defaultSort(col)) : matched;
@@ -113,7 +113,7 @@ export function ProjectsView(_props: { param?: string }) {
 
   const barCandidates = useMemo<Candidate[]>(() => {
     if (bar === 'team') {
-      const keys = [...new Set(projects.flatMap((p) => p.teams.map((t) => t.key)))].sort();
+      const keys = [...new Set(projects.flatMap((p) => p.scopes.map((t) => t.key)))].sort();
       return [{ label: 'all — clear team filter', value: 'all' }, ...keys.map((k) => ({ label: k, value: k }))];
     }
     if (bar === 'sort') return columns.map((c) => ({ label: c.key, value: c.key }));
@@ -135,6 +135,13 @@ export function ProjectsView(_props: { param?: string }) {
     setBar(null);
   };
 
+  if (!providerFor(ctx.cfg).capabilities.projects) {
+    return (
+      <Text dimColor>
+        {providerFor(ctx.cfg).name} has no projects — this view needs a tracker that groups issues.
+      </Text>
+    );
+  }
   if (loading) return <Text color={theme.warn}>Loading projects…</Text>;
   if (error) return <Text color={theme.err}>Linear error: {error}</Text>;
 
