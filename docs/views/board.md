@@ -2,18 +2,7 @@
 
 Aliases: `b`, `bo`. Every dispatched task, in the column that says what it's waiting on.
 
-```
-Queued(1)        Triage(0)        Working(1)       Needs Input(1)   PR Open(2) 1-1   Failed(0)        Done(1) 1
-╔══════════════╗                  ╭──────────────╮ ╭──────────────╮ ╭──────────────╮                  ╭──────────────╮
-║ CLO-142 Add  ║                  │ ⠴ CLO-140    │ │ CLO-138      │ │ SAS-91 Emit  │                  │ CLO-131 Dro… │
-║ a rollback   ║                  │ Retry        │ │ Decide auth  │ │ metering     │                  │ ✓ merged #1… │
-║ 7:00 · 27k … ║                  │ 7:00 · 27k … │ │ 7:00 · 27k … │ │ 7:00 · 27k … │                  ╰──────────────╯
-║ pushing the… ║                  │ ▰▰▰▰▱▱▱▱ 1/2 │ │ ? Which mec… │ │ pushing the… │
-╚══════════════╝                  │ pushing the… │ ╰──────────────╯ │ #1204 open … │
-                                  ╰──────────────╯                  ╰──────────────╯
-                                                                    ▼ 1 more — i/k …
-┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-```
+![The board with CAD-14 selected in Working: its subtask checklist and the tail of its activity log fill the detail pane](../images/board.png)
 
 Columns are Queued · Triage · Working · Needs Input · PR Open · Failed · Done. Within a column cards
 sort by what wants you first — changes requested, conflicting, approved, draft, awaiting review — and

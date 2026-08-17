@@ -5,17 +5,24 @@ Read DESIGN.md first — architecture, code map, task lifecycle, and the renderi
 ## Commands
 
 ```bash
+bin/check            # the gate CI runs: lint, build, CDC replay
+bin/lint             # typecheck + docs lint (fast; what a pre-commit hook runs)
+bin/gen-docs         # regenerate the views table, stage and build the docs site
 npm run dev          # run from source (tsx)
-npx tsc --noEmit     # typecheck — must be clean before every commit
 npm run build        # rebuild dist (the linked `coli` bin runs dist, not src)
-npm run check        # CDC replay: the client mirror must match the daemon's store
 npm run doctor       # env sanity: claude CLI, gh, Linear key, repos
 coli daemon status   # is the backend up? (`stop` to kill it — that aborts live agents)
 ```
 
+Anything runnable — a lint, a gate, a generator — lives in `bin/` as a script you can run by hand, not buried in a workflow or an npm alias; CI calls the same script you do. A generator takes `--check`: it writes nothing and fails if the tree would change, so "the docs are current" is one command.
+
+The docs site is `bin/gen-docs`: it regenerates the views table in `docs/README.md` from `src/views/registry.ts`, checks every view has a page and every alias is documented, then builds `docs/` with mkdocs into `site/`. Staging mirrors the repo layout, so a relative link that works on GitHub works on the site — don't add site-only link rewriting. Prose is written by hand; the generator owns the table between its markers and nothing else.
+
 Smoke boot: `LINEAR_API_KEY=lin_api_dummy script -q /dev/null timeout 5 npm run dev >/dev/null 2>&1` — board chrome means it rendered. **Judge it by the rendered output and the log, never by `$?`:** macOS `script` does not propagate its child's status (`script -q /dev/null timeout 2 sleep 10` exits 1, not 124), and it sometimes fails to allocate a tty at all (`script: tcgetattr/ioctl: Operation not supported on socket`) — in both cases the harness is lying, not colinear. Grep the frame for box-drawing characters, and re-run before believing a failure. This **starts a daemon against your real config and state**; `coli daemon stop` when done, and never enqueue fake issues into it.
 
 To exercise anything config- or state-shaped without touching live work, run against a throwaway `HOME` (`HOME=/tmp/x npx tsx src/index.tsx contexts`) or set `COLINEAR_STATE_DIR` — both give the run its own config, socket, pidfile and state.
+
+Screenshots (`docs/images/`) are captured from `coli demo` in a real pty — [ttyd](https://github.com/tsl0922/ttyd) on localhost driven by a browser — because a headless render harness verifies views but not daemon behaviour; the real pty is what caught the three demo bugs in PR #34. Two things bite: **start `coli` after sizing the window** (Ink draws to the size it had at boot), and **after every resize, toggle `term.options.fontSize` to force xterm to re-init its canvas** — browser viewport emulation drops `devicePixelRatio` to 1 while the backing store is still 2x, which renders the whole terminal at half scale. 1680×790 at fontSize 16 gives 183×41, the first width where the header's key grid stops truncating.
 
 ## Rules
 
@@ -30,4 +37,4 @@ To exercise anything config- or state-shaped without touching live work, run aga
 - Nothing reaches GitHub or Linear without the operator asking. Review posting is a deterministic `gh api` call, never a session — an agent can report a success its own tool call didn't have.
 - Two processes: the daemon owns the dispatcher/store/persistence, the TUI mirrors it over a socket. Views must stay agnostic — read through the store API, write through it (mirrors forward, never mutate locally), and put decisions that depend on backend results in the dispatcher, not the view.
 - No test suite; verification is typecheck + build + check + smoke + dogfooding.
-- Keep DESIGN.md, README.md and `docs/` current when behavior changes — a new view needs a `docs/views/<name>.md` and an index row; a new config option needs a row in `docs/configuration.md`.
+- Keep DESIGN.md, README.md and `docs/` current when behavior changes — a new view needs a `docs/views/<name>.md` (the index row is generated; `bin/gen-docs` fails without the page); a new config option needs a row in `docs/configuration.md`.

@@ -64,16 +64,23 @@ export function Table<T>(props: {
       {visible.map((row, i) => {
         const idx = windowStart + i;
         const id = getId(row);
+        // the cursor row is drawn plain and inverted as a whole: `inverse` on a
+        // coloured cell swaps *that* colour to the background, so keeping the
+        // per-cell colours turns the selected row into a row of mismatched
+        // blocks instead of one bar
+        const onCursor = idx === cursor;
         return (
-          <Text key={id} inverse={idx === cursor} wrap="truncate">
+          <Text key={id} inverse={onCursor} wrap="truncate">
             {selectedIds && (
-              <Text color={theme.selection}>{cell(selectedIds.has(id) ? '◉' : '○', selWidth)}</Text>
+              <Text color={onCursor ? undefined : theme.selection}>
+                {cell(selectedIds.has(id) ? '◉' : '○', selWidth)}
+              </Text>
             )}
             {columns.map((c) =>
-              c.render ? (
+              c.render && !onCursor ? (
                 <Text key={c.key}>{c.render(row, colWidth(c))}</Text>
               ) : (
-                <Text key={c.key} color={c.color?.(row)}>
+                <Text key={c.key} color={onCursor ? undefined : c.color?.(row)}>
                   {cell(c.text(row), colWidth(c))}
                 </Text>
               ),

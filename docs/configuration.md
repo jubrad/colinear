@@ -163,7 +163,9 @@ File issues into it from the shell:
 coli issue add "Add a rollback path"                  # LOC-1
 coli issue add "Write the down migration" --parent LOC-1
 coli issue add "Ship it" --priority 2 --desc "after the migration lands"
-``` Because a **context** is already a config plus its own daemon and store, the natural way to run two trackers is one context each — which also keeps their issue ids from ever meeting in one store.
+```
+
+Because a **context** is already a config plus its own daemon and store, the natural way to run two trackers is one context each — which also keeps their issue ids from ever meeting in one store.
 
 One requirement any adapter has to meet: `identifier` is load-bearing beyond display. It names branches, worktree directories and coordination channels, and PR matching looks for it in branch names and titles — so it has to be short, unique across the repos in play, and safe in a path and a git ref.
 

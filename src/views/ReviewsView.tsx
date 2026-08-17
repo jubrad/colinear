@@ -270,21 +270,31 @@ export function ReviewsView(props: { param?: string }) {
           {cols.author ? cell('AUTHOR', cols.author) : ''}
           {cols.size ? cell('SIZE', cols.size) : ''}
         </Text>
-        {window.map((r, i) => (
-          <Text key={r.id} wrap="truncate" inverse={start + i === cursor}>
-            <Text color={REVIEW_COLORS[r.status] ?? theme.dim}>
-              {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)}{' '}
-              {cell(STATUS_LABEL[r.status] ?? r.status, W.status)}
+        {window.map((r, i) => {
+          // the cursor row goes plain: `inverse` over coloured cells turns each
+          // colour into a background, so a coloured row inverts into a strip of
+          // mismatched blocks rather than one bar (same rule as ui/Table)
+          const onCursor = start + i === cursor;
+          return (
+            <Text key={r.id} wrap="truncate" inverse={onCursor}>
+              <Text color={onCursor ? undefined : REVIEW_COLORS[r.status] ?? theme.dim}>
+                {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)}{' '}
+                {cell(STATUS_LABEL[r.status] ?? r.status, W.status)}
+              </Text>
+              <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
+              <Text color={onCursor ? undefined : r.isDraft ? theme.dim : theme.ok}>
+                {cell(r.isDraft ? 'draft' : 'open', W.draft)}
+              </Text>
+              <Text>{cell(r.title, cols.title)}</Text>
+              <Text dimColor={!onCursor}>
+                {cols.author ? cell(r.author, cols.author) : ''}
+                {cols.size
+                  ? cell(r.changedFiles ? `${r.changedFiles}f +${r.additions}/-${r.deletions}` : '', cols.size)
+                  : ''}
+              </Text>
             </Text>
-            <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
-            <Text color={r.isDraft ? theme.dim : theme.ok}>{cell(r.isDraft ? 'draft' : 'open', W.draft)}</Text>
-            <Text>{cell(r.title, cols.title)}</Text>
-            <Text dimColor>
-              {cols.author ? cell(r.author, cols.author) : ''}
-              {cols.size ? cell(r.changedFiles ? `${r.changedFiles}f +${r.additions}/-${r.deletions}` : '', cols.size) : ''}
-            </Text>
-          </Text>
-        ))}
+          );
+        })}
         {!rows.length && <Text dimColor>No PRs are waiting on your review.</Text>}
         {rows.length > visible && (
           <Text dimColor>
