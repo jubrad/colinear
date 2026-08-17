@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Read DESIGN.md first — architecture, code map, task lifecycle, and the rendering gotchas that are easy to regress. README.md covers user-facing behavior.
+Read DESIGN.md first — architecture, code map, task lifecycle, and the rendering gotchas that are easy to regress. README.md is the public overview; `docs/` is the user-facing reference (one page per view, plus getting-started, security, configuration, CLI) and must be kept current with behaviour changes.
 
 ## Commands
 
@@ -30,4 +30,4 @@ To exercise anything config- or state-shaped without touching live work, run aga
 - Nothing reaches GitHub or Linear without the operator asking. Review posting is a deterministic `gh api` call, never a session — an agent can report a success its own tool call didn't have.
 - Two processes: the daemon owns the dispatcher/store/persistence, the TUI mirrors it over a socket. Views must stay agnostic — read through the store API, write through it (mirrors forward, never mutate locally), and put decisions that depend on backend results in the dispatcher, not the view.
 - No test suite; verification is typecheck + build + check + smoke + dogfooding.
-- Keep README.md and DESIGN.md current when behavior changes.
+- Keep DESIGN.md, README.md and `docs/` current when behavior changes — a new view needs a `docs/views/<name>.md` and an index row; a new config option needs a row in `docs/configuration.md`.

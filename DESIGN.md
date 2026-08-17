@@ -1,6 +1,6 @@
 # colinear — design notes
 
-Context doc for anyone (human or Claude session) picking this codebase up. README.md covers usage; this covers how it works, where things live, and the hard-won gotchas. Keep both updated when behavior changes.
+Context doc for anyone (human or Claude session) picking this codebase up. `docs/` covers usage; this covers how it works, where things live, and the hard-won gotchas. Keep both updated when behavior changes.
 
 ## What it is
 

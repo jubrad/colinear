@@ -1,7 +1,7 @@
 {
   "name": "colinear",
   "version": "0.2.0",
-  "description": "Linear + Claude Code orchestrator TUI: pick issues, dispatch agents, watch the board",
+  "description": "A k9s-style TUI that runs Claude Code agents against your issue tracker: pick issues, dispatch agents, watch the board",
   "type": "module",
   "bin": {
     "colinear": "dist/index.js",
@@ -15,7 +15,7 @@
     "check": "tsx src/core/store.check.ts"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.221",
@@ -29,5 +29,23 @@
     "@types/react": "^18.3.3",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jubrad/colinear.git"
+  },
+  "homepage": "https://github.com/jubrad/colinear#readme",
+  "bugs": {
+    "url": "https://github.com/jubrad/colinear/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "agents",
+    "linear",
+    "tui",
+    "ink",
+    "kanban"
+  ]
 }
