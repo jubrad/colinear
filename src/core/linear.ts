@@ -28,7 +28,7 @@ const ISSUE_FIELDS = `
   branchName
   state { name type }
   team { id }
-  project { id }
+  project { id name }
   labels { nodes { name color } }
   assignee { id displayName }
   parent { id identifier }
@@ -44,7 +44,7 @@ interface IssueNode {
   branchName: string;
   state: { name: string; type: string };
   team?: { id: string } | null;
-  project?: { id: string } | null;
+  project?: { id: string; name?: string } | null;
   labels: { nodes: Array<{ name: string; color: string }> };
   assignee?: { id: string; displayName: string } | null;
   parent?: { id: string; identifier: string } | null;
@@ -63,6 +63,7 @@ function toIssue(n: IssueNode): LinearIssue {
     stateType: n.state.type,
     teamId: n.team?.id,
     projectId: n.project?.id,
+    projectName: n.project?.name,
     labels: n.labels.nodes,
     assignee: n.assignee?.displayName,
     assigneeId: n.assignee?.id,

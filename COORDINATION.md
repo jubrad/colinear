@@ -67,6 +67,30 @@ The work and (for sub-issues) triage prompts gain a channel block instructing:
   opened, done notice.
 - Operator messages outrank everything else in the channel.
 
+### Projects
+
+A family channel reaches the agents whose work overlaps yours. A **project
+channel** reaches the ones you would otherwise never hear from: different
+families, same release. Any issue with a Linear project gets one, named after
+the project — `#proj-cloud-migration` — and an agent working that issue is in
+both.
+
+Two memberships, one pair of tools. `channel_read` and `channel_post` take a
+`scope` (`"family"` or `"project"`), and the enum contains exactly the channels
+*this* session belongs to: the parameter picks among memberships rather than
+naming a channel, so an agent still cannot read or post to a family it isn't
+in. Default is the family channel — the narrower one.
+
+The prompt asks for different discipline per channel, because the failure mode
+differs. Family: scope claims, architectural decisions, PR links, done notices.
+Project: only what someone outside your family would need — a shared interface
+or schema you are changing, a contended environment you are taking, a decision
+that constrains other issues. A project channel that fills with family business
+is one nobody reads.
+
+`M` in `:project NAME` opens that project's channel; one operator message
+reaches every agent working an issue in it, across families.
+
 ### Coordinator sessions
 
 A parent whose work happens in sub-issues has no session of its own, so there
