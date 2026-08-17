@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { DispatcherApi, GcItem, GcProgress } from '../client.js';
+import type { ChannelMessage } from '../core/channel.js';
 import type { Config, Scope } from '../core/types.js';
 
 export type ToastKind = 'info' | 'ok' | 'err';
@@ -11,6 +12,10 @@ export interface AppCtx {
   onGc?: (fn: (items: GcItem[]) => void) => () => void;
   /** per-worktree progress while a gc removal runs */
   onGcProgress?: (fn: (p: GcProgress) => void) => () => void;
+  /** the daemon's own disk, for when it isn't this machine's disk */
+  onLogTail?: (fn: (text: string) => void) => () => void;
+  onChannels?: (fn: (list: Array<{ name: string; messages: number }>) => void) => () => void;
+  onChannelHistory?: (fn: (channel: string, messages: ChannelMessage[]) => void) => () => void;
   viewer?: { id: string; displayName: string };
   teams: Scope[];
   size: { columns: number; rows: number };

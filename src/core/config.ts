@@ -183,6 +183,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     attachPermissionMode: permissionMode(raw.attachPermissionMode, 'auto'),
     denyTools: Array.isArray(raw.denyTools) ? raw.denyTools : [],
     terminal: raw.terminal,
+    remote: raw.remote?.ssh ? { ssh: raw.remote.ssh } : undefined,
   };
 }
 

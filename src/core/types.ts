@@ -477,4 +477,15 @@ export interface Config {
   denyTools: string[];
   /** terminal for session attach: "ghostty" | "terminal" (default: Ghostty if installed) */
   terminal?: string;
+  /**
+   * Where this context's daemon runs. Unset — the default — means local, and
+   * nothing about colinear changes. Set it and the client stops assuming the
+   * daemon's paths exist here: attach, shell and doc editing go over ssh, and
+   * anything read from the daemon's disk comes over the socket instead.
+   *
+   * `ssh` is whatever you'd type after `ssh` — a host, user@host, or an
+   * ssh_config alias. The socket itself is forwarded separately; see
+   * docs/remote.md.
+   */
+  remote?: { ssh: string };
 }
