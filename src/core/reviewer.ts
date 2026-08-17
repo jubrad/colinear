@@ -7,6 +7,7 @@ import { guidanceFor } from './guidance.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
 import { deletePendingReviews, fetchPrDetails, submitReview, type ReviewEvent } from './reviews.js';
+import { isDemo } from './demo.js';
 import { store } from './store.js';
 import { questionSummary } from './types.js';
 import type { ChatTurn, Config, Review, ReviewFinding, Severity } from './types.js';
@@ -125,6 +126,18 @@ export class Reviewer {
   }
 
   /** Abort so an interactive session can take the transcript over. */
+  /**
+   * Demo mode has no repo to check out and no PR to post to. Refuse rather
+   * than half-succeed: a demo that quietly calls `gh api` against a made-up
+   * PR is a demo that can surprise someone.
+   */
+  private refuseInDemo(id: string, what: string): boolean {
+    if (!isDemo(this.cfg)) return false;
+    store.addReviewActivity(id, `demo mode: ${what} does nothing here`);
+    this.toast?.(`demo mode — ${what} is not wired to anything`, 'info');
+    return true;
+  }
+
   suspend(id: string): boolean {
     const controller = this.aborts.get(id);
     if (!controller) return false;
@@ -143,6 +156,7 @@ export class Reviewer {
 
   /** Pre-review: check out the PR and have an agent read the diff. */
   async start(id: string) {
+    if (this.refuseInDemo(id, 'starting a pre-review')) return;
     const review = store.getReview(id);
     if (!review || this.aborts.has(id)) return;
     if (!review.repo) {
@@ -224,6 +238,7 @@ export class Reviewer {
    * didn't have.
    */
   async post(id: string, event: ReviewEvent = 'COMMENT') {
+    if (this.refuseInDemo(id, 'posting')) return;
     const review = store.getReview(id);
     if (!review) return;
     if (!review.doc && !review.summary) {
@@ -278,6 +293,7 @@ export class Reviewer {
    * whole PR is still in its context, so a turn is mostly cache reads.
    */
   async chat(id: string, text: string) {
+    if (this.refuseInDemo(id, 'the review chat')) return;
     const review = store.getReview(id);
     if (!review) return;
     // whatever happens next, what the operator typed goes in the transcript —
@@ -330,6 +346,7 @@ export class Reviewer {
 
   /** Approve / request changes — the same deterministic post, with an event. */
   async verdict(id: string, verdict: 'approve' | 'request-changes') {
+    if (this.refuseInDemo(id, 'approve / request changes')) return;
     const review = store.getReview(id);
     if (!review) return;
     const event: ReviewEvent = verdict === 'approve' ? 'APPROVE' : 'REQUEST_CHANGES';

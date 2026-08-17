@@ -33,6 +33,14 @@ SAS-91     pr open     Emit metering events per tenant              cloud     #1
 1–4 of 6
 ```
 
+## Try it in thirty seconds
+
+```bash
+git clone https://github.com/jubrad/colinear && cd colinear
+npm install && npm link
+coli demo                        # a populated board — no account, no agents, nothing billed
+```
+
 ## Quick start
 
 ```bash
@@ -59,6 +67,7 @@ Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset) and `
 |---|---|
 | [Getting started](docs/getting-started.md) | install, configure, first dispatch |
 | [Security & blast radius](docs/security.md) | what it can touch, what it can't, where your data goes |
+| [Demo mode](docs/demo.md) | `coli demo` — see it working before configuring anything |
 | [How dispatch works](docs/dispatch.md) | triage → work → checks, messaging agents, sessions |
 | [Configuration](docs/configuration.md) | every option, with defaults |
 | [Remote daemon](docs/remote.md) · [Docker](docs/docker.md) | run the daemon on a VM or in a container *(work in progress)* |

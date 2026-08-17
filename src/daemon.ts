@@ -3,6 +3,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readSync, statSync, unlinkS
 import { join } from 'node:path';
 import { loadConfig } from './core/config.js';
 import { channels } from './core/channel.js';
+import { isDemo, seedDemoBoard, seedDemoIssues } from './core/demo.js';
 import { Dispatcher } from './core/dispatcher.js';
 import { STATE_DIR, log } from './core/log.js';
 import { onNotifyForward } from './core/notify.js';
@@ -58,11 +59,21 @@ export async function runDaemon(): Promise<void> {
   loadState(cfg);
   reviewer.resumeWatching(); // reviews restored from disk keep their live doc
   const stopPersistence = startPersistence();
-  const stopPrPolling = startPrPolling(cfg, dispatcher);
-  const stopReviewPolling = startReviewPolling(cfg, async () => {
-    // a poll is what discovers a PR is merged or taken, so cleanup follows it
-    await reviewer.cleanupStale();
-  });
+
+  // demo mode fabricates a board and never reaches the network: polling would
+  // ask `gh` about PRs that don't exist and wipe the fiction
+  if (isDemo(cfg)) {
+    seedDemoBoard();
+    void seedDemoIssues(cfg).catch((err) => log(`demo seed: ${err}`));
+    log('demo mode: fabricated board, scripted agents, no network');
+  }
+  const stopPrPolling = isDemo(cfg) ? () => {} : startPrPolling(cfg, dispatcher);
+  const stopReviewPolling = isDemo(cfg)
+    ? () => {}
+    : startReviewPolling(cfg, async () => {
+        // a poll is what discovers a PR is merged or taken, so cleanup follows it
+        await reviewer.cleanupStale();
+      });
 
   const clients = new Set<Socket>();
   const broadcast = (msg: ServerMsg) => {
@@ -123,7 +134,7 @@ export async function runDaemon(): Promise<void> {
         void dispatcher.applyEdits(cmd.id, cmd.edits);
         break;
       case 'pollPrs':
-        void dispatcher.pollPrs();
+        if (!isDemo(cfg)) void dispatcher.pollPrs();
         break;
       case 'setViewer':
         dispatcher.setViewer(cmd.viewer);
@@ -157,7 +168,7 @@ export async function runDaemon(): Promise<void> {
         void reviewer.verdict(cmd.id, cmd.verdict);
         break;
       case 'pollReviews':
-        void pollReviewRequests(cfg);
+        if (!isDemo(cfg)) void pollReviewRequests(cfg);
         break;
       case 'message':
         dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });

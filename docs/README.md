@@ -1,5 +1,6 @@
 # colinear docs
 
+- **[Demo mode](demo.md)** — `coli demo`: a populated board, no account, nothing billed
 - **[Getting started](getting-started.md)** — install, configure, dispatch your first issue
 - **[Security & blast radius](security.md)** — what colinear can touch, what it can't, where your data lives
 - **[How dispatch works](dispatch.md)** — the triage → work → checks pipeline, messaging agents, sessions

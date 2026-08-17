@@ -48,6 +48,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 |---|---|---|
 | `provider` | `"linear"` | which issue tracker this context talks to: `linear`, or `sqlite` for a local one. [Details](#issue-providers) |
 | `sqlitePath` | `<state dir>/local.db` | where the sqlite tracker's file lives |
+| `demo` | `false` | scripted agents, fabricated board, no network. [Details](demo.md) |
 | `linearApiKey` | `$LINEAR_API_KEY` | Linear personal API key. Leave it out of the file and export the env var if you'd rather not have it on disk |
 | `repos` | one repo (see below) | the allowlist — agents only ever touch these, and only through worktrees. First entry is the default. [Details](#repos) |
 | `team` | your assigned issues | Linear team key (`"CLOUD"`) to browse, or `"all"` for every team. `--team CLOUD` / `--team all` override it for one run, and the last team picked with `t` is remembered |
