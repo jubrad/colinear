@@ -128,18 +128,27 @@ export function GcView(_props: { param?: string }) {
           {cell('AGE', 6)}
           {cell('WORKTREE', pathWidth)}
         </Text>
-        {all.slice(0, Math.max(3, ctx.size.rows - 12)).map((item, i) => (
-          <Text key={item.path} wrap="truncate" inverse={i === cursor}>
-            <Text color={picked.has(item.path) ? theme.ok : theme.dim}>{picked.has(item.path) ? '✔ ' : '· '}</Text>
-            <Text bold>{cell(formatSize(item.kilobytes), 8)}</Text>
-            <Text>{cell(item.label, 14)}</Text>
-            <Text color={REASON_COLOR[item.reason] ?? theme.dim}>{cell(item.reason, 11)}</Text>
-            <Text dimColor>
-              {cell(`${Math.floor(item.ageDays)}d`, 6)}
-              {cell(item.path, pathWidth)}
+        {all.slice(0, Math.max(3, ctx.size.rows - 12)).map((item, i) => {
+          // plain on the cursor row — see ui/Table: inverse over coloured cells
+          // paints each colour as a background instead of one bar
+          const onCursor = i === cursor;
+          return (
+            <Text key={item.path} wrap="truncate" inverse={onCursor}>
+              <Text color={onCursor ? undefined : picked.has(item.path) ? theme.ok : theme.dim}>
+                {picked.has(item.path) ? '✔ ' : '· '}
+              </Text>
+              <Text bold>{cell(formatSize(item.kilobytes), 8)}</Text>
+              <Text>{cell(item.label, 14)}</Text>
+              <Text color={onCursor ? undefined : REASON_COLOR[item.reason] ?? theme.dim}>
+                {cell(item.reason, 11)}
+              </Text>
+              <Text dimColor={!onCursor}>
+                {cell(`${Math.floor(item.ageDays)}d`, 6)}
+                {cell(item.path, pathWidth)}
+              </Text>
             </Text>
-          </Text>
-        ))}
+          );
+        })}
         {items && !all.length && <Text dimColor>Nothing to reclaim.</Text>}
       </Box>
 

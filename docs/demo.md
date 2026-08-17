@@ -13,15 +13,9 @@ billed**. It writes a `demo` [context](configuration.md#contexts) — a local sq
 The fiction is **Cadence**, a team productivity and process-tracking app, mid-week with several
 agents deep:
 
-```
-Queued(2)        Triage(0)        Working(2)       Needs Input(1)   PR Open(3) 1-1-1 Failed(0)  Done(1) 1
-╔══════════════╗                  ╭──────────────╮ ╭──────────────╮ ╭──────────────╮            ╭──────────────╮
-║ CAD-21       ║                  │ ⠹ CAD-14     │ │ CAD-18 Slack │ │ ● CAD-7      │            │ CAD-4 Pause… │
-║ Import tasks ║                  │ Aggregate    │ │  reminders   │ │ Streak       │            │ ✓ merged #1… │
-║ --:-- · 0 t… ║                  │ 1h12m · 54k… │ │ 1h06m · 25k… │ │ 1h28m · 68k… │            ╰──────────────╯
-║ ⛓ CAD-20 · … ║                  │ ▰▰▰▰▰▰▱▱ 3/4 │ │ ? How often… │ │ GitHub repo… │
-╚══════════════╝                  ╰──────────────╯ ╰──────────────╯ │ #205 draft … │
-```
+![The demo board: Cadence mid-week, with a blocked task, an agent at work, one waiting on a decision, three open PRs and one merged](images/board.png)
+
+Every screenshot in these docs is demo mode — so anything you see here, you can reproduce.
 
 Deliberately, that board covers every state worth seeing: a **tracking parent** with two sub-issues,
 a **blocked** task waiting on its schema issue, an agent **mid-work** with subtask progress, one

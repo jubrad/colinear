@@ -140,9 +140,11 @@ export function CostsView(_props: { param?: string }) {
           return (
             <Text key={row.key} wrap="truncate" inverse={selected}>
               <Text bold={selected}>{cell(row.label, 20)}</Text>
-              <Text color={row.color}>
+              {/* plain on the cursor row: inverse turns a cell colour into a
+                  background, which breaks the row into mismatched blocks */}
+              <Text color={selected ? undefined : row.color}>
                 {'█'.repeat(filled)}
-                <Text dimColor>{'·'.repeat(barWidth - filled)}</Text>
+                <Text dimColor={!selected}>{'·'.repeat(barWidth - filled)}</Text>
               </Text>
               <Text bold> {`$${row.costUsd.toFixed(2)}`.padStart(8)}</Text>
               <Text dimColor>

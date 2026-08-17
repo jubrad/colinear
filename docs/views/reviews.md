@@ -3,6 +3,8 @@
 Aliases: `rev`, `pr`. PRs where your review is requested, across every repo your `gh` auth can see,
 refreshed every five minutes.
 
+![The review queue: two PRs, the selected one pre-reviewed with four findings graded lead, blocking, consider and nit](../images/reviews.png)
+
 ## Assisted pre-review
 
 `r` checks the PR out in a worktree and runs one agent over the diff in context. Progress streams

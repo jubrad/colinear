@@ -23,22 +23,7 @@ each PR with its draft state, CI, review decision and stack base.
 `a` opens a form over the view. An agent can ask up to four questions at once, each with options
 that carry a description of what choosing them means:
 
-```
-╔════════════════════════════════════════════════════════════════════════════╗
-║  question · CLO-142 — 1 of 2                                               ║
-║  [Auth method]                                                             ║
-║  The new /v2/sync endpoint needs to authenticate callers. Which mechanism  ║
-║  should it use, given the controller already talks to sync-server over     ║
-║  mTLS?                                                                     ║
-║                                                                            ║
-║  ▸ 1. mTLS                                                                 ║
-║        reuses the existing controller ↔ sync-server trust chain            ║
-║    2. Bearer token                                                         ║
-║        simpler to test locally, but needs a rotation story before shipping ║
-║    3. your own answer                                                      ║
-║  ↑↓/1-2: pick · enter: next question · e: write it in $EDITOR · esc        ║
-╚════════════════════════════════════════════════════════════════════════════╝
-```
+![The answer form open over the board: the agent's question, its numbered options, and the keys to pick one or write your own](../images/answer-form.png)
 
 `←` goes back to change an answer; they're sent together. **`e`** writes the whole set as a markdown
 form and opens `$EDITOR` — for a paragraph, or to answer four at once. Anything left blank is sent as

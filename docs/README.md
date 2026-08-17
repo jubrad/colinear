@@ -14,6 +14,8 @@
 
 `:` opens the command bar; tab completes. Most views also have a short alias.
 
+![The command bar open over the board, listing the views it can jump to with a one-line description of each](images/command-palette.png)
+
 | view | what it's for |
 |---|---|
 | [`:issues`](views/issues.md) | browse the tracker and dispatch agents |

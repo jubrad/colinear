@@ -52,8 +52,10 @@ export function formatDuration(run: { startedAt?: number; endedAt?: number }, no
 }
 
 /** Pad or truncate plain text to an exact cell width (with trailing space separator built in). */
+// the last char of a cell is the gutter: a value that fills its column exactly
+// would otherwise run straight into the next one ("…for the digestcadence")
 export function cell(text: string, w: number): string {
-  return text.length > w ? `${text.slice(0, w - 2)}… ` : text.padEnd(w);
+  return text.length >= w ? `${text.slice(0, w - 2)}… ` : text.padEnd(w);
 }
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];

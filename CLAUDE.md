@@ -17,6 +17,8 @@ Smoke boot: `LINEAR_API_KEY=lin_api_dummy script -q /dev/null timeout 5 npm run 
 
 To exercise anything config- or state-shaped without touching live work, run against a throwaway `HOME` (`HOME=/tmp/x npx tsx src/index.tsx contexts`) or set `COLINEAR_STATE_DIR` — both give the run its own config, socket, pidfile and state.
 
+Screenshots (`docs/images/`) are captured from `coli demo` in a real pty — [ttyd](https://github.com/tsl0922/ttyd) on localhost driven by a browser — because a headless render harness verifies views but not daemon behaviour; the real pty is what caught the three demo bugs in PR #34. Two things bite: **start `coli` after sizing the window** (Ink draws to the size it had at boot), and **after every resize, toggle `term.options.fontSize` to force xterm to re-init its canvas** — browser viewport emulation drops `devicePixelRatio` to 1 while the backing store is still 2x, which renders the whole terminal at half scale. 1680×790 at fontSize 16 gives 183×41, the first width where the header's key grid stops truncating.
+
 ## Rules
 
 - Trust `npx tsc --noEmit`, not editor diagnostics (chronically stale in this repo).

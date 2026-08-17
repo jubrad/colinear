@@ -3,15 +3,7 @@
 Aliases: `ls`, `t`. The same tasks as the [board](board.md), as one list — for when there are more
 cards than a column can show.
 
-```
-tasks[6/6] sorted by board ↑                                                                           / filter · , sort
-ISSUE      STATUS      TITLE                                        REPO      PR              CI       TIME   TOKENS
-CLO-142    queued      Add a rollback path for the schema migration cloud                              7:00   27k
-CLO-140    working     Retry sync-server writes on 429              cloud                              7:00   27k
-CLO-138    needs input Decide auth for /v2/sync                     cloud                              7:00   27k
-SAS-91     pr open     Emit metering events per tenant              cloud     #1204 approved  passing  7:00   27k
-1–4 of 6
-```
+![The task table sorted in board order, the cursor on a PR-open task whose detail pane sits below](../images/tasks.png)
 
 Default order is the board read left-to-right: column, then what needs you first. `,` sorts by any
 column (again on the same one reverses), `/` filters with the same matcher the board uses.

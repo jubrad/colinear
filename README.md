@@ -4,34 +4,13 @@ A k9s-style terminal UI that runs Claude Code agents against your issue tracker.
 
 It runs on **Claude subscription auth** (the logged-in `claude` CLI), works on **Linear** today behind a provider interface, and never touches your working copy: agents get worktrees, and they only ever open draft PRs.
 
-```
-Queued(1)        Triage(0)        Working(1)       Needs Input(1)   PR Open(2) 1-1   Failed(0)        Done(1) 1
-╔══════════════╗                  ╭──────────────╮ ╭──────────────╮ ╭──────────────╮                  ╭──────────────╮
-║ CLO-142 Add  ║                  │ ⠴ CLO-140    │ │ CLO-138      │ │ SAS-91 Emit  │                  │ CLO-131 Dro… │
-║ a rollback   ║                  │ Retry        │ │ Decide auth  │ │ metering     │                  │ ✓ merged #1… │
-║ 7:00 · 27k … ║                  │ 7:00 · 27k … │ │ 7:00 · 27k … │ │ 7:00 · 27k … │                  ╰──────────────╯
-║ pushing the… ║                  │ ▰▰▰▰▱▱▱▱ 1/2 │ │ ? Which mec… │ │ pushing the… │
-╚══════════════╝                  │ pushing the… │ ╰──────────────╯ │ #1204 open … │
-                                  ╰──────────────╯                  ╰──────────────╯
-                                                                    ▼ 1 more — i/k …
-┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ CLO-142: Add a rollback path for the schema migration 7:00 · 24k in · 3k out · $1.20                                 │
-│ ── activity ──                                                                                                       │
-│ pushing the branch                                                                                                   │
-└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-```
+![The board: seven columns of dispatched agents, with the selected task's subtasks and live activity in the pane below](docs/images/board.png)
 
 Every task is also a searchable, sortable table — same data, same keys, `:tasks`:
 
-```
-tasks[6/6] sorted by board ↑                                                                           / filter · , sort
-ISSUE      STATUS      TITLE                                        REPO      PR              CI       TIME   TOKENS
-CLO-142    queued      Add a rollback path for the schema migration cloud                              7:00   27k
-CLO-140    working     Retry sync-server writes on 429              cloud                              7:00   27k
-CLO-138    needs input Decide auth for /v2/sync                     cloud                              7:00   27k
-SAS-91     pr open     Emit metering events per tenant              cloud     #1204 approved  passing  7:00   27k
-1–4 of 6
-```
+![The task table: one row per task with status, repo, PR, CI, elapsed time and tokens](docs/images/tasks.png)
+
+*Both frames are `coli demo` — a fabricated board you can run yourself in thirty seconds.*
 
 ## Try it in thirty seconds
 
