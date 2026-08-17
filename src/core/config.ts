@@ -183,7 +183,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     attachPermissionMode: permissionMode(raw.attachPermissionMode, 'auto'),
     denyTools: Array.isArray(raw.denyTools) ? raw.denyTools : [],
     terminal: raw.terminal,
-    remote: raw.remote?.ssh ? { ssh: raw.remote.ssh } : undefined,
+    remote: normalizeRemote(raw.remote),
   };
 }
 
@@ -232,6 +232,23 @@ function normalizeExperiments(raw: RawExperiments, master: boolean): Partial<Rec
     log(`config: "experimental" is false — ${wanted.map(([n]) => n).join(', ')} stays off`);
   }
   return out;
+}
+
+type RawRemote = { ssh?: string; exec?: string[]; label?: string } | undefined;
+
+/**
+ * `{ ssh: "vm" }` is the common case and stays writable as such; `exec` is the
+ * general form, so docker and kubectl are the same mechanism rather than three
+ * special cases in the attach path.
+ */
+function normalizeRemote(raw: RawRemote): { exec: string[]; label: string } | undefined {
+  if (!raw) return undefined;
+  if (Array.isArray(raw.exec) && raw.exec.length) {
+    return { exec: raw.exec, label: raw.label ?? raw.exec[0] };
+  }
+  if (raw.ssh) return { exec: ['ssh', '-t', raw.ssh], label: raw.label ?? raw.ssh };
+  console.error('config: "remote" needs either { "ssh": "host" } or { "exec": ["cmd", …] }');
+  process.exit(1);
 }
 
 const PERMISSION_MODES = ['auto', 'acceptEdits', 'default', 'plan', 'dontAsk', 'bypassPermissions'];

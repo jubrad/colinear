@@ -3,6 +3,7 @@ import { existsSync, unlinkSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadConfig } from './core/config.js';
 import { STATE_DIR, log } from './core/log.js';
 import {
   createDecoder,
@@ -132,6 +133,16 @@ function tryConnect(): Promise<Socket | null> {
 export async function connectToDaemon(): Promise<Connection> {
   let socket = await tryConnect();
   if (!socket) {
+    // A context whose daemon lives elsewhere must never get a local one
+    // started under it: you'd end up with two daemons, or a local one holding
+    // a socket the real work isn't behind.
+    const remote = loadConfig({ requireKey: false }).remote;
+    if (remote) {
+      throw new Error(
+        `no daemon behind ${SOCKET_PATH}, and this context runs on ${remote.label}.\n` +
+          'Start it there (or open the tunnel) — colinear will not start a local one for a remote context.',
+      );
+    }
     // a socket file left by a killed daemon refuses connections forever
     if (existsSync(SOCKET_PATH)) unlinkSync(SOCKET_PATH);
     spawnDaemon();

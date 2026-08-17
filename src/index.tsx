@@ -65,7 +65,17 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const shq = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
 /** " on vm" — so a handoff never leaves you guessing which machine you're on. */
-const where = (cfg: Config): string => (cfg.remote ? ` on ${cfg.remote.ssh}` : '');
+const where = (cfg: Config): string => (cfg.remote ? ` on ${cfg.remote.label}` : '');
+
+/**
+ * Run one shell command wherever the daemon lives. The prefix decides how —
+ * ssh, docker exec, kubectl exec — and each of them takes the command as a
+ * single argument, so colinear doesn't need to know which one it is.
+ */
+function runThere(remote: { exec: string[]; label: string }, command: string): void {
+  const [bin, ...args] = remote.exec;
+  spawnSync(bin, [...args, command], { stdio: 'inherit' });
+}
 
 function daemonPid(pidPath = PID_PATH): number | undefined {
   if (!existsSync(pidPath)) return undefined;
@@ -81,6 +91,17 @@ function daemonPid(pidPath = PID_PATH): number | undefined {
 
 /** `coli daemon [stop|status]` — the backend, and its lifecycle controls. */
 async function daemonCommand(sub?: string): Promise<void> {
+  // A remote or containerized daemon's pidfile holds a pid from ITS namespace.
+  // Signalling that number here would, at best, do nothing — at worst it would
+  // kill an unrelated local process that happens to share the id.
+  const remote = loadConfig({ requireKey: false }).remote;
+  if (remote && sub !== undefined) {
+    console.log(
+      `this context's daemon runs on ${remote.label} — manage it there:\n` +
+        `  ${remote.exec.join(' ')} ${sub === 'stop' ? "'pkill -f \"coli daemon\"'" : "'coli daemon status'"}`,
+    );
+    return;
+  }
   const pid = daemonPid();
   if (sub === 'stop') {
     if (!pid) {
@@ -219,7 +240,7 @@ async function runTui(): Promise<void> {
         // the worktree is on the daemon's machine. Spawning a local shell here
         // would either fail silently or — worse, when both machines use the
         // same layout — drop you in a same-named directory on the wrong host.
-        spawnSync('ssh', ['-t', cfg.remote.ssh, `cd ${shq(action.worktree)} && exec \$SHELL -l`], { stdio: 'inherit' });
+        runThere(cfg.remote, `cd ${shq(action.worktree)} && exec $SHELL -l`);
       } else {
         spawnSync(process.env.SHELL ?? 'zsh', [], { cwd: action.worktree, stdio: 'inherit' });
       }
@@ -232,8 +253,10 @@ async function runTui(): Promise<void> {
       if (cfg.remote) {
         // the transcript lives in ~/.claude/projects/<encoded-cwd> on the
         // daemon's host, so resuming has to happen there too
-        const remoteCmd = `cd ${shq(action.worktree)} && claude --resume ${shq(action.sessionId ?? '')} --permission-mode ${shq(cfg.attachPermissionMode)}`;
-        spawnSync('ssh', ['-t', cfg.remote.ssh, remoteCmd], { stdio: 'inherit' });
+        runThere(
+          cfg.remote,
+          `cd ${shq(action.worktree)} && claude --resume ${shq(action.sessionId ?? '')} --permission-mode ${shq(cfg.attachPermissionMode)}`,
+        );
       } else {
         spawnSync('claude', ['--resume', action.sessionId ?? '', '--permission-mode', cfg.attachPermissionMode], {
           cwd: action.worktree,
@@ -255,7 +278,7 @@ async function runTui(): Promise<void> {
     } else if (action.kind === 'edit-file') {
       if (cfg.remote) {
         // the review doc lives in the review worktree, on the daemon's host
-        spawnSync('ssh', ['-t', cfg.remote.ssh, `\${EDITOR:-vi} ${shq(action.path)}`], { stdio: 'inherit' });
+        runThere(cfg.remote, `\${EDITOR:-vi} ${shq(action.path)}`);
       } else {
         spawnSync(process.env.EDITOR ?? 'vi', [action.path], { stdio: 'inherit' });
       }

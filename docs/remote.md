@@ -1,5 +1,8 @@
 # Running the daemon on another machine
 
+> **Work in progress.** ssh and container modes are newer than the rest of colinear and less
+> travelled; expect rough edges. The local default is unaffected.
+
 **Local is the default and nothing here is required.** Leave `remote` unset and colinear behaves
 exactly as it always has.
 
@@ -39,6 +42,15 @@ coli --context vm
 `remote.ssh` is whatever you'd type after `ssh` — a host, `user@host`, or an ssh_config alias. Paths
 in that config are **the VM's** paths, since that's where agents run.
 
+`ssh` is sugar for the general form, `exec`: a command prefix that takes one shell-command argument.
+That's what makes containers ([docker](docker.md)) and, later, `kubectl exec` the same mechanism
+rather than three special cases:
+
+```json
+{ "remote": { "exec": ["ssh", "-t", "vm"] } }
+{ "remote": { "exec": ["docker", "exec", "-it", "coli", "sh", "-lc"], "label": "coli" } }
+```
+
 Start the daemon over there once, the normal way:
 
 ```bash
@@ -77,3 +89,6 @@ flag rather than something inferred.
   provider calls client-side. Over SSH that's encrypted, but the cleaner shape is proxying provider
   calls through the daemon so the key never leaves the VM.
 - Nothing supervises the tunnel. If ssh drops, the client stops receiving deltas — restart both.
+- With `remote` set, colinear refuses to start a local daemon for that context, and
+  `coli daemon status|stop` won't signal a pid that belongs to another machine's namespace — it
+  tells you the command to run over there instead.
