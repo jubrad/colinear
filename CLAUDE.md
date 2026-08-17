@@ -23,6 +23,7 @@ To exercise anything config- or state-shaped without touching live work, run aga
 - Always `npm run build` after changes so `coli` picks them up; typecheck + build before committing; push to origin main after committing.
 - Runtime debugging: `~/.local/state/colinear/colinear.log` (includes diverted stderr — React warnings land there).
 - Never set `ANTHROPIC_API_KEY` — agents bill the Claude subscription via the logged-in CLI.
+- Edits go in a `Popup` over the view they came from (ui/Popup.tsx: it must render *last*, and it needs an explicit height); full screen is only for whole surfaces like the config editor and the review split. See DESIGN.md.
 - Rendering invariants (see DESIGN.md "Rendering gotchas"): root renders rows-1 with overflow hidden; stable identities from useTasks; DEC-2026 frame wrapping; no ambiguous-width glyphs in chrome.
 - Prompts and posting live in the daemon: a rebuild needs `coli daemon stop && coli`, since `R` only reloads the frontend.
 - Nothing reaches GitHub or Linear without the operator asking. Review posting is a deterministic `gh api` call, never a session — an agent can report a success its own tool call didn't have.

@@ -94,7 +94,8 @@ export function DispatchModal(props: {
   );
 
   return (
-    <Box flexDirection="column" borderStyle="double" borderColor={theme.key} paddingX={2}>
+    // the frame and the opaque backdrop belong to Popup; this is the contents
+    <Box flexDirection="column" flexShrink={0}>
       <Text bold color={theme.key}>
         custom dispatch — {count} issue{count > 1 ? 's' : ''}
       </Text>

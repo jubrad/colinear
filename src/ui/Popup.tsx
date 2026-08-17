@@ -53,6 +53,12 @@ export function Popup(props: {
   );
 }
 
+/** Rows a dispatch/edit form of `fields` fields needs, including the frame. */
+export function formHeight(fields: number, extraLines = 0): number {
+  // title + fields + footer, inside the border
+  return fields + extraLines + 4;
+}
+
 /** Centre a dialog of this size in the view pane, without running off it. */
 export function popupPlacement(
   size: { columns: number; rows: number },

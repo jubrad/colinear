@@ -313,6 +313,12 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
   two-question set with descriptions survives the round trip.
 - **An empty `<Text>` has no height**, so blank lines vanish and markdown paragraphs run
   together — render `' '` for them.
+- **Edits are popups; whole surfaces are full screen.** Anything that edits a thing — the task
+  form, custom dispatch, the answer form, the sub-issue picker, messaging an agent — floats over
+  the view it was opened from via `Popup`, because the context you are editing against is worth
+  keeping on screen. Full screen is for surfaces rather than edits: `:config`'s `$EDITOR` handoff,
+  the PR review doc + discussion split. A one-line y/n confirmation (`:gc`, review posting) is
+  neither — it stays inline at the foot of its view.
 - **Modals are popups, and two things make that work.** Ink supports `position="absolute"`, so
   `Popup` (ui/Popup.tsx) floats a dialog over the view instead of displacing it — but Ink only
   writes cells that hold characters, so an absolute bordered box is **transparent**: the board

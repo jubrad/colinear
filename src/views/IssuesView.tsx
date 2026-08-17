@@ -9,6 +9,7 @@ import { store } from '../core/store.js';
 import type { LinearIssue } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
 import { useColinear } from '../ui/context.js';
+import { Popup, popupPlacement, formHeight } from '../ui/Popup.js';
 import { DispatchModal, type DispatchOptions } from '../ui/DispatchModal.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { theme } from '../theme.js';
@@ -300,17 +301,6 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       {bar === 'fuzzy' && (
         <CommandBar prefix="/" initial={query} onChange={setQuery} onSubmit={() => setBar(null)} onCancel={() => { setQuery(''); setBar(null); }} />
       )}
-      {dispatching && (
-        <DispatchModal
-          count={picked().length}
-          repos={ctx.cfg.repos}
-          onSubmit={(opts) => {
-            setDispatching(false);
-            dispatch(picked(), opts);
-          }}
-          onCancel={() => setDispatching(false)}
-        />
-      )}
       {bar === 'new' && (
         <CommandBar
           prefix="new issue> "
@@ -337,6 +327,26 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
         sortDesc={sortDesc}
         emptyText="No issues match."
       />
+      {/* last: absolute boxes paint in tree order, so a popup rendered
+          before its siblings is overdrawn by them */}
+      {dispatching && (
+        <Popup
+          {...popupPlacement(ctx.size, {
+            width: Math.min(88, ctx.size.columns - 8),
+            height: formHeight(ctx.cfg.repos.length > 1 ? 4 : 3),
+          }, ctx.cmdOpen)}
+        >
+        <DispatchModal
+          count={picked().length}
+          repos={ctx.cfg.repos}
+          onSubmit={(opts) => {
+            setDispatching(false);
+            dispatch(picked(), opts);
+          }}
+          onCancel={() => setDispatching(false)}
+        />
+        </Popup>
+      )}
     </Box>
   );
 }

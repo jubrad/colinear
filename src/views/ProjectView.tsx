@@ -7,6 +7,7 @@ import type { LinearIssue, LinearProject } from '../core/types.js';
 import { fuzzyMatch } from '../ui/CommandBar.js';
 import { openUrl } from '../core/open.js';
 import { useColinear } from '../ui/context.js';
+import { Popup, popupPlacement, formHeight } from '../ui/Popup.js';
 import { DispatchModal, type DispatchOptions } from '../ui/DispatchModal.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { projectCache } from './ProjectsView.js';
@@ -144,17 +145,6 @@ export function ProjectView(props: { param?: string }) {
           {project.description}
         </Text>
       )}
-      {asking && (
-        <DispatchModal
-          count={picked().length}
-          repos={ctx.cfg.repos}
-          onSubmit={(opts) => {
-            setAsking(false);
-            dispatch(picked(), opts);
-          }}
-          onCancel={() => setAsking(false)}
-        />
-      )}
       <Box gap={1} flexGrow={1} marginTop={1}>
         {STATE_COLUMNS.map((col) => {
           const colIssues = issues.filter((i) => col.types.includes(i.stateType ?? 'backlog'));
@@ -196,6 +186,26 @@ export function ProjectView(props: { param?: string }) {
           );
         })}
       </Box>
+      {/* last: absolute boxes paint in tree order, so a popup rendered
+          before its siblings is overdrawn by them */}
+      {asking && (
+        <Popup
+          {...popupPlacement(ctx.size, {
+            width: Math.min(88, ctx.size.columns - 8),
+            height: formHeight(ctx.cfg.repos.length > 1 ? 4 : 3),
+          }, ctx.cmdOpen)}
+        >
+        <DispatchModal
+          count={picked().length}
+          repos={ctx.cfg.repos}
+          onSubmit={(opts) => {
+            setAsking(false);
+            dispatch(picked(), opts);
+          }}
+          onCancel={() => setAsking(false)}
+        />
+        </Popup>
+      )}
     </Box>
   );
 }
