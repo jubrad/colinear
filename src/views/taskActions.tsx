@@ -307,6 +307,7 @@ export const TASK_ACTION_KEYS: Array<[string, string]> = [
   ['a', 'answer form'],
   ['x', 'cancel'],
   ['s', 'attach claude'],
+  ['S', 'shell'],
   ['r', 'resume'],
   ['f', 'force start'],
   ['b', 'rebase'],

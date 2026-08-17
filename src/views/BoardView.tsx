@@ -1,4 +1,5 @@
 import { Box, Text, useInput } from 'ink';
+import { CommandBar, type Candidate } from '../ui/CommandBar.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
@@ -8,6 +9,7 @@ import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/forma
 import { STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
 import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
+import { BOARD_SORT, compareTasks, matchesQuery, SORT_KEYS } from './taskLens.js';
 
 interface BoardColumn {
   title: string;
@@ -77,18 +79,23 @@ export function BoardView(_props: { param?: string }) {
   const ctx = useColinear();
   const tasks = useTasks();
   const [pos, setPos] = useState({ col: 0, row: 0 });
+  const [query, setQuery] = useState('');
+  const [bar, setBar] = useState<'fuzzy' | 'sort' | null>(null);
+  const [sortKey, setSortKey] = useState<string>(BOARD_SORT);
   const actions = useTaskActions();
 
   // grid[col] = tasks in that board column, in render order
-  const grid = useMemo(
-    () =>
-      COLUMNS.map((col) =>
-        // within a column, PR state orders the cards: what needs you first.
-        // Columns whose tasks have no PRs keep their existing order.
-        tasks.filter((t) => col.statuses.includes(t.status)).sort((a, b) => prRank(a) - prRank(b)),
-      ),
-    [tasks, store.version],
-  );
+  const grid = useMemo(() => {
+    // the same matcher the list view uses, so a query means one thing
+    const visible = query ? tasks.filter((t) => matchesQuery(t, query)) : tasks;
+    return COLUMNS.map((col) =>
+      // within a column, what needs you first — or whatever `,` chose. A sort
+      // orders cards inside their column; it never moves one out of it.
+      visible
+        .filter((t) => col.statuses.includes(t.status))
+        .sort((a, b) => (sortKey === BOARD_SORT ? prRank(a) - prRank(b) : compareTasks(sortKey, a, b))),
+    );
+  }, [tasks, store.version, query, sortKey]);
 
   // keep the cursor on a real card as tasks move between columns; must
   // return the SAME object when nothing changes or this setState loops
@@ -131,12 +138,24 @@ export function BoardView(_props: { param?: string }) {
       if (key.rightArrow || input === 'l') moveCol(1);
       if (key.upArrow || input === 'i') moveRow(-1);
       if (key.downArrow || input === 'k') moveRow(1);
-      // the same board of tasks, searchable and sortable
-      if (input === '/') ctx.navigate('tasks');
+      if (input === '/') {
+        setBar('fuzzy');
+        return;
+      }
+      if (input === ',') {
+        setBar('sort');
+        return;
+      }
       actions.handleKey(input, key, selected);
     },
-    { isActive: !actions.busy && !ctx.cmdOpen },
+    { isActive: bar === null && !actions.busy && !ctx.cmdOpen },
   );
+
+  useEffect(() => ctx.setCapture(bar !== null), [bar]);
+  useEffect(() => {
+    ctx.setEscHandler(query ? () => (setQuery(''), true) : null);
+    return () => ctx.setEscHandler(null);
+  }, [query]);
 
   if (!tasks.length) {
     return (
@@ -158,11 +177,49 @@ export function BoardView(_props: { param?: string }) {
   // vertical budget for cards: view inner height (app.tsx sizes the view pane
   // to rows-6-cmd, minus its own border) less the detail pane and the column
   // header line. Columns window their cards to this instead of flex-squeezing.
+  const filtering = Boolean(query) || sortKey !== BOARD_SORT;
   const viewInner = Math.max(8, ctx.size.rows - 6 - (ctx.cmdOpen ? 4 : 0)) - 2;
-  const cardBudget = Math.max(4, viewInner - (selected ? 15 : 0) - 1);
+  const cardBudget = Math.max(4, viewInner - (selected ? 15 : 0) - 1 - (filtering ? 1 : 0) - (bar ? 1 : 0));
+
+  const shown = grid.reduce((n, col) => n + col.length, 0);
 
   return (
     <Box flexDirection="column" flexGrow={1}>
+      {filtering && (
+        <Text wrap="truncate">
+          {query ? (
+            <Text color={theme.accent}>/{query} </Text>
+          ) : null}
+          <Text dimColor>
+            {shown} of {tasks.length} cards
+            {sortKey !== BOARD_SORT ? ` · sorted by ${sortKey}` : ''}
+            {query ? ' · esc clears' : ''}
+          </Text>
+        </Text>
+      )}
+      {bar === 'fuzzy' && (
+        <CommandBar
+          prefix="/"
+          initial={query}
+          onChange={setQuery}
+          onSubmit={() => setBar(null)}
+          onCancel={() => {
+            setQuery('');
+            setBar(null);
+          }}
+        />
+      )}
+      {bar === 'sort' && (
+        <CommandBar
+          prefix="sort> "
+          candidates={SORT_KEYS.map((k) => ({ label: k, value: k })) as Candidate[]}
+          onSubmit={(value, top) => {
+            setSortKey(top?.value ?? value ?? BOARD_SORT);
+            setBar(null);
+          }}
+          onCancel={() => setBar(null)}
+        />
+      )}
       {/* overflow clip keeps tall columns from pushing card headers off-screen */}
       <Box gap={1} flexGrow={1} overflow="hidden">
         {COLUMNS.map((col, colIdx) => {
@@ -178,25 +235,30 @@ export function BoardView(_props: { param?: string }) {
                 {col.title}({colTasks.length})
                 {prCounts(colTasks)}
               </Text>
-              {start > 0 && (
-                <Text dimColor wrap="truncate">
-                  ▲ {start} more above
-                </Text>
-              )}
-              {colTasks.slice(start, end).map((task) => (
-                <Card
-                  key={task.issue.id}
-                  task={task}
-                  selected={task.issue.id === selected?.issue.id}
-                  color={color}
-                  now={ctx.now}
-                />
-              ))}
-              {end < colTasks.length && (
-                <Text dimColor wrap="truncate">
-                  ▼ {colTasks.length - end} more — i/k to scroll
-                </Text>
-              )}
+              {/* the cards live in a fixed box: a single card taller than the
+                  budget used to overflow the column and paint over the header
+                  above it, which is Ink's behaviour for overflow, not clipping */}
+              <Box flexDirection="column" height={cardBudget} flexShrink={0} overflow="hidden">
+                {start > 0 && (
+                  <Text dimColor wrap="truncate">
+                    ▲ {start} more above
+                  </Text>
+                )}
+                {colTasks.slice(start, end).map((task) => (
+                  <Card
+                    key={task.issue.id}
+                    task={task}
+                    selected={task.issue.id === selected?.issue.id}
+                    color={color}
+                    now={ctx.now}
+                  />
+                ))}
+                {end < colTasks.length && (
+                  <Text dimColor wrap="truncate">
+                    ▼ {colTasks.length - end} more — i/k to scroll
+                  </Text>
+                )}
+              </Box>
             </Box>
           );
         })}
@@ -445,7 +507,7 @@ function progressBar(done: number, total: number, width = 8): string {
 export const boardKeys: Array<[string, string]> = [
   ['j/l ←→', 'column'],
   ['i/k ↑↓', 'card'],
+  ['/', 'search'],
+  [',', 'sort'],
   ...TASK_ACTION_KEYS,
-  ['S', 'shell'],
-  ['/', 'search (list)'],
 ];

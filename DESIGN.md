@@ -105,6 +105,9 @@ src/views/           registry.ts maps names/aliases → components + hotkey help
                      IssuesView with a spec. taskActions.tsx holds the verbs a task has (cancel,
                      resume, force, rebase, attach, edit, escalate, …) plus their modals, so the
                      board and the tasks table are two renderings of one set of actions.
+                     taskLens.ts is the other half of that: status words, CI text, the fuzzy
+                     matcher and the sort comparator, so a query or a sort key means the same
+                     thing in both views rather than being reimplemented per view.
                      ChannelView tails a coordination channel (experimental)
 src/doctor.ts        npm run doctor — env sanity CLI
 ```
