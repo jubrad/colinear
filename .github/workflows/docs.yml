@@ -66,5 +66,20 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      # Pages needs a public repo (or a paid plan). Until it's turned on the
+      # site still builds and uploads, it just has nowhere to go — skip the
+      # deploy rather than failing every docs push, and publishing starts on
+      # its own the moment Settings → Pages → Source is set to GitHub Actions.
+      - id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Pages is not enabled for this repository — built and uploaded, but not deployed.'
+          fi
       - id: deploy
+        if: steps.pages.outputs.enabled == 'true'
         uses: actions/deploy-pages@v4
