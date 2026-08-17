@@ -78,7 +78,10 @@ src/core/
   coordinator.ts     EXPERIMENTAL: a tracking parent's coordinator session — prompt, family
                      snapshot, scratch cwd, and the CoordinatorTools interface the dispatcher
                      implements (message/cancel/propose against its own sub-issues only)
-  channel.ts         EXPERIMENTAL coordination channels: per-family jsonl message log +
+  channel.ts         EXPERIMENTAL coordination channels, per issue family AND per project
+                     (SessionChannels is what one session belongs to; the tools' scope enum
+                     holds exactly those, so membership stays enforced by construction):
+                     per-channel jsonl message log +
                      per-reader cursors, behind a ChannelStore interface (the remote seam).
                      Off unless config `experimental` AND `experiments.coordination`
   gc.ts              which worktrees can go: finished tasks past a keep-window, review

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, SessionInbox, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
-import { channels } from './channel.js';
+import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { coordinatorCwd, coordinatorPrompt, familyStatus, type CoordinatorTools } from './coordinator.js';
 import { experimentOn } from './config.js';
 import { assignIssue, fetchBlockers, fetchIssuesByIds, fetchSubIssues } from './linear.js';
@@ -163,19 +163,21 @@ export class Dispatcher {
     if (!task) return;
     const messages = task.inbox ?? [];
     if (messages.length) store.update(id, { inbox: undefined });
-    const channel = experimentOn(this.cfg, 'coordination') ? `#${task.issue.identifier}` : undefined;
+    const coordChannels = experimentOn(this.cfg, 'coordination')
+      ? channelsFor(task.issue, task.issue.identifier)
+      : undefined;
     const inbox = new SessionInbox();
     this.inboxes.set(id, inbox);
     store.addActivity(id, 'coordinator session');
     try {
       const result = await runSession({
-        prompt: coordinatorPrompt(task, channel, messages),
+        prompt: coordinatorPrompt(task, coordChannels?.scopes.map((c) => c.id) ?? [], messages),
         cwd: coordinatorCwd(task),
         callbacks: this.callbacks(id),
         model: store.get(id)?.model ?? this.cfg.model,
         maxTurns: 30,
         abortController: controller,
-        channel: channel ? { id: channel, username: task.issue.identifier } : undefined,
+        channels: coordChannels,
         inbox,
         coordinator: this.coordinatorTools(id),
       });
@@ -794,21 +796,21 @@ export class Dispatcher {
       // EXPERIMENTAL coordination channel, one per issue family: a sub-issue
       // joins its parent's, a tracking parent hosts its own. Sub-issue triage
       // joins too — scope questions surface earliest there.
-      const channel = experimentOn(this.cfg, 'coordination')
-        ? channelFor(issue, store.get(id)?.subIssues?.length ? issue.identifier : undefined)
+      const sessionChannels = experimentOn(this.cfg, 'coordination')
+        ? channelsFor(issue, store.get(id)?.subIssues?.length ? issue.identifier : undefined)
         : undefined;
       if (!resumeSession && !task.skipTriage) {
         store.addActivity(id, 'triage pass');
-        const triageChannel = issue.parent ? channel : undefined;
+        const triageChannels = issue.parent ? sessionChannels : undefined;
         const triage = await runSession({
-          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, guidanceFor(this.cfg.guidance, 'triage'))}\n${familyBlock(issue, family)}${triageChannel ? channelBlock(triageChannel.id) : ''}`,
+          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, guidanceFor(this.cfg.guidance, 'triage'))}\n${familyBlock(issue, family)}${triageChannels ? channelBlock(triageChannels) : ''}`,
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: triageSchema(this.cfg.repos.map((r) => r.name)),
           model: store.get(id)?.model ?? this.cfg.model,
           maxTurns: 40,
           abortController: controller,
-          channel: triageChannel,
+          channels: triageChannels,
         });
         store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + triage.costUsd });
         if (triage.isError) throw new Error(`triage failed: ${triage.errors.join('; ')}`);
@@ -855,7 +857,7 @@ export class Dispatcher {
       if (queued.length) store.update(id, { inbox: undefined });
       const ctx =
         taskContext(current, taskRepo, branch, family, guidanceFor(this.cfg.guidance, 'work')) +
-        (channel ? channelBlock(channel.id) : '') +
+        (sessionChannels ? channelBlock(sessionChannels) : '') +
         operatorBlock(queued);
       // the mailbox keeps this session open between turns, so `M` can reach it
       const inbox = new SessionInbox();
@@ -876,7 +878,7 @@ export class Dispatcher {
         model: store.get(id)?.model ?? this.cfg.model,
         resume: resumeSession,
         abortController: controller,
-        channel,
+        channels: sessionChannels,
         inbox,
       });
       this.inboxes.delete(id);
@@ -1186,9 +1188,14 @@ function dependencyBlock(task: Task): string {
  * tracking sub-issues — its own. Nothing else gets one; a lone task has
  * nobody to coordinate with.
  */
-function channelFor(issue: LinearIssue, ownFamily?: string): { id: string; username: string } | undefined {
+function channelsFor(issue: LinearIssue, ownFamily?: string): SessionChannels | undefined {
+  const scopes: SessionChannels['scopes'] = [];
   const family = issue.parent?.identifier ?? ownFamily;
-  return family ? { id: `#${family}`, username: issue.identifier } : undefined;
+  if (family) scopes.push({ scope: 'family', id: `#${family}` });
+  // a project channel reaches the agents you would otherwise never hear from:
+  // different families, same release
+  if (issue.projectName) scopes.push({ scope: 'project', id: projectChannel(issue.projectName) });
+  return scopes.length ? { username: issue.identifier, scopes } : undefined;
 }
 
 /** Operator messages that arrived while nothing was running. */
@@ -1201,16 +1208,38 @@ These arrived while you weren't running. They come from the human running coline
 ${messages.map((m) => `- ${m}`).join('\n')}`;
 }
 
-function channelBlock(channel: string): string {
-  return `
-
-## Coordination channel ${channel} (experimental)
-You share this channel with the other agents working this issue family and with the human operator.
-Tools: mcp__colinear__channel_read (new messages since your last read — you never see duplicates) and mcp__colinear__channel_post (short message, max ~2 lines; your name is stamped automatically).
-Discipline:
-- READ at session start, before structural/architectural decisions, and before opening your PR.
-- POST: a scope claim at session start (files/dirs you own), architectural decisions siblings must know about, advisory claims on shared resources ("using the kind cluster ~20min"), your PR link when opened, and a done notice.
-- OPERATOR messages outrank everything else in this channel.`;
+function channelBlock(membership: SessionChannels): string {
+  const family = membership.scopes.find((c) => c.scope === 'family');
+  const project = membership.scopes.find((c) => c.scope === 'project');
+  const lines = [
+    '',
+    '',
+    `## Coordination channels (experimental) — you are ${membership.username} here`,
+    'Tools: mcp__colinear__channel_read (new messages since your last read — you never see duplicates)',
+    'and mcp__colinear__channel_post (short message, max ~2 lines; your name is stamped automatically).',
+    membership.scopes.length > 1
+      ? `Both take scope: ${membership.scopes.map((c) => `"${c.scope}" = ${c.id}`).join(', ')}. Default is ${membership.scopes[0].id}.`
+      : `Your channel is ${membership.scopes[0].id}.`,
+  ];
+  if (family) {
+    lines.push(
+      `${family.id} is your issue family — the agents whose work touches yours:`,
+      '- READ at session start, before structural/architectural decisions, and before opening your PR.',
+      '- POST: a scope claim at session start (files/dirs you own), architectural decisions siblings must',
+      '  know about, advisory claims on shared resources ("using the kind cluster ~20min"), your PR link',
+      '  when opened, and a done notice.',
+    );
+  }
+  if (project) {
+    lines.push(
+      `${project.id} is the whole project — other families working the same release. Keep it quieter:`,
+      '- POST only what someone outside your family would need: a shared interface or schema you are',
+      '  changing, a contended environment you are taking, a decision that constrains other issues.',
+      '- READ it before a change that reaches outside your own issue.',
+    );
+  }
+  lines.push('- OPERATOR messages outrank everything else in any channel.');
+  return lines.join('\n');
 }
 
 function familyBlock(issue: LinearIssue, family?: IssueFamily): string {

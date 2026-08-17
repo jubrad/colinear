@@ -2,6 +2,16 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, write
 import { join } from 'node:path';
 import { STATE_DIR, log } from './log.js';
 
+/**
+ * The channels one session belongs to. A sub-issue agent is in its family's
+ * channel and, when the issue has one, its project's — family for the people
+ * you overlap with, project for the ones you'd otherwise never hear from.
+ */
+export interface SessionChannels {
+  username: string;
+  scopes: Array<{ scope: 'family' | 'project'; id: string }>;
+}
+
 export interface ChannelMessage {
   ts: number;
   from: string;
@@ -26,6 +36,12 @@ const BACKFILL = 10;
 
 function safeName(channel: string): string {
   return channel.replace(/[^A-Za-z0-9_-]/g, '');
+}
+
+/** `#proj-cloud-migration` — readable in :chan, and stable per project. */
+export function projectChannel(name: string): string {
+  const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+  return `#proj-${slug || 'unnamed'}`;
 }
 
 class JsonlChannelStore implements ChannelStore {

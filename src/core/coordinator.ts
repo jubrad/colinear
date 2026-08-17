@@ -57,7 +57,7 @@ export function familyStatus(parent: Task): string {
     .join('\n');
 }
 
-export function coordinatorPrompt(parent: Task, channel: string | undefined, messages: string[]): string {
+export function coordinatorPrompt(parent: Task, channelIds: string[], messages: string[]): string {
   const lines = [
     `# Coordinating ${parent.issue.identifier}: ${parent.issue.title}`,
     '',
@@ -74,10 +74,12 @@ export function coordinatorPrompt(parent: Task, channel: string | undefined, mes
     '- mcp__colinear__family_propose — propose new sub-issues. This does NOT create them: the operator',
     '  reviews your proposal and approves it. Say so when you propose, rather than reporting them as created.',
   ];
-  if (channel) {
+  if (channelIds.length) {
     lines.push(
-      `- mcp__colinear__channel_read / channel_post — the family channel ${channel}, shared with every`,
-      '  sub-issue agent. Read it first: the agents post scope claims and decisions there.',
+      `- mcp__colinear__channel_read / channel_post — your channels: ${channelIds.join(', ')}. The family`,
+      '  channel is where the sub-issue agents post scope claims and decisions; read it first. A project',
+      '  channel, if you have one, reaches the other families working the same project — use it for what',
+      '  crosses family lines, not for family business.',
     );
   }
   lines.push(

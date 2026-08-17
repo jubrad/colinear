@@ -2,6 +2,7 @@ import { createSdkMcpServer, query, tool, type SDKUserMessage } from '@anthropic
 import { z } from 'zod';
 import { channels, formatMessages } from './channel.js';
 import type { CoordinatorTools } from './coordinator.js';
+import type { SessionChannels } from './channel.js';
 import type { AskedQuestion, PendingQuestion, PlannedSubtask } from './types.js';
 
 /** our own in-process tools; auto-approved rather than re-asked per call */
@@ -14,28 +15,44 @@ const COLINEAR_TOOL_PREFIX = 'mcp__colinear__';
  * enforced by construction and there is no parameter for an agent to lie in.
  */
 function colinearServer(opts: {
-  channel?: { id: string; username: string };
+  channels?: SessionChannels;
   coordinator?: CoordinatorTools;
 }) {
   const tools = [];
-  if (opts.channel) {
-    const { id: channel, username } = opts.channel;
+  const membership = opts.channels;
+  if (membership && membership.scopes.length) {
+    const { username, scopes } = membership;
+    const byScope = new Map(scopes.map((s) => [s.scope, s.id]));
+    const only = scopes[0].id;
+    // the scope is an enum of the channels this session is actually in, so an
+    // agent still cannot address one it doesn't belong to — the parameter
+    // picks among memberships, it doesn't name a channel
+    const scopeArg = z
+      .enum(scopes.map((s) => s.scope) as [string, ...string[]])
+      .optional()
+      .describe(scopes.map((s) => `${s.scope} = ${s.id}`).join(', '));
+    const resolve = (scope?: string) => byScope.get(scope as 'family' | 'project') ?? only;
+    const list = scopes.map((s) => `${s.id} (${s.scope})`).join(' and ');
     tools.push(
       tool(
         'channel_read',
-        `Read new messages on your coordination channel ${channel} (since your last read; you never see the same message twice).`,
-        {},
-        async () => ({
-          content: [{ type: 'text' as const, text: formatMessages(channels.readSince(channel, username)) }],
-        }),
+        `Read new messages on your coordination channel(s): ${list}. Only what you haven't seen; you never get the same message twice.`,
+        { scope: scopeArg },
+        async ({ scope }) => {
+          const channel = resolve(scope as string | undefined);
+          return {
+            content: [{ type: 'text' as const, text: formatMessages(channels.readSince(channel, username)) }],
+          };
+        },
       ),
       tool(
         'channel_post',
-        `Post a short message (max ~2 lines) to your coordination channel ${channel}. Your name is stamped automatically.`,
-        { message: z.string().min(1).max(500) },
-        async ({ message }) => {
+        `Post a short message (max ~2 lines) to a channel you are in: ${list}. Your name is stamped automatically.`,
+        { message: z.string().min(1).max(500), scope: scopeArg },
+        async ({ message, scope }) => {
+          const channel = resolve(scope as string | undefined);
           channels.post(channel, username, 'agent', message);
-          return { content: [{ type: 'text' as const, text: 'posted' }] };
+          return { content: [{ type: 'text' as const, text: `posted to ${channel}` }] };
         },
       ),
     );
@@ -201,15 +218,15 @@ export async function runSession(opts: {
   /** session id to resume (continues its transcript) */
   resume?: string;
   abortController?: AbortController;
-  /** EXPERIMENTAL coordination channel; identity baked in at spawn */
-  channel?: { id: string; username: string };
+  /** EXPERIMENTAL coordination channels; identity baked in at spawn */
+  channels?: SessionChannels;
   /** keeps the session open for operator messages (see SessionInbox) */
   inbox?: SessionInbox;
   /** EXPERIMENTAL: family-management tools for a tracking parent */
   coordinator?: CoordinatorTools;
 }): Promise<SessionResult> {
-  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController, channel, inbox, coordinator } = opts;
-  const mcp = colinearServer({ channel, coordinator });
+  const { prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController, channels: membership, inbox, coordinator } = opts;
+  const mcp = colinearServer({ channels: membership, coordinator });
 
   const q = query({
     prompt: inbox ? inbox.stream(prompt) : prompt,

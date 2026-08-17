@@ -13,6 +13,8 @@ export interface LinearIssue {
   stateType?: string;
   teamId?: string;
   projectId?: string;
+  /** carried so a project channel can be named after the project, not its uuid */
+  projectName?: string;
   /** set when this issue is a sub-issue */
   parent?: { id: string; identifier: string };
 }

@@ -6,6 +6,8 @@ import { store } from '../core/store.js';
 import type { LinearIssue, LinearProject } from '../core/types.js';
 import { fuzzyMatch } from '../ui/CommandBar.js';
 import { openUrl } from '../core/open.js';
+import { projectChannel } from '../core/channel.js';
+import { experimentOn } from '../core/config.js';
 import { useColinear } from '../ui/context.js';
 import { Popup, popupPlacement, formHeight } from '../ui/Popup.js';
 import { DispatchModal, type DispatchOptions } from '../ui/DispatchModal.js';
@@ -112,6 +114,15 @@ export function ProjectView(props: { param?: string }) {
       if (input === 'r') refresh();
       if (input === 'o' && current) openUrl(current.url);
       if (input === 'p' && project) ctx.navigate('plan', project.name);
+      // the project's coordination channel: one message reaches every agent
+      // working an issue in it, across families
+      if (input === 'M' && project) {
+        if (!experimentOn(ctx.cfg, 'coordination')) {
+          ctx.toast('coordination is off — enable the experiment to use project channels', 'info');
+        } else {
+          ctx.navigate('chan', projectChannel(project.name).replace(/^#/, ''));
+        }
+      }
       if (key.return && current && store.get(current.id)) ctx.navigate('task', current.identifier);
     },
     { isActive: !asking && !ctx.cmdOpen },
@@ -217,6 +228,7 @@ export const projectKeys: Array<[string, string]> = [
   ['c', 'custom dispatch'],
   ['o', 'open in browser'],
   ['p', 'plan chat'],
+  ['M', 'project channel'],
   ['enter', 'task detail'],
   ['r', 'refresh'],
 ];

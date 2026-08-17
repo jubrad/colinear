@@ -64,7 +64,10 @@ export function ChannelView(props: { param?: string }) {
         {list.length ? (
           list.map((c, i) => (
             <Text key={c} inverse={i === cursor}>
-              #{c} <Text dimColor>({channels.history(c).length} messages)</Text>
+              #{c}{' '}
+              <Text dimColor>
+                ({channels.history(c).length} messages · {c.startsWith('proj-') ? 'project' : 'issue family'})
+              </Text>
             </Text>
           ))
         ) : (
@@ -145,8 +148,16 @@ function DisabledNote() {
   );
 }
 
+/**
+ * Channel names are file names, so case matters. Issue families are upper
+ * (`CLO-67`) and project channels are slugs (`proj-cloud-migration`) — match
+ * an existing channel case-insensitively before assuming either.
+ */
 function normalize(param: string): string {
-  return param.replace(/^#/, '').toUpperCase();
+  const raw = param.replace(/^#/, '');
+  const existing = channels.channels().find((c) => c.toLowerCase() === raw.toLowerCase());
+  if (existing) return existing;
+  return /^[a-z]+-\d+$/i.test(raw) ? raw.toUpperCase() : raw;
 }
 
 export const channelKeys: Array<[string, string]> = [
