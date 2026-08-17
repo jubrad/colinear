@@ -113,8 +113,9 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
   }
 
   const linearApiKey = raw.linearApiKey ?? process.env.LINEAR_API_KEY ?? '';
-  // chores that never touch Linear (gc) shouldn't demand a key to run
-  if (!linearApiKey && opts?.requireKey !== false) {
+  // chores that never touch Linear (gc) shouldn't demand a key to run — nor
+  // should a provider that has no Linear to talk to
+  if (!linearApiKey && opts?.requireKey !== false && (raw.provider ?? 'linear') === 'linear') {
     fatal(`No Linear API key. Set LINEAR_API_KEY or add "linearApiKey" to ${configPath()}`);
   }
 
@@ -161,6 +162,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
 
   return {
     provider: raw.provider ?? 'linear',
+    sqlitePath: raw.sqlitePath ? expandHome(raw.sqlitePath) : undefined,
     // "all" (any case) = every team, k9s-style
     team: team === undefined ? undefined : team.toLowerCase() === 'all' ? '*' : team.toUpperCase(),
     linearApiKey,

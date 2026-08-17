@@ -386,6 +386,8 @@ export interface RepoConfig {
 export interface Config {
   /** which issue tracker this context talks to (default "linear") */
   provider: string;
+  /** sqlite provider: where the tracker lives (default <state dir>/local.db) */
+  sqlitePath?: string;
   linearApiKey: string;
   /** repos agents may work on; first entry is the default */
   repos: RepoConfig[];

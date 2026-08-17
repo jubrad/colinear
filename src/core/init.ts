@@ -4,6 +4,7 @@ import { basename, dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { promisify } from 'node:util';
 import { configPath } from './config.js';
+import { STATE_DIR } from './log.js';
 import { CONTEXT, DEFAULT_CONTEXT } from './context.js';
 import { providerFor } from './provider.js';
 import type { Config, RepoConfig } from './types.js';
@@ -51,18 +52,28 @@ export async function runInit(opts: { yes?: boolean } = {}): Promise<void> {
     }
 
     console.log('\nRequirements: the `claude` CLI logged in (subscription auth — leave');
-    console.log('ANTHROPIC_API_KEY unset), `gh` authenticated, and an issue-tracker API key.');
+    console.log('ANTHROPIC_API_KEY unset) and `gh` authenticated.');
 
-    const linearApiKey = await askKey(ask);
-    if (linearApiKey === undefined) return console.log('\ninput ended — nothing written.');
-    const cfg = { provider: 'linear', linearApiKey } as unknown as Config;
-    const scope = await askScope(ask, cfg);
+    const provider = await askProvider(ask);
+    if (provider === undefined) return console.log('\ninput ended — nothing written.');
+
+    let linearApiKey = '';
+    let scope: string | undefined;
+    if (provider === 'linear') {
+      const key = await askKey(ask);
+      if (key === undefined) return console.log('\ninput ended — nothing written.');
+      linearApiKey = key;
+      scope = await askScope(ask, { provider, linearApiKey } as unknown as Config);
+    } else {
+      console.log(`\nA local tracker in ${join(STATE_DIR, 'local.db')} — no account, no key.`);
+      console.log('File your first issue with: coli issue add "the thing"');
+    }
     const repos = await askRepos(ask);
 
     const seed: Record<string, unknown> = {
-      provider: 'linear',
+      provider,
       // a key in the file is a key on disk: skip it when the env already has one
-      ...(process.env.LINEAR_API_KEY ? {} : { linearApiKey }),
+      ...(provider === 'linear' && !process.env.LINEAR_API_KEY ? { linearApiKey } : {}),
       ...(scope ? { team: scope } : {}),
       repos: repos.map((r) => ({
         name: r.name,
@@ -88,6 +99,16 @@ export async function runInit(opts: { yes?: boolean } = {}): Promise<void> {
 }
 
 type Ask = (question: string) => Promise<string | undefined>;
+
+/** Which tracker. sqlite exists so you can be running without an account. */
+async function askProvider(ask: Ask): Promise<string | undefined> {
+  console.log('\nWhich issue tracker?');
+  console.log('  1. linear — your Linear workspace (needs an API key)');
+  console.log('  2. sqlite — a local tracker in a file; no account, no network');
+  const pick = await ask('choice [1]: ');
+  if (pick === undefined) return undefined;
+  return pick.trim() === '2' || pick.trim().toLowerCase() === 'sqlite' ? 'sqlite' : 'linear';
+}
 
 async function askKey(ask: Ask): Promise<string | undefined> {
   if (process.env.LINEAR_API_KEY) {
