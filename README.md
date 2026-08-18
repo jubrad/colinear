@@ -6,6 +6,9 @@ It runs on **Claude subscription auth** (the logged-in `claude` CLI), works on *
 
 📖 **[Read the docs](https://jubrad.github.io/colinear/)** · 🚀 **[Getting started](https://jubrad.github.io/colinear/docs/getting-started/)**
 
+*Disclaimer: This is an app I find productive and have developed almost blindly with claude. I've done typescript development, but this is far out of my expertise and the code could very well be vibe-coded trash. I don't really care. The goal is to get something out that is productive. I'm also adding features and fixes to it regularly.. while  I am putting thought into preventing backwards compatible issues I have no guarantees. Use at your own risk, at this point in time I'm not accepting contributions from the general public, but feel free to open an issue.*
+
+
 ![The board: seven columns of dispatched agents, with the selected task's subtasks and live activity in the pane below](docs/images/board.png)
 
 Every task is also a searchable, sortable table — same data, same keys, `:tasks`:
