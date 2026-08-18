@@ -1928,9 +1928,12 @@ session ends. The bias is towards repeating a message rather than losing one.</p
 <code>owner/repo#number</code>). <code>gh</code> search finds PRs awaiting my review every 5 minutes; <code>r</code> checks the
 PR's head out in <code>&lt;repo&gt;-worktrees/review-&lt;n&gt;</code> and runs one session.</p>
 <p><strong>The document is the artifact.</strong> The agent writes <code>.colinear-review.md</code> (git-excluded) —
-prose for the operator, ending in a ```findings fence holding a JSON array. Findings are
+prose for the operator, ending in a <code>findings fence holding a JSON array. Findings are
 parsed from that fence, so a chat turn that changes the agent's mind can't leave prose and
 findings disagreeing; structured output would have needed a second pass to keep them in sync.
+The closing fence is found by parsing, not by regex: the block ends at the first</code> where the
+JSON is valid, because a finding whose comment carries a fenced code suggestion puts a ``` in
+the middle of a string — a non-greedy match ended there once, and a full review posted empty.
 The daemon watches the file, so it fills in as it's written and picks up edits made anywhere.</p>
 <p><strong>Posting is deterministic — no session.</strong> The findings are already structured, so colinear
 clears any pending review of ours (GitHub allows one per user per PR, and a leftover blocks
