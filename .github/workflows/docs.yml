@@ -1,7 +1,8 @@
 name: docs
 
 # The site and its per-PR previews both live on the gh-pages branch: the main
-# site at the root, previews under previews/pr-<n>/. Pages serves that branch.
+# site at the root, previews under previews/pr-<n>/. Publishing that branch to
+# Pages is pages.yml's job — this workflow only writes to it.
 #
 # Previews are maintainer-only, and the gate is the repository's own rulesets
 # rather than a list here: `no branches` restricts branch creation to admin
