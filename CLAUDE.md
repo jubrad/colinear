@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Read DESIGN.md first — architecture, code map, task lifecycle, and the rendering gotchas that are easy to regress. README.md is the public overview; `docs/` is the user-facing reference (one page per view, plus getting-started, security, configuration, CLI) and must be kept current with behaviour changes.
+Read DESIGN.md first — how it works (processes, CDC sync, the task state machine, the clocks) and the rendering gotchas that are easy to regress; CODEMAP.md is the file-by-file map. README.md is the public overview; `docs/` is the user-facing reference (one page per view, plus getting-started, security, configuration, CLI) and must be kept current with behaviour changes.
 
 ## Commands
 

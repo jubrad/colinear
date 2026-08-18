@@ -1,149 +1,130 @@
 # colinear — design notes
 
-Context doc for anyone (human or Claude session) picking this codebase up. `docs/` covers usage; this covers how it works, where things live, and the hard-won gotchas. Keep both updated when behavior changes.
-
 ## What it is
 
 A k9s-style Ink TUI that dispatches Claude Code agents (via `@anthropic-ai/claude-agent-sdk`) against Linear issues. One git worktree per issue, kanban board of agent progress, draft-PR-only output, human-in-the-loop for questions/escalations/promotion. Runs on Claude subscription auth: the SDK uses the logged-in `claude` CLI when `ANTHROPIC_API_KEY` is unset — never set that env var here.
 
 Stack: TypeScript (strict, NodeNext ESM — all internal imports use `.js` suffixes), React 18 + Ink 5, no test framework. `npm run dev` = tsx; `npm run build` = tsc → `dist/` (`coli`/`colinear` bins via `npm link` run dist, so **rebuild after changes**).
 
-## Code map
+## How it works
 
-```
-src/index.tsx        entry + process modes: bare `coli` supervises a TUI child (respawns it on
-                     exit code 75 = `R` reload); `--tui` runs the client (alt-screen, DEC-2026
-                     sync-output wrapping, stderr diversion, the attach loop TUI ⇄ interactive
-                     claude/shell/editor); `daemon [status|stop]` runs/controls the backend;
-                     `gc` and `contexts` are standalone chores that work with the daemon down
-src/daemon.ts        the backend process: owns Dispatcher, store, persistence, PR polling and the
-                     Linear sweeps; unix-socket server — hello(snapshot) then a delta stream per
-                     client, commands in, toasts out; pidfile for status/stop
-src/client.ts        the TUI's half: connects (spawning a detached daemon if none is up), turns the
-                     local store into a mirror, and exposes DispatcherApi — the interface views call,
-                     implemented for real by Dispatcher and by message-passing here
-src/app.tsx          view stack + `:` command bar, AppCtx provider, global keys, header/crumbs,
-                     clock (pauses when no task is timing), terminal size, toasts
-src/theme.ts         palette + STATUS_COLORS
-src/core/
-  types.ts           all shared types: Task, TaskStatus, TriageVerdict (incl. split-plan subtasks,
-                     verification tier, repo pick), PrInfo, RepoConfig, Config
-  context.ts         which config + state dir this process uses (--context/-c, COLINEAR_CONTEXT,
-                     COLINEAR_STATE_DIR). A leaf module evaluated before anything derives a path
-                     from it; re-exports STATE_DIR through log.ts
-  config.ts          ~/.config/colinear/config.json (legacy ~/.colinear.json), the context layer
-                     over it, repos allowlist normalization (remote/pushRemote/prBase are GIT
-                     REMOTE NAMES), --team flag
-  store.ts           observable Map<issueId, Task> + version counter. Two modes: the daemon's is the
-                     source of truth and emits a CDC delta per mutation; a client's is a mirror
-                     (hydrate + apply) whose writes forward to the daemon instead of applying locally
-  delta.ts           wire format: Change/Delta/Snapshot, WireTask (question minus its callback), and
-                     encodePatch — cleared fields travel separately because JSON drops undefined
-  protocol.ts        socket path, PROTOCOL_VERSION, Command/ClientMsg/ServerMsg, NDJSON codec
-  store.check.ts     `npm run check`: replays a realistic mutation sequence into a mirror and asserts
-                     they agree (cleared fields, activity cap, answer callback, gap → re-snapshot)
-  hooks.ts           useTasks(): memoized per store.version — identity stability is load-bearing (see gotchas)
-  dispatcher.ts      the heart: queue + concurrency (default 3), runTask (triage→work→checks),
-                     worktree management (PR-branch adoption, existing-worktree reuse), prompts
-                     (taskContext block shared by all sessions), fixci mode, suspend/cancel/resume/
-                     redispatch, blocked-task queueing on Linear "blocks" relations, shutdown
-  agent.ts           runSession(): SDK query() wrapper — canUseTool intercepts AskUserQuestion and
-                     relays the human answers via a deny message (hack; SDK "defer" would be cleaner).
-                     The WHOLE question set is kept: AskUserQuestion carries up to four questions,
-                     each with per-option descriptions, and answering only the first made the agent
-                     re-ask the rest. Permission gates ride the same shape with allow/deny options,
-                     usage/token accounting, structured output via outputFormat json_schema, resume/abort.
-                     SessionInbox turns the prompt into an async iterable so the operator can push a
-                     message into a live session (`M`); the session closes on `result` unless one is
-                     pending, which is what keeps a normal run from hanging open
-  provider.ts        the IssueProvider interface + ProviderCapabilities: the only thing the app
-                     knows about issue trackers. Adapters are registered in the map here rather
-                     than by import side-effect, so a refactor can't silently unregister one
-  providers/shared.ts leaf helpers every adapter needs (safeBranch, stateTypeOf, ALL_SCOPES) —
-                     a leaf so provider.ts can import adapters without a cycle
-  providers/linear.ts GraphQL client; queryIssuesPaged (cursor pagination, 500 cap) backs all issue
-                     fetches; teams/projects/viewer/labels; mutations (create/assign/state/comment);
-                     fetchBlockers (inverseRelations type "blocks")
-  reviews.ts         the GitHub side of PR review: one GraphQL search for PRs awaiting me
-                     (diff stats + branches included, archived repos excluded), repo matching
-                     by git remote (a repo's colinear name rarely equals its GitHub slug),
-                     deletePendingReviews + submitReview (deterministic posting)
-  reviewer.ts        assisted review: worktree on the PR head, one session that writes
-                     .colinear-review.md, chat turns that resume it, doc watch, and the
-                     deterministic post/approve/request-changes path
-  prs.ts             gh pr list per repo w/ tasks; matching: pinnedPr > branch match > identifier in
-                     head/title, ranked OPEN > MERGED > CLOSED; stack chaining by baseRef; status
-                     transitions (incl. un-failing error tasks that gain a live PR); CI babysitter
-  statesync.ts       Linear state moves (dispatch→started, first PR→In Review), per-team state cache
-  persist.ts         state.json v2: tasks (minus live question fn) + planner snapshots + UI prefs;
-                     debounced on store change + 10s heartbeat + flush on exit; atomic tmp+rename;
-                     live statuses restore as `interrupted`
-  guidance.ts        guidanceFor(scope): the general block plus whatever is scoped to this
-                     prompt (triage / work / review / plan)
-  coordinator.ts     EXPERIMENTAL: a tracking parent's coordinator session — prompt, family
-                     snapshot, scratch cwd, and the CoordinatorTools interface the dispatcher
-                     implements (message/cancel/propose against its own sub-issues only)
-  channel.ts         EXPERIMENTAL coordination channels, per issue family AND per project
-                     (SessionChannels is what one session belongs to; the tools' scope enum
-                     holds exactly those, so membership stays enforced by construction):
-                     per-channel jsonl message log +
-                     per-reader cursors, behind a ChannelStore interface (the remote seam).
-                     Off unless config `experimental` AND `experiments.coordination`
-  gc.ts              which worktrees can go: finished tasks past a keep-window, review
-                     checkouts of stale reviews, and directories no task claims (repo
-                     re-routes leave those). Refuses to classify anything as an orphan
-                     when no tasks loaded — empty state is indistinguishable from live work
-  planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
-                     read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
-                     approve() creates Linear sub-issues; snapshot/restore for persistence
-  answers.ts         the $EDITOR path for questions: renders a question set as a markdown form and
-                     parses the filled-in `Answer:` blocks back (forgiving — a human edited it)
-  attach.ts          `s`/`S`: in-place terminal handoff (pending-action consumed by index.tsx loop)
-                     or external window via script file (Ghostty/Terminal); suspend-first for live agents
-  checks.ts          per-repo shell checks in the worktree
-  customviews.ts     ~/.config/colinear/views/*.json → declarative issue filters
-  newissue.ts        `n`: one-off structured-output session drafts an issue from a description
-  notify.ts          terminal-notifier (click-through URL) with osascript fallback
-  log.ts             append log at ~/.local/state/colinear/colinear.log (also captures diverted stderr)
-src/ui/              presentation primitives: Table (generic sortable), CommandBar (prompt+ranked
-                     completion; rank = prefix>substring>subsequence), modals (Dispatch/EditTask/SubIssue),
-                     Header/Crumbs, format helpers, AppCtx definition (context.ts)
-src/views/           registry.ts maps names/aliases → components + hotkey help; issues/board/tasks/
-                     task/projects/project/plan/reviews/costs/logs/gc/config/help; custom views wrap
-                     IssuesView with a spec. taskActions.tsx holds the verbs a task has (cancel,
-                     resume, force, rebase, attach, edit, escalate, …) plus their modals, so the
-                     board and the tasks table are two renderings of one set of actions.
-                     taskLens.ts is the other half of that: status words, CI text, the fuzzy
-                     matcher and the sort comparator, so a query or a sort key means the same
-                     thing in both views rather than being reimplemented per view.
-                     ChannelView tails a coordination channel (experimental)
-src/doctor.ts        npm run doctor — env sanity CLI
+Two processes, one authoritative store, and a mirror that is never allowed to lie. (File-by-file map: [CODEMAP.md](https://github.com/jubrad/colinear/blob/main/CODEMAP.md).)
+
+```mermaid
+flowchart LR
+  subgraph tui["TUI process — coli --tui"]
+    views["views (Ink)"] <--> mirror[("store mirror")]
+  end
+  subgraph daemon["daemon process — coli daemon"]
+    store[("store")] --> disp["dispatcher"]
+    disp --> sessions["agent sessions<br/>(one worktree each)"]
+    store --> disk[("~/.local/state/colinear")]
+    disp <--> tracker["tracker + gh"]
+  end
+  mirror -- "commands, changes" --> store
+  store -- "snapshot, then deltas" --> mirror
 ```
 
-## Process model
+The **daemon** owns everything stateful: the dispatcher, the store, persistence, PR polling and the
+tracker sweeps. Agents therefore outlive the terminal — close it, `q`, or `R` onto a new build and
+the work keeps running. `coli daemon stop` is the only thing that interrupts an agent.
 
-Two processes. The **daemon** owns everything stateful — dispatcher, store, persistence, PR polling,
-Linear sweeps — so agents outlive the terminal; the **TUI** is a client that mirrors its state. `coli`
-starts both (daemon only if one isn't up); `coli daemon stop` is the only thing that interrupts agents.
-
-State reaches the client by change data capture: hydrate from a snapshot, then follow deltas stamped
-with the version they produced. A delta that doesn't follow the mirror's version is refused and the
-client asks for the tail it's due (or a fresh snapshot if it fell off the 1000-entry log).
+The **TUI** is a client. It hydrates a mirror of the store and follows changes. `coli` starts both,
+the daemon only if one isn't already listening on the context's socket.
 
 The split is deliberately invisible to views:
 
-- **Reads** — the mirror is a Store with the same API, so `useTasks()`/`store.get()` are unchanged.
-- **Writes** — `store.update()` on a mirror forwards a Change to the daemon and applies nothing
-  locally; the authoritative delta comes back. Never make a mirror mutate directly, or it diverges.
-- **Callbacks** — `question.answer` can't cross a socket, so the mirror synthesizes one that sends
-  `{answer, id, text}`; the real closure lives in the daemon. Auto-mode allow/deny rides the same path.
-- **Policy stays in the backend.** `applyEdits` (the board's `m` modal) is a dispatcher method because
-  whether an agent still needs to run depends on what re-polling finds — that decision can't straddle
-  the wire. Its result comes back as a `toast` message.
+| | |
+|---|---|
+| **Reads** | the mirror is a `Store` with the same API — `useTasks()` and `store.get()` don't know |
+| **Writes** | `store.update()` on a mirror **forwards** and applies nothing locally; the authoritative delta comes back |
+| **Callbacks** | `question.answer` can't cross a socket, so the mirror synthesizes one that sends `{answer, id, text}`; the real closure lives in the daemon |
+| **Decisions** | anything that depends on what re-polling finds (`applyEdits`, promotion gates) is a dispatcher method, not view logic |
 
-`R` reloads the frontend: the TUI exits 75 and the supervisor respawns it on the new build, daemon
-untouched. Still client-side and therefore lost on reload: the `:plan` planner session and `n`
-new-issue drafting. Moving those behind the daemon is the obvious next step.
+The rule that keeps it honest: **a mirror never mutates itself.** One local write that isn't
+echoed by the daemon and the two copies disagree forever, silently.
+
+### The mirror follows a log, not a feed
+
+State reaches the client by change data capture. Every mutation stamps a delta with the version it
+produced, so the client can tell "I have everything" from "I missed something" — a distinction a
+plain event feed can't make.
+
+```mermaid
+sequenceDiagram
+  participant V as view
+  participant M as mirror
+  participant D as daemon store
+  V->>M: store.update(id, patch)
+  M->>D: change
+  D->>D: apply · version++ · append to log
+  D-->>M: delta { version: n }
+  alt n == mirror.version + 1
+    M->>M: apply
+  else gap
+    M->>D: since(mirror.version)
+    D-->>M: the tail, or a fresh snapshot if it<br/>fell off the 1000-delta log
+  end
+```
+
+`npm run check` (`bin/check`) replays a recorded delta stream into a fresh mirror and asserts it
+matches the daemon's store field for field. That replay is the only test in the repo, and it exists
+because divergence here is invisible until someone acts on a stale card.
+
+### Clocks
+
+Nothing polls on render. Every recurring read lives in the daemon on a fixed timer:
+
+| every | what runs | why that number |
+|---|---|---|
+| 2s | the running task's subtask checklist file | it drives a progress bar; the agent rewrites it mid-turn |
+| 60s | PR state, CI rollup, review decision, mergeability | GitHub's own numbers move on this order; faster mostly buys rate limits |
+| 60s | blocked recheck, retention sweep, closed-issue sweep, sub-issue rollup | one tick, four jobs — see `recheckBlocked()` |
+| 5m | `gh` search for PRs awaiting your review | a review request is not urgent, and the search is expensive |
+
+Two retries also sit on clocks: a session that dies before starting is requeued once after **5s**,
+and a rate-limited session after **30s**. Both are one-shot — a second failure parks the task rather
+than looping.
+
+The blocked recheck is also **event-driven**: it runs whenever a task completes or a PR merges, so a
+dependency clearing doesn't wait out the minute.
+
+### The task state machine
+
+```mermaid
+stateDiagram-v2
+  [*] --> queued: dispatch
+  queued --> blocked: tracker says blocked
+  blocked --> queued: blockers done · f forces
+  queued --> triage: slot free
+  triage --> working: verdict do
+  triage --> needs_input: too_big · needs_info
+  queued --> working: manual r · skip triage
+  working --> needs_input: agent asks
+  needs_input --> working: you answer · r
+  working --> checks: agent done
+  checks --> pr_open: draft PR
+  checks --> error: checks failed
+  pr_open --> done: merged
+  working --> error: session failed
+  error --> queued: r · a live PR appears
+  working --> interrupted: cancel · quit
+  interrupted --> queued: r
+  done --> [*]: retention, after 30d
+```
+
+Concurrency is the whole scheduler: `pump()` starts tasks while `running < concurrency` and refills
+as each finishes. There is no priority queue — the board's ordering is a view concern.
+
+Three states sit outside that flow:
+
+- **`tracking`** — a parent whose work happens in its sub-issues. It never runs a work session; the
+  60s sweep rolls its children up, and `M` or `r` starts a *coordinator* session instead (no
+  worktree, no checks, no PR).
+- **Manual dispatch** — `awaitingStart`. The worktree exists and the card sits in Working with
+  nothing running, waiting for you to lay a skeleton down. `r` hands that same worktree to an agent.
+- **Maintenance** (`fixci`, `rebase`) — runs against an already-open PR. The task keeps its status
+  and shows a blinking dot rather than moving back to Working: the feature isn't being rewritten.
 
 ## Experiments
 
@@ -193,9 +174,9 @@ Constraint on the UI side: every view sizes its panes against a **four-row heade
 (`ctx.size.rows - 12` and friends), so the context indicator rides on the existing Repo row rather
 than taking a fifth.
 
-## Task lifecycle
+## Lifecycle detours
 
-`queued → triage → working → checks → done|pr_open` with detours:
+The diagram above is the shape. These are the parts that surprise people:
 - `blocked` (Linear blockers open; rechecked every 60s + on merges/completions). Linear has one
   kind of "blocks"; colinear has two. A blocker starts as `start` (parks the task); `f` converts
   it to `merge`, which dispatches the work in parallel but keeps it on the task — the agent's
@@ -208,18 +189,18 @@ than taking a fifth.
   is on for that parent (or globally). `autoDispatchable()` is the whole rule and is pure —
   the Linear state, not the absence of a task, is what makes a sub-issue eligible, so a task
   dropped by retention long after it finished can't be resurrected. Capped per sweep
-- `coordinate` mode: a tracking parent woken by a message (or `r`) runs a coordinator session
-  instead of a work session — no worktree, no checks, no PR, and the status stays `tracking`.
-  Its tools can message and cancel its own sub-issues and propose new ones; creating them stays
-  behind the operator's `A`, which is the same review UI a too_big split uses
-- maintenance modes (fixci, rebase) run against an already-open PR: the task keeps its status
-  and shows a blinking dot instead of moving back to Working, and the repo's checks are left to
-  the prompt rather than re-run here (which would flip the card to `checks` for no new signal)
+- `coordinate` mode: the coordinator's tools can message and cancel its *own* sub-issues and
+  propose new ones; creating them stays behind the operator's `A`, the same review UI a too_big
+  split uses
+- maintenance modes leave the repo's checks to the prompt rather than re-running them here, which
+  would flip the card to `checks` for no new signal
 - fixci mode: red PR rollup → resume session with failing logs, one attempt per red, re-arms on green
 - rebase mode: PR conflicts with its base → session that rebases and force-with-leases, same
   one-attempt-per-conflict shape. `mergeable: UNKNOWN` means GitHub is still computing and never
   triggers one. The prompt confines it to the rebase: resolve, test, push, no scope changes,
   AskUserQuestion when a conflict needs a human decision
+
+## Sessions and messages
 
 Work sessions are **streaming-input** conversations (`SessionInbox`): the prompt is an async
 iterable that yields the opening prompt and then whatever the operator sends with `M`. The catch

@@ -34,7 +34,9 @@ theme:
   features:
     - navigation.sections
     - navigation.top
-    - navigation.instant
+    # navigation.instant is deliberately off: it swaps pages without a reload,
+    # and docs/js/mermaid.js renders on DOMContentLoaded — diagrams would come
+    # up on a hard load and stay raw text after any in-site link
     - content.code.copy
     - search.suggest
   font:
@@ -53,8 +55,18 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
-  - pymdownx.superfences
   - pymdownx.details
+  # class is "mermaid-src", not "mermaid", on purpose: Material claims .mermaid
+  # and in this setup empties the block without filling it. Under another name
+  # its integration ignores them and docs/js/mermaid.js does the rendering.
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid-src
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+extra_javascript:
+  - docs/js/mermaid.js
 
 nav:
   - Overview: index.md
