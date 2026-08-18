@@ -32,6 +32,20 @@ export function filterIssues(issues: Issue[], query: string, labelFilters: strin
           ? token.slice(6)
           : null;
       if (labelTerm !== null) return labels.some((l) => l.includes(labelTerm));
+      // parent:CAD-12 or parent:cadence — an issue's parent is either the issue
+      // above it or the project it belongs to, and both are the same question
+      // ("what is this part of?") from where the operator sits
+      const parentTerm = token.startsWith('parent:')
+        ? token.slice(7)
+        : token.startsWith('under:')
+          ? token.slice(6)
+          : null;
+      if (parentTerm !== null) {
+        if (!parentTerm) return false;
+        return [issue.parent?.identifier, issue.projectName, issue.projectId, issue.parent?.id]
+          .filter((v): v is string => Boolean(v))
+          .some((v) => v.toLowerCase().includes(parentTerm));
+      }
       return fuzzyMatch(haystack, token);
     });
   });
@@ -345,22 +359,33 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       {/* last: absolute boxes paint in tree order, so a popup rendered
           before its siblings is overdrawn by them */}
       {dispatching && (
-        <Popup
-          {...popupPlacement(ctx.size, {
-            width: Math.min(88, ctx.size.columns - 8),
-            height: formHeight(ctx.cfg.repos.length > 1 ? 4 : 3),
-          }, ctx.cmdOpen)}
-        >
-        <DispatchModal
-          count={picked().length}
-          repos={ctx.cfg.repos}
-          onSubmit={(opts) => {
-            setDispatching(false);
-            dispatch(picked(), opts);
-          }}
-          onCancel={() => setDispatching(false)}
-        />
-        </Popup>
+        (() => {
+          // options + a paragraph-sized instructions box, capped so a short
+          // terminal still shows the whole form rather than clipping the footer
+          const optionRows = ctx.cfg.repos.length > 1 ? 5 : 4;
+          const inner = Math.min(88, ctx.size.columns - 8) - 4;
+          const lines = Math.max(3, Math.min(10, ctx.size.rows - 8 - formHeight(optionRows) - 4));
+          const place = popupPlacement(
+            ctx.size,
+            { width: inner + 4, height: formHeight(optionRows, lines + 2) },
+            ctx.cmdOpen,
+          );
+          return (
+            <Popup {...place}>
+              <DispatchModal
+                count={picked().length}
+                repos={ctx.cfg.repos}
+                width={inner}
+                instructionLines={lines}
+                onSubmit={(opts) => {
+                  setDispatching(false);
+                  dispatch(picked(), opts);
+                }}
+                onCancel={() => setDispatching(false)}
+              />
+            </Popup>
+          );
+        })()
       )}
     </Box>
   );

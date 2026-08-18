@@ -200,6 +200,13 @@ export interface Task {
   model?: string;
   /** repo this task works on (defaults to the first configured repo) */
   repo?: { name: string; path: string; defaultBranch: string; remote?: string; pushRemote?: string; prBase?: string; worktreeRoot: string };
+  /**
+   * Dispatched manually: the worktree exists and the card sits in Working, but
+   * no agent has been started. `r` starts one — the point is to lay a skeleton
+   * down by hand first (a design doc, a file layout) and have the agent pick it
+   * up rather than invent its own.
+   */
+  awaitingStart?: boolean;
   /** set while a CI-failure fix has been dispatched for the current red rollup */
   ciFixAttempted?: boolean;
   /** rebase this PR automatically when GitHub reports a conflict */

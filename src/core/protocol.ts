@@ -14,11 +14,11 @@ import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
-  | { name: 'enqueue'; issues: Issue[]; opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean } }
+  | { name: 'enqueue'; issues: Issue[]; opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean; manual?: boolean } }
   | { name: 'cancel'; id: string }
   | { name: 'resume'; id: string }
   | { name: 'force'; id: string }

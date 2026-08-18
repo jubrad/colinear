@@ -316,9 +316,17 @@ export class Dispatcher {
       return true;
     }
     const task = store.get(id);
-    if (task && ['queued', 'blocked'].includes(task.status)) {
+    // a manually dispatched task has no controller to abort: it sits in Working
+    // with a worktree and no agent, so it cancels like a queued one
+    if (task && (task.awaitingStart || ['queued', 'blocked'].includes(task.status))) {
       // operator stop is not a failure — park it resumable, not in Failed
-      store.update(id, { status: 'interrupted', error: undefined, blockedBy: undefined, endedAt: Date.now() });
+      store.update(id, {
+        status: 'interrupted',
+        awaitingStart: undefined,
+        error: undefined,
+        blockedBy: undefined,
+        endedAt: Date.now(),
+      });
       store.addActivity(id, 'cancelled before start — r to requeue');
       return true;
     }
@@ -335,6 +343,15 @@ export class Dispatcher {
     // coordinating the family (experimental — otherwise r stays a no-op)
     if (task?.status === 'tracking') {
       if (!this.wake(id)) this.toast(`${task.issue.identifier}: coordination is off`, 'info');
+      return;
+    }
+    // a manually dispatched task sits in Working with no agent: r is how you
+    // hand it over once your skeleton is in place
+    if (task?.awaitingStart) {
+      store.update(id, { awaitingStart: undefined, status: 'queued' });
+      store.addActivity(id, 'starting the agent on the prepared worktree');
+      this.queue.push(id);
+      this.pump();
       return;
     }
     if (!task || !['interrupted', 'error', 'escalated', 'needs_input', 'blocked'].includes(task.status)) return;
@@ -368,7 +385,7 @@ export class Dispatcher {
 
   enqueue(
     issues: Issue[],
-    opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean },
+    opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean; manual?: boolean },
   ) {
     for (const issue of issues) {
       if (store.get(issue.id)) continue;
@@ -384,6 +401,7 @@ export class Dispatcher {
         instructions: opts?.instructions,
         model: opts?.model,
         skipTriage: opts?.skipTriage,
+        awaitingStart: opts?.manual || undefined,
         repo: (({ name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot }) => ({ name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot }))(
           opts?.repo ?? this.cfg.repos[0],
         ),
@@ -401,6 +419,12 @@ export class Dispatcher {
           .catch((err) => store.addActivity(issue.id, `assign failed: ${String(err).slice(0, 80)}`));
       }
       void syncIssueState(this.cfg, issue, 'started');
+      if (opts?.manual) {
+        // the whole point is to get a checkout without an agent in it; blockers
+        // aren't consulted because nothing is going to run yet either way
+        void this.prepareOnly(issue.id);
+        continue;
+      }
       // respect Linear "blocks" relations: park behind unresolved blockers
       void (providerFor(this.cfg).capabilities.blockers
         ? providerFor(this.cfg).blockers(issue.id)
@@ -1082,6 +1106,29 @@ export class Dispatcher {
       clearInterval(timer);
       read();
     };
+  }
+
+  /**
+   * Manual dispatch: cut the worktree, park the card in Working, start nothing.
+   * The operator lays down whatever skeleton they wanted (a design doc, a file
+   * layout) and `r` hands it to an agent — which reuses this same worktree, so
+   * their work is what the agent finds.
+   */
+  private async prepareOnly(id: string) {
+    const task = store.get(id);
+    if (!task) return;
+    try {
+      const repo = task.repo ?? this.cfg.repos[0];
+      store.addActivity(id, 'creating worktree');
+      const { worktree, branch } = isDemo(this.cfg)
+        ? demoWorktree(task.issue)
+        : await this.ensureWorktree(task.issue, repo);
+      store.update(id, { status: 'working', worktree, branch, startedAt: Date.now() });
+      store.addActivity(id, `worktree ready at ${worktree} — r starts the agent`);
+    } catch (err) {
+      store.update(id, { status: 'error', awaitingStart: undefined, error: String(err).slice(0, 300) });
+      store.addActivity(id, `worktree failed: ${String(err).slice(0, 120)}`);
+    }
   }
 
   private async ensureWorktree(

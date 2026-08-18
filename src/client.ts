@@ -26,7 +26,7 @@ import type { Config, Issue, RepoConfig, TaskEdits } from './core/types.js';
 export interface DispatcherApi {
   enqueue(
     issues: Issue[],
-    opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean },
+    opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean; manual?: boolean },
   ): void;
   cancel(id: string): boolean;
   resume(id: string): boolean;

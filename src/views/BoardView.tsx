@@ -281,7 +281,9 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
   const { task, selected, color, now } = props;
   const last = task.activity[task.activity.length - 1] ?? '';
   const doneCount = task.subtasks.filter((s) => s.done).length;
-  const active = ACTIVE_STATUSES.includes(task.status);
+  // a manual dispatch sits in Working with no agent: spinning would say a
+  // session is thinking when the card is in fact waiting on the operator
+  const active = ACTIVE_STATUSES.includes(task.status) && !task.awaitingStart;
   if (task.status === 'done' || task.status === 'cancelled') {
     // settled work — id, title, and how it finished is the whole story
     const merged = task.prs.find((pr) => pr.state === 'MERGED');
@@ -339,6 +341,11 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
         {formatDuration(task, now) || '--:--'} · {formatTokens(task.tokens)} tok
         {task.repo ? ` · ${task.repo.name}` : ''}
       </Text>
+      {task.awaitingStart && (
+        <Text color={theme.key} wrap="truncate">
+          ⏸ worktree ready — r starts it
+        </Text>
+      )}
       {task.subIssues?.length ? (
         // tracking parent: sub-issue progress is the story, not PRs
         <>

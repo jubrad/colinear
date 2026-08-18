@@ -10,18 +10,22 @@ still dispatch.
 
 | key | what |
 |---|---|
-| `/` | fuzzy filter. `#bug` or `label:bug` filters by label |
+| `/` | fuzzy filter. `#bug` or `label:bug` by label; `parent:CAD-12` or `parent:cadence` by what an issue is part of — the issue above it or its project, since both answer the same question |
 | `t` | switch team (the provider's word for it — team, project, repo) |
 | `l` | add a label filter · `s` sort by any column · `p` include/exclude project issues |
 | `S` | sub-issues on/off — pull in the children of the issues listed, under their parents |
 | `space` | select — actions apply to the selection, or to the row under the cursor |
 | `enter` | **dispatch** |
 | `D` | dispatch, skipping triage |
-| `c` | custom dispatch: instructions, model, repo, whether to triage |
+| `c` | custom dispatch: model, repo, whether to triage, whether to **start** — and a paragraph-sized instructions box (enter is a newline there, `ctrl-d` dispatches) |
 | `n` | **new issue from a description** — an agent drafts the title and body and files it |
 | `o` | open in the tracker · `b` board · `r` refresh |
 
 ## Notes
+
+- `c` → **start: manual — worktree only** cuts the worktree and stops, leaving the card in Working
+  for you to lay a skeleton down before `r` hands it to an agent. See
+  [dispatch](../dispatch.md#manual-dispatch-a-worktree-no-agent).
 
 - Dispatching self-assigns the issue and moves it to In Progress immediately (`stateSync`), not when
   an agent slot frees up.
