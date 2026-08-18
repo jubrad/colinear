@@ -16,7 +16,11 @@ coli daemon status   # is the backend up? (`stop` to kill it — that aborts liv
 
 Anything runnable — a lint, a gate, a generator — lives in `bin/` as a script you can run by hand, not buried in a workflow or an npm alias; CI calls the same script you do. A generator takes `--check`: it writes nothing and fails if the tree would change, so "the docs are current" is one command.
 
+Dependency versions live in `requirements.txt` (docs toolchain) and `package.json` — never inline in a workflow or a script, because two copies of a pin drift and Dependabot can only read files. `.github/dependabot.yml` covers npm, pip, actions and the Dockerfile.
+
 The published site lives on the **`gh-pages`** branch — the main site at the root, per-pull-request previews under `previews/pr-<n>/` — and `.github/workflows/pages.yml` publishes it through the Pages deployment API on every push to that branch. The legacy branch builder is deliberately not used: it failed with nothing but "Page build failed" on every commit, including one that only deleted files, while the deployment API had published every time it was asked. Both are pushed by `.github/scripts/publish-site.sh`, which is why publishing main keeps `previews/` and a preview only touches its own directory. `gh-pages` is machine-managed: it is the one branch excluded from the `no branches` ruleset, because CI's token is not an admin bypass actor.
+
+
 
 Previews are maintainer-only, and the gate is the rulesets rather than a list in the workflow: only an admin can create a branch here, so a pull request from this repository can only be a maintainer's. **Fork pull requests are verified but never deployed** — `bin/gen-docs` runs repository code, and running a stranger's code with a token that can write `gh-pages` would hand them the site. They get the built site as a workflow artifact instead.
 

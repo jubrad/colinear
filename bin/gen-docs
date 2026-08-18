@@ -26,8 +26,6 @@ for arg in "$@"; do
   esac
 done
 
-MATERIAL='mkdocs-material==9.7.7'
-GLIGHTBOX='mkdocs-glightbox==0.4.0'
 
 # the registry loads custom views from the user's config dir on import: point
 # HOME somewhere empty so a local custom view can't leak into the docs
@@ -67,9 +65,9 @@ if [[ -x "$venv/bin/mkdocs" ]]; then
 elif command -v mkdocs >/dev/null 2>&1 && python3 -c 'import material' >/dev/null 2>&1; then
   mkdocs='mkdocs'
 else
-  echo "── setting up $venv ($MATERIAL)"
+  echo "── setting up $venv from requirements.txt"
   python3 -m venv "$venv"
-  "$venv/bin/pip" -q install "$MATERIAL" "$GLIGHTBOX"
+  "$venv/bin/pip" -q install -r requirements.txt
   mkdocs="$venv/bin/mkdocs"
 fi
 

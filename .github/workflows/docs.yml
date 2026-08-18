@@ -58,7 +58,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install mkdocs-material==9.7.7 mkdocs-glightbox==0.4.0
+      - run: pip install -r requirements.txt
       # --check: the generated table must already match the registry, every
       # view must have a page, and mkdocs --strict rejects a broken link
       - name: generate and build the docs
@@ -118,15 +118,23 @@ jobs:
     # this repository can only be created by an admin, so a pull request whose
     # head lives here is a maintainer's.
     #
-    # gh-pages is the exception — it has to be writable by CI, so it is excluded
-    # from that ruleset, which means anyone with write access can push it. A
-    # pull request *from* gh-pages would therefore be a non-admin's branch
-    # reaching a job that holds contents:write. Refuse it.
+    # Two branch patterns are excluded from that ruleset so machines can write
+    # them, which also means write access — not admin — is enough to push them.
+    # A pull request from either would otherwise be a non-admin's branch
+    # reaching the one job that holds contents:write:
+    #
+    #   gh-pages       CI publishes the site here
+    #   dependabot/**  Dependabot cannot be given a ruleset bypass on a
+    #                  personal repository, so its branches are excluded
+    #
+    # Dependabot's own runs get a read-only token anyway, so a preview would
+    # fail rather than deploy — skipping is the honest outcome, not a red X.
     if: >-
       github.event_name == 'pull_request' &&
       github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref != 'gh-pages'
+      github.event.pull_request.head.ref != 'gh-pages' &&
+      !startsWith(github.event.pull_request.head.ref, 'dependabot/')
     needs: build
     runs-on: ubuntu-latest
     permissions:
