@@ -67,7 +67,10 @@ export interface IssueProvider {
   readonly scopeLabel: string;
 
   /** issues in a scope; undefined scope = mine, ALL_SCOPES = everywhere */
-  issues(scope: string | undefined, opts?: { includeProjects?: boolean }): Promise<Issue[]>;
+  issues(
+    scope: string | undefined,
+    opts?: { includeProjects?: boolean; includeSubIssues?: boolean },
+  ): Promise<Issue[]>;
   filteredIssues(filter: IssueFilter): Promise<Issue[]>;
   issuesByIds(ids: string[]): Promise<Issue[]>;
   subIssues(parentId: string): Promise<Issue[]>;

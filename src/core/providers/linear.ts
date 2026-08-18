@@ -111,16 +111,30 @@ export const ALL_TEAMS = '*';
 export async function fetchIssues(
   cfg: Config,
   teamKey?: string,
-  opts?: { includeProjects?: boolean },
+  opts?: { includeProjects?: boolean; includeSubIssues?: boolean },
 ): Promise<Issue[]> {
-  const filter: Record<string, unknown> = {
-    state: { type: { in: ['triage', 'backlog', 'unstarted', 'started'] } },
-  };
+  const open = { state: { type: { in: ['triage', 'backlog', 'unstarted', 'started'] } } };
+  const filter: Record<string, unknown> = { ...open };
   if (!opts?.includeProjects) filter.project = { null: true };
   if (teamKey === undefined) filter.assignee = { isMe: { eq: true } };
   else if (teamKey !== ALL_TEAMS) filter.team = { key: { eq: teamKey } };
-  return queryIssuesPaged(cfg, filter);
+  const top = await queryIssuesPaged(cfg, filter);
+  if (!opts?.includeSubIssues) return top;
+
+  // Sub-issues are usually invisible here for reasons that have nothing to do
+  // with being sub-issues: they inherit the parent's project (excluded unless
+  // `p`) or belong to whoever picked them up (excluded in the "mine" view). So
+  // this asks for them by parent instead of relaxing the filters, which would
+  // change what the list means.
+  const parents = top.map((i) => i.id).slice(0, CHILD_PARENT_CAP);
+  if (!parents.length) return top;
+  const children = await queryIssuesPaged(cfg, { ...open, parent: { id: { in: parents } } });
+  const seen = new Set(top.map((i) => i.id));
+  return [...top, ...children.filter((c) => !seen.has(c.id))];
 }
+
+/** One extra query, not one per row — but a filter has a size, so it is capped. */
+const CHILD_PARENT_CAP = 200;
 
 export async function fetchTeams(cfg: Config): Promise<Scope[]> {
   const data = await gql<{ teams: { nodes: Scope[] } }>(

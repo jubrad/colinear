@@ -64,20 +64,21 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const [sortKey, setSortKey] = useState(spec?.sort ?? 'updated');
   const [sortDesc, setSortDesc] = useState(false);
   const [includeProjects, setIncludeProjects] = useState(false);
+  const [includeSubs, setIncludeSubs] = useState(false);
 
   const refresh = useCallback(
-    (teamKey: string | undefined, withProjects = includeProjects) => {
+    (teamKey: string | undefined, withProjects = includeProjects, withSubs = includeSubs) => {
       setLoading(true);
       setError(undefined);
       const fetch = spec
         ? providerFor(cfg).filteredIssues(spec.filter ?? {})
-        : providerFor(cfg).issues(teamKey, { includeProjects: withProjects });
+        : providerFor(cfg).issues(teamKey, { includeProjects: withProjects, includeSubIssues: withSubs });
       fetch
         .then((all) => setIssues(all.filter((i) => !store.get(i.id))))
         .catch((e) => setError(String(e)))
         .finally(() => setLoading(false));
     },
-    [cfg, spec, includeProjects],
+    [cfg, spec, includeProjects, includeSubs],
   );
 
   useEffect(() => refresh(team), []);
@@ -134,12 +135,15 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
 
   const rows = useMemo(() => {
     const matched = filterIssues(issues, query, labelFilters);
-    if (sortKey === 'updated') return sortDesc ? [...matched].reverse() : matched;
-    const col = columns.find((c) => c.key === sortKey);
-    if (!col) return matched;
-    const sorted = [...matched].sort(defaultSort(col));
-    return sortDesc ? sorted.reverse() : sorted;
-  }, [issues, query, labelFilters, sortKey, sortDesc, columns]);
+    const ordered = (() => {
+      if (sortKey === 'updated') return sortDesc ? [...matched].reverse() : matched;
+      const col = columns.find((c) => c.key === sortKey);
+      if (!col) return matched;
+      const sorted = [...matched].sort(defaultSort(col));
+      return sortDesc ? sorted.reverse() : sorted;
+    })();
+    return includeSubs ? nestUnderParents(ordered) : ordered;
+  }, [issues, query, labelFilters, sortKey, sortDesc, columns, includeSubs]);
 
   useEffect(() => setCursor((c) => Math.max(0, Math.min(c, rows.length - 1))), [rows.length]);
 
@@ -208,6 +212,13 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       if (input === 'p') {
         setIncludeProjects((v) => {
           refresh(team, !v);
+          return !v;
+        });
+      }
+      // a tracker without sub-issues has nothing to toggle
+      if (input === 'S' && provider.capabilities.subIssues) {
+        setIncludeSubs((v) => {
+          refresh(team, includeProjects, !v);
           return !v;
         });
       }
@@ -284,7 +295,9 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       <Box justifyContent="space-between">
         <Text>
           <Text bold color={theme.accent}>
-            {spec ? spec.name : `issues(${team === '*' ? 'all' : (team ?? 'mine')}${includeProjects ? '+projects' : ''})`}
+            {spec
+              ? spec.name
+              : `issues(${team === '*' ? 'all' : (team ?? 'mine')}${includeProjects ? '+projects' : ''}${includeSubs ? '+subs' : ''})`}
           </Text>
           <Text dimColor>
             [{rows.length}/{issues.length}]
@@ -377,6 +390,30 @@ function LabelsCell(props: { labels: Array<{ name: string; color: string }>; wid
   );
 }
 
+/**
+ * Children immediately after their parent, everything else where the sort put
+ * it. A child whose parent isn't in the list keeps its own place — it is a
+ * top-level row as far as this view is concerned.
+ */
+function nestUnderParents(rows: Issue[]): Issue[] {
+  const children = new Map<string, Issue[]>();
+  const present = new Set(rows.map((i) => i.id));
+  for (const issue of rows) {
+    if (!issue.parent || !present.has(issue.parent.id)) continue;
+    const list = children.get(issue.parent.id) ?? [];
+    list.push(issue);
+    children.set(issue.parent.id, list);
+  }
+  if (!children.size) return rows;
+  const nested = new Set([...children.values()].flat().map((i) => i.id));
+  const out: Issue[] = [];
+  for (const issue of rows) {
+    if (nested.has(issue.id)) continue;
+    out.push(issue, ...(children.get(issue.id) ?? []));
+  }
+  return out;
+}
+
 export const issuesKeys: Array<[string, string]> = [
   ['space', 'select'],
   ['enter', 'dispatch'],
@@ -390,5 +427,6 @@ export const issuesKeys: Array<[string, string]> = [
   ['s', 'sort'],
   ['n', 'new issue'],
   ['p', 'projects on/off'],
+  ['S', 'sub-issues on/off'],
   ['r', 'refresh'],
 ];
