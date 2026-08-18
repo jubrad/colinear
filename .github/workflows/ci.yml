@@ -7,6 +7,9 @@ on:
 
 jobs:
   check:
+    # "check (20)" told you the matrix index and nothing about the work; this
+    # says which runtime is being verified, which is the only variable here
+    name: node ${{ matrix.node }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -30,6 +33,10 @@ jobs:
   # Naming the matrix jobs directly would work too, but then adding a Node
   # version silently changes what protection covers — this doesn't.
   ci:
+    # PINNED: the "no push main" ruleset requires a status check named exactly
+    # "ci". Renaming this job (or letting the id supply the name) silently
+    # removes the gate — pull requests would go green with nothing required.
+    name: ci
     # always(): a skipped job counts as satisfied, so it has to run and fail
     # rather than be skipped when the matrix fails
     if: always()
