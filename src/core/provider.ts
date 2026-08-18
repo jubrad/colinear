@@ -24,6 +24,8 @@ export interface ProviderCapabilities {
   priority: boolean;
   /** projects (or epics) → :projects, :project, project channels */
   projects: boolean;
+  /** projects can be created from here → `n` in :projects */
+  createProjects: boolean;
   /** a scope above the issue to browse by → the `t` picker, `--team` */
   scopes: boolean;
   /** issue states we can move through → stateSync */
@@ -42,6 +44,20 @@ export interface CreateIssueInput {
   priority?: number;
   /** makes the new issue a child of this one */
   parentId?: string;
+}
+
+export interface CreateProjectInput {
+  name: string;
+  /** one line, for a list */
+  description?: string;
+  /** the brief itself, markdown */
+  content?: string;
+  /** the scopes it belongs to — a Linear project can span teams */
+  scopeIds: string[];
+  /** the tracker's own vocabulary: planned, started, paused … */
+  state?: string;
+  priority?: number;
+  targetDate?: string;
 }
 
 export interface IssueFilter {
@@ -82,6 +98,8 @@ export interface IssueProvider {
   projectIssues(projectId: string): Promise<Issue[]>;
 
   create(input: CreateIssueInput): Promise<{ id: string; identifier: string }>;
+  /** throws where capabilities.createProjects is false */
+  createProject(input: CreateProjectInput): Promise<{ id: string; name: string; url?: string }>;
   blockIssue(blockerId: string, blockedId: string): Promise<void>;
   assign(issueId: string, userId: string): Promise<void>;
   comment(issueId: string, body: string): Promise<void>;

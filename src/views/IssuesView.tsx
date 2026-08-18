@@ -14,8 +14,8 @@ import { DispatchModal, type DispatchOptions } from '../ui/DispatchModal.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { theme } from '../theme.js';
 
-const PRIORITY_LABELS = ['—', 'Urgent', 'High', 'Med', 'Low'];
-const PRIORITY_COLORS: Array<string | undefined> = [undefined, 'red', 'yellow', 'white', 'gray'];
+export const PRIORITY_LABELS = ['—', 'Urgent', 'High', 'Med', 'Low'];
+export const PRIORITY_COLORS: Array<string | undefined> = [undefined, 'red', 'yellow', 'white', 'gray'];
 
 type BarMode = 'fuzzy' | 'team' | 'label' | 'sort' | 'new';
 
