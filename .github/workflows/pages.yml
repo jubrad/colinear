@@ -1,0 +1,44 @@
+name: pages
+
+# Deploy whatever is on gh-pages, using the Pages *deployment* API rather than
+# the legacy branch builder.
+#
+# Why the indirection: gh-pages holds the main site at the root and previews
+# under previews/pr-<n>/, which needs a branch. Serving that branch through the
+# legacy builder failed with nothing but "Page build failed" on every commit —
+# including a commit that only deleted files — while the deployment API had
+# published every time it was asked. So the branch stays the store, and this
+# publishes it.
+#
+# No loop: this workflow reads gh-pages and pushes nothing.
+
+on:
+  push:
+    branches: [gh-pages]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy the site
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deploy
+        uses: actions/deploy-pages@v4
