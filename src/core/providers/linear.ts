@@ -1,6 +1,6 @@
 import type { IssueProvider } from '../provider.js';
 import { safeBranch, stateTypeOf } from './shared.js';
-import type { Config, Issue, Scope } from '../types.js';
+import type { Project, Config, Issue, Scope } from '../types.js';
 
 const API = 'https://api.linear.app/graphql';
 
@@ -168,35 +168,60 @@ export async function fetchFilteredIssues(cfg: Config, spec: IssueFilterSpec): P
   return queryIssuesPaged(cfg, filter);
 }
 
-export async function fetchProjects(cfg: Config): Promise<import('../types.js').Project[]> {
+type ProjectNode = {
+  id: string;
+  name: string;
+  description?: string;
+  state: string;
+  priority?: number;
+  progress: number;
+  targetDate?: string;
+  url: string;
+  teams: { nodes: Array<{ id: string; key: string; name: string }> };
+  lead?: { displayName: string } | null;
+};
+
+async function fetchProjectsPage(
+  cfg: Config,
+  after: string | undefined,
+): Promise<{ nodes: ProjectNode[]; pageInfo: { hasNextPage: boolean; endCursor?: string } }> {
   const data = await gql<{
-    projects: {
-      nodes: Array<{
-        id: string;
-        name: string;
-        description?: string;
-        state: string;
-        priority?: number;
-        progress: number;
-        targetDate?: string;
-        url: string;
-        teams: { nodes: Array<{ id: string; key: string; name: string }> };
-        lead?: { displayName: string } | null;
-      }>;
-    };
+    projects: { nodes: ProjectNode[]; pageInfo: { hasNextPage: boolean; endCursor?: string } };
   }>(
     cfg,
-    `query {
-      projects(first: 75, filter: { state: { in: ["planned", "started", "paused"] } }) {
+    // backlog belongs in the list: a project that exists but isn't scheduled
+    // yet is exactly the one you'd open to plan. Only settled states stay out.
+    `query ($after: String) {
+      projects(
+        first: 100
+        after: $after
+        filter: { state: { nin: ["completed", "canceled"] } }
+      ) {
         nodes {
           id name description state priority progress targetDate url
           teams { nodes { id key name } }
           lead { displayName }
         }
+        pageInfo { hasNextPage endCursor }
       }
     }`,
+    { after },
   );
-  return data.projects.nodes.map((n) => ({ ...n, scopes: n.teams.nodes, lead: n.lead?.displayName }));
+  return data.projects;
+}
+
+/** A workspace can hold more projects than one page; a fixed 75 silently hid the rest. */
+const MAX_PROJECTS = 400;
+
+export async function fetchProjects(cfg: Config): Promise<Project[]> {
+  const nodes = [];
+  let after: string | undefined;
+  do {
+    const page = await fetchProjectsPage(cfg, after);
+    nodes.push(...page.nodes);
+    after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : undefined;
+  } while (after && nodes.length < MAX_PROJECTS);
+  return nodes.map((n) => ({ ...n, scopes: n.teams.nodes, lead: n.lead?.displayName }));
 }
 
 export async function fetchProjectIssues(cfg: Config, projectId: string): Promise<Issue[]> {
