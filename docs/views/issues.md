@@ -13,6 +13,7 @@ still dispatch.
 | `/` | fuzzy filter. `#bug` or `label:bug` filters by label |
 | `t` | switch team (the provider's word for it — team, project, repo) |
 | `l` | add a label filter · `s` sort by any column · `p` include/exclude project issues |
+| `S` | sub-issues on/off — pull in the children of the issues listed, under their parents |
 | `space` | select — actions apply to the selection, or to the row under the cursor |
 | `enter` | **dispatch** |
 | `D` | dispatch, skipping triage |
@@ -28,5 +29,12 @@ still dispatch.
   automatically when their blockers finish. `f` on the board starts one anyway, keeping the blockers
   as merge-order dependencies.
 - Queries paginate with a 500-issue cap; the default view hides project issues (`p` shows them).
+- **Sub-issues are usually missing for reasons that have nothing to do with being sub-issues.** They
+  inherit their parent's project (hidden unless `p`), or they belong to whoever picked them up
+  (hidden in the default `mine` view). `S` asks for them by parent instead of relaxing those
+  filters, so the list keeps meaning what its header says: one extra query, children placed directly
+  under the parent they belong to, and a `↳ PARENT` in the parent column. A child whose parent isn't
+  in the list stays where the sort put it. Providers without sub-issues
+  (`capabilities.subIssues`) ignore the key.
 - Custom views are saved filters that render in this same table — see
   [configuration](../configuration.md#custom-views).

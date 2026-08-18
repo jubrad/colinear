@@ -194,7 +194,18 @@ export function sqliteProvider(cfg: Config): IssueProvider {
         params.push(scope);
       }
       if (!opts?.includeProjects) parts.push('i.project_id IS NULL');
-      return issues(`WHERE ${parts.join(' AND ')} ORDER BY i.priority = 0, i.priority, i.number`, params);
+      const order = 'ORDER BY i.priority = 0, i.priority, i.number';
+      const top = issues(`WHERE ${parts.join(' AND ')} ${order}`, params);
+      if (!opts?.includeSubIssues || !top.length) return top;
+      // by parent, not by relaxing the filters above — a sub-issue is hidden
+      // here because it inherited a project, not because it is a sub-issue
+      const ids = top.map((i) => i.id);
+      const children = issues(
+        `WHERE ${open} AND i.parent_id IN (${ids.map(() => '?').join(',')}) ${order}`,
+        ids,
+      );
+      const seen = new Set(ids);
+      return [...top, ...children.filter((c) => !seen.has(c.id))];
     },
     filteredIssues: async (filter: IssueFilter) => {
       const parts: string[] = [];

@@ -8,3 +8,6 @@ site/
 
 # bin/gen-docs provisions this when mkdocs-material is not already available
 .venv-docs/
+
+# playwright-mcp scratch output (screenshot/driving sessions)
+.playwright-mcp/
