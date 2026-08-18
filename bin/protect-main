@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Branch protection for main, as repository rulesets.
+#
+#   bin/protect-main              apply (or update) both rulesets
+#   bin/protect-main --dry-run    print what would be sent, change nothing
+#   bin/protect-main --admin-bypass   let repository admins push past them
+#
+# Two rulesets:
+#
+#   main             main takes changes through a pull request that passes CI,
+#                    cannot be force-pushed, and cannot be deleted.
+#   fork-only        no one may create or update any *other* branch in this
+#                    repository, so a contribution has to arrive as a pull
+#                    request from a fork.
+#
+# The second one has a consequence worth understanding before you run this:
+# **GitHub will not let you fork a repository into the account that already
+# owns it.** With no bypass, the owner of a personal repo can no longer open a
+# pull request at all — there is nowhere to push the branch. The ways out are
+# to move the repo into an organisation (then fork it to your personal
+# account), contribute from a second account, or run this with
+# --admin-bypass, which keeps branch pushes working for admins while everyone
+# else must fork.
+set -euo pipefail
+
+repo="${REPO:-jubrad/colinear}"
+dry=''
+bypass='[]'
+
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) dry='1' ;;
+    # actor_id 5 is the built-in "repository admin" role
+    --admin-bypass) bypass='[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}]' ;;
+    *) echo "usage: bin/protect-main [--dry-run] [--admin-bypass]" >&2; exit 2 ;;
+  esac
+done
+
+# ci.yml runs on every pull request; docs.yml is path-filtered, so requiring
+# its `build` would leave any PR that doesn't touch docs waiting on a check
+# that never runs
+main_ruleset=$(cat <<JSON
+{
+  "name": "main",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": $bypass,
+  "conditions": { "ref_name": { "include": ["refs/heads/main"], "exclude": [] } },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true
+      }
+    },
+    { "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "required_status_checks": [
+          { "context": "check (20)" },
+          { "context": "check (22)" },
+          { "context": "check (24)" }
+        ]
+      }
+    }
+  ]
+}
+JSON
+)
+
+# every branch except main: nothing may be created or pushed here, which is
+# what leaves a fork as the only way in
+fork_ruleset=$(cat <<JSON
+{
+  "name": "fork-only",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": $bypass,
+  "conditions": { "ref_name": { "include": ["~ALL"], "exclude": ["refs/heads/main"] } },
+  "rules": [
+    { "type": "creation" },
+    { "type": "update" }
+  ]
+}
+JSON
+)
+
+if [[ -n "$dry" ]]; then
+  echo "$main_ruleset"
+  echo "$fork_ruleset"
+  exit 0
+fi
+
+existing="$(gh api "repos/$repo/rulesets" 2>&1)" || {
+  echo "$existing" >&2
+  echo >&2
+  echo "Rulesets need the repository public, or the account on GitHub Pro." >&2
+  exit 1
+}
+
+apply() {
+  local name="$1" body="$2" id
+  id="$(jq -r --arg n "$name" '.[] | select(.name==$n) | .id' <<<"$existing" | head -1)"
+  if [[ -n "$id" ]]; then
+    gh api -X PUT "repos/$repo/rulesets/$id" --input - <<<"$body" >/dev/null
+    echo "updated ruleset: $name"
+  else
+    gh api -X POST "repos/$repo/rulesets" --input - <<<"$body" >/dev/null
+    echo "created ruleset: $name"
+  fi
+}
+
+apply main "$main_ruleset"
+apply fork-only "$fork_ruleset"
+
+echo
+gh api "repos/$repo/rulesets" --jq '.[] | "\(.name): \(.enforcement)"'

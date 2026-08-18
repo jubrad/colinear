@@ -8,6 +8,7 @@ Read DESIGN.md first — architecture, code map, task lifecycle, and the renderi
 bin/check            # the gate CI runs: lint, build, CDC replay
 bin/lint             # typecheck + docs lint (fast; what a pre-commit hook runs)
 bin/gen-docs --serve # regenerate the views table, build the docs site, browse it
+bin/protect-main     # branch protection for main, as rulesets (needs a public repo or Pro)
 npm run dev          # run from source (tsx)
 npm run build        # rebuild dist (the linked `coli` bin runs dist, not src)
 npm run doctor       # env sanity: claude CLI, gh, Linear key, repos
