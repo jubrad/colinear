@@ -7,9 +7,10 @@ on:
 
 jobs:
   check:
-    # "check (20)" told you the matrix index and nothing about the work; this
-    # says which runtime is being verified, which is the only variable here
-    name: node ${{ matrix.node }}
+    # named after the command it runs, so a red check tells you what to type
+    # locally to reproduce it — the node version is the only thing the matrix
+    # varies, and it goes in brackets because it is the smaller half of the fact
+    name: bin/check (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
