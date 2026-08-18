@@ -36,7 +36,7 @@ The document's prose is written for you, to decide what to send. It never leaves
 
 | key | what |
 |---|---|
-| `r` start a pre-review · `x` cancel one · `R` refresh the list |
+| `r` start a pre-review · `x` cancel one · `u` refresh the list |
 | `enter` | the review document + discussion |
 | `p` post · `A` approve · `X` request changes · `n` attach a note that rides along |
 | `s` | hand the terminal to that review's claude session |

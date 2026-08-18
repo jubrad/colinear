@@ -177,7 +177,10 @@ export function ReviewsView(props: { param?: string }) {
         execFile('open', [selected.url], () => {});
         ctx.toast(`opened ${selected.repository}#${selected.number}`, 'info');
       }
-      if (input === 'R') ctx.dispatcher.pollReviews();
+      // not R: the global handler owns R (reload ui) and Ink runs every
+      // active useInput hook, so binding it here fired both — a refresh
+      // that also restarted the frontend
+      if (input === 'u') ctx.dispatcher.pollReviews();
       if (input === 'S') {
         // cycle the field; landing back on the current one flips direction
         const next = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length];
@@ -459,6 +462,6 @@ export const reviewsKeys: Array<[string, string]> = [
   ['o', 'open PR'],
   ['x', 'cancel'],
   ['S', 'sort'],
-  ['R', 'refresh'],
+  ['u', 'refresh'],
   ['/', 'filter'],
 ];
