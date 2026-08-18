@@ -7,6 +7,21 @@ Dispatching (`enter`, or `c` for the custom modal) immediately self-assigns the 
 3. **Work pass**: every session opens with a full task-context block (issue + description, parent, repo/remotes, all PRs with pin markers, triage plan, your instructions, merge-order dependencies). Existing PRs are **adopted** — the agent reviews their diff and pushes to their branch, never duplicates. A subtask checklist file drives the card's progress bar; lints and tests per the verification tier; subagent diff review; push to the repo's `pushRemote` (your fork, if configured); draft PR against `prBase` of the upstream via `gh pr create --draft`. Agents may stack PRs (chained by base branch, rendered as a stack). **Agents never mark PRs ready** — that's your `d`.
 4. **Checks** from the repo config, then PR polling: state, CI rollup, review decision, mergeability. Matching prefers open/merged PRs over closed duplicates, and `m` can pin the canonical PR (number, `#123`, or URL); a failed task that gains a live PR un-fails itself. With `ciAutofix`, red checks dispatch a fix session that pulls the failing logs and pushes a fix.
 
+## Manual dispatch — a worktree, no agent
+
+The custom modal's **start** field has a second setting: `manual — worktree only`. The issue is
+assigned and moved to In Progress and the worktree is cut off `<remote>/<defaultBranch>` exactly as
+usual, and then nothing runs. The card sits in **Working** with `⏸ worktree ready — r starts it`, no
+spinner, no session, no tokens.
+
+This is for the work that goes badly when an agent starts from a blank checkout: a design doc whose
+headings are the contract, a file layout you want followed, a first commit that fixes the shape of
+the thing. Write it in the worktree (`s` opens a shell there), then `r` hands the same worktree to
+an agent — `ensureWorktree` reuses what's there, so the agent starts from your skeleton rather than
+inventing its own.
+
+`x` cancels a prepared task the way it cancels a queued one; the worktree stays for `:gc`.
+
 ## Talking to a running agent
 
 `M` on a card (board or `:tasks`) sends the agent a message without attaching to it — "use the existing helper", "don't touch the schema", "rebase first".

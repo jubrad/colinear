@@ -200,22 +200,33 @@ export function ProjectView(props: { param?: string }) {
       {/* last: absolute boxes paint in tree order, so a popup rendered
           before its siblings is overdrawn by them */}
       {asking && (
-        <Popup
-          {...popupPlacement(ctx.size, {
-            width: Math.min(88, ctx.size.columns - 8),
-            height: formHeight(ctx.cfg.repos.length > 1 ? 4 : 3),
-          }, ctx.cmdOpen)}
-        >
-        <DispatchModal
-          count={picked().length}
-          repos={ctx.cfg.repos}
-          onSubmit={(opts) => {
-            setAsking(false);
-            dispatch(picked(), opts);
-          }}
-          onCancel={() => setAsking(false)}
-        />
-        </Popup>
+        (() => {
+          // options + a paragraph-sized instructions box, capped so a short
+          // terminal still shows the whole form rather than clipping the footer
+          const optionRows = ctx.cfg.repos.length > 1 ? 5 : 4;
+          const inner = Math.min(88, ctx.size.columns - 8) - 4;
+          const lines = Math.max(3, Math.min(10, ctx.size.rows - 8 - formHeight(optionRows) - 4));
+          const place = popupPlacement(
+            ctx.size,
+            { width: inner + 4, height: formHeight(optionRows, lines + 2) },
+            ctx.cmdOpen,
+          );
+          return (
+            <Popup {...place}>
+              <DispatchModal
+                count={picked().length}
+                repos={ctx.cfg.repos}
+                width={inner}
+                instructionLines={lines}
+                onSubmit={(opts) => {
+                  setAsking(false);
+                  dispatch(picked(), opts);
+                }}
+                onCancel={() => setAsking(false)}
+              />
+            </Popup>
+          );
+        })()
       )}
     </Box>
   );

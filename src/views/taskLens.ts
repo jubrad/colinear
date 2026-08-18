@@ -14,6 +14,9 @@ import { boardOrder, prRank, prState } from './BoardView.js';
 export function statusText(task: Task): string {
   if (task.maintenance === 'rebase') return 'rebasing';
   if (task.maintenance === 'fixci') return 'fixing ci';
+  // a manual dispatch is in Working with nothing running: say so, or the card
+  // looks like an agent that has gone quiet
+  if (task.awaitingStart) return 'manual — r starts it';
   return task.status.replace('_', ' ');
 }
 
