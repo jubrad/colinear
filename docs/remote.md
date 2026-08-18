@@ -17,20 +17,14 @@ authenticated there as well.
 ## The tunnel
 
 colinear speaks NDJSON over a unix socket, and OpenSSH forwards unix sockets, so the transport needs
-no code:
+no protocol work — only for the socket to exist at the path this context looks in.
 
-```bash
-ssh -N -L ~/.local/state/colinear/contexts/vm/coli.sock:/home/you/.local/state/colinear/coli.sock vm
-```
-
-Give it a [context](configuration.md#contexts) rather than pointing it at your local socket path: a
-context has its own state directory and socket, so a remote daemon can't collide with a local one and
-you can run both at once.
+Set `"forward": true` and colinear opens it for you:
 
 ```json
 // ~/.config/colinear/contexts/vm.json
 {
-  "remote": { "ssh": "vm" },
+  "remote": { "ssh": "vm", "forward": true },
   "repos": [{ "name": "cloud", "path": "/home/you/work/cloud" }]
 }
 ```
@@ -38,6 +32,38 @@ you can run both at once.
 ```bash
 coli --context vm
 ```
+
+Give it a [context](configuration.md#contexts) rather than pointing it at your local socket path: a
+context has its own state directory and socket, so a remote daemon can't collide with a local one and
+you can run both at once.
+
+### What forwarding actually does
+
+When the context's socket has nothing behind it, colinear asks the far side where its socket lives
+(`ssh vm 'coli daemon socket'` — the answer depends on that machine's `HOME` and context, so it is
+asked rather than guessed), then runs the equivalent of:
+
+```bash
+ssh -N -L ~/.local/state/colinear/contexts/vm/coli.sock:/home/you/.local/state/colinear/coli.sock vm
+```
+
+Set `"socket"` if you would rather name the far-side path than have it asked for:
+
+```json
+{ "remote": { "ssh": "vm", "forward": true, "socket": "/home/you/.local/state/colinear/coli.sock" } }
+```
+
+The tunnel is a child of the session that opened it, and goes down with it. That is deliberate: a
+forward left running after the UI exits leaves a socket that accepts connections with nothing behind
+it, which is worse than no socket at all. If the tunnel dies mid-session the connection drops the way
+any daemon disconnect does, and the reason is in `colinear.log`.
+
+Forwarding needs `ssh`. A generic `exec` prefix ([docker](docker.md), `kubectl`) has no equivalent,
+so `"forward": true` without `"ssh"` is refused at config load rather than failing later as a
+connect timeout.
+
+You can still run the tunnel yourself — leave `forward` unset and use the `ssh -N -L` line above.
+`coli daemon socket` prints the path either side expects.
 
 `remote.ssh` is whatever you'd type after `ssh` — a host, `user@host`, or an ssh_config alias. Paths
 in that config are **the VM's** paths, since that's where agents run.

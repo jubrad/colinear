@@ -90,13 +90,13 @@ function daemonPid(pidPath = PID_PATH): number | undefined {
   }
 }
 
-/** `coli daemon [stop|status]` — the backend, and its lifecycle controls. */
+/** `coli daemon [stop|status|socket]` — the backend, and its lifecycle controls. */
 async function daemonCommand(sub?: string): Promise<void> {
   // A remote or containerized daemon's pidfile holds a pid from ITS namespace.
   // Signalling that number here would, at best, do nothing — at worst it would
   // kill an unrelated local process that happens to share the id.
   const remote = loadConfig({ requireKey: false }).remote;
-  if (remote && sub !== undefined) {
+  if (remote && sub !== undefined && sub !== 'socket') {
     console.log(
       `this context's daemon runs on ${remote.label} — manage it there:\n` +
         `  ${remote.exec.join(' ')} ${sub === 'stop' ? "'pkill -f \"coli daemon\"'" : "'coli daemon status'"}`,
@@ -112,6 +112,12 @@ async function daemonCommand(sub?: string): Promise<void> {
     }
     process.kill(pid, 'SIGTERM');
     console.log(`stopped daemon (pid ${pid}) — agents were aborted and resume with r`);
+    return;
+  }
+  // asked over ssh by the far side's tunnel setup: where this context's socket
+  // is depends on HOME and the context, so the answer has to come from here
+  if (sub === 'socket') {
+    console.log(SOCKET_PATH);
     return;
   }
   if (sub === 'status') {
