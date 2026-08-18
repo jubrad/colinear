@@ -23,3 +23,20 @@ jobs:
       # and the CDC replay that proves the client mirror matches the store.
       # It picks its own throwaway state dir, so no runner state is touched.
       - run: bin/check
+
+  # One stable name for branch protection to require. The ruleset asks for a
+  # check called "ci"; check names come from job names, so without this there
+  # is nothing by that name to wait for and a pull request never goes green.
+  # Naming the matrix jobs directly would work too, but then adding a Node
+  # version silently changes what protection covers — this doesn't.
+  ci:
+    # always(): a skipped job counts as satisfied, so it has to run and fail
+    # rather than be skipped when the matrix fails
+    if: always()
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - name: the matrix must have passed
+        run: |
+          echo "check: ${{ needs.check.result }}"
+          [ "${{ needs.check.result }}" = success ] || exit 1
