@@ -7,7 +7,7 @@ Read DESIGN.md first — architecture, code map, task lifecycle, and the renderi
 ```bash
 bin/check            # the gate CI runs: lint, build, CDC replay
 bin/lint             # typecheck + docs lint (fast; what a pre-commit hook runs)
-bin/gen-docs         # regenerate the views table, stage and build the docs site
+bin/gen-docs --serve # regenerate the views table, build the docs site, browse it
 npm run dev          # run from source (tsx)
 npm run build        # rebuild dist (the linked `coli` bin runs dist, not src)
 npm run doctor       # env sanity: claude CLI, gh, Linear key, repos
@@ -16,7 +16,7 @@ coli daemon status   # is the backend up? (`stop` to kill it — that aborts liv
 
 Anything runnable — a lint, a gate, a generator — lives in `bin/` as a script you can run by hand, not buried in a workflow or an npm alias; CI calls the same script you do. A generator takes `--check`: it writes nothing and fails if the tree would change, so "the docs are current" is one command.
 
-The docs site is `bin/gen-docs`: it regenerates the views table in `docs/README.md` from `src/views/registry.ts`, checks every view has a page and every alias is documented, then builds `docs/` with mkdocs into `site/`. Staging mirrors the repo layout, so a relative link that works on GitHub works on the site — don't add site-only link rewriting. Prose is written by hand; the generator owns the table between its markers and nothing else.
+The docs site is `bin/gen-docs`: it regenerates the views table in `docs/README.md` from `src/views/registry.ts`, checks every view has a page and every alias is documented, then builds `docs/` with mkdocs into `site/`. Staging symlinks the repo layout, so a relative link that works on GitHub works on the site — don't add site-only link rewriting. Prose is written by hand; the generator owns the table between its markers and nothing else. It needs mkdocs **with the Material theme** (a bare `mkdocs` on PATH fails with "Unrecognised theme name"), so it provisions a pinned `.venv-docs/` unless the environment already has one; `--no-site` skips all of that for the lint path.
 
 Smoke boot: `LINEAR_API_KEY=lin_api_dummy script -q /dev/null timeout 5 npm run dev >/dev/null 2>&1` — board chrome means it rendered. **Judge it by the rendered output and the log, never by `$?`:** macOS `script` does not propagate its child's status (`script -q /dev/null timeout 2 sleep 10` exits 1, not 124), and it sometimes fails to allocate a tty at all (`script: tcgetattr/ioctl: Operation not supported on socket`) — in both cases the harness is lying, not colinear. Grep the frame for box-drawing characters, and re-run before believing a failure. This **starts a daemon against your real config and state**; `coli daemon stop` when done, and never enqueue fake issues into it.
 

@@ -5,3 +5,6 @@ clo-views-export.json
 # bin/gen-docs output: staged sources and the built site
 site-src/
 site/
+
+# bin/gen-docs provisions this when mkdocs-material is not already available
+.venv-docs/
