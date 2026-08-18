@@ -22,6 +22,8 @@ The published site lives on the **`gh-pages`** branch — the main site at the r
 
 
 
+Previews are removed by **reconciliation, not by an event**: `.github/workflows/preview-cleanup.yml` asks, for every `previews/pr-<n>/` on the branch, whether that pull request is still open — on close, on a weekly schedule, and on demand. Deleting on the close event alone lost previews two ways: a close event that never fired (a paths filter, a cancelled run) and a preview job still in flight that pushed *after* the cleanup looked.
+
 Previews are maintainer-only, and the gate is the rulesets rather than a list in the workflow: only an admin can create a branch here, so a pull request from this repository can only be a maintainer's. **Fork pull requests are verified but never deployed** — `bin/gen-docs` runs repository code, and running a stranger's code with a token that can write `gh-pages` would hand them the site. They get the built site as a workflow artifact instead.
 
 The docs site is `bin/gen-docs`: it regenerates the views table in `docs/README.md` from `src/views/registry.ts`, checks every view has a page and every alias is documented, then builds `docs/` with mkdocs into `site/`. Staging symlinks the repo layout, so a relative link that works on GitHub works on the site — don't add site-only link rewriting. Prose is written by hand; the generator owns the table between its markers and nothing else. It needs mkdocs **with the Material theme** (a bare `mkdocs` on PATH fails with "Unrecognised theme name"), so it provisions a pinned `.venv-docs/` unless the environment already has one; `--no-site` skips all of that for the lint path.
