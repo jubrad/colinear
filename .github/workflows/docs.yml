@@ -155,6 +155,14 @@ jobs:
         with:
           name: site
           path: incoming
+      # the merge may have happened while this job was queued; publishing then
+      # would leave a preview nobody will close (see preview-cleanup.yml)
+      - name: still open?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state=$(gh pr view ${{ github.event.pull_request.number }} --json state --jq .state)
+          [ "$state" = OPEN ] || { echo "pull request is $state — nothing to preview"; exit 1; }
       - name: commit the preview to gh-pages
         env:
           TARGET: previews/pr-${{ github.event.pull_request.number }}
@@ -166,32 +174,3 @@ jobs:
           URL: https://jubrad.github.io/colinear/previews/pr-${{ github.event.pull_request.number }}/
           PR: ${{ github.event.pull_request.number }}
         run: bash .github/scripts/comment-preview.sh
-
-  cleanup:
-    name: remove preview
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.action == 'closed' &&
-      github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    concurrency:
-      group: gh-pages
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: gh-pages
-          fetch-depth: 0
-      - name: drop the preview
-        env:
-          TARGET: previews/pr-${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          [ -d "$TARGET" ] || { echo "no preview at $TARGET"; exit 0; }
-          git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git rm -rq "$TARGET"
-          git commit -qm "docs: drop preview for #${{ github.event.pull_request.number }}"
-          git push -q origin gh-pages

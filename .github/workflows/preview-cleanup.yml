@@ -1,0 +1,47 @@
+name: preview cleanup
+
+# Previews are removed by reconciliation, not by reacting to one event: for
+# every previews/pr-<n>/ on gh-pages, is that pull request still open?
+#
+# Deleting on the "closed" event alone lost previews two ways — a close event
+# that never fired (docs.yml's paths filter, or a cancelled run), and a preview
+# job still in flight that pushed its directory *after* the cleanup had looked.
+# Both left a preview for a merged pull request live indefinitely.
+#
+# So: on close, on a schedule, and on demand. Same script each time.
+
+on:
+  pull_request:
+    # deliberately no paths filter — a pull request that changed no docs can
+    # still have a preview from an earlier push
+    types: [closed]
+  schedule:
+    # Mondays, to catch whatever the events missed
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: prune previews
+    runs-on: ubuntu-latest
+    steps:
+      # the repository, for the script
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: pages
+          fetch-depth: 0
+      - name: drop previews for closed pull requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAGES_DIR: pages
+        run: bash .github/scripts/prune-previews.sh
