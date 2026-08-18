@@ -113,12 +113,19 @@ jobs:
 
   preview:
     name: preview
-    # maintainers only: a pull request branch in this repository can only exist
-    # if an admin created it (see the `no branches` ruleset)
+    # Maintainers only, and the gate is the `no branches` ruleset: a branch in
+    # this repository can only be created by an admin, so a pull request whose
+    # head lives here is a maintainer's.
+    #
+    # gh-pages is the exception — it has to be writable by CI, so it is excluded
+    # from that ruleset, which means anyone with write access can push it. A
+    # pull request *from* gh-pages would therefore be a non-admin's branch
+    # reaching a job that holds contents:write. Refuse it.
     if: >-
       github.event_name == 'pull_request' &&
       github.event.action != 'closed' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref != 'gh-pages'
     needs: build
     runs-on: ubuntu-latest
     permissions:
