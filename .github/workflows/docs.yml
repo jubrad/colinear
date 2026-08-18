@@ -92,9 +92,13 @@ jobs:
       group: gh-pages
       cancel-in-progress: false
     steps:
+      # the repository, for the script — gh-pages holds a built site and
+      # nothing else, so the script cannot live there
+      - uses: actions/checkout@v4
       - uses: actions/checkout@v4
         with:
           ref: gh-pages
+          path: pages
           fetch-depth: 0
         continue-on-error: true
       - uses: actions/download-artifact@v4
@@ -104,6 +108,7 @@ jobs:
       - name: commit the site to gh-pages
         env:
           TARGET: .
+          GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/publish-site.sh
 
   preview:
@@ -124,8 +129,10 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: gh-pages
+          path: pages
           fetch-depth: 0
         continue-on-error: true
       - uses: actions/download-artifact@v4
@@ -135,6 +142,7 @@ jobs:
       - name: commit the preview to gh-pages
         env:
           TARGET: previews/pr-${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/publish-site.sh
       - name: link it on the pull request
         env:
@@ -160,7 +168,6 @@ jobs:
         with:
           ref: gh-pages
           fetch-depth: 0
-        continue-on-error: true
       - name: drop the preview
         env:
           TARGET: previews/pr-${{ github.event.pull_request.number }}
