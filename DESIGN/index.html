@@ -1955,7 +1955,7 @@ review, so the post retries once with everything in the body.</p>
 tracker's client.</p>
 <p>Features ask <code>capabilities</code> rather than assuming: <code>workflowStates</code> gates stateSync, <code>blockers</code>
 gates the blocked column and <code>f</code>, <code>subIssues</code> gates tracking parents and <code>u</code>, <code>priority</code> gates the
-PRI column, <code>projects</code> gates <code>:projects</code>, <code>comments</code> gates escalation, and <code>branchNames</code> decides
+PRI column, <code>projects</code> gates <code>:projects</code>, <code>createProjects</code> gates its <code>n</code>, <code>comments</code> gates escalation, and <code>branchNames</code> decides
 whether the provider supplies a branch or <code>safeBranch()</code> derives one. A missing capability turns a
 feature off where the operator can see it (<code>:config</code> lists them), which is the difference between
 a tracker that isn't supported and one that is supported partially.</p>

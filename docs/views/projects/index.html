@@ -922,6 +922,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#new-projects-n" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New projects (n)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#keys-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keys (:projects)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#keys-project" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1286,6 +1308,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#new-projects-n" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New projects (n)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#keys-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keys (:projects)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#keys-project" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1314,9 +1358,48 @@
 
 
 <h1 id="projects-and-project-project-views"><code>:projects</code> and <code>:project</code> — project views<a class="headerlink" href="#projects-and-project-project-views" title="Permanent link">&para;</a></h1>
-<p><code>:projects</code> (aliases <code>pj</code>, <code>proj</code>) lists the tracker's projects: state, progress, lead, teams, target
-date. <code>/</code> filters, <code>t</code> switches team, <code>s</code> sorts, <code>enter</code> opens one.</p>
+<p><code>:projects</code> (aliases <code>pj</code>, <code>proj</code>) lists the tracker's projects: state, priority, progress, lead,
+teams, target date. <code>/</code> filters, <code>t</code> switches team, <code>s</code> sorts, <code>enter</code> opens one.</p>
 <p><code>:project NAME</code> (alias <code>p</code>) is a kanban of that project's issues, whether or not they're dispatched.</p>
+<h2 id="new-projects-n">New projects (<code>n</code>)<a class="headerlink" href="#new-projects-n" title="Permanent link">&para;</a></h2>
+<p><code>n</code> opens a template: the <strong>team</strong> it belongs to, the <strong>state</strong> it starts in (planned / started /
+paused), its <strong>priority</strong>, and a <strong>brief</strong> — a paragraph-sized box where <code>enter</code> is a newline and
+<code>ctrl-d</code> creates.</p>
+<p>An agent turns the brief into the project: a name someone can read, the one line the list shows, and
+a body covering the problem, what is in scope, what is explicitly not, and how anyone will know it
+worked. It is told not to invent a schedule, owners, or an issue breakdown — issues get filed
+separately, and <a href="../plan/"><code>:plan</code></a> is where a breakdown comes from.</p>
+<p>The form asks only for the facts a model should not be guessing. Everything it can write, it writes.</p>
+<p>Demo mode runs no agent: the first line of the brief becomes the name and the rest becomes the body,
+which is a plainer version of the same shape.</p>
+<p>Needs a provider with the <code>createProjects</code> capability.</p>
+<h2 id="keys-projects">Keys (<code>:projects</code>)<a class="headerlink" href="#keys-projects" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>what</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enter</code></td>
+<td>open the project's board</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td><strong>new project</strong> — the template above</td>
+</tr>
+<tr>
+<td><code>p</code></td>
+<td>the <a href="../plan/">planning chat</a> for the project under the cursor</td>
+</tr>
+<tr>
+<td><code>/</code> filter · <code>t</code> team · <code>s</code> sort · <code>o</code> open in the tracker · <code>r</code> refresh</td>
+<td></td>
+</tr>
+</tbody>
+</table>
 <h2 id="keys-project">Keys (<code>:project</code>)<a class="headerlink" href="#keys-project" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
