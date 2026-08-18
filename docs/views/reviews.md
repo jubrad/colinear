@@ -10,6 +10,10 @@ refreshed every five minutes.
 `r` checks the PR out in a worktree and runs one agent over the diff in context. Progress streams
 onto the card. **Nothing is posted.**
 
+The detail pane shows the review's worktree and its **session id** as a ready-to-paste
+`claude --resume` — the same handles a task shows, and the way back into a review session from
+outside colinear.
+
 `enter` opens the **review document** full screen — the agent's write-up on one side, a discussion
 with that same agent on the other (`tab` switches, `j/k` scrolls, `e` edits it in `$EDITOR`). Your
 turn resumes the reviewing session, so the PR is still in context; when the agent needs a decision it

@@ -3,7 +3,10 @@
 Alias: `ta`. Argument: the issue key (`:task CLO-142`). `enter` from the board or the table.
 
 Everything about one task: the scrollable activity log, subtasks, dependencies, check output, and
-each PR with its draft state, CI, review decision and stack base.
+each PR with its draft state, CI, review decision and stack base. The header also carries the
+**worktree path** and the live **session id** as a ready-to-paste `claude --resume` — the two
+handles you need to poke at a session from outside colinear (the transcript lives under
+`~/.claude/projects/<encoded-worktree>/<session-id>.jsonl`).
 
 ## Keys
 
