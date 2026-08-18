@@ -168,13 +168,25 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
   // search at the exact moment the work succeeds. Staling on absence alone
   // therefore forgot every PR reviewed through colinear within one poll.
   const inFlight = new Set(['reviewing', 'posting', 'queued']);
+  // Investment: a posted verdict, findings written and waiting, a session that
+  // can be resumed, or a checkout on disk. Absence from the search must never
+  // stale these — submitting a review, suspending for attach, and answering a
+  // question all fulfil or pause the request, and each has already destroyed
+  // work by being read as "finished with". Absence alone only settles a review
+  // nothing and nobody has touched.
   const posted = new Set(['commented', 'approved', 'changes_requested']);
+  const invested = (r: Review) =>
+    posted.has(r.status) ||
+    r.status === 'ready' ||
+    Boolean(r.sessionId) ||
+    Boolean(r.findings?.length) ||
+    Boolean(r.worktree);
   for (const review of store.listReviews()) {
     if (seen.has(review.id) || review.status === 'stale' || inFlight.has(review.status)) continue;
-    if (posted.has(review.status)) {
-      // posted and no longer requested: stale only when the PR actually
-      // settles. Until then it stays on the list — the author may push again,
-      // and the worktree is deliberately kept for exactly that (docs/views/reviews.md)
+    if (invested(review)) {
+      // stale only when the PR actually settles. Until then it stays on the
+      // list — the author may push again, and the worktree is deliberately
+      // kept for exactly that (docs/views/reviews.md)
       const state = await prCurrentState(review.repository, review.number);
       if (state === 'OPEN' || state === undefined) continue;
       store.updateReview(review.id, { status: 'stale' });
