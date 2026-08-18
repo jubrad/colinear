@@ -1360,7 +1360,10 @@
 <h1 id="task-one-task-in-full"><code>:task</code> — one task in full<a class="headerlink" href="#task-one-task-in-full" title="Permanent link">&para;</a></h1>
 <p>Alias: <code>ta</code>. Argument: the issue key (<code>:task CLO-142</code>). <code>enter</code> from the board or the table.</p>
 <p>Everything about one task: the scrollable activity log, subtasks, dependencies, check output, and
-each PR with its draft state, CI, review decision and stack base.</p>
+each PR with its draft state, CI, review decision and stack base. The header also carries the
+<strong>worktree path</strong> and the live <strong>session id</strong> as a ready-to-paste <code>claude --resume</code> — the two
+handles you need to poke at a session from outside colinear (the transcript lives under
+<code>~/.claude/projects/&lt;encoded-worktree&gt;/&lt;session-id&gt;.jsonl</code>).</p>
 <h2 id="keys">Keys<a class="headerlink" href="#keys" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

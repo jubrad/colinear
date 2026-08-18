@@ -1364,6 +1364,9 @@ refreshed every five minutes.</p>
 <h2 id="assisted-pre-review">Assisted pre-review<a class="headerlink" href="#assisted-pre-review" title="Permanent link">&para;</a></h2>
 <p><code>r</code> checks the PR out in a worktree and runs one agent over the diff in context. Progress streams
 onto the card. <strong>Nothing is posted.</strong></p>
+<p>The detail pane shows the review's worktree and its <strong>session id</strong> as a ready-to-paste
+<code>claude --resume</code> — the same handles a task shows, and the way back into a review session from
+outside colinear.</p>
 <p><code>enter</code> opens the <strong>review document</strong> full screen — the agent's write-up on one side, a discussion
 with that same agent on the other (<code>tab</code> switches, <code>j/k</code> scrolls, <code>e</code> edits it in <code>$EDITOR</code>). Your
 turn resumes the reviewing session, so the PR is still in context; when the agent needs a decision it
