@@ -4,6 +4,8 @@ A k9s-style terminal UI that runs Claude Code agents against your issue tracker.
 
 It runs on **Claude subscription auth** (the logged-in `claude` CLI), works on **Linear** today behind a provider interface, and never touches your working copy: agents get worktrees, and they only ever open draft PRs.
 
+📖 **[Read the docs](https://jubrad.github.io/colinear/)** · 🚀 **[Getting started](https://jubrad.github.io/colinear/docs/getting-started/)**
+
 ![The board: seven columns of dispatched agents, with the selected task's subtasks and live activity in the pane below](docs/images/board.png)
 
 Every task is also a searchable, sortable table — same data, same keys, `:tasks`:
@@ -11,8 +13,6 @@ Every task is also a searchable, sortable table — same data, same keys, `:task
 ![The task table: one row per task with status, repo, PR, CI, elapsed time and tokens](docs/images/tasks.png)
 
 *Both frames are `coli demo` — a fabricated board you can run yourself in thirty seconds.*
-
-📖 **[Read the docs](https://jubrad.github.io/colinear/)** · 🚀 **[Getting started](https://jubrad.github.io/colinear/docs/getting-started/)**
 
 ## Try it in thirty seconds
 
