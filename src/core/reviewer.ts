@@ -21,8 +21,8 @@ const DOC_LIMIT = 64_000;
 
 const SEVERITIES = new Set(['blocking', 'consider', 'nit', 'praise']);
 
-/** Fenced block holding the findings — ```findings preferred, ```json accepted. */
-const FENCE = /```(?:findings|json)\s*([\s\S]*?)```/g;
+/** Opening of the findings fence — ```findings preferred, ```json accepted. */
+const FENCE_OPEN = /```(?:findings|json)[^\S\n]*\n?/g;
 
 /** Drop anything that isn't a finding rather than posting malformed comments. */
 function validFindings(value: unknown): ReviewFinding[] {
@@ -54,24 +54,47 @@ function validFindings(value: unknown): ReviewFinding[] {
  * the source of truth. Structured output would have split them, and every chat
  * turn afterwards would need a second pass to keep the two in sync.
  */
-function parseDoc(text: string): { summary: string; findings: ReviewFinding[] } {
-  const fence = [...text.matchAll(FENCE)].pop();
-  let findings: ReviewFinding[] = [];
-  if (fence) {
-    try {
-      // both shapes turn up: a bare array, and { "findings": [...] }
-      findings = validFindings(JSON.parse(fence[1]));
-    } catch {
-      // a malformed fence costs the findings list, not the review itself
-    }
-  }
-  const prose = text.replace(FENCE, '').trim();
+export function parseDoc(text: string): { summary: string; findings: ReviewFinding[]; fencePresent: boolean } {
+  const extracted = extractFindingsBlock(text);
+  const findings = extracted ? validFindings(extracted.value) : [];
+  const prose = (extracted ? text.slice(0, extracted.start) + text.slice(extracted.end) : text).trim();
   const summary =
     prose
       .split(/\n{2,}/)
       .map((block) => block.trim())
       .find((block) => block && !block.startsWith('#')) ?? prose.slice(0, 500);
-  return { summary, findings };
+  return { summary, findings, fencePresent: Boolean(extracted) || hasFenceOpening(text) };
+}
+
+const hasFenceOpening = (text: string): boolean => {
+  FENCE_OPEN.lastIndex = 0;
+  return FENCE_OPEN.test(text);
+};
+
+/**
+ * The findings block, ending at the first closing fence where the JSON
+ * actually parses. A non-greedy `[\s\S]*?```` regex ended the block at the
+ * first ``` it saw — which, for a finding whose comment carries a fenced code
+ * suggestion, is the *inside* of a string. That truncated the JSON, the parse
+ * failed, and a full review posted as an empty one. The closing fence is the
+ * one that completes valid JSON, so try each candidate in order.
+ */
+function extractFindingsBlock(text: string): { value: unknown; start: number; end: number } | undefined {
+  FENCE_OPEN.lastIndex = 0;
+  for (let open = FENCE_OPEN.exec(text); open; open = FENCE_OPEN.exec(text)) {
+    const bodyStart = open.index + open[0].length;
+    for (let close = text.indexOf('```', bodyStart); close !== -1; close = text.indexOf('```', close + 3)) {
+      try {
+        // both shapes turn up: a bare array, and { "findings": [...] }
+        const value: unknown = JSON.parse(text.slice(bodyStart, close));
+        const fenceEnd = close + 3;
+        return { value, start: open.index, end: fenceEnd };
+      } catch {
+        // an inner fence mid-string — keep scanning for the real closer
+      }
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -221,7 +244,14 @@ export class Reviewer {
         store.updateReview(id, { doc: result.text, summary: result.text.slice(0, 2000), findings: [] });
       }
       const count = store.getReview(id)?.findings?.length ?? 0;
-      store.addReviewActivity(id, `pre-review ready: ${count} finding${count === 1 ? '' : 's'}`);
+      if (count === 0) {
+        // a written review with no findings is almost always a parse failure,
+        // and quietly saying "0" is how one got posted as an empty review
+        store.addReviewActivity(id, '⚠ no findings parsed from the review document — check its ```findings fence');
+        this.toast(`${review.repository}#${review.number}: review ready but no findings parsed`, 'err');
+      } else {
+        store.addReviewActivity(id, `pre-review ready: ${count} finding${count === 1 ? '' : 's'}`);
+      }
       notify(this.cfg, `${review.repository}#${review.number}`, `pre-review ready (${count})`, review.url);
     } catch (err) {
       store.updateReview(id, { status: 'error', error: String(err).slice(0, 300), endedAt: Date.now() });
@@ -247,6 +277,15 @@ export class Reviewer {
     }
     const anchored = (review.findings ?? []).filter((f) => f.line && f.file);
     const loose = (review.findings ?? []).filter((f) => !f.line || !f.file);
+    // zero findings means the fence failed to parse (or was never written):
+    // what would go up is the summary — a description of the PR, not feedback.
+    // That exact thing has been posted to a real PR; never again.
+    if (!(review.findings ?? []).length && event !== 'APPROVE') {
+      store.updateReview(id, { status: 'ready', error: 'no findings parsed — nothing to post' });
+      store.addReviewActivity(id, 'post refused: no findings parsed from the review document');
+      this.toast(`${review.repository}#${review.number}: post refused — no findings parsed (enter to inspect, e to edit)`, 'err');
+      return;
+    }
     const body = reviewBody(review, loose, event, anchored.length > 0);
 
     store.updateReview(id, { status: 'posting', error: undefined });

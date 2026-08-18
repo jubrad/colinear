@@ -231,6 +231,9 @@ PR's head out in `<repo>-worktrees/review-<n>` and runs one session.
 prose for the operator, ending in a ```findings fence holding a JSON array. Findings are
 parsed from that fence, so a chat turn that changes the agent's mind can't leave prose and
 findings disagreeing; structured output would have needed a second pass to keep them in sync.
+The closing fence is found by parsing, not by regex: the block ends at the first ``` where the
+JSON is valid, because a finding whose comment carries a fenced code suggestion puts a ``` in
+the middle of a string — a non-greedy match ended there once, and a full review posted empty.
 The daemon watches the file, so it fills in as it's written and picks up edits made anywhere.
 
 **Posting is deterministic — no session.** The findings are already structured, so colinear
