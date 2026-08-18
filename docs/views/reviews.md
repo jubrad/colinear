@@ -43,5 +43,10 @@ The document's prose is written for you, to decide what to send. It never leaves
 | `S` | sort: needs-me / updated / size / repo / author / cost (again reverses) |
 | `o` | open the PR |
 
-Review worktrees are reclaimed when the PR merges or the review goes stale — not when it's posted,
-since the author may push again.
+A posted review stays on the list while its PR is open — submitting a review *fulfils* the review
+request on GitHub's side, so the list can't rely on the request alone, and checks the PR itself
+before letting go. When the PR merges or closes, the review settles to stale and its worktree is
+reclaimed — not when it's posted, since the author may push again. `/stale` shows the settled ones.
+
+Reviews staled by the old behaviour recover on their own: once per daemon start, stale reviews whose
+PR is still open and carries a review of yours get their status back from GitHub's record.

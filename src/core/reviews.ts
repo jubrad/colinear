@@ -98,7 +98,13 @@ export async function repoForSlug(cfg: Config, nameWithOwner: string): Promise<R
  * reviews keep their state — only the PR metadata refreshes — so a pre-review
  * in flight is never clobbered by a poll.
  */
+let recoveredOnce = false;
+
 export async function pollReviewRequests(cfg: Config): Promise<void> {
+  if (!recoveredOnce) {
+    recoveredOnce = true;
+    await recoverPostedReviews().catch((err) => log(`review recovery failed: ${String(err).slice(0, 160)}`));
+  }
   let prs: SearchedPr[];
   try {
     const login = await viewerLogin();
@@ -156,14 +162,86 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
     });
   }
 
-  // A PR that stopped requesting my review is finished with: merged, closed,
-  // or someone else took it. Reviews mid-session are left alone; everything
-  // else goes stale, which is what releases its worktree.
+  // A PR that stopped requesting my review is *usually* finished with: merged,
+  // closed, or someone else took it. The exception is the review I just posted
+  // — submitting a review FULFILS the request, so the PR drops out of the
+  // search at the exact moment the work succeeds. Staling on absence alone
+  // therefore forgot every PR reviewed through colinear within one poll.
   const inFlight = new Set(['reviewing', 'posting', 'queued']);
+  const posted = new Set(['commented', 'approved', 'changes_requested']);
   for (const review of store.listReviews()) {
     if (seen.has(review.id) || review.status === 'stale' || inFlight.has(review.status)) continue;
+    if (posted.has(review.status)) {
+      // posted and no longer requested: stale only when the PR actually
+      // settles. Until then it stays on the list — the author may push again,
+      // and the worktree is deliberately kept for exactly that (docs/views/reviews.md)
+      const state = await prCurrentState(review.repository, review.number);
+      if (state === 'OPEN' || state === undefined) continue;
+      store.updateReview(review.id, { status: 'stale' });
+      store.addReviewActivity(review.id, `PR ${state.toLowerCase()} — review settled`);
+      continue;
+    }
     store.updateReview(review.id, { status: 'stale' });
     store.addReviewActivity(review.id, 'no longer awaiting my review');
+  }
+}
+
+/**
+ * Un-stale reviews that were staled by the fulfilled-request bug: for a while,
+ * posting a review dropped the PR out of the review-requested search and the
+ * reconcile read that absence as "finished with". GitHub still knows the truth
+ * — the submitted review is right there on the PR — so ask it, once per daemon
+ * start: a stale review whose PR is still open and carries a review of ours
+ * gets its status back from GitHub's own record.
+ *
+ * Bounded by what staling never touches: retention drops settled reviews after
+ * 30 days, so this walks at most a month of them, once.
+ */
+async function recoverPostedReviews(): Promise<void> {
+  const stale = store.listReviews().filter((r) => r.status === 'stale');
+  if (!stale.length) return;
+  const login = await viewerLogin();
+  for (const review of stale) {
+    let state: string | undefined;
+    let mine: string | undefined;
+    try {
+      const { stdout } = await exec('gh', [
+        'pr', 'view', String(review.number), '--repo', review.repository,
+        '--json', 'state,reviews',
+      ]);
+      const data = JSON.parse(stdout) as {
+        state?: string;
+        reviews?: Array<{ author?: { login?: string }; state?: string }>;
+      };
+      state = data.state;
+      // the LATEST of my reviews decides: an approve after a comment is an approve
+      mine = (data.reviews ?? []).filter((r) => r.author?.login === login).at(-1)?.state;
+    } catch {
+      continue; // could not check ≠ anything; leave it stale
+    }
+    if (state !== 'OPEN' || !mine) continue;
+    const status =
+      mine === 'APPROVED' ? 'approved' : mine === 'CHANGES_REQUESTED' ? 'changes_requested' : 'commented';
+    store.updateReview(review.id, { status });
+    store.addReviewActivity(review.id, `recovered: review is ${status} on an open PR`);
+    log(`review recovery: ${review.id} stale -> ${status}`);
+  }
+}
+
+/**
+ * The PR's own state, for reviews the search no longer returns. undefined on
+ * any failure: "could not check" must never read as "closed", or a rate limit
+ * would stale every posted review on the list.
+ */
+async function prCurrentState(slug: string, number: number): Promise<string | undefined> {
+  try {
+    const { stdout } = await exec('gh', [
+      'pr', 'view', String(number), '--repo', slug, '--json', 'state', '--jq', '.state',
+    ]);
+    const state = stdout.trim();
+    return state || undefined;
+  } catch {
+    return undefined;
   }
 }
 
