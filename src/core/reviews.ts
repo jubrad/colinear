@@ -156,14 +156,44 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
     });
   }
 
-  // A PR that stopped requesting my review is finished with: merged, closed,
-  // or someone else took it. Reviews mid-session are left alone; everything
-  // else goes stale, which is what releases its worktree.
+  // A PR that stopped requesting my review is *usually* finished with: merged,
+  // closed, or someone else took it. The exception is the review I just posted
+  // — submitting a review FULFILS the request, so the PR drops out of the
+  // search at the exact moment the work succeeds. Staling on absence alone
+  // therefore forgot every PR reviewed through colinear within one poll.
   const inFlight = new Set(['reviewing', 'posting', 'queued']);
+  const posted = new Set(['commented', 'approved', 'changes_requested']);
   for (const review of store.listReviews()) {
     if (seen.has(review.id) || review.status === 'stale' || inFlight.has(review.status)) continue;
+    if (posted.has(review.status)) {
+      // posted and no longer requested: stale only when the PR actually
+      // settles. Until then it stays on the list — the author may push again,
+      // and the worktree is deliberately kept for exactly that (docs/views/reviews.md)
+      const state = await prCurrentState(review.repository, review.number);
+      if (state === 'OPEN' || state === undefined) continue;
+      store.updateReview(review.id, { status: 'stale' });
+      store.addReviewActivity(review.id, `PR ${state.toLowerCase()} — review settled`);
+      continue;
+    }
     store.updateReview(review.id, { status: 'stale' });
     store.addReviewActivity(review.id, 'no longer awaiting my review');
+  }
+}
+
+/**
+ * The PR's own state, for reviews the search no longer returns. undefined on
+ * any failure: "could not check" must never read as "closed", or a rate limit
+ * would stale every posted review on the list.
+ */
+async function prCurrentState(slug: string, number: number): Promise<string | undefined> {
+  try {
+    const { stdout } = await exec('gh', [
+      'pr', 'view', String(number), '--repo', slug, '--json', 'state', '--jq', '.state',
+    ]);
+    const state = stdout.trim();
+    return state || undefined;
+  } catch {
+    return undefined;
   }
 }
 
