@@ -120,7 +120,9 @@ export function DispatchModal(props: {
         <Text bold color={focus === 'instructions' ? theme.accent : theme.dim}>
           instructions
         </Text>
-        <Text dimColor> — enter is a newline here</Text>
+        {/* only while it's true: this hint and the footer's "enter: dispatch"
+            used to be on screen together, contradicting each other */}
+        <Text dimColor>{focus === 'instructions' ? ' — enter starts a new line' : ' — tab to write'}</Text>
       </Box>
       <TextArea
         value={instructions}
@@ -132,8 +134,9 @@ export function DispatchModal(props: {
         onSubmit={submit}
       />
       <Text dimColor>
-        tab: switch field · ←→: pick · {focus === 'instructions' ? 'ctrl-d' : 'enter'}: dispatch · esc:
-        cancel
+        {focus === 'instructions'
+          ? 'tab: switch field · ctrl-d: dispatch · ctrl-u: clear · esc: cancel'
+          : 'tab: switch field · ←→: pick · enter: dispatch · esc: cancel'}
       </Text>
     </Box>
   );
