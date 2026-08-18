@@ -1421,6 +1421,8 @@ says why.</p>
 request on GitHub's side, so the list can't rely on the request alone, and checks the PR itself
 before letting go. When the PR merges or closes, the review settles to stale and its worktree is
 reclaimed — not when it's posted, since the author may push again. <code>/stale</code> shows the settled ones.</p>
+<p>Reviews staled by the old behaviour recover on their own: once per daemon start, stale reviews whose
+PR is still open and carries a review of yours get their status back from GitHub's record.</p>
 
 
 
