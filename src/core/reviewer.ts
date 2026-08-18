@@ -281,7 +281,10 @@ export class Reviewer {
     // what would go up is the summary — a description of the PR, not feedback.
     // That exact thing has been posted to a real PR; never again.
     if (!(review.findings ?? []).length && event !== 'APPROVE') {
-      store.updateReview(id, { status: 'ready', error: 'no findings parsed — nothing to post' });
+      // refuse WITHOUT touching the status. Setting it to 'ready' here demoted
+      // an already-posted review out of the reconcile's protected set, and the
+      // next poll staled it — the refusal itself made the review disappear.
+      store.updateReview(id, { error: 'no findings parsed — nothing to post' });
       store.addReviewActivity(id, 'post refused: no findings parsed from the review document');
       this.toast(`${review.repository}#${review.number}: post refused — no findings parsed (enter to inspect, e to edit)`, 'err');
       return;
