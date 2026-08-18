@@ -1,0 +1,7 @@
+# The docs toolchain, pinned so CI and a local `bin/gen-docs` build the same
+# site. Python lives here for one reason: mkdocs. Everything else is npm.
+#
+# In the repository root, and named exactly this, because that is where
+# Dependabot's pip ecosystem looks — a cleverer path is a path it doesn't scan.
+mkdocs-material==9.7.7
+mkdocs-glightbox==0.4.0
