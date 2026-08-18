@@ -382,6 +382,11 @@ function Detail(props: { review: Review; now: number }) {
           {review.repository} is not in your repos allowlist — add it to pre-review here
         </Text>
       )}
+      {review.sessionId && (
+        <Text dimColor wrap="truncate">
+          session {review.sessionId} — claude --resume {review.sessionId}
+        </Text>
+      )}
       {review.error && (
         <Text color={theme.err} wrap="truncate">
           ✖ {review.error}

@@ -217,6 +217,13 @@ export function TaskView(props: { param?: string }) {
           {task.branch ? ` · ${task.branch}` : ''}
         </Text>
       </Text>
+      {(task.worktree || task.sessionId) && (
+        <Text dimColor wrap="truncate">
+          {task.worktree ? `worktree ${task.worktree}` : ''}
+          {task.worktree && task.sessionId ? ' · ' : ''}
+          {task.sessionId ? `session ${task.sessionId} — claude --resume ${task.sessionId}` : ''}
+        </Text>
+      )}
       {task.instructions && (
         <Text dimColor wrap="truncate">
           instructions: {task.instructions}
