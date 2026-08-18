@@ -37,7 +37,7 @@ concurrency:
 
 jobs:
   build:
-    name: bin/gen-docs --check
+    name: verify docs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

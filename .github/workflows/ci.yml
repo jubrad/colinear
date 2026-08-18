@@ -7,10 +7,10 @@ on:
 
 jobs:
   check:
-    # named after the command it runs, so a red check tells you what to type
-    # locally to reproduce it — the node version is the only thing the matrix
-    # varies, and it goes in brackets because it is the smaller half of the fact
-    name: bin/check (node ${{ matrix.node }})
+    # plain english, and the only thing the matrix varies. What it runs is
+    # bin/check — typecheck, docs lint, build, CDC replay — which the job's own
+    # log says, and which is the same command you run locally
+    name: verify on node ${{ matrix.node }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
