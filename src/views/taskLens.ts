@@ -48,11 +48,33 @@ function haystack(task: Task): string {
     .toLowerCase();
 }
 
+/**
+ * What a task is part of: the issue above it, or the project it belongs to.
+ * Deliberately not in the haystack above — a bare `/CAD-12` should find CAD-12,
+ * not every task under it. `parent:CAD-12` is how you ask for the family.
+ */
+function parentHay(task: Task): string {
+  return [task.issue.parent?.identifier ?? '', task.issue.projectName ?? '', task.issue.projectId ?? '']
+    .join(' ')
+    .toLowerCase();
+}
+
 export function matchesQuery(task: Task, query: string): boolean {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!tokens.length) return true;
   const hay = haystack(task);
-  return tokens.every((token) => fuzzyMatch(hay, token));
+  const parents = parentHay(task);
+  return tokens.every((token) => {
+    // same vocabulary as :issues — the board, :tasks and :issues answering
+    // "what is this part of?" differently is the sort of thing that makes two
+    // views of one dataset feel like two datasets
+    const prefix = ['parent:', 'under:'].find((p) => token.startsWith(p));
+    if (prefix) {
+      const term = token.slice(prefix.length);
+      return term ? parents.includes(term) : false;
+    }
+    return fuzzyMatch(hay, token);
+  });
 }
 
 /** default: the board read left-to-right, then what needs you first */

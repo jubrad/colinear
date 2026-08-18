@@ -11,10 +11,19 @@ name: pages
 # publishes it.
 #
 # No loop: this workflow reads gh-pages and pushes nothing.
+#
+# It deploys whatever the branch holds regardless of how the triggering run
+# concluded — the branch is the source of truth, and a deploy of the current
+# state is never the wrong thing to do.
 
 on:
-  push:
-    branches: [gh-pages]
+  # NOT `push: branches: [gh-pages]` — a push trigger reads the workflow from
+  # the branch that was pushed, and gh-pages holds a built site with no
+  # .github/ at all, so that trigger never fires. workflow_run reads from the
+  # default branch, which is where this file lives.
+  workflow_run:
+    workflows: [docs, preview cleanup]
+    types: [completed]
   workflow_dispatch:
 
 permissions:

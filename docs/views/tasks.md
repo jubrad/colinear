@@ -13,8 +13,12 @@ column (again on the same one reverses), `/` filters with the same matcher the b
 | key | what |
 |---|---|
 | `j` `k` / ↑ ↓ | move · `g` top · `G` bottom |
-| `/` | filter — id, title, repo, status, PR state, CI |
+| `/` | filter — id, title, repo, status, PR state, CI; `parent:CAD-12` or `parent:cadence` for everything under one issue or project |
 | `,` | sort by column |
 | everything else | identical to the [board](board.md#keys): `enter`, `a`, `m`, `M`, `u`, `s`, `S`, `x`, `r`, `f`, `b`, `c`, `o`, `O` |
 
 The selected task's detail pane sits below the table when the terminal is tall enough.
+
+`parent:` is the same token [`:issues`](issues.md) uses, and means the same thing: what is this part
+of — the issue above it, or its project. A bare `/CAD-12` still finds CAD-12 itself rather than its
+children, because searching for an id should find that id.

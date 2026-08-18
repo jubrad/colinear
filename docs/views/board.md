@@ -20,7 +20,7 @@ rewritten.
 |---|---|
 | `j` `l` / ← → | move between columns |
 | `i` `k` / ↑ ↓ | move between cards |
-| `/` | search — id, title, repo, status, PR state, CI. `/conflict`, `/needs`, `/failing` |
+| `/` | search — id, title, repo, status, PR state, CI. `/conflict`, `/needs`, `/failing`. `parent:CAD-12` or `parent:cadence` for everything under one issue or project |
 | `,` | sort within columns |
 | `enter` | [task detail](task.md) |
 | `a` | answer the agent's question ([the form](task.md#answering-questions)) |
