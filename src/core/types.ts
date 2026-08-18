@@ -499,5 +499,15 @@ export interface Config {
    *
    * `{ "ssh": "vm" }` is sugar for the first. See docs/remote.md.
    */
-  remote?: { exec: string[]; label: string };
+  remote?: {
+    exec: string[];
+    label: string;
+    /** the ssh destination, when this remote came from `{ "ssh": "vm" }` — the
+        only form that can forward a unix socket for us */
+    ssh?: string;
+    /** open (and own) the ssh tunnel to the daemon's socket automatically */
+    forward?: boolean;
+    /** the daemon's socket path on that machine; discovered when omitted */
+    socket?: string;
+  };
 }

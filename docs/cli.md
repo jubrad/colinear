@@ -11,6 +11,7 @@ Agents therefore outlive the UI. Close the terminal, quit with `q`, or hit `R` t
 | `coli daemon` | run the daemon in the foreground |
 | `coli daemon status` | pid + socket, or "no daemon running" |
 | `coli daemon stop` | stop it — live agents abort and resume with `r` |
+| `coli daemon socket` | print this context's socket path — what an ssh forward has to target ([remote](remote.md)) |
 | `coli gc [--yes] [--older-than N]` | reclaim worktree disk; prints what it would remove and stops there without `--yes`. Works with the daemon down |
 | `coli contexts` | list contexts: config path, state dir, and which have a daemon running |
 | `npm run doctor` | env sanity: `claude` CLI, `gh` auth, Linear key, repos |

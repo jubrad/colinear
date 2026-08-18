@@ -242,19 +242,27 @@ function normalizeExperiments(raw: RawExperiments, master: boolean): Partial<Rec
   return out;
 }
 
-type RawRemote = { ssh?: string; exec?: string[]; label?: string } | undefined;
+type RawRemote =
+  | { ssh?: string; exec?: string[]; label?: string; forward?: boolean; socket?: string }
+  | undefined;
 
 /**
  * `{ ssh: "vm" }` is the common case and stays writable as such; `exec` is the
  * general form, so docker and kubectl are the same mechanism rather than three
  * special cases in the attach path.
  */
-function normalizeRemote(raw: RawRemote): { exec: string[]; label: string } | undefined {
+function normalizeRemote(raw: RawRemote): Config['remote'] {
   if (!raw) return undefined;
+  const extra = { forward: raw.forward, socket: raw.socket };
   if (Array.isArray(raw.exec) && raw.exec.length) {
-    return { exec: raw.exec, label: raw.label ?? raw.exec[0] };
+    // "forward" means an ssh tunnel; a generic exec prefix (docker, kubectl)
+    // has no equivalent, and failing here beats a mysterious connect timeout
+    if (raw.forward && !raw.ssh) {
+      fatal('config: "remote.forward" needs { "ssh": "host" } — an exec prefix cannot forward a socket');
+    }
+    return { exec: raw.exec, label: raw.label ?? raw.exec[0], ssh: raw.ssh, ...extra };
   }
-  if (raw.ssh) return { exec: ['ssh', '-t', raw.ssh], label: raw.label ?? raw.ssh };
+  if (raw.ssh) return { exec: ['ssh', '-t', raw.ssh], label: raw.label ?? raw.ssh, ssh: raw.ssh, ...extra };
   fatal('config: "remote" needs either { "ssh": "host" } or { "exec": ["cmd", …] }');
 }
 

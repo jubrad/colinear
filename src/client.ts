@@ -16,6 +16,7 @@ import {
 } from './core/protocol.js';
 import type { ChannelMessage } from './core/channel.js';
 import { store } from './core/store.js';
+import { openTunnel } from './core/tunnel.js';
 import type { Config, Issue, RepoConfig, TaskEdits } from './core/types.js';
 
 /**
@@ -147,16 +148,32 @@ function tryConnect(): Promise<Socket | null> {
  */
 export async function connectToDaemon(): Promise<Connection> {
   let socket = await tryConnect();
+  // set when we opened the tunnel: it is ours to take down again
+  let closeTunnel: (() => void) | undefined;
   if (!socket) {
     // A context whose daemon lives elsewhere must never get a local one
     // started under it: you'd end up with two daemons, or a local one holding
     // a socket the real work isn't behind.
     const remote = loadConfig({ requireKey: false }).remote;
     if (remote) {
-      throw new Error(
-        `no daemon behind ${SOCKET_PATH}, and this context runs on ${remote.label}.\n` +
-          'Start it there (or open the tunnel) — colinear will not start a local one for a remote context.',
-      );
+      if (remote.forward) {
+        // the socket is missing because nothing is forwarding it yet: open the
+        // tunnel ourselves and try again
+        const tunnel = await openTunnel(remote, SOCKET_PATH);
+        if (tunnel) {
+          socket = await tryConnect();
+          if (socket) closeTunnel = tunnel.close;
+        }
+      }
+      if (!socket) {
+        throw new Error(
+          `no daemon behind ${SOCKET_PATH}, and this context runs on ${remote.label}.\n` +
+            (remote.forward
+              ? `The tunnel did not come up — check ${join(STATE_DIR, 'colinear.log')}, and that ` +
+                `\`ssh ${remote.ssh} 'coli daemon status'\` reports one running.`
+              : 'Start it there (or open the tunnel) — colinear will not start a local one for a remote context.'),
+        );
+      }
     }
     // a socket file left by a killed daemon refuses connections forever
     if (existsSync(SOCKET_PATH)) unlinkSync(SOCKET_PATH);
@@ -218,7 +235,12 @@ export async function connectToDaemon(): Promise<Connection> {
         resolve({
           cfg: msg.cfg,
           daemonPid: msg.pid,
-          close: () => socket?.destroy(),
+          close: () => {
+            socket?.destroy();
+            // a forward we opened outlives the socket otherwise, leaving a
+            // path that accepts connections with nothing behind it
+            closeTunnel?.();
+          },
           onToast: (fn) => {
             toastListeners.add(fn);
             return () => toastListeners.delete(fn);
@@ -308,6 +330,7 @@ export async function connectToDaemon(): Promise<Connection> {
       }
     });
     socket?.on('close', () => {
+      closeTunnel?.();
       if (!ready) reject(new Error('daemon closed the connection during handshake'));
     });
     socket?.on('error', (err) => {
