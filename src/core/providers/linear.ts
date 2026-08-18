@@ -176,6 +176,7 @@ export async function fetchProjects(cfg: Config): Promise<import('../types.js').
         name: string;
         description?: string;
         state: string;
+        priority?: number;
         progress: number;
         targetDate?: string;
         url: string;
@@ -188,7 +189,7 @@ export async function fetchProjects(cfg: Config): Promise<import('../types.js').
     `query {
       projects(first: 75, filter: { state: { in: ["planned", "started", "paused"] } }) {
         nodes {
-          id name description state progress targetDate url
+          id name description state priority progress targetDate url
           teams { nodes { id key name } }
           lead { displayName }
         }
@@ -200,6 +201,48 @@ export async function fetchProjects(cfg: Config): Promise<import('../types.js').
 
 export async function fetchProjectIssues(cfg: Config, projectId: string): Promise<Issue[]> {
   return queryIssuesPaged(cfg, { project: { id: { eq: projectId } } });
+}
+
+/**
+ * Create a project. Linear takes the brief as `content` (markdown) and the one
+ * line the project list shows as `description`, so both are sent rather than
+ * one being duplicated into the other.
+ */
+export async function createProject(
+  cfg: Config,
+  input: {
+    name: string;
+    description?: string;
+    content?: string;
+    scopeIds: string[];
+    state?: string;
+    priority?: number;
+    targetDate?: string;
+  },
+): Promise<{ id: string; name: string; url?: string }> {
+  const data = await gql<{
+    projectCreate: { success: boolean; project?: { id: string; name: string; url: string } };
+  }>(
+    cfg,
+    `mutation ($input: ProjectCreateInput!) {
+      projectCreate(input: $input) { success project { id name url } }
+    }`,
+    {
+      input: {
+        name: input.name,
+        teamIds: input.scopeIds,
+        ...(input.description ? { description: input.description } : {}),
+        ...(input.content ? { content: input.content } : {}),
+        ...(input.state ? { state: input.state } : {}),
+        ...(input.priority ? { priority: input.priority } : {}),
+        ...(input.targetDate ? { targetDate: input.targetDate } : {}),
+      },
+    },
+  );
+  if (!data.projectCreate.success || !data.projectCreate.project) {
+    throw new Error('Linear refused the project');
+  }
+  return data.projectCreate.project;
 }
 
 export async function createIssue(
@@ -349,6 +392,7 @@ export function linearProvider(cfg: Config): IssueProvider {
       subIssues: true,
       priority: true,
       projects: true,
+    createProjects: true,
       scopes: true,
       workflowStates: true,
       branchNames: true,
@@ -362,6 +406,7 @@ export function linearProvider(cfg: Config): IssueProvider {
     scopes: () => fetchTeams(cfg),
     projects: () => fetchProjects(cfg),
     projectIssues: (projectId) => fetchProjectIssues(cfg, projectId),
+    createProject: (input) => createProject(cfg, input),
     create: ({ scopeId, title, description, projectId, priority, parentId }) =>
       createIssue(cfg, { teamId: scopeId, title, description, projectId, priority, parentId }),
     blockIssue: (blockerId, blockedId) => createBlocksRelation(cfg, blockerId, blockedId),

@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS states (
 );
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, state TEXT DEFAULT 'started',
-  progress REAL DEFAULT 0, target_date TEXT, lead TEXT
+  progress REAL DEFAULT 0, target_date TEXT, lead TEXT, priority INTEGER DEFAULT 0, content TEXT
 );
 CREATE TABLE IF NOT EXISTS issues (
   id TEXT PRIMARY KEY,
@@ -99,6 +99,15 @@ function open(path: string): Db {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec(SCHEMA);
+  // added after the first release: CREATE TABLE IF NOT EXISTS leaves an
+  // existing table alone, so the column has to be asked for separately
+  for (const column of ['priority INTEGER DEFAULT 0', 'content TEXT']) {
+    try {
+      db.exec(`ALTER TABLE projects ADD COLUMN ${column}`);
+    } catch {
+      /* already there */
+    }
+  }
   seed(db);
   return db;
 }
@@ -178,6 +187,7 @@ export function sqliteProvider(cfg: Config): IssueProvider {
       subIssues: true,
       priority: true,
       projects: true,
+    createProjects: true,
       scopes: true,
       workflowStates: true,
       // no upstream to hand us a branch: safeBranch derives one
@@ -259,6 +269,7 @@ export function sqliteProvider(cfg: Config): IssueProvider {
         name: String(r.name),
         description: r.description ? String(r.description) : undefined,
         state: String(r.state ?? 'started'),
+        priority: r.priority == null ? undefined : Number(r.priority),
         progress: Number(r.progress ?? 0),
         targetDate: r.target_date ? String(r.target_date) : undefined,
         url: '',
@@ -267,6 +278,29 @@ export function sqliteProvider(cfg: Config): IssueProvider {
       })) as Project[];
     },
     projectIssues: async (projectId) => issues('WHERE i.project_id = ? ORDER BY i.number', [projectId]),
+    createProject: async (input) => {
+      const projectId = id();
+      conn()
+        .prepare(
+          `INSERT INTO projects (id, name, description, content, state, progress, target_date, priority)
+           VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+        )
+        .run(
+          projectId,
+          input.name,
+          // description is the line a list shows; content is the brief itself.
+          // Putting the markdown in the first one turns every project row into
+          // a wall of "# why".
+          input.description ?? null,
+          input.content ?? null,
+          input.state ?? 'planned',
+          input.targetDate ?? null,
+          input.priority ?? 0,
+        );
+      // no scope join table here: a local project belongs to the whole file,
+      // which is the same simplification the scopes list already makes
+      return { id: projectId, name: input.name };
+    },
 
     create: async (input: CreateIssueInput) => {
       const db = conn();

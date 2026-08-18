@@ -260,7 +260,7 @@ tracker's client.
 
 Features ask `capabilities` rather than assuming: `workflowStates` gates stateSync, `blockers`
 gates the blocked column and `f`, `subIssues` gates tracking parents and `u`, `priority` gates the
-PRI column, `projects` gates `:projects`, `comments` gates escalation, and `branchNames` decides
+PRI column, `projects` gates `:projects`, `createProjects` gates its `n`, `comments` gates escalation, and `branchNames` decides
 whether the provider supplies a branch or `safeBranch()` derives one. A missing capability turns a
 feature off where the operator can see it (`:config` lists them), which is the difference between
 a tracker that isn't supported and one that is supported partially.

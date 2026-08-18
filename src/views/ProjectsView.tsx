@@ -2,11 +2,15 @@ import { Box, Text, useInput } from 'ink';
 import { providerFor } from '../core/provider.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { openUrl } from '../core/open.js';
-import type { Project } from '../core/types.js';
+import type { Project, Scope } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
 import { useColinear } from '../ui/context.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
+import { NewProjectModal, type NewProject } from '../ui/NewProjectModal.js';
+import { Popup, formHeight, popupPlacement } from '../ui/Popup.js';
+import { createProjectFromPrompt } from '../core/newproject.js';
 import { theme } from '../theme.js';
+import { PRIORITY_COLORS, PRIORITY_LABELS } from './IssuesView.js';
 
 /** module cache so ProjectView/ChatView can resolve a param without refetching */
 export let projectCache: Project[] = [];
@@ -24,6 +28,8 @@ export function ProjectsView(_props: { param?: string }) {
   const [bar, setBar] = useState<BarMode | null>(null);
   const [sortKey, setSortKey] = useState('name');
   const [sortDesc, setSortDesc] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [scopes, setScopes] = useState<Scope[]>([]);
 
   const refresh = useCallback(() => {
     setLoading(projectCache.length === 0);
@@ -37,7 +43,12 @@ export function ProjectsView(_props: { param?: string }) {
   }, [ctx.cfg]);
 
   useEffect(() => refresh(), []);
-  useEffect(() => ctx.setCapture(bar !== null), [bar]);
+  // the form needs real scope ids, and asking for them once beats asking on open
+  useEffect(() => {
+    if (!providerFor(ctx.cfg).capabilities.createProjects) return;
+    void providerFor(ctx.cfg).scopes().then(setScopes).catch(() => setScopes([]));
+  }, [ctx.cfg]);
+  useEffect(() => ctx.setCapture(bar !== null || creating), [bar, creating]);
   useEffect(() => () => ctx.setCapture(false), []);
 
   const hasFilters = query !== '' || teamFilter !== undefined;
@@ -54,9 +65,32 @@ export function ProjectsView(_props: { param?: string }) {
     return () => ctx.setEscHandler(null);
   }, [hasFilters]);
 
+  const create = useCallback(
+    (draft: NewProject) => {
+      setCreating(false);
+      ctx.toast('drafting the project…', 'info');
+      void createProjectFromPrompt(ctx.cfg, draft)
+        .then((project) => {
+          ctx.toast(`created ${project.name}`, 'ok');
+          refresh();
+        })
+        .catch((e) => ctx.toast(`project creation failed: ${String(e).slice(0, 80)}`, 'err'));
+    },
+    [ctx, refresh],
+  );
+
   const columns = useMemo<Array<Column<Project>>>(
     () => [
       { key: 'name', label: 'PROJECT', width: 'flex', text: (p) => p.name },
+      {
+        key: 'priority',
+        label: 'PRI',
+        width: 7,
+        // you can set this when creating one, so it has to be visible after
+        text: (p) => PRIORITY_LABELS[p.priority ?? 0] ?? '—',
+        color: (p) => PRIORITY_COLORS[p.priority ?? 0],
+        sort: (a, b) => ((a.priority || 5) - (b.priority || 5)),
+      },
       {
         key: 'state',
         label: 'STATE',
@@ -104,11 +138,13 @@ export function ProjectsView(_props: { param?: string }) {
       if (input === 't') setBar('team');
       if (input === 's') setBar('sort');
       if (input === 'r') refresh();
+      // gated on the provider: a tracker without projects has nothing to create
+      if (input === 'n' && providerFor(ctx.cfg).capabilities.createProjects) setCreating(true);
       if (input === 'o' && rows[cursor]) openUrl(rows[cursor].url);
       if (input === 'p' && rows[cursor]) ctx.navigate('plan', rows[cursor].name);
       if (key.return && rows[cursor]) ctx.navigate('project', rows[cursor].name);
     },
-    { isActive: bar === null && !ctx.cmdOpen },
+    { isActive: bar === null && !creating && !ctx.cmdOpen },
   );
 
   const barCandidates = useMemo<Candidate[]>(() => {
@@ -185,6 +221,31 @@ export function ProjectsView(_props: { param?: string }) {
         sortDesc={sortDesc}
         emptyText="No projects match."
       />
+      {/* last on purpose: an absolute box is painted in tree order */}
+      {creating &&
+        (() => {
+          const rowCount = scopes.length > 1 ? 3 : 3;
+          const inner = Math.min(88, ctx.size.columns - 8) - 4;
+          const lines = Math.max(3, Math.min(10, ctx.size.rows - 8 - formHeight(rowCount) - 4));
+          return (
+            <Popup
+              {...popupPlacement(
+                ctx.size,
+                { width: inner + 4, height: formHeight(rowCount, lines + 2) },
+                ctx.cmdOpen,
+              )}
+            >
+              <NewProjectModal
+                scopes={scopes}
+                scopeKey={teamFilter}
+                width={inner}
+                briefLines={lines}
+                onSubmit={create}
+                onCancel={() => setCreating(false)}
+              />
+            </Popup>
+          );
+        })()}
     </Box>
   );
 }
@@ -196,6 +257,7 @@ function bar10(progress: number, width = 8): string {
 
 export const projectsKeys: Array<[string, string]> = [
   ['enter', 'open project'],
+  ['n', 'new project'],
   ['p', 'plan chat'],
   ['o', 'open in browser'],
   ['/', 'filter'],

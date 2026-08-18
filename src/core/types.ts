@@ -58,6 +58,8 @@ export interface Project {
   url: string;
   scopes: Scope[];
   lead?: string;
+  /** 0 none, 1 urgent … 4 low — same scale as an issue's */
+  priority?: number;
 }
 
 export interface WorkflowState {
