@@ -1,0 +1,56 @@
+# Dependency updates.
+#
+# Note for anyone puzzled by silence here: the `no branches` ruleset restricts
+# branch creation to admin bypass, and Dependabot is not an admin. On a
+# personal repository it cannot be granted a ruleset bypass either — that actor
+# type is organisation-only — so `refs/heads/dependabot/**` has to be excluded
+# from that ruleset for any of this to open a pull request.
+version: 2
+updates:
+  # the application itself
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # one pull request for the boring half, so review attention goes to the
+      # updates that can actually change behaviour
+      routine:
+        patterns: ['*']
+        update-types: [minor, patch]
+    ignore:
+      # the agent SDK decides what agents are allowed to do and how sessions
+      # terminate; those releases get read, not merged on sight
+      - dependency-name: '@anthropic-ai/claude-agent-sdk'
+        update-types: [version-update:semver-major]
+
+  # the docs toolchain — see requirements.txt
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      docs:
+        patterns: ['*']
+
+  # actions/* in the workflows; a pinned major goes stale quietly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ['*']
+
+  # the reference container's base image
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
