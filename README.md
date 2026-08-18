@@ -12,6 +12,8 @@ Every task is also a searchable, sortable table — same data, same keys, `:task
 
 *Both frames are `coli demo` — a fabricated board you can run yourself in thirty seconds.*
 
+📖 **[Read the docs](https://jubrad.github.io/colinear/)** · 🚀 **[Getting started](https://jubrad.github.io/colinear/docs/getting-started/)**
+
 ## Try it in thirty seconds
 
 ```bash
@@ -41,6 +43,8 @@ Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset) and `
 - **Plan** — a read-only planning chat that drafts sub-issues for you to approve.
 
 ## Documentation
+
+**[jubrad.github.io/colinear](https://jubrad.github.io/colinear/)** — every page below, with search and navigation.
 
 | | |
 |---|---|
