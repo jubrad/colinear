@@ -1,5 +1,15 @@
 name: docs
 
+# The site and its per-PR previews both live on the gh-pages branch: the main
+# site at the root, previews under previews/pr-<n>/. Pages serves that branch.
+#
+# Previews are maintainer-only, and the gate is the repository's own rulesets
+# rather than a list here: `no branches` restricts branch creation to admin
+# bypass, so a pull request from *this* repository can only have come from a
+# maintainer. Fork pull requests are verified but never deployed — building
+# them runs bin/gen-docs, which executes repository code, and doing that with a
+# token that can write to gh-pages would hand a stranger the site.
+
 on:
   push:
     branches: [main]
@@ -15,9 +25,12 @@ on:
       - 'src/views/registry.ts'
       - '.github/workflows/docs.yml'
   pull_request:
+    types: [opened, synchronize, reopened, closed]
     paths:
       - 'docs/**'
       - 'README.md'
+      - 'DESIGN.md'
+      - 'COORDINATION.md'
       - 'mkdocs.yml'
       - 'bin/gen-docs'
       - 'src/tools/gen-docs.ts'
@@ -27,17 +40,12 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-# a queued docs push should replace the one in flight, not race it
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
   build:
     name: verify docs
+    # a closed pull request has nothing to verify, only a preview to remove
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,34 +62,127 @@ jobs:
       # view must have a page, and mkdocs --strict rejects a broken link
       - name: generate and build the docs
         run: bin/gen-docs --check
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: site
           path: site
+          retention-days: 7
+      # a fork pull request gets no preview URL, so say where the site it just
+      # built actually is rather than leaving the reviewer to guess
+      - name: how to see it
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          {
+            echo '### Docs preview'
+            echo
+            echo 'This pull request comes from a fork, so it is verified but not deployed.'
+            echo 'Download the **site** artifact from this run and open `index.html`, or'
+            echo 'push the branch to this repository for a preview URL.'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-  # only main publishes; a PR gets the build as a check and nothing more
-  deploy:
+  publish:
     name: publish to Pages
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+    permissions:
+      contents: write
+    # every job that pushes gh-pages takes turns
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
     steps:
-      # Pages needs a public repo (or a paid plan). Until it's turned on the
-      # site still builds and uploads, it just has nowhere to go — skip the
-      # deploy rather than failing every docs push, and publishing starts on
-      # its own the moment Settings → Pages → Source is set to GitHub Actions.
-      - id: pages
+      # the repository, for the script — gh-pages holds a built site and
+      # nothing else, so the script cannot live there
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: pages
+          fetch-depth: 0
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: incoming
+      - name: commit the site to gh-pages
+        env:
+          TARGET: .
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/publish-site.sh
+
+  preview:
+    name: preview
+    # Maintainers only, and the gate is the `no branches` ruleset: a branch in
+    # this repository can only be created by an admin, so a pull request whose
+    # head lives here is a maintainer's.
+    #
+    # gh-pages is the exception — it has to be writable by CI, so it is excluded
+    # from that ruleset, which means anyone with write access can push it. A
+    # pull request *from* gh-pages would therefore be a non-admin's branch
+    # reaching a job that holds contents:write. Refuse it.
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref != 'gh-pages'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: pages
+          fetch-depth: 0
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: incoming
+      - name: commit the preview to gh-pages
+        env:
+          TARGET: previews/pr-${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/publish-site.sh
+      - name: link it on the pull request
         env:
           GH_TOKEN: ${{ github.token }}
+          URL: https://jubrad.github.io/colinear/previews/pr-${{ github.event.pull_request.number }}/
+          PR: ${{ github.event.pull_request.number }}
+        run: bash .github/scripts/comment-preview.sh
+
+  cleanup:
+    name: remove preview
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+      - name: drop the preview
+        env:
+          TARGET: previews/pr-${{ github.event.pull_request.number }}
         run: |
-          if gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1; then
-            echo 'enabled=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'enabled=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::Pages is not enabled for this repository — built and uploaded, but not deployed.'
-          fi
-      - id: deploy
-        if: steps.pages.outputs.enabled == 'true'
-        uses: actions/deploy-pages@v4
+          set -euo pipefail
+          [ -d "$TARGET" ] || { echo "no preview at $TARGET"; exit 0; }
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git rm -rq "$TARGET"
+          git commit -qm "docs: drop preview for #${{ github.event.pull_request.number }}"
+          git push -q origin gh-pages
