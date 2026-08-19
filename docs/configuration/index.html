@@ -1720,6 +1720,11 @@
 <td>permission mode for <code>s</code> attach sessions: <code>auto</code> (classifier gates risky commands), <code>acceptEdits</code>, <code>bypassPermissions</code>, <code>default</code>. Headless agents always run <code>auto</code>; classifier-blocked commands surface on the board as allow/deny questions</td>
 </tr>
 <tr>
+<td><code>editor</code></td>
+<td>unset</td>
+<td>what <code>e</code> opens — answer forms, review documents, the config itself. Beats <code>$EDITOR</code> (the precedence git gives <code>core.editor</code>); flags welcome: <code>"code --wait"</code>. Unset falls through to <code>$EDITOR</code>, then <code>vi</code></td>
+</tr>
+<tr>
 <td><code>remote</code></td>
 <td>unset (local)</td>
 <td>run this context against a daemon on another machine: <code>{"ssh": "vm"}</code>. Add <code>"forward": true</code> and colinear opens (and owns) the ssh tunnel to its socket; <code>"socket"</code> names the far-side path instead of asking for it. <a href="../remote/">Details</a></td>
