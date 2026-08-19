@@ -62,6 +62,17 @@ const leaveAltScreen = () => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Open a file in the operator's editor and wait for it to close. The config's
+ * `editor` wins over $EDITOR (the precedence git gives core.editor), and may
+ * carry flags — "code --wait" — so it runs through the shell with the path as
+ * a positional argument rather than being split by hand.
+ */
+function openEditor(cfg: Config, path: string): void {
+  const editor = cfg.editor ?? process.env.EDITOR ?? 'vi';
+  spawnSync('/bin/sh', ['-c', `${editor} "$1"`, 'sh', path], { stdio: 'inherit' });
+}
+
 /** Single-quote for a remote shell: the only escape inside '' is '\''. */
 const shq = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
@@ -367,21 +378,22 @@ async function runTui(): Promise<void> {
         if (!/^n/i.test(answer.trim())) conn.dispatcher.resume(action.issueId);
       }
     } else if (action.kind === 'edit-answers') {
-      spawnSync(process.env.EDITOR ?? 'vi', [action.path], { stdio: 'inherit' });
+      openEditor(cfg, action.path);
       const answers = parseAnswerDoc(readFileSync(action.path, 'utf8'), action.count);
       conn.dispatcher.answer(action.issueId, answers);
       console.log(`sent ${answers.length} answer${answers.length > 1 ? 's' : ''}`);
     } else if (action.kind === 'edit-file') {
       if (cfg.remote) {
-        // the review doc lives in the review worktree, on the daemon's host
-        runThere(cfg.remote, `\${EDITOR:-vi} ${shq(action.path)}`);
+        // the review doc lives in the review worktree, on the daemon's host —
+        // the configured editor still applies, since the config is shared
+        runThere(cfg.remote, `${cfg.editor ?? '\${EDITOR:-vi}'} ${shq(action.path)}`);
       } else {
-        spawnSync(process.env.EDITOR ?? 'vi', [action.path], { stdio: 'inherit' });
+        openEditor(cfg, action.path);
       }
       conn.dispatcher.reloadReviewDoc(action.reviewId);
     } else if (action.kind === 'edit-config') {
       const editPath = ensureConfigFile(cfg);
-      spawnSync(process.env.EDITOR ?? 'vi', [editPath], { stdio: 'inherit' });
+      openEditor(cfg, editPath);
       Object.assign(cfg, loadConfig());
       conn.dispatcher.reloadConfig();
       console.log(`config reloaded from ${configPath()}`);
