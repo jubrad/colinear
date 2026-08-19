@@ -46,7 +46,9 @@ inventing its own.
 
 ## Talking to a running agent
 
-`M` on a card (board or `:tasks`) sends the agent a message without attaching to it — "use the existing helper", "don't touch the schema", "rebase first".
+`M` on a card (board or `:tasks`) opens a paragraph-sized box and sends the agent a message without
+attaching to it — "use the existing helper", "don't touch the schema", a pasted stack trace. `enter`
+is a newline; `ctrl+d` sends (and wakes a parked agent), `ctrl+q` queues it without waking.
 
 - **A live agent** takes it at its next turn boundary. It can't interrupt a command already running, so a message sent during a four-minute test run lands when that finishes; usually it's seconds. The session is a streaming conversation, so your message arrives as a user turn — the agent answers it and carries on.
 - **An idle task** — PR open, done, failed, interrupted, needs-input — is **woken**: colinear starts a session (resuming the same transcript, so the work is still in context) whose opening prompt carries your message. Sending is the whole gesture; you don't have to remember to press `r` afterwards. `ctrl+q` sends without waking if you'd rather it wait.
