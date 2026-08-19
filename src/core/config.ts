@@ -195,6 +195,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     autoDispatchLabels: Array.isArray(raw.autoDispatchLabels)
       ? raw.autoDispatchLabels.filter((l): l is string => typeof l === 'string' && Boolean(l.trim()))
       : undefined,
+    autoDispatchScope: autoDispatchScope(raw.autoDispatchScope),
     remote: normalizeRemote(raw.remote),
   };
 }
@@ -268,6 +269,13 @@ function normalizeRemote(raw: RawRemote): Config['remote'] {
   }
   if (raw.ssh) return { exec: ['ssh', '-t', raw.ssh], label: raw.label ?? raw.ssh, ssh: raw.ssh, ...extra };
   fatal('config: "remote" needs either { "ssh": "host" } or { "exec": ["cmd", …] }');
+}
+
+/** A typo here would silently widen the sweep to the whole workspace. */
+function autoDispatchScope(raw: unknown): 'team' | 'all' | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === 'team' || raw === 'all') return raw;
+  fatal(`config: "autoDispatchScope" must be "team" or "all", not ${JSON.stringify(raw)}`);
 }
 
 const PERMISSION_MODES = ['auto', 'acceptEdits', 'default', 'plan', 'dontAsk', 'bypassPermissions'];

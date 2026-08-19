@@ -517,6 +517,14 @@ export interface Config {
    */
   autoDispatchLabels?: string[];
   /**
+   * Where the label sweep looks. "team" (default) confines it to the
+   * configured `team` — labels aren't namespaced, and a workspace-wide sweep
+   * acting on another team's vocabulary would self-assign their issues.
+   * "all" is the explicit opt-in for single-team workspaces or a deliberate
+   * cross-team label.
+   */
+  autoDispatchScope?: 'team' | 'all';
+  /**
    * What `e` opens — answers, review docs, the config itself. Beats $EDITOR
    * (the same precedence git gives core.editor), and may carry flags:
    * "code --wait". Unset falls through to $EDITOR, then vi.

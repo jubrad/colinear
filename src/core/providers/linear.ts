@@ -424,7 +424,10 @@ export function linearProvider(cfg: Config): IssueProvider {
       comments: true,
     },
     issues: (scope, opts) => fetchIssues(cfg, scope, opts),
-    filteredIssues: (filter) => fetchFilteredIssues(cfg, filter),
+    // IssueFilter says scope; the spec says team — passing the object through
+    // unchanged silently dropped the scope, which is the kind of miss that
+    // turns a team-confined sweep into a workspace-wide one
+    filteredIssues: (filter) => fetchFilteredIssues(cfg, { ...filter, team: filter.scope }),
     issuesByIds: (ids) => fetchIssuesByIds(cfg, ids),
     subIssues: (parentId) => fetchSubIssues(cfg, parentId),
     blockers: (id) => fetchBlockers(cfg, id),

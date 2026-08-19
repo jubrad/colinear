@@ -18,6 +18,12 @@ The guards are the same purity rule the sub-issue sweep uses. Tracker state deci
 never be resurrected by its label. An issue assigned to someone else is never taken — auto-dispatch
 self-assigns, and that would be theft. Three per sweep, so bulk-labelling lands as a trickle.
 
+The sweep is **confined to your configured `team`** by default. Labels aren't namespaced — `agent`
+in another team's vocabulary can mean something else entirely — and a workspace-wide sweep would
+self-assign their unassigned issues and move them to In Progress. `"autoDispatchScope": "all"` is
+the explicit opt-in for single-team workspaces or a deliberately cross-team label; with no `team`
+configured and scope `"team"`, the sweep does nothing and says so once.
+
 Removing the label stops future dispatch and cancels nothing already running.
 
 ## Manual dispatch — a worktree, no agent

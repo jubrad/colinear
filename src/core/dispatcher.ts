@@ -98,6 +98,7 @@ export class Dispatcher {
   /** mailboxes of the sessions running right now, keyed by task id */
   private inboxes = new Map<string, SessionInbox>();
   private viewer?: { id: string; displayName: string };
+  private warnedLabelScope = false;
 
   constructor(private cfg: Config) {
     // unref: a pending timer must never keep the process alive after quit
@@ -605,8 +606,25 @@ export class Dispatcher {
   private async sweepLabels() {
     const labels = this.cfg.autoDispatchLabels;
     if (!labels?.length) return;
+    // team-confined unless the operator explicitly said "all": labels aren't
+    // namespaced, and acting on another team's vocabulary self-assigns their
+    // issues. No team to confine to = no sweep, said once, rather than a
+    // silent widening to the workspace.
+    let scope: string | undefined;
+    if ((this.cfg.autoDispatchScope ?? 'team') === 'team') {
+      const team = this.cfg.team && this.cfg.team !== '*' ? this.cfg.team : undefined;
+      if (!team) {
+        if (!this.warnedLabelScope) {
+          this.warnedLabelScope = true;
+          this.toast('label dispatch is off: set "team" in the config, or "autoDispatchScope": "all"', 'err');
+          log('label dispatch: no team to scope to and autoDispatchScope is not "all" — sweeping nothing');
+        }
+        return;
+      }
+      scope = team;
+    }
     const found = await providerFor(this.cfg)
-      .filteredIssues({ labels })
+      .filteredIssues({ labels, scope })
       .catch(() => [] as Issue[]);
     const eligible = labelDispatchable(found, this.viewer?.id);
     if (!eligible.length) return;
