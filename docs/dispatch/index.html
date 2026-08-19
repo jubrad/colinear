@@ -583,6 +583,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#label-dispatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Label dispatch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#manual-dispatch-a-worktree-no-agent" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1308,6 +1319,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#label-dispatch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Label dispatch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#manual-dispatch-a-worktree-no-agent" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1365,6 +1387,21 @@
 <li><strong>Work pass</strong>: every session opens with a full task-context block (issue + description, parent, repo/remotes, all PRs with pin markers, triage plan, your instructions, merge-order dependencies). Existing PRs are <strong>adopted</strong> — the agent reviews their diff and pushes to their branch, never duplicates. A subtask checklist file drives the card's progress bar; lints and tests per the verification tier; subagent diff review; push to the repo's <code>pushRemote</code> (your fork, if configured); draft PR against <code>prBase</code> of the upstream via <code>gh pr create --draft</code>. Agents may stack PRs (chained by base branch, rendered as a stack). <strong>Agents never mark PRs ready</strong> — that's your <code>d</code>.</li>
 <li><strong>Checks</strong> from the repo config, then PR polling: state, CI rollup, review decision, mergeability. Matching prefers open/merged PRs over closed duplicates, and <code>m</code> can pin the canonical PR (number, <code>#123</code>, or URL); a failed task that gains a live PR un-fails itself. With <code>ciAutofix</code>, red checks dispatch a fix session that pulls the failing logs and pushes a fix.</li>
 </ol>
+<h2 id="label-dispatch">Label dispatch<a class="headerlink" href="#label-dispatch" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nt">"autoDispatchLabels"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"CLOUD"</span><span class="p">:</span><span class="w"> </span><span class="s2">"agent"</span><span class="p">,</span><span class="w"> </span><span class="nt">"SAS"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"colinear"</span><span class="p">,</span><span class="w"> </span><span class="s2">"bot"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<p>A tracker label becomes the dispatch button, <strong>per team</strong>: the minute sweep picks up open issues in
+a listed team carrying that team's label and enqueues them through the normal pipeline — triage
+included, which is the safety net for anything labelled optimistically.</p>
+<p>The map is the scope. A team with no entry is opted out entirely, and each team names its own label
+because labels aren't namespaced — <code>agent</code> meaning "dispatch this" in CLOUD says nothing about what
+it means in SAS, and one team's label on another team's issue does nothing.</p>
+<p>The guards are the same purity rule the sub-issue sweep uses. Tracker state decides eligibility
+(backlog / unstarted / triage only), so an issue whose finished task was dropped by retention can
+never be resurrected by its label. An issue assigned to someone else is never taken — auto-dispatch
+self-assigns, and that would be theft. Three per sweep across all teams, so bulk-labelling lands as
+a trickle.</p>
+<p>Removing the label stops future dispatch and cancels nothing already running.</p>
 <h2 id="manual-dispatch-a-worktree-no-agent">Manual dispatch — a worktree, no agent<a class="headerlink" href="#manual-dispatch-a-worktree-no-agent" title="Permanent link">&para;</a></h2>
 <p>The custom modal's <strong>start</strong> field has a second setting: <code>manual — worktree only</code>. The issue is
 assigned and moved to In Progress and the worktree is cut off <code>&lt;remote&gt;/&lt;defaultBranch&gt;</code> exactly as

@@ -1720,6 +1720,11 @@
 <td>permission mode for <code>s</code> attach sessions: <code>auto</code> (classifier gates risky commands), <code>acceptEdits</code>, <code>bypassPermissions</code>, <code>default</code>. Headless agents always run <code>auto</code>; classifier-blocked commands surface on the board as allow/deny questions</td>
 </tr>
 <tr>
+<td><code>autoDispatchLabels</code></td>
+<td>unset</td>
+<td>per-team dispatch labels: <code>{"CLOUD": "agent", "SAS": ["colinear", "bot"]}</code>. Issues in a listed team carrying that team's label dispatch themselves — swept every minute, 3 per sweep across all teams, through the normal pipeline (triage included). <strong>The map is the scope</strong>: a team with no entry is opted out, and each team names its own label because labels are not namespaced. See <a href="../dispatch/#label-dispatch">dispatch</a></td>
+</tr>
+<tr>
 <td><code>editor</code></td>
 <td>unset</td>
 <td>what <code>e</code> opens — answer forms, review documents, the config itself. Beats <code>$EDITOR</code> (the precedence git gives <code>core.editor</code>); flags welcome: <code>"code --wait"</code>. Unset falls through to <code>$EDITOR</code>, then <code>vi</code></td>
