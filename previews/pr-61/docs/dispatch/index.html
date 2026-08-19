@@ -1395,6 +1395,11 @@ included, which is the safety net for anything the label was slapped on optimist
 (backlog / unstarted / triage only), so an issue whose finished task was dropped by retention can
 never be resurrected by its label. An issue assigned to someone else is never taken — auto-dispatch
 self-assigns, and that would be theft. Three per sweep, so bulk-labelling lands as a trickle.</p>
+<p>The sweep is <strong>confined to your configured <code>team</code></strong> by default. Labels aren't namespaced — <code>agent</code>
+in another team's vocabulary can mean something else entirely — and a workspace-wide sweep would
+self-assign their unassigned issues and move them to In Progress. <code>"autoDispatchScope": "all"</code> is
+the explicit opt-in for single-team workspaces or a deliberately cross-team label; with no <code>team</code>
+configured and scope <code>"team"</code>, the sweep does nothing and says so once.</p>
 <p>Removing the label stops future dispatch and cancels nothing already running.</p>
 <h2 id="manual-dispatch-a-worktree-no-agent">Manual dispatch — a worktree, no agent<a class="headerlink" href="#manual-dispatch-a-worktree-no-agent" title="Permanent link">&para;</a></h2>
 <p>The custom modal's <strong>start</strong> field has a second setting: <code>manual — worktree only</code>. The issue is
