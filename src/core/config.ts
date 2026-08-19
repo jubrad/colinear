@@ -192,6 +192,9 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     denyTools: Array.isArray(raw.denyTools) ? raw.denyTools : [],
     terminal: raw.terminal,
     editor: typeof raw.editor === 'string' && raw.editor.trim() ? raw.editor.trim() : undefined,
+    autoDispatchLabels: Array.isArray(raw.autoDispatchLabels)
+      ? raw.autoDispatchLabels.filter((l): l is string => typeof l === 'string' && Boolean(l.trim()))
+      : undefined,
     remote: normalizeRemote(raw.remote),
   };
 }

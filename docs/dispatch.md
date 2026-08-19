@@ -7,6 +7,19 @@ Dispatching (`enter`, or `c` for the custom modal) immediately self-assigns the 
 3. **Work pass**: every session opens with a full task-context block (issue + description, parent, repo/remotes, all PRs with pin markers, triage plan, your instructions, merge-order dependencies). Existing PRs are **adopted** — the agent reviews their diff and pushes to their branch, never duplicates. A subtask checklist file drives the card's progress bar; lints and tests per the verification tier; subagent diff review; push to the repo's `pushRemote` (your fork, if configured); draft PR against `prBase` of the upstream via `gh pr create --draft`. Agents may stack PRs (chained by base branch, rendered as a stack). **Agents never mark PRs ready** — that's your `d`.
 4. **Checks** from the repo config, then PR polling: state, CI rollup, review decision, mergeability. Matching prefers open/merged PRs over closed duplicates, and `m` can pin the canonical PR (number, `#123`, or URL); a failed task that gains a live PR un-fails itself. With `ciAutofix`, red checks dispatch a fix session that pulls the failing logs and pushes a fix.
 
+## Label dispatch
+
+`"autoDispatchLabels": ["agent"]` makes a tracker label the dispatch button: the minute sweep picks
+up open issues carrying any listed label and enqueues them through the normal pipeline — triage
+included, which is the safety net for anything the label was slapped on optimistically.
+
+The guards are the same purity rule the sub-issue sweep uses. Tracker state decides eligibility
+(backlog / unstarted / triage only), so an issue whose finished task was dropped by retention can
+never be resurrected by its label. An issue assigned to someone else is never taken — auto-dispatch
+self-assigns, and that would be theft. Three per sweep, so bulk-labelling lands as a trickle.
+
+Removing the label stops future dispatch and cancels nothing already running.
+
 ## Manual dispatch — a worktree, no agent
 
 The custom modal's **start** field has a second setting: `manual — worktree only`. The issue is
