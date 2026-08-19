@@ -26,7 +26,7 @@ rewritten.
 | `a` | answer the agent's question ([the form](task.md#answering-questions)) |
 | `1`–`9` | pick an option outright, when there's only one question |
 | `m` | edit the task — repo, pinned PR, instructions, model, triage, auto-rebase, auto-dispatch |
-| `M` | message the agent without attaching |
+| `M` | message the agent without attaching — a multi-line box; `ctrl+d` sends, `ctrl+q` queues without waking |
 | `u` | dispatch this parent's sub-issues (picker) |
 | `s` | attach `claude` in the worktree · `S` a plain shell |
 | `x` cancel · `r` resume — or start the agent on a [manually dispatched](../dispatch.md#manual-dispatch-a-worktree-no-agent) task · `f` force-start a blocked task · `b` rebase a conflicting PR |

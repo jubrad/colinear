@@ -1,6 +1,6 @@
 import { Box, Text, useInput, type Key } from 'ink';
 import { providerFor } from '../core/provider.js';
-import TextInput from 'ink-text-input';
+import { TextArea } from '../ui/TextArea.js';
 import { execFile } from 'node:child_process';
 import { useEffect, useState, type ReactNode } from 'react';
 import { attachSession, attachShell, setPendingAction } from '../core/attach.js';
@@ -190,18 +190,27 @@ export function useTaskActions(): TaskActions {
         />
         </Popup>
       )}
-      {messaging && (
-        <Popup {...place(Math.min(88, ctx.size.columns - 8), 6)}>
-        <MessageModal
-          task={messaging}
-          onCancel={() => setMessaging(undefined)}
-          onSubmit={(text, wake) => {
-            setMessaging(undefined);
-            ctx.dispatcher.message(messaging.issue.id, text, { wake });
-          }}
-        />
-        </Popup>
-      )}
+      {messaging &&
+        (() => {
+          // room to write: a message to an agent is often a paragraph (or a
+          // pasted stack trace), and a one-line box hid everything past the edge
+          const inner = Math.min(88, ctx.size.columns - 8) - 4;
+          const lines = Math.max(3, Math.min(8, ctx.size.rows - 16));
+          return (
+            <Popup {...place(inner + 4, lines + 5)}>
+              <MessageModal
+                task={messaging}
+                width={inner}
+                lines={lines}
+                onCancel={() => setMessaging(undefined)}
+                onSubmit={(text, wake) => {
+                  setMessaging(undefined);
+                  ctx.dispatcher.message(messaging.issue.id, text, { wake });
+                }}
+              />
+            </Popup>
+          );
+        })()}
       {repoModal && (
         <Popup {...place(Math.min(92, ctx.size.columns - 8), 15)}>
         <EditTaskModal
@@ -256,10 +265,12 @@ function answerHeight(question: PendingQuestion, width: number): number {
  */
 function MessageModal(props: {
   task: Task;
+  width: number;
+  lines: number;
   onCancel: () => void;
   onSubmit: (text: string, wake: boolean) => void;
 }) {
-  const { task, onCancel, onSubmit } = props;
+  const { task, width, lines, onCancel, onSubmit } = props;
   const [draft, setDraft] = useState('');
   const live = ['triage', 'working', 'checks'].includes(task.status) || Boolean(task.maintenance);
   // mirrors Dispatcher.wake(): parked work stays parked, and a task already on
@@ -267,7 +278,7 @@ function MessageModal(props: {
   const wakeable =
     !live && !task.question && !['queued', 'blocked', 'tracking'].includes(task.status);
 
-  // same shape as EditTaskModal's ctrl+r: a modifier alongside the text input
+  // the TextArea owns enter (a newline) and ctrl-d (send); these ride alongside
   useInput((input, key) => {
     if (key.escape) onCancel();
     if (key.ctrl && input === 'q' && draft.trim()) onSubmit(draft, false);
@@ -279,28 +290,28 @@ function MessageModal(props: {
       <Text bold color={theme.key}>
         message {task.issue.identifier}
       </Text>
-      <Box>
-        <Text color={theme.accent}>{'> '}</Text>
-        <TextInput
-          value={draft}
-          placeholder={
-            live
-              ? 'the agent reads this at its next turn'
-              : wakeable
-                ? 'sending starts a session so the agent reads it'
-                : "queued for this task's next session"
-          }
-          onChange={setDraft}
-          onSubmit={(value) => (value.trim() ? onSubmit(value, true) : onCancel())}
-        />
-      </Box>
+      <TextArea
+        value={draft}
+        onChange={setDraft}
+        focus
+        width={width}
+        height={lines}
+        placeholder={
+          live
+            ? 'the agent reads this at its next turn'
+            : wakeable
+              ? 'sending starts a session so the agent reads it'
+              : "queued for this task's next session"
+        }
+        onSubmit={() => draft.trim() && onSubmit(draft, true)}
+      />
       <Text dimColor>
         {live
           ? 'picked up between turns — it will not interrupt a running command'
           : wakeable
-            ? 'enter: send and wake the agent · ctrl+q: just queue it for later'
+            ? 'ctrl+d: send and wake the agent · ctrl+q: just queue it for later'
             : "parked work stays parked: this rides into the next session's prompt"}
-        {' · esc: cancel'}
+        {live || !wakeable ? ' · ctrl+d: send' : ''} · enter: newline · esc: cancel
       </Text>
     </Box>
   );
