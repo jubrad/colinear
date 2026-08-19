@@ -1414,7 +1414,9 @@ an agent — <code>ensureWorktree</code> reuses what's there, so the agent start
 inventing its own.</p>
 <p><code>x</code> cancels a prepared task the way it cancels a queued one; the worktree stays for <code>:gc</code>.</p>
 <h2 id="talking-to-a-running-agent">Talking to a running agent<a class="headerlink" href="#talking-to-a-running-agent" title="Permanent link">&para;</a></h2>
-<p><code>M</code> on a card (board or <code>:tasks</code>) sends the agent a message without attaching to it — "use the existing helper", "don't touch the schema", "rebase first".</p>
+<p><code>M</code> on a card (board or <code>:tasks</code>) opens a paragraph-sized box and sends the agent a message without
+attaching to it — "use the existing helper", "don't touch the schema", a pasted stack trace. <code>enter</code>
+is a newline; <code>ctrl+d</code> sends (and wakes a parked agent), <code>ctrl+q</code> queues it without waking.</p>
 <ul>
 <li><strong>A live agent</strong> takes it at its next turn boundary. It can't interrupt a command already running, so a message sent during a four-minute test run lands when that finishes; usually it's seconds. The session is a streaming conversation, so your message arrives as a user turn — the agent answers it and carries on.</li>
 <li><strong>An idle task</strong> — PR open, done, failed, interrupted, needs-input — is <strong>woken</strong>: colinear starts a session (resuming the same transcript, so the work is still in context) whose opening prompt carries your message. Sending is the whole gesture; you don't have to remember to press <code>r</code> afterwards. <code>ctrl+q</code> sends without waking if you'd rather it wait.</li>
