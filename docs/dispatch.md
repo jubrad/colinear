@@ -9,20 +9,23 @@ Dispatching (`enter`, or `c` for the custom modal) immediately self-assigns the 
 
 ## Label dispatch
 
-`"autoDispatchLabels": ["agent"]` makes a tracker label the dispatch button: the minute sweep picks
-up open issues carrying any listed label and enqueues them through the normal pipeline — triage
-included, which is the safety net for anything the label was slapped on optimistically.
+```json
+"autoDispatchLabels": { "CLOUD": "agent", "SAS": ["colinear", "bot"] }
+```
+
+A tracker label becomes the dispatch button, **per team**: the minute sweep picks up open issues in
+a listed team carrying that team's label and enqueues them through the normal pipeline — triage
+included, which is the safety net for anything labelled optimistically.
+
+The map is the scope. A team with no entry is opted out entirely, and each team names its own label
+because labels aren't namespaced — `agent` meaning "dispatch this" in CLOUD says nothing about what
+it means in SAS, and one team's label on another team's issue does nothing.
 
 The guards are the same purity rule the sub-issue sweep uses. Tracker state decides eligibility
 (backlog / unstarted / triage only), so an issue whose finished task was dropped by retention can
 never be resurrected by its label. An issue assigned to someone else is never taken — auto-dispatch
-self-assigns, and that would be theft. Three per sweep, so bulk-labelling lands as a trickle.
-
-The sweep is **confined to your configured `team`** by default. Labels aren't namespaced — `agent`
-in another team's vocabulary can mean something else entirely — and a workspace-wide sweep would
-self-assign their unassigned issues and move them to In Progress. `"autoDispatchScope": "all"` is
-the explicit opt-in for single-team workspaces or a deliberately cross-team label; with no `team`
-configured and scope `"team"`, the sweep does nothing and says so once.
+self-assigns, and that would be theft. Three per sweep across all teams, so bulk-labelling lands as
+a trickle.
 
 Removing the label stops future dispatch and cancels nothing already running.
 

@@ -509,21 +509,18 @@ export interface Config {
    * `{ "ssh": "vm" }` is sugar for the first. See docs/remote.md.
    */
   /**
-   * Issues carrying any of these labels dispatch themselves: the sweep picks
-   * up unstarted, unassigned (or mine) issues with a matching label and
-   * enqueues them through the normal pipeline — triage included, which is the
-   * safety net. Off unless set. The label is the opt-in, so removing it from
-   * an issue stops future dispatch but never cancels work already running.
+   * Per-team dispatch labels: issues in a listed team carrying that team's
+   * label dispatch themselves through the normal pipeline — triage included,
+   * which is the safety net. The map is the scope: a team with no entry is
+   * opted out entirely, and labels aren't namespaced so each team names its
+   * own. Removing a label stops future dispatch and cancels nothing running.
+   *
+   *   "autoDispatchLabels": { "CLOUD": "agent", "SAS": ["colinear", "bot"] }
+   *
+   * (Config files may write a bare string per team; loading normalizes to
+   * lists.)
    */
-  autoDispatchLabels?: string[];
-  /**
-   * Where the label sweep looks. "team" (default) confines it to the
-   * configured `team` — labels aren't namespaced, and a workspace-wide sweep
-   * acting on another team's vocabulary would self-assign their issues.
-   * "all" is the explicit opt-in for single-team workspaces or a deliberate
-   * cross-team label.
-   */
-  autoDispatchScope?: 'team' | 'all';
+  autoDispatchLabels?: Record<string, string[]>;
   /**
    * What `e` opens — answers, review docs, the config itself. Beats $EDITOR
    * (the same precedence git gives core.editor), and may carry flags:

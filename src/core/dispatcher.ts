@@ -98,7 +98,6 @@ export class Dispatcher {
   /** mailboxes of the sessions running right now, keyed by task id */
   private inboxes = new Map<string, SessionInbox>();
   private viewer?: { id: string; displayName: string };
-  private warnedLabelScope = false;
 
   constructor(private cfg: Config) {
     // unref: a pending timer must never keep the process alive after quit
@@ -604,38 +603,29 @@ export class Dispatcher {
    * sub-issue sweep — a bulk labelling lands as a trickle, not a stampede.
    */
   private async sweepLabels() {
-    const labels = this.cfg.autoDispatchLabels;
-    if (!labels?.length) return;
-    // team-confined unless the operator explicitly said "all": labels aren't
-    // namespaced, and acting on another team's vocabulary self-assigns their
-    // issues. No team to confine to = no sweep, said once, rather than a
-    // silent widening to the workspace.
-    let scope: string | undefined;
-    if ((this.cfg.autoDispatchScope ?? 'team') === 'team') {
-      const team = this.cfg.team && this.cfg.team !== '*' ? this.cfg.team : undefined;
-      if (!team) {
-        if (!this.warnedLabelScope) {
-          this.warnedLabelScope = true;
-          this.toast('label dispatch is off: set "team" in the config, or "autoDispatchScope": "all"', 'err');
-          log('label dispatch: no team to scope to and autoDispatchScope is not "all" — sweeping nothing');
-        }
-        return;
+    const perTeam = this.cfg.autoDispatchLabels;
+    if (!perTeam) return;
+    // the map is the scope: each team is swept for its own labels, and a team
+    // with no entry is never touched. Labels aren't namespaced, so "agent"
+    // meaning dispatch in CLOUD says nothing about what it means in SAS.
+    const eligible: Array<{ issue: Issue; label: string }> = [];
+    for (const [team, labels] of Object.entries(perTeam)) {
+      const found = await providerFor(this.cfg)
+        .filteredIssues({ scope: team, labels })
+        .catch(() => [] as Issue[]);
+      for (const issue of labelDispatchable(found, this.viewer?.id)) {
+        eligible.push({ issue, label: issue.labels.find((l) => labels.includes(l.name))?.name ?? labels[0] });
       }
-      scope = team;
     }
-    const found = await providerFor(this.cfg)
-      .filteredIssues({ labels, scope })
-      .catch(() => [] as Issue[]);
-    const eligible = labelDispatchable(found, this.viewer?.id);
     if (!eligible.length) return;
+    // one cap across every team — a bulk labelling lands as a trickle
     const batch = eligible.slice(0, 3);
-    for (const issue of batch) {
-      const label = issue.labels.find((l) => labels.includes(l.name))?.name ?? labels[0];
+    for (const { issue, label } of batch) {
       this.enqueue([issue]);
       store.addActivity(issue.id, `auto-dispatched by label "${label}"`);
     }
     this.toast(
-      `label dispatch: started ${batch.map((i) => i.identifier).join(', ')}` +
+      `label dispatch: started ${batch.map((b) => b.issue.identifier).join(', ')}` +
         (eligible.length > batch.length ? ` (${eligible.length - batch.length} more next sweep)` : ''),
       'ok',
     );
