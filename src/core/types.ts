@@ -508,6 +508,12 @@ export interface Config {
    *
    * `{ "ssh": "vm" }` is sugar for the first. See docs/remote.md.
    */
+  /**
+   * What `e` opens — answers, review docs, the config itself. Beats $EDITOR
+   * (the same precedence git gives core.editor), and may carry flags:
+   * "code --wait". Unset falls through to $EDITOR, then vi.
+   */
+  editor?: string;
   remote?: {
     exec: string[];
     label: string;
