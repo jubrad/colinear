@@ -509,6 +509,19 @@ export interface Config {
    * `{ "ssh": "vm" }` is sugar for the first. See docs/remote.md.
    */
   /**
+   * Per-team dispatch labels: issues in a listed team carrying that team's
+   * label dispatch themselves through the normal pipeline — triage included,
+   * which is the safety net. The map is the scope: a team with no entry is
+   * opted out entirely, and labels aren't namespaced so each team names its
+   * own. Removing a label stops future dispatch and cancels nothing running.
+   *
+   *   "autoDispatchLabels": { "CLOUD": "agent", "SAS": ["colinear", "bot"] }
+   *
+   * (Config files may write a bare string per team; loading normalizes to
+   * lists.)
+   */
+  autoDispatchLabels?: Record<string, string[]>;
+  /**
    * What `e` opens — answers, review docs, the config itself. Beats $EDITOR
    * (the same precedence git gives core.editor), and may carry flags:
    * "code --wait". Unset falls through to $EDITOR, then vi.

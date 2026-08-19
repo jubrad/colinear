@@ -40,6 +40,22 @@ export function autoDispatchable(parent: Task, subs: Issue[], configDefault: boo
   );
 }
 
+/**
+ * Issues a label sweep should start: unstarted in the tracker, in nobody's
+ * store, and not another human's. The same purity rule as autoDispatchable —
+ * tracker state is the guard, so a labelled issue whose task retention
+ * dropped long after it finished can never be resurrected by its label.
+ */
+export function labelDispatchable(issues: Issue[], viewerId: string | undefined): Issue[] {
+  return issues.filter(
+    (issue) =>
+      !store.get(issue.id) &&
+      ['backlog', 'unstarted', 'triage'].includes(issue.stateType ?? '') &&
+      // auto-dispatch self-assigns; taking an issue a colleague holds is theft
+      (!issue.assigneeId || issue.assigneeId === viewerId),
+  );
+}
+
 /** repo fields are enum-constrained to the config allowlist so routing can't
     silently miss on a name the model made up ("materialize-cloud", a path…) */
 function triageSchema(repoNames: string[]) {
@@ -583,6 +599,39 @@ export class Dispatcher {
   }
 
   /**
+   * Dispatch issues that opted in by label. Capped per sweep like the
+   * sub-issue sweep — a bulk labelling lands as a trickle, not a stampede.
+   */
+  private async sweepLabels() {
+    const perTeam = this.cfg.autoDispatchLabels;
+    if (!perTeam) return;
+    // the map is the scope: each team is swept for its own labels, and a team
+    // with no entry is never touched. Labels aren't namespaced, so "agent"
+    // meaning dispatch in CLOUD says nothing about what it means in SAS.
+    const eligible: Array<{ issue: Issue; label: string }> = [];
+    for (const [team, labels] of Object.entries(perTeam)) {
+      const found = await providerFor(this.cfg)
+        .filteredIssues({ scope: team, labels })
+        .catch(() => [] as Issue[]);
+      for (const issue of labelDispatchable(found, this.viewer?.id)) {
+        eligible.push({ issue, label: issue.labels.find((l) => labels.includes(l.name))?.name ?? labels[0] });
+      }
+    }
+    if (!eligible.length) return;
+    // one cap across every team — a bulk labelling lands as a trickle
+    const batch = eligible.slice(0, 3);
+    for (const { issue, label } of batch) {
+      this.enqueue([issue]);
+      store.addActivity(issue.id, `auto-dispatched by label "${label}"`);
+    }
+    this.toast(
+      `label dispatch: started ${batch.map((b) => b.issue.identifier).join(', ')}` +
+        (eligible.length > batch.length ? ` (${eligible.length - batch.length} more next sweep)` : ''),
+      'ok',
+    );
+  }
+
+  /**
    * Drop finished work older than the retention window. Only terminal states
    * go — nothing with an agent, a question, or an open PR — and the window is
    * also what the header's totals cover, so the two can't disagree.
@@ -668,6 +717,7 @@ export class Dispatcher {
     this.sweepRetention();
     await this.sweepClosed().catch(() => {});
     await this.refreshTracking().catch(() => {});
+    await this.sweepLabels().catch(() => {});
     // merge-order dependencies are tracked on every task, not just blocked ones:
     // the promote gate reads them long after the work is done
     for (const task of store.list()) {

@@ -192,6 +192,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     denyTools: Array.isArray(raw.denyTools) ? raw.denyTools : [],
     terminal: raw.terminal,
     editor: typeof raw.editor === 'string' && raw.editor.trim() ? raw.editor.trim() : undefined,
+    autoDispatchLabels: autoDispatchLabels(raw.autoDispatchLabels),
     remote: normalizeRemote(raw.remote),
   };
 }
@@ -265,6 +266,30 @@ function normalizeRemote(raw: RawRemote): Config['remote'] {
   }
   if (raw.ssh) return { exec: ['ssh', '-t', raw.ssh], label: raw.label ?? raw.ssh, ssh: raw.ssh, ...extra };
   fatal('config: "remote" needs either { "ssh": "host" } or { "exec": ["cmd", …] }');
+}
+
+/**
+ * { "CLOUD": "agent", "SAS": ["colinear", "bot"] } — team key to label(s).
+ * A bare array is refused with the reason: it has no team, and guessing one
+ * would put the sweep somewhere the operator didn't point it.
+ */
+function autoDispatchLabels(raw: unknown): Record<string, string[]> | undefined {
+  if (raw === undefined) return undefined;
+  if (Array.isArray(raw)) {
+    fatal('config: "autoDispatchLabels" is a per-team map, not a list — {"TEAM": "label"}');
+  }
+  if (typeof raw !== 'object' || raw === null) {
+    fatal('config: "autoDispatchLabels" must be an object: {"TEAM": "label"} or {"TEAM": ["a", "b"]}');
+  }
+  const out: Record<string, string[]> = {};
+  for (const [team, value] of Object.entries(raw)) {
+    const labels = (Array.isArray(value) ? value : [value]).filter(
+      (l): l is string => typeof l === 'string' && Boolean(l.trim()),
+    );
+    if (!labels.length) fatal(`config: "autoDispatchLabels.${team}" names no label`);
+    out[team] = labels;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 const PERMISSION_MODES = ['auto', 'acceptEdits', 'default', 'plan', 'dontAsk', 'bypassPermissions'];
