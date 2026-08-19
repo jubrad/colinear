@@ -1388,18 +1388,19 @@
 <li><strong>Checks</strong> from the repo config, then PR polling: state, CI rollup, review decision, mergeability. Matching prefers open/merged PRs over closed duplicates, and <code>m</code> can pin the canonical PR (number, <code>#123</code>, or URL); a failed task that gains a live PR un-fails itself. With <code>ciAutofix</code>, red checks dispatch a fix session that pulls the failing logs and pushes a fix.</li>
 </ol>
 <h2 id="label-dispatch">Label dispatch<a class="headerlink" href="#label-dispatch" title="Permanent link">&para;</a></h2>
-<p><code>"autoDispatchLabels": ["agent"]</code> makes a tracker label the dispatch button: the minute sweep picks
-up open issues carrying any listed label and enqueues them through the normal pipeline — triage
-included, which is the safety net for anything the label was slapped on optimistically.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">"autoDispatchLabels"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"CLOUD"</span><span class="p">:</span><span class="w"> </span><span class="s2">"agent"</span><span class="p">,</span><span class="w"> </span><span class="nt">"SAS"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"colinear"</span><span class="p">,</span><span class="w"> </span><span class="s2">"bot"</span><span class="p">]</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<p>A tracker label becomes the dispatch button, <strong>per team</strong>: the minute sweep picks up open issues in
+a listed team carrying that team's label and enqueues them through the normal pipeline — triage
+included, which is the safety net for anything labelled optimistically.</p>
+<p>The map is the scope. A team with no entry is opted out entirely, and each team names its own label
+because labels aren't namespaced — <code>agent</code> meaning "dispatch this" in CLOUD says nothing about what
+it means in SAS, and one team's label on another team's issue does nothing.</p>
 <p>The guards are the same purity rule the sub-issue sweep uses. Tracker state decides eligibility
 (backlog / unstarted / triage only), so an issue whose finished task was dropped by retention can
 never be resurrected by its label. An issue assigned to someone else is never taken — auto-dispatch
-self-assigns, and that would be theft. Three per sweep, so bulk-labelling lands as a trickle.</p>
-<p>The sweep is <strong>confined to your configured <code>team</code></strong> by default. Labels aren't namespaced — <code>agent</code>
-in another team's vocabulary can mean something else entirely — and a workspace-wide sweep would
-self-assign their unassigned issues and move them to In Progress. <code>"autoDispatchScope": "all"</code> is
-the explicit opt-in for single-team workspaces or a deliberately cross-team label; with no <code>team</code>
-configured and scope <code>"team"</code>, the sweep does nothing and says so once.</p>
+self-assigns, and that would be theft. Three per sweep across all teams, so bulk-labelling lands as
+a trickle.</p>
 <p>Removing the label stops future dispatch and cancels nothing already running.</p>
 <h2 id="manual-dispatch-a-worktree-no-agent">Manual dispatch — a worktree, no agent<a class="headerlink" href="#manual-dispatch-a-worktree-no-agent" title="Permanent link">&para;</a></h2>
 <p>The custom modal's <strong>start</strong> field has a second setting: <code>manual — worktree only</code>. The issue is

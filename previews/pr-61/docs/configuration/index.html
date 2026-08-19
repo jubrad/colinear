@@ -1722,12 +1722,7 @@
 <tr>
 <td><code>autoDispatchLabels</code></td>
 <td>unset</td>
-<td>issues carrying any of these labels dispatch themselves — swept every minute, capped at 3 per sweep, through the normal pipeline (triage included). The label is the opt-in: <code>["agent"]</code> makes labelling an issue in the tracker the dispatch button. Confined to your <code>team</code> unless <code>autoDispatchScope</code> says otherwise. See <a href="../dispatch/#label-dispatch">dispatch</a></td>
-</tr>
-<tr>
-<td><code>autoDispatchScope</code></td>
-<td><code>"team"</code></td>
-<td>where the label sweep looks. <code>"team"</code> confines it to the configured <code>team</code> — labels are not namespaced, and a workspace-wide sweep acting on another team's vocabulary would self-assign their issues. <code>"all"</code> is the explicit opt-in for single-team workspaces or a deliberate cross-team label. No <code>team</code> configured and scope <code>"team"</code> = no sweep, said once</td>
+<td>per-team dispatch labels: <code>{"CLOUD": "agent", "SAS": ["colinear", "bot"]}</code>. Issues in a listed team carrying that team's label dispatch themselves — swept every minute, 3 per sweep across all teams, through the normal pipeline (triage included). <strong>The map is the scope</strong>: a team with no entry is opted out, and each team names its own label because labels are not namespaced. See <a href="../dispatch/#label-dispatch">dispatch</a></td>
 </tr>
 <tr>
 <td><code>editor</code></td>
