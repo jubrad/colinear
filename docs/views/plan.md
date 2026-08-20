@@ -3,12 +3,18 @@
 Alias: `chat`. Argument: the project name (`:plan Cloud Migration`), or `p` on a project in
 [`:projects`](projects.md).
 
-A project's **design document**, drafted by an agent and shaped in chat — on the review-document
-pattern, with the storage inverted: **the tracker owns the design** (a project document named
-`Design`, falling back to the project description), and what you see here is the working draft.
-Opening the view pulls the tracker's copy fresh and starts the plan agent; it investigates the
-primary repository (read-only) and writes the draft — prose for humans, ending in a ```plan fence
-proposing milestones and issues.
+A project's **design document**, shaped in a conversation — on the review-document pattern, with
+the storage inverted: **the tracker owns the design** (a project document named `Design`, falling
+back to the project description), and what you see here is the working draft.
+
+Opening the view pulls the tracker's copy fresh and starts **nothing**: planning is collaborative,
+and the first move is yours. Say where your head is at in the chat (or press `d` to have the agent
+open — it frames the project from its issues and the repository and asks you the questions that
+matter). The first message starts the session, primed with everything a later write-up needs. While
+you converge, the agent keeps a short notes section current in the draft; when the direction is
+agreed — or you say "write it up" — it investigates the primary repository (read-only) and replaces
+the draft with the full design: prose for humans, ending in a ```plan fence proposing milestones
+and issues.
 
 The fence is scaffolding, not content: it never publishes. The issues and milestones it proposes
 *become tracker objects* when you approve them; the prose becomes the tracker's document when you
@@ -19,14 +25,15 @@ publish. Two separate keys, because they are two separate decisions.
 | key | what |
 |---|---|
 | `tab` | switch between the draft and the chat input |
-| `ctrl+d` | send a chat turn — the agent revises the draft as the plan changes |
+| `ctrl+d` | send a chat turn — the first one starts the session |
+| `d` | the agent opens the discussion (doc focus) |
 | `j/k` `g/G` | scroll the draft (doc focus) |
 | `e` | edit the draft in `$EDITOR` (the `editor` config applies); re-absorbed on return |
 | `U` | **publish** — the prose (fence stripped) becomes the project's `Design` document |
 | `p` | **post a project update** — the plan's summary, as a tracker status post |
 | `A` | **approve** — the fence's issues, reviewed in a list: `space` drops one, `A` creates |
 | `D` | approve and **dispatch wave 1** — only issues with no in-plan blockers; later waves start as their blockers land |
-| `s` | reopen the plan: re-pull the tracker doc, restart the agent |
+| `s` | reopen the plan: re-pull the tracker doc, reset the discussion |
 
 ## Approval is reconciliation
 

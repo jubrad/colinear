@@ -159,3 +159,4 @@ Daemon restart note: protocol 8.
 - [x] Phase 2 — shipped (branch `plan-milestones`, stacked on 1.5): milestones capability (Linear + sqlite), approve reconciles them, card chip
 - [x] Phase 3 — shipped (branch `project-updates`, stacked on 2): projectUpdates capability, deterministic `p` post from :plan (protocol 9)
 - [x] Phase 4 — shipped (branch `plan-coordinator`, stacked on 3): plan session gets family_* tools scoped to the project + channel membership as `plan`
+- [x] Discussion-first rework (branch `plan-discussion`, stacked on 4, operator feedback 2026-08-20): opening starts no session; the first chat turn (or `d`) starts a context-primed discussion; the draft is written when the direction is agreed

@@ -218,8 +218,6 @@ export class PlanManager {
         docContent = doc.content;
       }
     }
-    const issues = await providerFor(this.cfg).projectIssues(id).catch(() => [] as Issue[]);
-
     const path = this.draftPath(id);
     writeFileSync(path, seedDraft(project, docContent));
     this.watchDraft(id);
@@ -233,48 +231,13 @@ export class PlanManager {
       return;
     }
 
-    const controller = new AbortController();
-    this.aborts.set(id, controller);
-    store.updatePlan(id, { startedAt: store.getPlan(id)?.startedAt ?? Date.now() });
-    try {
-      const result = await runSession({
-        permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
-        prompt: planPrompt(this.cfg, project, path, docContent, issues, experimentOn(this.cfg, 'coordination')),
-        cwd: this.cfg.repos[0]?.path ?? process.cwd(),
-        model: this.cfg.model,
-        abortController: controller,
-        callbacks: this.callbacks(id),
-        ...this.sessionExtras(id, project.name),
-      });
-      if (controller.signal.aborted) {
-        store.updatePlan(id, { status: 'ready', endedAt: Date.now() });
-        return;
-      }
-      if (result.isError) {
-        store.updatePlan(id, { status: 'error', error: result.errors.join('; ').slice(0, 300), endedAt: Date.now() });
-        return;
-      }
-      this.absorbDraft(id);
-      const plan = store.getPlan(id);
-      store.updatePlan(id, {
-        status: 'ready',
-        costUsd: (plan?.costUsd ?? 0) + result.costUsd,
-        endedAt: Date.now(),
-      });
-      const count = store.getPlan(id)?.issues?.length ?? 0;
-      if (count === 0 && hasFenceOpening(readDraft(path), FENCE_NAMES)) {
-        store.addPlanActivity(id, '⚠ no issues parsed from the draft — check its ```plan fence');
-        this.toast(`${project.name}: plan ready but its fence did not parse`, 'err');
-      } else {
-        store.addPlanActivity(id, `plan ready: ${count} issue${count === 1 ? '' : 's'} proposed`);
-      }
-      notify(this.cfg, project.name, `plan ready (${count} issues)`, undefined);
-    } catch (err) {
-      store.updatePlan(id, { status: 'error', error: String(err).slice(0, 300), endedAt: Date.now() });
-      log(`plan ${id} failed: ${err}`);
-    } finally {
-      this.aborts.delete(id);
-    }
+    // Deliberately no session here. Planning is collaborative: the operator
+    // opens the discussion (a chat turn, or `d` for the agent to open it),
+    // and the design is written down when the direction is agreed — never
+    // produced unprompted for the operator to react to. The first chat turn
+    // starts the session with the context gathered above.
+    this.absorbDraft(id);
+    store.updatePlan(id, { status: 'ready' });
   }
 
   /** One chat turn against the plan session; the reply lands in plan.chat. */
@@ -290,12 +253,6 @@ export class PlanManager {
       });
       return;
     }
-    if (!plan.sessionId) {
-      store.updatePlan(id, {
-        chat: withTurn([typed, { role: 'note', text: 'No plan session yet — reopen the plan first.', at: now }]),
-      });
-      return;
-    }
     if (this.aborts.has(id)) {
       store.updatePlan(id, {
         chat: withTurn([typed, { role: 'note', text: 'The agent is still working on the previous turn — this one was not sent.', at: now }]),
@@ -306,9 +263,16 @@ export class PlanManager {
     const controller = new AbortController();
     this.aborts.set(id, controller);
     try {
+      // the first turn starts the session, primed with everything the
+      // discussion (and the plan tasks it may end in) needs: the project, its
+      // issues, the published design, the repo. Later turns resume it.
+      const prompt = plan.sessionId
+        ? `${text}\n\n(Draft discipline still applies: notes as we converge, the full design — prose + \`\`\`plan fence — only once the direction is agreed or I ask you to write it up.)`
+        : await this.discussionOpener(id, text);
+      if (prompt === undefined) return; // opener could not resolve the project; noted in chat
       const result = await runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
-        prompt: `${text}\n\n(Keep the draft at the path you were given current: rewrite it — prose and \`\`\`plan fence — whenever this turn changes the plan.)`,
+        prompt,
         cwd: this.cfg.repos[0]?.path ?? process.cwd(),
         resume: plan.sessionId,
         model: this.cfg.model,
@@ -326,11 +290,54 @@ export class PlanManager {
         costUsd: (current?.costUsd ?? 0) + result.costUsd,
       });
       this.absorbDraft(id);
+      const after = store.getPlan(id);
+      const count = after?.issues?.length ?? 0;
+      if (count === 0 && after?.draft && hasFenceOpening(after.draft, FENCE_NAMES)) {
+        store.addPlanActivity(id, '⚠ no issues parsed from the draft — check its ```plan fence');
+        this.toast(`${plan.projectName}: the draft's fence did not parse`, 'err');
+      } else if (count && count !== (plan.issues?.length ?? 0)) {
+        store.addPlanActivity(id, `draft proposes ${count} issue${count === 1 ? '' : 's'}`);
+        notify(this.cfg, plan.projectName, `plan drafted (${count} issues)`, undefined);
+      }
     } finally {
       this.aborts.delete(id);
       const current = store.getPlan(id);
       if (current?.chatting) store.updatePlan(id, { chatting: false });
     }
+  }
+
+  /**
+   * The first chat turn's prompt: the discussion-stance brief plus everything
+   * a later "write it up" needs — the project, its issues, the published
+   * design, the repo it runs in. Returns undefined (with a note in the chat)
+   * when the project can't be resolved from the tracker.
+   */
+  private async discussionOpener(id: string, text: string): Promise<string | undefined> {
+    const plan = store.getPlan(id);
+    if (!plan) return undefined;
+    const provider = providerFor(this.cfg);
+    const project = (await provider.projects().catch(() => [] as Project[])).find((p) => p.id === id);
+    if (!project) {
+      store.updatePlan(id, {
+        chat: [
+          ...(store.getPlan(id)?.chat ?? []),
+          { role: 'note', text: 'could not load the project from the tracker — reopen the plan (s) and try again', at: Date.now() },
+        ],
+      });
+      return undefined;
+    }
+    const issues = await provider.projectIssues(id).catch(() => [] as Issue[]);
+    store.updatePlan(id, { startedAt: plan.startedAt ?? Date.now() });
+    store.addPlanActivity(id, 'discussion opened');
+    return discussionPrompt(
+      this.cfg,
+      project,
+      this.draftPath(id),
+      plan.published ?? '',
+      issues,
+      experimentOn(this.cfg, 'coordination'),
+      text,
+    );
   }
 
   /** Re-read the draft after an $EDITOR edit; also re-establishes the watch. */
@@ -662,7 +669,13 @@ function parseDraft(text: string): { summary: string; milestones: PlanMilestone[
 
 function seedDraft(project: Project, published: string): string {
   if (published.trim()) return `${published.trim()}\n`;
-  return `# ${project.name} — design\n\n_No design document yet. The plan agent drafts here; publish sends the prose to the tracker._\n`;
+  return `# ${project.name} — design
+
+_No design yet — this is a conversation first. Say where your head is at in the chat below
+(ctrl+d sends), or tab to this pane and press d to have the agent open with what it can see.
+The agent keeps notes here as you converge; say "write it up" when the direction is agreed,
+and the full design (with its \`\`\`plan fence) replaces this page._
+`;
 }
 
 function demoDraft(project: Project): string {
@@ -682,33 +695,33 @@ The demo plan: a short brief with a fence, so the whole flow is visible without 
 `;
 }
 
-function planPrompt(
+function discussionPrompt(
   cfg: Config,
   project: Project,
   draftPath: string,
   published: string,
   issues: Issue[],
-  coordinating = false,
+  coordinating: boolean,
+  opener: string,
 ): string {
   const existing = issues.map((i) => `- ${i.identifier} [${i.stateName}] ${i.title}`).join('\n');
   const coordination = coordinating
     ? `
 
-You are also this project's coordinator. Your mcp__colinear__family_* tools work on the project's dispatched issues (the "family" here is the project): family_status is the live board, fresher than the list above — use it before deciding anything; family_message reaches an issue's agent; family_cancel stops one (say why; the operator can resume it). family_propose only points you back at the fence: proposing means revising the draft, and the operator approves with A. You are in the project channel (mcp__colinear__channel_read / channel_post) as "plan" — read it before big decisions, and post what the agents working these issues need to know. Coordinate when asked or when the board plainly needs it; drafting the design is still the job.`
+You are also this project's coordinator. Your mcp__colinear__family_* tools work on the project's dispatched issues (the "family" here is the project): family_status is the live board, fresher than the list above — use it before deciding anything; family_message reaches an issue's agent; family_cancel stops one (say why; the operator can resume it). family_propose only points you back at the fence: proposing means revising the draft, and the operator approves with A. You are in the project channel (mcp__colinear__channel_read / channel_post) as "plan" — read it before big decisions, and post what the agents working these issues need to know. Coordinate when asked or when the board plainly needs it; the discussion with the operator is still the job.`
     : '';
-  return `You are the planning agent for the project "${project.name}" inside colinear, a TUI that dispatches coding agents against tracker issues.${coordination}
-
-Your artifact is the draft at ${draftPath} — the working copy of the project's design document. The tracker's copy is the source of truth; the operator publishes your prose there when it is right, and approves your proposed issues into the tracker separately. You never create or modify tracker state yourself.
-
-${published.trim() ? 'The draft currently holds the published design — revise it rather than starting over.' : 'There is no published design yet — write the first draft.'}
+  return `You are the design partner for the project "${project.name}" inside colinear, a TUI that dispatches coding agents against tracker issues. The operator opened this chat to think the design through WITH you — discuss first, write later. Keep replies conversational and short, ask the questions that matter, and ground what you say in the repository you are in (read-only, briefly) whenever the discussion needs a fact.${coordination}
 
 Existing issues in this project:
 ${existing || '(none yet)'}
 
-Investigate the repository you are in (read-only, briefly) to ground component names and scope estimates in reality. Then write the draft:
+${published.trim() ? `The published design ("${DOC_TITLE}") is in the draft file below — the discussion is presumably about changing it.` : 'There is no published design yet.'}
 
-- Prose for humans: the problem, what is in scope, what is explicitly not, and how anyone will know it worked. No schedules, no owners — those live in the tracker.
-- End the file with one \`\`\`plan fence holding JSON: {"milestones": [{"name", "targetDate"?, "description"?}], "issues": [{"title", "description", "repo"?, "milestone"?, "priority"?, "blockedBy"?: [sibling titles]}]}. Each issue must be completable by one coding agent in one PR. The fence never publishes — it is scaffolding the operator approves into real issues.
+The draft file at ${draftPath} is your only writable artifact (use the Write tool, only that file). The tracker's copy is the source of truth; the operator publishes prose and approves issues separately. You never create or modify tracker state yourself. Draft discipline:
 
-Write the whole file with the Write tool (only that file), keep it current on every revision, and reply briefly — the draft is the artifact, not your reply.${guidanceFor(cfg.guidance, 'plan')}`;
+- While the direction is still forming, you may keep a short "## Notes from the discussion" section current at the top of the draft — agreed points, open questions, nothing more. The operator watches it to see the shared understanding form.
+- Only once the direction is agreed — or the operator says to write it up — replace the draft with the full design: prose for humans (the problem, what is in scope, what is explicitly not, how anyone will know it worked; no schedules, no owners), ending in one \`\`\`plan fence holding JSON: {"milestones": [{"name", "targetDate"?, "description"?}], "issues": [{"title", "description", "repo"?, "milestone"?, "priority"?, "blockedBy"?: [sibling titles]}]}. Each issue must be completable by one coding agent in one PR. The fence never publishes — it is scaffolding the operator approves into real issues.
+
+The operator opens:
+${opener}${guidanceFor(cfg.guidance, 'plan')}`;
 }

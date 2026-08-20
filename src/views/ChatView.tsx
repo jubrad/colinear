@@ -86,6 +86,14 @@ export function ChatView(props: { param?: string }) {
       }
       if (input === 'U' && project) ctx.dispatcher.publishPlan(project.id);
       if (input === 'p' && project) ctx.dispatcher.postPlanUpdate(project.id);
+      // the agent opens the discussion — an ordinary chat turn, so it reads
+      // as one in the transcript and needs no wire support of its own
+      if (input === 'd' && project && !plan?.chatting) {
+        ctx.dispatcher.planChat(
+          project.id,
+          'Open the discussion: from what you can see of this project, its issues and the repository, frame the problem briefly and ask me the questions that matter most. No design yet.',
+        );
+      }
       if ((input === 'A' || input === 'D') && proposed.length) {
         setDropped(new Set());
         setApproveCursor(0);
@@ -266,6 +274,7 @@ function ApproveList(props: { proposed: PlanIssue[]; dropped: Set<string>; curso
 
 export const chatKeys: Array<[string, string]> = [
   ['tab', 'doc/chat'],
+  ['d', 'agent opens the discussion'],
   ['j/k', 'scroll doc'],
   ['e', 'edit draft in $EDITOR'],
   ['U', 'publish to the tracker'],
