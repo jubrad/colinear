@@ -86,8 +86,31 @@ store.upsertReview({
   tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 0,
 } as Review);
 
+// project plans: the third CDC entity, exercised through the same lifecycle —
+// upsert, patch, activity, a cleared field, and a delete
+store.upsertPlan({
+  id: 'proj-1', projectName: 'Cadence metrics', status: 'drafting', activity: [],
+  tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 0,
+});
+store.updatePlan('proj-1', {
+  status: 'ready',
+  draft: '# plan\n\n```plan\n{"issues":[]}\n```',
+  summary: 'a plan',
+  issues: [{ title: 'Build the thing', description: 'd', repo: 'cadence', blockedBy: ['Other'] }],
+  milestones: [{ name: 'Cutover', targetDate: '2026-09-01' }],
+  docUpdatedAt: '2026-08-19T00:00:00Z',
+  error: 'transient',
+});
+store.addPlanActivity('proj-1', 'draft ready');
+store.updatePlan('proj-1', { status: 'published', publishedAt: 5, error: undefined });
+store.upsertPlan({
+  id: 'proj-gone', projectName: 'Dropped', status: 'drafting', activity: [],
+  tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, costUsd: 0,
+});
+store.deletePlan('proj-gone');
+
 let answered: string | undefined;
-mirror.hydrate({ version: 0, tasks: [], reviews: [] }, (id, answers) => {
+mirror.hydrate({ version: 0, tasks: [], reviews: [], plans: [] }, (id, answers) => {
   answered = `${id}:${answers.join(',')}`;
 });
 for (const delta of captured) {
@@ -98,8 +121,8 @@ const strip = (t: Task) => ({
   ...t,
   question: t.question ? { kind: t.question.kind, questions: t.question.questions } : undefined,
 });
-const left = JSON.stringify([store.list().map(strip), store.listReviews()]);
-const right = JSON.stringify([mirror.list().map(strip), mirror.listReviews()]);
+const left = JSON.stringify([store.list().map(strip), store.listReviews(), store.listPlans()]);
+const right = JSON.stringify([mirror.list().map(strip), mirror.listReviews(), mirror.listPlans()]);
 if (left !== right) {
   console.error('DIVERGED\n source:', left, '\n mirror:', right);
   process.exit(1);
@@ -107,6 +130,9 @@ if (left !== right) {
 if (store.get('A')?.error !== undefined) throw new Error('source kept a cleared field');
 if (mirror.get('A')?.error !== undefined) throw new Error('mirror kept a cleared field');
 if (mirror.get('B')?.activity.length !== 200) throw new Error('mirror activity cap drifted');
+if (mirror.getPlan('proj-1')?.status !== 'published') throw new Error('mirror lost the plan status');
+if (mirror.getPlan('proj-1')?.error !== undefined) throw new Error('mirror kept a cleared plan field');
+if (mirror.getPlan('proj-gone')) throw new Error('mirror kept a deleted plan');
 
 if (mirror.get('B')?.question?.questions.length !== 2) throw new Error('mirror lost a question');
 if (mirror.get('B')?.question?.questions[0].options[0].description !== 'matches the controller path') {
@@ -130,5 +156,5 @@ if (mirror.get('C')) throw new Error('deleted task still in the mirror');
 if (mirror.getReview('o/r#7')) throw new Error('deleted review still in the mirror');
 if (!mirror.getReview('o/r#8')) throw new Error('later review missing from the mirror');
 console.log(
-  `ok — ${captured.length} deltas replayed, ${store.list().length} tasks + ${store.listReviews().length} reviews identical`,
+  `ok — ${captured.length} deltas replayed, ${store.list().length} tasks + ${store.listReviews().length} reviews + ${store.listPlans().length} plans identical`,
 );

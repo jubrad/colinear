@@ -3,13 +3,14 @@ import { join } from 'node:path';
 import { STATE_DIR, log } from './log.js';
 import { restorePlanners, serializePlanners, type PlannerSnapshot } from './planner.js';
 import { store } from './store.js';
-import type { Config, Review, Task, TaskStatus } from './types.js';
+import type { Config, ProjectPlan, Review, Task, TaskStatus } from './types.js';
 
 const STATE_FILE = join(STATE_DIR, 'state.json');
 const LIVE_STATUSES: TaskStatus[] = ['queued', 'triage', 'working', 'checks', 'needs_input'];
 
 type PersistedTask = Omit<Task, 'question'>;
 type PersistedReview = Omit<Review, 'question'>;
+type PersistedPlan = Omit<ProjectPlan, 'question'>;
 
 export interface UiState {
   /** last picker team: 'mine', '*', or a team key */
@@ -20,6 +21,7 @@ interface PersistedState {
   version: number;
   tasks?: PersistedTask[];
   reviews?: PersistedReview[];
+  plans?: PersistedPlan[];
   planners?: PlannerSnapshot[];
   ui?: UiState;
 }
@@ -37,7 +39,8 @@ export function setUiState(patch: Partial<UiState>): void {
 function serialize(): string {
   const tasks: PersistedTask[] = store.list().map(({ question: _q, ...rest }) => rest);
   const reviews: PersistedReview[] = store.listReviews().map(({ question: _q, ...rest }) => rest);
-  const state: PersistedState = { version: 3, tasks, reviews, planners: serializePlanners(), ui: uiState };
+  const plans: PersistedPlan[] = store.listPlans().map(({ question: _q, ...rest }) => rest);
+  const state: PersistedState = { version: 3, tasks, reviews, plans, planners: serializePlanners(), ui: uiState };
   return JSON.stringify(state, null, 2);
 }
 
@@ -75,6 +78,11 @@ export function loadState(cfg: Config): void {
           : // 'posted' was colinear's word before GitHub's own (COMMENTED) won
             ((r.status as string) === 'posted' ? 'commented' : r.status);
       store.upsertReview({ ...r, status, question: undefined });
+    }
+    for (const plan of data.plans ?? []) {
+      // a plan session mid-chat comes back idle; the draft and its parse survive
+      const status = plan.status === 'drafting' && plan.sessionId ? 'ready' : plan.status;
+      store.upsertPlan({ ...plan, status, question: undefined });
     }
     restorePlanners(cfg, data.planners ?? []);
     uiState = data.ui ?? {};

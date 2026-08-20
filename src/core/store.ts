@@ -4,10 +4,11 @@ import {
   type Change,
   type Delta,
   type Snapshot,
+  type WirePlan,
   type WireReview,
   type WireTask,
 } from './delta.js';
-import type { Review, Task, TaskStatus } from './types.js';
+import type { ProjectPlan, Review, Task, TaskStatus } from './types.js';
 
 type Listener = () => void;
 
@@ -18,6 +19,8 @@ class Store {
   tasks = new Map<string, Task>();
   /** PR reviews, keyed "owner/repo#number" — same CDC contract as tasks */
   reviews = new Map<string, Review>();
+  /** project plans, keyed by project id — same CDC contract again */
+  plans = new Map<string, ProjectPlan>();
   version = 0;
   private listeners = new Set<Listener>();
   private log: Delta[] = [];
@@ -128,11 +131,51 @@ class Store {
     return [...this.reviews.values()];
   }
 
+  upsertPlan(plan: ProjectPlan) {
+    const change: Change = { kind: 'plan-upsert', plan: toWire(plan) as WirePlan };
+    if (this.remote) return this.remote(change);
+    this.plans.set(plan.id, plan);
+    this.emit(change);
+  }
+
+  getPlan(id: string): ProjectPlan | undefined {
+    return this.plans.get(id);
+  }
+
+  updatePlan(id: string, patch: Partial<ProjectPlan>) {
+    const { patch: wire, clear } = encodePatch(patch);
+    if (this.remote) return this.remote({ kind: 'plan-update', id, patch: wire, clear });
+    const plan = this.plans.get(id);
+    if (!plan) return;
+    Object.assign(plan, patch);
+    this.emit({ kind: 'plan-update', id, patch: wire, clear });
+  }
+
+  addPlanActivity(id: string, line: string) {
+    if (this.remote) return this.remote({ kind: 'plan-activity', id, line });
+    const plan = this.plans.get(id);
+    if (!plan) return;
+    appendActivity(plan, line);
+    this.emit({ kind: 'plan-activity', id, line });
+  }
+
+  /** Plans leave only when the operator removes one; nothing sweeps them. */
+  deletePlan(id: string) {
+    if (this.remote) return this.remote({ kind: 'plan-delete', id });
+    if (!this.plans.delete(id)) return;
+    this.emit({ kind: 'plan-delete', id });
+  }
+
+  listPlans(): ProjectPlan[] {
+    return [...this.plans.values()];
+  }
+
   snapshot(): Snapshot {
     return {
       version: this.version,
       tasks: this.list().map((t) => toWire(t) as WireTask),
       reviews: this.listReviews().map((r) => toWire(r) as WireReview),
+      plans: this.listPlans().map((p) => toWire(p) as WirePlan),
     };
   }
 
@@ -177,6 +220,14 @@ class Store {
         return this.addReviewActivity(change.id, change.line);
       case 'review-update':
         return this.updateReview(change.id, withCleared<Partial<Review>>(change.patch, change.clear));
+      case 'plan-upsert':
+        return this.upsertPlan(change.plan as unknown as ProjectPlan);
+      case 'plan-activity':
+        return this.addPlanActivity(change.id, change.line);
+      case 'plan-update':
+        return this.updatePlan(change.id, withCleared<Partial<ProjectPlan>>(change.patch, change.clear));
+      case 'plan-delete':
+        return this.deletePlan(change.id);
       case 'delete':
         return this.delete(change.id);
       case 'review-delete':
@@ -189,6 +240,8 @@ class Store {
     if (onAnswer) this.onAnswer = onAnswer;
     this.tasks = new Map(snapshot.tasks.map((t) => [t.issue.id, this.fromWire(t, t.issue.id)]));
     this.reviews = new Map(snapshot.reviews.map((r) => [r.id, this.fromWire(r, r.id) as unknown as Review]));
+    // older daemons don't send plans; an empty map beats a crash mid-hydrate
+    this.plans = new Map((snapshot.plans ?? []).map((p) => [p.id, this.fromWire(p, p.id) as unknown as ProjectPlan]));
     this.version = snapshot.version;
     this.log = [];
     this.notify();
@@ -204,15 +257,22 @@ class Store {
       this.tasks.delete(delta.id);
     } else if (delta.kind === 'review-delete') {
       this.reviews.delete(delta.id);
+    } else if (delta.kind === 'plan-delete') {
+      this.plans.delete(delta.id);
     } else if (delta.kind === 'upsert') {
       this.tasks.set(delta.task.issue.id, this.fromWire(delta.task, delta.task.issue.id));
     } else if (delta.kind === 'review-upsert') {
       this.reviews.set(delta.review.id, this.fromWire(delta.review, delta.review.id) as unknown as Review);
+    } else if (delta.kind === 'plan-upsert') {
+      this.plans.set(delta.plan.id, this.fromWire(delta.plan, delta.plan.id) as unknown as ProjectPlan);
     } else {
-      const isReview = delta.kind.startsWith('review-');
-      const target = isReview ? this.reviews.get(delta.id) : this.tasks.get(delta.id);
+      const target = delta.kind.startsWith('review-')
+        ? this.reviews.get(delta.id)
+        : delta.kind.startsWith('plan-')
+          ? this.plans.get(delta.id)
+          : this.tasks.get(delta.id);
       if (!target) return false;
-      if (delta.kind === 'activity' || delta.kind === 'review-activity') {
+      if (delta.kind === 'activity' || delta.kind === 'review-activity' || delta.kind === 'plan-activity') {
         appendActivity(target, delta.line);
       } else {
         Object.assign(target, this.fromWire(delta.patch, delta.id));
@@ -225,7 +285,7 @@ class Store {
   }
 
   /** Re-attach the answer callback the wire format can't carry. */
-  private fromWire(wire: Partial<WireTask> | Partial<WireReview>, id: string): Task {
+  private fromWire(wire: Partial<WireTask> | Partial<WireReview> | Partial<WirePlan>, id: string): Task {
     const task = wire as unknown as Task;
     if (wire.question) {
       const send = this.onAnswer;
