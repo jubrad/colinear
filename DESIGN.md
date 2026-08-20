@@ -363,7 +363,8 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
 | config | `~/.config/colinear/config.json` |
 | contexts | `~/.config/colinear/contexts/<name>.json` (layered over the config above) |
 | custom views | `~/.config/colinear/views/*.json` |
-| task/planner/UI state | `~/.local/state/colinear/state.json` (pruned by `retentionDays`) |
+| task/review/plan/UI state | `~/.local/state/colinear/state.json` (pruned by `retentionDays`; plans only leave when the operator removes them) |
+| plan drafts | `~/.local/state/colinear/plans/<project>.md` (workspace only — the tracker's document is the source of truth) |
 | debug log + diverted stderr | `~/.local/state/colinear/colinear.log` |
 | coordination channels (experimental) | `~/.local/state/colinear/channels/*.jsonl` + `cursors.json` |
 | socket + pidfile | `~/.local/state/colinear/coli.sock`, `coli.pid` |
@@ -382,7 +383,8 @@ Every `~/.local/state/colinear/` path above moves under `contexts/<name>/` in a 
   nothing stops daemon-only code from being imported into the client and silently mutating a mirror.
 - Snapshots are whole-store; fine at this scale (activity is capped at 200 lines/task) but a diffed
   snapshot is the obvious next move if boards get big.
-- The planner and new-issue sessions still run in the TUI process, so `R`/quit kills them.
+- The new-issue and new-project drafting sessions still run in the TUI process, so `R`/quit kills
+  them. (The planner had the same debt until it became the daemon's `:plan` session.)
 - `escalated` status is vestigial (verdicts now park as needs_input) but kept for old persisted state.
 - Interactive attach + headless resume share one session id; concurrent writers are prevented by suspend-first, not enforced.
 - No pagination UI past the 500-issue cap; silently truncates.
