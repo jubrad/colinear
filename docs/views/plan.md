@@ -35,6 +35,12 @@ not cancelled** — cancelling is your call, per issue. Created issues carry a p
 pointing at the design revision they came from, and `blockedBy` titles become real blocking
 relations.
 
+Milestones reconcile the same way, first: where the provider has them, the fence's milestones are
+created if missing (matched by name, existing ones reused, none ever deleted) and each issue is
+filed under the milestone it names. An issue naming a milestone that exists nowhere is created
+without one, with a warning in the plan's activity. Where the provider has no milestones the
+fence's are ignored — also said out loud, not silently.
+
 ## When the design changes outside colinear
 
 Planned projects are swept on the poll cadence (about five minutes): when the tracker's document

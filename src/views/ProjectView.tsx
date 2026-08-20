@@ -183,6 +183,7 @@ export function ProjectView(props: { param?: string }) {
                     </Text>
                     <Text dimColor wrap="truncate">
                       {issue.assignee ?? 'unassigned'}
+                      {issue.milestoneName ? ` · ${issue.milestoneName}` : ''}
                       {task && (
                         <Text color={STATUS_COLORS[task.status]} bold>
                           {'  ⚒ '}

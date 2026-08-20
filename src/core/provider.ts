@@ -28,6 +28,8 @@ export interface ProviderCapabilities {
   createProjects: boolean;
   /** documents attached to a project → the plan's published home (:plan) */
   documents: boolean;
+  /** project milestones → plan approval creates them and files issues under them */
+  milestones: boolean;
   /** a scope above the issue to browse by → the `t` picker, `--team` */
   scopes: boolean;
   /** issue states we can move through → stateSync */
@@ -46,6 +48,16 @@ export interface CreateIssueInput {
   priority?: number;
   /** makes the new issue a child of this one */
   parentId?: string;
+  /** files the new issue under a project milestone (capabilities.milestones) */
+  milestoneId?: string;
+}
+
+export interface ProjectMilestone {
+  id: string;
+  name: string;
+  /** ISO date, no time — trackers treat milestone dates as calendar days */
+  targetDate?: string;
+  description?: string;
 }
 
 export interface CreateProjectInput {
@@ -122,6 +134,14 @@ export interface IssueProvider {
     projectId: string,
     doc: { id?: string; title: string; content: string },
   ): Promise<{ id: string; updatedAt: string; url?: string }>;
+
+  /** a project's milestones; [] where capabilities.milestones is false */
+  projectMilestones(projectId: string): Promise<ProjectMilestone[]>;
+  /** throws where capabilities.milestones is false */
+  createMilestone(
+    projectId: string,
+    milestone: { name: string; targetDate?: string; description?: string },
+  ): Promise<{ id: string; name: string }>;
   blockIssue(blockerId: string, blockedId: string): Promise<void>;
   assign(issueId: string, userId: string): Promise<void>;
   comment(issueId: string, body: string): Promise<void>;

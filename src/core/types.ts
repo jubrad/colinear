@@ -25,6 +25,8 @@ export interface Issue {
   projectId?: string;
   /** carried so a project channel can be named after the project, not its uuid */
   projectName?: string;
+  /** the project milestone this issue belongs to, where the provider has them */
+  milestoneName?: string;
   /** set when this issue is a sub-issue */
   parent?: { id: string; identifier: string };
 }

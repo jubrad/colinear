@@ -4,6 +4,8 @@
 teams, target date. `/` filters, `t` switches team, `s` sorts, `enter` opens one.
 
 `:project NAME` (alias `p`) is a kanban of that project's issues, whether or not they're dispatched.
+Where the provider has milestones, each card's second line names the milestone the issue is filed
+under, after the assignee.
 
 ## New projects (`n`)
 

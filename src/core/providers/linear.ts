@@ -34,6 +34,7 @@ const ISSUE_FIELDS = `
   labels { nodes { name color } }
   assignee { id displayName }
   parent { id identifier }
+  projectMilestone { name }
 `;
 
 interface IssueNode {
@@ -50,6 +51,7 @@ interface IssueNode {
   labels: { nodes: Array<{ name: string; color: string }> };
   assignee?: { id: string; displayName: string } | null;
   parent?: { id: string; identifier: string } | null;
+  projectMilestone?: { name: string } | null;
 }
 
 function toIssue(n: IssueNode): Issue {
@@ -66,6 +68,7 @@ function toIssue(n: IssueNode): Issue {
     teamId: n.team?.id,
     projectId: n.project?.id,
     projectName: n.project?.name,
+    milestoneName: n.projectMilestone?.name,
     labels: n.labels.nodes,
     assignee: n.assignee?.displayName,
     assigneeId: n.assignee?.id,
@@ -337,6 +340,8 @@ export async function createIssue(
     priority?: number;
     /** makes the new issue a sub-issue of this parent */
     parentId?: string;
+    /** Linear's name for the milestone field on IssueCreateInput */
+    projectMilestoneId?: string;
   },
 ): Promise<{ id: string; identifier: string }> {
   const data = await gql<{ issueCreate: { success: boolean; issue: { id: string; identifier: string } } }>(
@@ -348,6 +353,47 @@ export async function createIssue(
   );
   if (!data.issueCreate.success) throw new Error('issueCreate failed');
   return data.issueCreate.issue;
+}
+
+export async function fetchProjectMilestones(
+  cfg: Config,
+  projectId: string,
+): Promise<import('../provider.js').ProjectMilestone[]> {
+  const data = await gql<{
+    project: { projectMilestones: { nodes: Array<{ id: string; name: string; targetDate?: string; description?: string }> } };
+  }>(
+    cfg,
+    `query ($id: String!) {
+      project(id: $id) {
+        projectMilestones(first: 100) { nodes { id name targetDate description } }
+      }
+    }`,
+    { id: projectId },
+  );
+  return data.project.projectMilestones.nodes.map((m) => ({
+    id: m.id,
+    name: m.name,
+    targetDate: m.targetDate ?? undefined,
+    description: m.description ?? undefined,
+  }));
+}
+
+export async function createProjectMilestone(
+  cfg: Config,
+  projectId: string,
+  milestone: { name: string; targetDate?: string; description?: string },
+): Promise<{ id: string; name: string }> {
+  const data = await gql<{
+    projectMilestoneCreate: { success: boolean; projectMilestone: { id: string; name: string } };
+  }>(
+    cfg,
+    `mutation ($input: ProjectMilestoneCreateInput!) {
+      projectMilestoneCreate(input: $input) { success projectMilestone { id name } }
+    }`,
+    { input: { projectId, ...milestone } },
+  );
+  if (!data.projectMilestoneCreate.success) throw new Error('projectMilestoneCreate failed');
+  return data.projectMilestoneCreate.projectMilestone;
 }
 
 export async function fetchWorkflowStates(cfg: Config, teamId: string): Promise<import('../types.js').WorkflowState[]> {
@@ -474,8 +520,9 @@ export function linearProvider(cfg: Config): IssueProvider {
       subIssues: true,
       priority: true,
       projects: true,
-    createProjects: true,
-    documents: true,
+      createProjects: true,
+      documents: true,
+      milestones: true,
       scopes: true,
       workflowStates: true,
       branchNames: true,
@@ -495,8 +542,10 @@ export function linearProvider(cfg: Config): IssueProvider {
     createProject: (input) => createProject(cfg, input),
     projectDocuments: (projectId) => fetchProjectDocuments(cfg, projectId),
     saveProjectDocument: (projectId, doc) => saveProjectDocument(cfg, projectId, doc),
-    create: ({ scopeId, title, description, projectId, priority, parentId }) =>
-      createIssue(cfg, { teamId: scopeId, title, description, projectId, priority, parentId }),
+    create: ({ scopeId, title, description, projectId, priority, parentId, milestoneId }) =>
+      createIssue(cfg, { teamId: scopeId, title, description, projectId, priority, parentId, projectMilestoneId: milestoneId }),
+    projectMilestones: (projectId) => fetchProjectMilestones(cfg, projectId),
+    createMilestone: (projectId, milestone) => createProjectMilestone(cfg, projectId, milestone),
     blockIssue: (blockerId, blockedId) => createBlocksRelation(cfg, blockerId, blockedId),
     assign: (issueId, userId) => assignIssue(cfg, issueId, userId),
     comment: (issueId, body) => postComment(cfg, issueId, body),
