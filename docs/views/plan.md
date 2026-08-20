@@ -35,6 +35,20 @@ not cancelled** — cancelling is your call, per issue. Created issues carry a p
 pointing at the design revision they came from, and `blockedBy` titles become real blocking
 relations.
 
+## When the design changes outside colinear
+
+Planned projects are swept on the poll cadence (about five minutes): when the tracker's document
+moves past the revision you last saw — a teammate edited it in Linear — the plan gets an activity
+line and you get a toast. The change must survive one quiet sweep before it counts, because Linear
+saves continuously while someone types. Noticing never disarms the publish guard: the plan still
+refuses to publish over the edit until you reopen (`s`) and pull it.
+
+With the [coordination experiment](chan.md) on, the same detection posts a deterministic notice to
+the project's channel as **`colinear`** — publishing does too — so agents on the project's issues
+see "the design changed, re-read it before opening a PR" at their next channel read. No agent is
+woken or interrupted: live sessions finish on the brief they started with, and future sessions get
+the new design for free.
+
 ## Publishing is guarded
 
 If the tracker's document changed since your draft was cut — a teammate edited it in Linear —

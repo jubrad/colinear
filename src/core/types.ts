@@ -293,6 +293,12 @@ export interface ProjectPlan {
   docId?: string;
   /** tracker's updatedAt when the draft was cut — publish refuses when it moved */
   docUpdatedAt?: string;
+  /**
+   * the last tracker revision announced (activity/toast/channel notice) —
+   * deliberately separate from docUpdatedAt so noticing an outside edit
+   * never disarms the publish-conflict guard
+   */
+  docSeenAt?: string;
   /** mirrored published content, what sub-issue prompts read */
   published?: string;
   publishedAt?: number;
