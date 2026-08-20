@@ -197,6 +197,9 @@ export async function runDaemon(): Promise<void> {
       case 'removePlan':
         plans.remove(cmd.projectId);
         break;
+      case 'postPlanUpdate':
+        void plans.postUpdate(cmd.projectId);
+        break;
       case 'message':
         dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });
         break;

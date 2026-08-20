@@ -30,6 +30,8 @@ export interface ProviderCapabilities {
   documents: boolean;
   /** project milestones → plan approval creates them and files issues under them */
   milestones: boolean;
+  /** status posts on a project → :plan's post-approval update */
+  projectUpdates: boolean;
   /** a scope above the issue to browse by → the `t` picker, `--team` */
   scopes: boolean;
   /** issue states we can move through → stateSync */
@@ -142,6 +144,8 @@ export interface IssueProvider {
     projectId: string,
     milestone: { name: string; targetDate?: string; description?: string },
   ): Promise<{ id: string; name: string }>;
+  /** post a status update on a project; throws where capabilities.projectUpdates is false */
+  postProjectUpdate(projectId: string, body: string): Promise<{ id: string; url?: string }>;
   blockIssue(blockerId: string, blockedId: string): Promise<void>;
   assign(issueId: string, userId: string): Promise<void>;
   comment(issueId: string, body: string): Promise<void>;

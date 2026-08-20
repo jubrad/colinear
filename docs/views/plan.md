@@ -23,6 +23,7 @@ publish. Two separate keys, because they are two separate decisions.
 | `j/k` `g/G` | scroll the draft (doc focus) |
 | `e` | edit the draft in `$EDITOR` (the `editor` config applies); re-absorbed on return |
 | `U` | **publish** — the prose (fence stripped) becomes the project's `Design` document |
+| `p` | **post a project update** — the plan's summary, as a tracker status post |
 | `A` | **approve** — the fence's issues, reviewed in a list: `space` drops one, `A` creates |
 | `D` | approve and **dispatch wave 1** — only issues with no in-plan blockers; later waves start as their blockers land |
 | `s` | reopen the plan: re-pull the tracker doc, restart the agent |
@@ -61,5 +62,13 @@ If the tracker's document changed since your draft was cut — a teammate edited
 publish refuses rather than overwriting them blind. Reopen the plan (`s`) to pull their version,
 re-apply your changes, and publish again.
 
-Needs a provider with the `documents` capability for publishing; approval works everywhere
-projects do. Demo mode writes a canned draft and runs no agent.
+## Project updates
+
+`p` posts the plan's summary (plus the milestone/issue counts and the design revision) as a
+project update — Linear's status-post stream. Like review posting, the text is **deterministic**,
+composed from the mirrored plan record, never from a session: what reaches the tracker is never an
+agent's claim about itself.
+
+Needs a provider with the `documents` capability for publishing and `projectUpdates` for `p`;
+approval works everywhere projects do, and milestones need the `milestones` capability. Demo mode
+writes a canned draft and runs no agent.

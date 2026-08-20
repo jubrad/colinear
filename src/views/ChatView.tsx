@@ -85,6 +85,7 @@ export function ChatView(props: { param?: string }) {
         ctx.quit();
       }
       if (input === 'U' && project) ctx.dispatcher.publishPlan(project.id);
+      if (input === 'p' && project) ctx.dispatcher.postPlanUpdate(project.id);
       if ((input === 'A' || input === 'D') && proposed.length) {
         setDropped(new Set());
         setApproveCursor(0);
@@ -268,6 +269,7 @@ export const chatKeys: Array<[string, string]> = [
   ['j/k', 'scroll doc'],
   ['e', 'edit draft in $EDITOR'],
   ['U', 'publish to the tracker'],
+  ['p', 'post a project update'],
   ['A', 'approve → issues'],
   ['D', 'approve + dispatch'],
   ['s', 'reopen the plan'],
