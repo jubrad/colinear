@@ -1,7 +1,6 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { STATE_DIR, log } from './log.js';
-import { restorePlanners, serializePlanners, type PlannerSnapshot } from './planner.js';
 import { store } from './store.js';
 import type { Config, ProjectPlan, Review, Task, TaskStatus } from './types.js';
 
@@ -22,7 +21,6 @@ interface PersistedState {
   tasks?: PersistedTask[];
   reviews?: PersistedReview[];
   plans?: PersistedPlan[];
-  planners?: PlannerSnapshot[];
   ui?: UiState;
 }
 
@@ -40,7 +38,7 @@ function serialize(): string {
   const tasks: PersistedTask[] = store.list().map(({ question: _q, ...rest }) => rest);
   const reviews: PersistedReview[] = store.listReviews().map(({ question: _q, ...rest }) => rest);
   const plans: PersistedPlan[] = store.listPlans().map(({ question: _q, ...rest }) => rest);
-  const state: PersistedState = { version: 3, tasks, reviews, plans, planners: serializePlanners(), ui: uiState };
+  const state: PersistedState = { version: 3, tasks, reviews, plans, ui: uiState };
   return JSON.stringify(state, null, 2);
 }
 
@@ -84,7 +82,6 @@ export function loadState(cfg: Config): void {
       const status = plan.status === 'drafting' && plan.sessionId ? 'ready' : plan.status;
       store.upsertPlan({ ...plan, status, question: undefined });
     }
-    restorePlanners(cfg, data.planners ?? []);
     uiState = data.ui ?? {};
   } catch (err) {
     log(`state load failed: ${err}`);
@@ -92,8 +89,8 @@ export function loadState(cfg: Config): void {
 }
 
 /**
- * Persist on store changes (debounced), on a slow heartbeat (catches planner
- * chats and UI prefs, which live outside the store), and once on exit.
+ * Persist on store changes (debounced), on a slow heartbeat (catches UI
+ * prefs, which live outside the store), and once on exit.
  * Atomic rename so a crash can't torch state.
  */
 export function startPersistence(): () => void {

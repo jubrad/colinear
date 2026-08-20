@@ -1,23 +1,45 @@
-# `:plan` — planning chat
+# `:plan` — the project plan
 
-Alias: `chat`. Argument: the project name (`:plan Cloud Migration`).
+Alias: `chat`. Argument: the project name (`:plan Cloud Migration`), or `p` on a project in
+[`:projects`](projects.md).
 
-A long-lived conversation with an agent that can read the repo but not write to it: `Write` and
-`Edit` are denied outright. Use it to work out how a project should be split before any of it exists
-as issues.
+A project's **design document**, drafted by an agent and shaped in chat — on the review-document
+pattern, with the storage inverted: **the tracker owns the design** (a project document named
+`Design`, falling back to the project description), and what you see here is the working draft.
+Opening the view pulls the tracker's copy fresh and starts the plan agent; it investigates the
+primary repository (read-only) and writes the draft — prose for humans, ending in a ```plan fence
+proposing milestones and issues.
 
-When it proposes work it returns a fenced JSON block, which colinear parses into a **draft list**.
+The fence is scaffolding, not content: it never publishes. The issues and milestones it proposes
+*become tracker objects* when you approve them; the prose becomes the tracker's document when you
+publish. Two separate keys, because they are two separate decisions.
+
+## Keys
 
 | key | what |
 |---|---|
-| type | talk to it — `enter` sends |
-| `space` | toggle a draft off/on |
-| `A` | create the selected drafts as issues in the project |
-| `D` | create **and** dispatch them |
-| `esc` | leave the input · `q` back |
+| `tab` | switch between the draft and the chat input |
+| `ctrl+d` | send a chat turn — the agent revises the draft as the plan changes |
+| `j/k` `g/G` | scroll the draft (doc focus) |
+| `e` | edit the draft in `$EDITOR` (the `editor` config applies); re-absorbed on return |
+| `U` | **publish** — the prose (fence stripped) becomes the project's `Design` document |
+| `A` | **approve** — the fence's issues, reviewed in a list: `space` drops one, `A` creates |
+| `D` | approve and **dispatch wave 1** — only issues with no in-plan blockers; later waves start as their blockers land |
+| `s` | reopen the plan: re-pull the tracker doc, restart the agent |
 
-Nothing reaches the tracker until `A` or `D`. The chat and its drafts survive a restart — the session
-is resumed by id, so context isn't lost.
+## Approval is reconciliation
 
-Note: the planner still runs in the TUI process rather than the daemon, so `R` (reload) and quitting
-end it. The board's agents are unaffected.
+Approving never duplicates and never destroys: issues that already exist in the project (matched by
+title) are skipped and named; issues in the project that the plan no longer mentions are **listed,
+not cancelled** — cancelling is your call, per issue. Created issues carry a provenance footer
+pointing at the design revision they came from, and `blockedBy` titles become real blocking
+relations.
+
+## Publishing is guarded
+
+If the tracker's document changed since your draft was cut — a teammate edited it in Linear —
+publish refuses rather than overwriting them blind. Reopen the plan (`s`) to pull their version,
+re-apply your changes, and publish again.
+
+Needs a provider with the `documents` capability for publishing; approval works everywhere
+projects do. Demo mode writes a canned draft and runs no agent.

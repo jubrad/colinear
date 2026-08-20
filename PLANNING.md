@@ -154,7 +154,7 @@ Daemon restart note: protocol 8.
 
 ## Status
 
-- [ ] Phase 1 — in progress (branch `project-plans`)
+- [x] Phase 1 — shipped (branch `project-plans`): store entity, PlanManager, documents capability, :plan view
 - [ ] Phase 2
 - [ ] Phase 3
 - [ ] Phase 4
