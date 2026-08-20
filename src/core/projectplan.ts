@@ -329,6 +329,36 @@ export class PlanManager {
     const scopeId = project?.scopes[0]?.id;
     if (!scopeId) return this.toast(`${plan.projectName}: no ${provider.scopeLabel} to create issues in`, 'err');
 
+    // milestones first, so issues can be filed under them at creation.
+    // Same reconciliation contract: create what's missing (matched by name),
+    // reuse what exists, and never delete — a milestone the plan dropped may
+    // hold issues the plan never knew about.
+    const milestoneIds = new Map<string, string>();
+    const wantMilestones = plan.milestones ?? [];
+    if (wantMilestones.length && !provider.capabilities.milestones) {
+      store.addPlanActivity(
+        id,
+        `⚠ the fence proposes ${wantMilestones.length} milestone${wantMilestones.length === 1 ? '' : 's'} — ${provider.name} has no milestones, they were ignored`,
+      );
+    } else if (wantMilestones.length) {
+      const have = await provider.projectMilestones(id).catch(() => []);
+      for (const m of have) milestoneIds.set(normalizeTitle(m.name), m.id);
+      for (const m of wantMilestones) {
+        if (milestoneIds.has(normalizeTitle(m.name))) continue;
+        try {
+          const made = await provider.createMilestone(id, {
+            name: m.name,
+            targetDate: m.targetDate,
+            description: m.description,
+          });
+          milestoneIds.set(normalizeTitle(m.name), made.id);
+          store.addPlanActivity(id, `created milestone "${m.name}"`);
+        } catch (err) {
+          store.addPlanActivity(id, `could not create milestone "${m.name}": ${String(err).slice(0, 80)}`);
+        }
+      }
+    }
+
     const existing = await provider.projectIssues(id).catch(() => [] as Issue[]);
     const byTitle = new Map(existing.map((i) => [normalizeTitle(i.title), i]));
     const created = new Map<string, { id: string; identifier: string }>();
@@ -344,12 +374,17 @@ export class PlanManager {
       const provenance = plan.docId
         ? `\n\n---\n_From the project design (${DOC_TITLE}, ${plan.docUpdatedAt ?? 'draft'})._`
         : '';
+      const milestoneId = issue.milestone ? milestoneIds.get(normalizeTitle(issue.milestone)) : undefined;
+      if (issue.milestone && !milestoneId && provider.capabilities.milestones) {
+        store.addPlanActivity(id, `⚠ "${issue.title.slice(0, 50)}" names milestone "${issue.milestone}" — not in the fence, not in the tracker; created without it`);
+      }
       const made = await provider.create({
         scopeId,
         title: issue.title,
         description: `${issue.description}${provenance}`,
         projectId: id,
         priority: issue.priority,
+        milestoneId,
       });
       created.set(normalizeTitle(issue.title), made);
       store.addPlanActivity(id, `created ${made.identifier}: ${issue.title.slice(0, 60)}`);

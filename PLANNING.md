@@ -156,6 +156,6 @@ Daemon restart note: protocol 8.
 
 - [x] Phase 1 — shipped (branch `project-plans`): store entity, PlanManager, documents capability, :plan view
 - [x] Phase 1.5 — shipped (branch `plan-change-notices`, stacked on phase 1): docSeenAt + sweepDocChanges, debounced `colinear` channel notices
-- [ ] Phase 2
+- [x] Phase 2 — shipped (branch `plan-milestones`, stacked on 1.5): milestones capability (Linear + sqlite), approve reconciles them, card chip
 - [ ] Phase 3
 - [ ] Phase 4
