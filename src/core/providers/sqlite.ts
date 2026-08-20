@@ -69,6 +69,9 @@ CREATE TABLE IF NOT EXISTS milestones (
   id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL,
   target_date TEXT, description TEXT
 );
+CREATE TABLE IF NOT EXISTS project_updates (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, body TEXT NOT NULL, created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS labels (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS issue_labels (issue_id TEXT NOT NULL, label_id TEXT NOT NULL);
 /* "blocker must land before blocked" — the relation colinear parks tasks on */
@@ -206,6 +209,7 @@ export function sqliteProvider(cfg: Config): IssueProvider {
       createProjects: true,
       documents: true,
       milestones: true,
+      projectUpdates: true,
       scopes: true,
       workflowStates: true,
       // no upstream to hand us a branch: safeBranch derives one
@@ -386,6 +390,13 @@ export function sqliteProvider(cfg: Config): IssueProvider {
         .prepare('INSERT INTO milestones (id, project_id, name, target_date, description) VALUES (?, ?, ?, ?, ?)')
         .run(milestoneId, projectId, milestone.name, milestone.targetDate ?? null, milestone.description ?? null);
       return { id: milestoneId, name: milestone.name };
+    },
+    postProjectUpdate: async (projectId, body) => {
+      const updateId = id();
+      conn()
+        .prepare('INSERT INTO project_updates (id, project_id, body, created_at) VALUES (?, ?, ?, ?)')
+        .run(updateId, projectId, body, Date.now());
+      return { id: updateId };
     },
     blockIssue: async (blockerId, blockedId) => {
       conn().prepare('INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)').run(blockerId, blockedId);

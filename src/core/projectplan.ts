@@ -439,6 +439,39 @@ export class PlanManager {
     );
   }
 
+  /**
+   * Post the plan's summary as a tracker project update. Deterministic text
+   * from the mirrored record — the review-posting rule: what reaches the
+   * tracker is never a session's claim about itself.
+   */
+  async postUpdate(id: string) {
+    const plan = store.getPlan(id);
+    if (!plan) return;
+    if (isDemo(this.cfg)) return this.toast('demo mode — project updates are not wired to anything', 'info');
+    const provider = providerFor(this.cfg);
+    if (!provider.capabilities.projectUpdates) {
+      return this.toast(`${provider.name} has no project updates to post to`, 'err');
+    }
+    const summary = plan.summary?.trim();
+    if (!summary) return this.toast('nothing to post — the plan has no summary yet', 'err');
+    const counts = [
+      plan.milestones?.length ? `${plan.milestones.length} milestone${plan.milestones.length === 1 ? '' : 's'}` : '',
+      plan.issues?.length ? `${plan.issues.length} issue${plan.issues.length === 1 ? '' : 's'}` : '',
+    ].filter(Boolean);
+    const body =
+      summary +
+      (counts.length ? `\n\nThe plan proposes ${counts.join(' and ')}.` : '') +
+      `\n\n---\n_Posted from colinear (:plan), design revision ${plan.docUpdatedAt ?? 'draft'}._`;
+    try {
+      const posted = await provider.postProjectUpdate(id, body);
+      store.addPlanActivity(id, `posted a project update${posted.url ? ` (${posted.url})` : ''}`);
+      this.toast(`${plan.projectName}: project update posted`, 'ok');
+    } catch (err) {
+      store.updatePlan(id, { error: `update post failed: ${String(err).slice(0, 200)}` });
+      this.toast(`${plan.projectName}: update post failed — ${String(err).slice(0, 80)}`, 'err');
+    }
+  }
+
   /** Forget a plan: abort, unwatch, drop the record and the draft file. */
   remove(id: string) {
     this.aborts.get(id)?.abort();

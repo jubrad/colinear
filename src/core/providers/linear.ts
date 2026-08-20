@@ -396,6 +396,24 @@ export async function createProjectMilestone(
   return data.projectMilestoneCreate.projectMilestone;
 }
 
+export async function postProjectUpdate(
+  cfg: Config,
+  projectId: string,
+  body: string,
+): Promise<{ id: string; url?: string }> {
+  const data = await gql<{
+    projectUpdateCreate: { success: boolean; projectUpdate: { id: string; url?: string } };
+  }>(
+    cfg,
+    `mutation ($input: ProjectUpdateCreateInput!) {
+      projectUpdateCreate(input: $input) { success projectUpdate { id url } }
+    }`,
+    { input: { projectId, body } },
+  );
+  if (!data.projectUpdateCreate.success) throw new Error('projectUpdateCreate failed');
+  return data.projectUpdateCreate.projectUpdate;
+}
+
 export async function fetchWorkflowStates(cfg: Config, teamId: string): Promise<import('../types.js').WorkflowState[]> {
   const data = await gql<{ team: { states: { nodes: import('../types.js').WorkflowState[] } } }>(
     cfg,
@@ -523,6 +541,7 @@ export function linearProvider(cfg: Config): IssueProvider {
       createProjects: true,
       documents: true,
       milestones: true,
+      projectUpdates: true,
       scopes: true,
       workflowStates: true,
       branchNames: true,
@@ -546,6 +565,7 @@ export function linearProvider(cfg: Config): IssueProvider {
       createIssue(cfg, { teamId: scopeId, title, description, projectId, priority, parentId, projectMilestoneId: milestoneId }),
     projectMilestones: (projectId) => fetchProjectMilestones(cfg, projectId),
     createMilestone: (projectId, milestone) => createProjectMilestone(cfg, projectId, milestone),
+    postProjectUpdate: (projectId, body) => postProjectUpdate(cfg, projectId, body),
     blockIssue: (blockerId, blockedId) => createBlocksRelation(cfg, blockerId, blockedId),
     assign: (issueId, userId) => assignIssue(cfg, issueId, userId),
     comment: (issueId, body) => postComment(cfg, issueId, body),

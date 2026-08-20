@@ -14,7 +14,7 @@ import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 8;
+export const PROTOCOL_VERSION = 9;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -43,6 +43,8 @@ export type Command =
   | { name: 'publishPlan'; projectId: string }
   | { name: 'approvePlan'; projectId: string; drop: string[]; dispatch: boolean }
   | { name: 'removePlan'; projectId: string }
+  /** deterministic post of the plan summary as a tracker project update */
+  | { name: 'postPlanUpdate'; projectId: string }
   | { name: 'pollReviews' }
   | { name: 'gcScan'; olderThanDays: number }
   /** say something to a task's agent without attaching */
