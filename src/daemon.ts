@@ -59,7 +59,11 @@ export async function runDaemon(): Promise<void> {
   const cfg = loadConfig();
   const dispatcher = new Dispatcher(cfg);
   const reviewer = new Reviewer(cfg);
-  const plans = new PlanManager(cfg, (issues) => dispatcher.enqueue(issues));
+  const plans = new PlanManager(cfg, {
+    enqueue: (issues) => dispatcher.enqueue(issues),
+    message: (id, text) => dispatcher.message(id, text),
+    cancel: (id) => dispatcher.cancel(id),
+  });
   loadState(cfg);
   reviewer.resumeWatching(); // reviews restored from disk keep their live doc
   plans.resumeWatching();

@@ -123,6 +123,13 @@ being asked, and an agent that can spawn issues unattended is exactly what that
 rule is for. The parent stays `tracking` throughout — coordinating is not the
 parent going back into development.
 
+The project's **plan session** (`:plan`) gets the same tools, scoped to the
+project's dispatched issues instead of a parent's children, and joins the
+project channel as `plan`. One difference: its `family_propose` only points
+back at the draft's ```plan fence — the fence is the plan's single proposal
+surface, and the operator's `A` is its gate; a second path around that gate is
+exactly what must not exist.
+
 ### Operator
 
 `:chan` lists channels; `:chan CLO-67` tails one live with an input box.

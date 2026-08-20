@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import { runSession, type SessionCallbacks } from './agent.js';
-import { channels, projectChannel } from './channel.js';
+import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { experimentOn } from './config.js';
+import type { CoordinatorTools } from './coordinator.js';
 import { isDemo } from './demo.js';
 import { extractFencedJson, hasFenceOpening, stripFence } from './fence.js';
 import { guidanceFor } from './guidance.js';
@@ -35,8 +36,17 @@ export class PlanManager {
 
   constructor(
     private cfg: Config,
-    /** dispatch hook — approval's wave 1 goes through the normal pipeline */
-    private enqueue: (issues: Issue[]) => void,
+    /**
+     * The dispatcher's hands, lent rather than owned: wave-1 dispatch goes
+     * through the normal pipeline, and (coordination on) the plan session may
+     * message or cancel its project's agents — reach the operator already has,
+     * never authority they don't.
+     */
+    private dispatch: {
+      enqueue: (issues: Issue[]) => void;
+      message: (id: string, text: string) => void;
+      cancel: (id: string) => boolean;
+    },
   ) {
     // the drafts directory exists from birth: every entry point (start,
     // reload, an $EDITOR write) may be the first to touch it
@@ -110,6 +120,70 @@ export class PlanManager {
   }
 
   /**
+   * EXPERIMENTAL (coordination): the plan session's hands on the project.
+   * The same family tools a tracking parent's coordinator gets, scoped to the
+   * project's dispatched issues instead of a parent's children. Reach the
+   * operator already has — message, cancel — never authority they don't:
+   * propose points back at the draft's fence, because the fence is the one
+   * proposal surface and `A` is the one gate.
+   */
+  private planCoordinator(id: string): CoordinatorTools {
+    const projectTasks = () => store.list().filter((t) => t.issue.projectId === id);
+    const find = (identifier: string) =>
+      projectTasks().find((t) => t.issue.identifier.toLowerCase() === identifier.toLowerCase());
+    return {
+      status: () => {
+        const tasks = projectTasks();
+        if (!tasks.length) return 'No dispatched issues in this project yet.';
+        return tasks
+          .map((t) => {
+            const pr = t.prs[0];
+            const bits: string[] = [t.status];
+            if (t.maintenance) bits.push(t.maintenance);
+            if (pr) bits.push(`PR #${pr.number} ${pr.isDraft ? 'draft' : pr.state.toLowerCase()} ${pr.checksStatus}`);
+            if (t.blockedBy?.length) bits.push(`blocked by ${t.blockedBy.map((b) => b.identifier).join(', ')}`);
+            if (t.error) bits.push(`error: ${t.error.slice(0, 80)}`);
+            const last = t.activity.at(-1);
+            return `- ${t.issue.identifier} ${t.issue.title} — ${bits.join(' · ')}${last ? `\n    last: ${last.slice(0, 100)}` : ''}`;
+          })
+          .join('\n');
+      },
+      message: (identifier, text) => {
+        const target = find(identifier);
+        if (!target) return `${identifier} is not a dispatched issue in this project`;
+        this.dispatch.message(target.issue.id, `${text}\n\n(relayed by the project plan session)`);
+        store.addPlanActivity(id, `→ ${identifier}: ${text.slice(0, 80)}`);
+        return `sent to ${identifier}`;
+      },
+      cancel: (identifier, reason) => {
+        const target = find(identifier);
+        if (!target) return `${identifier} is not a dispatched issue in this project`;
+        const stopped = this.dispatch.cancel(target.issue.id);
+        store.addActivity(target.issue.id, `cancelled by the plan session: ${reason.slice(0, 100)}`);
+        store.addPlanActivity(id, `cancelled ${identifier}: ${reason.slice(0, 80)}`);
+        return stopped ? `cancelled ${identifier}` : `${identifier} had nothing running; it is parked`;
+      },
+      propose: (subtasks) =>
+        `not here: revise the \`\`\`plan fence in your draft instead (${subtasks.length} issue${subtasks.length === 1 ? '' : 's'} noted). ` +
+        'The fence is the proposal list, and the operator approves it with A — a second path around that gate is exactly what must not exist.',
+    };
+  }
+
+  /**
+   * What a plan session gets beyond the draft, when the coordination
+   * experiment is on: membership in the project channel (as `plan`, distinct
+   * from agents' issue names, the operator, and deterministic `colinear`
+   * notices) and the coordinator tools above.
+   */
+  private sessionExtras(id: string, projectName: string): { channels?: SessionChannels; coordinator?: CoordinatorTools } {
+    if (!experimentOn(this.cfg, 'coordination')) return {};
+    return {
+      channels: { username: 'plan', scopes: [{ scope: 'project', id: projectChannel(projectName) }] },
+      coordinator: this.planCoordinator(id),
+    };
+  }
+
+  /**
    * Open (or reopen) a project's plan: pull the tracker's design doc — the
    * source of truth — seed the draft from it, and start the agent.
    */
@@ -165,11 +239,12 @@ export class PlanManager {
     try {
       const result = await runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
-        prompt: planPrompt(this.cfg, project, path, docContent, issues),
+        prompt: planPrompt(this.cfg, project, path, docContent, issues, experimentOn(this.cfg, 'coordination')),
         cwd: this.cfg.repos[0]?.path ?? process.cwd(),
         model: this.cfg.model,
         abortController: controller,
         callbacks: this.callbacks(id),
+        ...this.sessionExtras(id, project.name),
       });
       if (controller.signal.aborted) {
         store.updatePlan(id, { status: 'ready', endedAt: Date.now() });
@@ -239,6 +314,7 @@ export class PlanManager {
         model: this.cfg.model,
         abortController: controller,
         callbacks: this.callbacks(id),
+        ...this.sessionExtras(id, plan.projectName),
       });
       const reply = result.isError
         ? `(the session failed: ${result.errors.join('; ').slice(0, 200)})`
@@ -426,7 +502,7 @@ export class PlanManager {
         .filter((v): v is string => Boolean(v));
       const fresh = await provider.issuesByIds(ids).catch(() => [] as Issue[]);
       if (fresh.length) {
-        this.enqueue(fresh);
+        this.dispatch.enqueue(fresh);
         store.addPlanActivity(id, `dispatched wave 1: ${fresh.map((i) => i.identifier).join(', ')}`);
       }
     }
@@ -606,9 +682,21 @@ The demo plan: a short brief with a fence, so the whole flow is visible without 
 `;
 }
 
-function planPrompt(cfg: Config, project: Project, draftPath: string, published: string, issues: Issue[]): string {
+function planPrompt(
+  cfg: Config,
+  project: Project,
+  draftPath: string,
+  published: string,
+  issues: Issue[],
+  coordinating = false,
+): string {
   const existing = issues.map((i) => `- ${i.identifier} [${i.stateName}] ${i.title}`).join('\n');
-  return `You are the planning agent for the project "${project.name}" inside colinear, a TUI that dispatches coding agents against tracker issues.
+  const coordination = coordinating
+    ? `
+
+You are also this project's coordinator. Your mcp__colinear__family_* tools work on the project's dispatched issues (the "family" here is the project): family_status is the live board, fresher than the list above — use it before deciding anything; family_message reaches an issue's agent; family_cancel stops one (say why; the operator can resume it). family_propose only points you back at the fence: proposing means revising the draft, and the operator approves with A. You are in the project channel (mcp__colinear__channel_read / channel_post) as "plan" — read it before big decisions, and post what the agents working these issues need to know. Coordinate when asked or when the board plainly needs it; drafting the design is still the job.`
+    : '';
+  return `You are the planning agent for the project "${project.name}" inside colinear, a TUI that dispatches coding agents against tracker issues.${coordination}
 
 Your artifact is the draft at ${draftPath} — the working copy of the project's design document. The tracker's copy is the source of truth; the operator publishes your prose there when it is right, and approves your proposed issues into the tracker separately. You never create or modify tracker state yourself.
 
