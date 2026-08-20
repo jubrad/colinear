@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, unlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import { runSession, type SessionCallbacks } from './agent.js';
+import { channels, projectChannel } from './channel.js';
+import { experimentOn } from './config.js';
 import { isDemo } from './demo.js';
 import { extractFencedJson, hasFenceOpening, stripFence } from './fence.js';
 import { guidanceFor } from './guidance.js';
@@ -23,6 +25,13 @@ const DOC_TITLE = 'Design';
 export class PlanManager {
   private aborts = new Map<string, AbortController>();
   private watchers = new Map<string, FSWatcher>();
+  /**
+   * Outside-edit debounce: a tracker revision seen by one sweep but not yet
+   * announced. Linear saves continuously while someone types, so a change
+   * only counts once it has survived a full sweep unchanged. In-memory on
+   * purpose — after a restart the next two sweeps re-detect and announce.
+   */
+  private pendingDocChange = new Map<string, string>();
 
   constructor(
     private cfg: Config,
@@ -58,6 +67,49 @@ export class PlanManager {
   }
 
   /**
+   * Outside-edit detection, run on the poll cadence: when a planned project's
+   * tracker doc moved past what we last announced, say so — an activity line
+   * and a toast, plus (coordination on) a deterministic notice to the project
+   * channel. Never a session, never a rewrite of anyone's instructions, and
+   * never touching docUpdatedAt: the publish guard stays armed until the
+   * operator reopens the plan and pulls the new revision.
+   */
+  async sweepDocChanges() {
+    if (!providerFor(this.cfg).capabilities.documents) return;
+    for (const plan of store.listPlans()) {
+      if (!plan.docId) continue;
+      const docs = await providerFor(this.cfg).projectDocuments(plan.id).catch(() => []);
+      const doc = docs.find((d) => d.id === plan.docId);
+      if (!doc) continue;
+      const seen = plan.docSeenAt ?? plan.docUpdatedAt;
+      if (!seen || doc.updatedAt === seen) {
+        this.pendingDocChange.delete(plan.id);
+        continue;
+      }
+      if (this.pendingDocChange.get(plan.id) !== doc.updatedAt) {
+        // first sighting, or still moving — wait for one quiet sweep
+        this.pendingDocChange.set(plan.id, doc.updatedAt);
+        continue;
+      }
+      this.pendingDocChange.delete(plan.id);
+      store.updatePlan(plan.id, { docSeenAt: doc.updatedAt });
+      store.addPlanActivity(plan.id, `the tracker design changed (${doc.updatedAt}) — reopen the plan to pull it`);
+      this.toast(`${plan.projectName}: the design changed in the tracker`, 'info');
+      if (experimentOn(this.cfg, 'coordination')) {
+        this.notice(
+          plan.projectName,
+          `the project design ("${DOC_TITLE}") changed in the tracker (${doc.updatedAt}). Re-read it before opening a PR.`,
+        );
+      }
+    }
+  }
+
+  /** Deterministic post to the project channel, as colinear — never the operator, never a session. */
+  private notice(projectName: string, text: string) {
+    channels.post(projectChannel(projectName), 'colinear', 'agent', text);
+  }
+
+  /**
    * Open (or reopen) a project's plan: pull the tracker's design doc — the
    * source of truth — seed the draft from it, and start the agent.
    */
@@ -86,8 +138,9 @@ export class PlanManager {
       const docs = await providerFor(this.cfg).projectDocuments(id).catch(() => []);
       const doc = docs.find((d) => d.title === DOC_TITLE) ?? docs[0];
       if (doc) {
-        store.updatePlan(id, { docId: doc.id, docUpdatedAt: doc.updatedAt, published: doc.content });
+        store.updatePlan(id, { docId: doc.id, docUpdatedAt: doc.updatedAt, docSeenAt: doc.updatedAt, published: doc.content });
         store.addPlanActivity(id, `pulled "${doc.title}" from the tracker (${doc.updatedAt})`);
+        this.pendingDocChange.delete(id);
         docContent = doc.content;
       }
     }
@@ -242,12 +295,17 @@ export class PlanManager {
       store.updatePlan(id, {
         docId: saved.id,
         docUpdatedAt: saved.updatedAt,
+        docSeenAt: saved.updatedAt,
         published: content,
         publishedAt: Date.now(),
         status: 'published',
       });
+      this.pendingDocChange.delete(id);
       store.addPlanActivity(id, `published to the tracker (${saved.updatedAt})`);
       this.toast(`${plan.projectName}: design published`, 'ok');
+      if (experimentOn(this.cfg, 'coordination')) {
+        this.notice(plan.projectName, `the project design ("${DOC_TITLE}") was republished (${saved.updatedAt}). Re-read it before opening a PR.`);
+      }
     } catch (err) {
       store.updatePlan(id, { error: `publish failed: ${String(err).slice(0, 200)}` });
       this.toast(`${plan.projectName}: publish failed — ${String(err).slice(0, 80)}`, 'err');
@@ -351,6 +409,7 @@ export class PlanManager {
     this.aborts.get(id)?.abort();
     this.watchers.get(id)?.close();
     this.watchers.delete(id);
+    this.pendingDocChange.delete(id);
     const path = this.draftPath(id);
     try {
       if (existsSync(path)) unlinkSync(path);

@@ -78,6 +78,9 @@ export async function runDaemon(): Promise<void> {
     : startReviewPolling(cfg, async () => {
         // a poll is what discovers a PR is merged or taken, so cleanup follows it
         await reviewer.cleanupStale();
+        // same cadence checks planned projects for outside design edits; the
+        // one-sweep debounce below rides on this interval
+        await plans.sweepDocChanges().catch((err) => log(`plan sweep: ${err}`));
       });
 
   const clients = new Set<Socket>();
@@ -311,7 +314,7 @@ export async function runDaemon(): Promise<void> {
     log('daemon shutting down');
     dispatcher.shutdown();
     reviewer.shutdown();
-  plans.shutdown();
+    plans.shutdown();
     stopPrPolling();
     stopReviewPolling();
     setTimeout(() => {
