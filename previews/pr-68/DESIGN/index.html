@@ -2063,8 +2063,12 @@ every live worktree looks dead.</p>
 <td><code>~/.config/colinear/views/*.json</code></td>
 </tr>
 <tr>
-<td>task/planner/UI state</td>
-<td><code>~/.local/state/colinear/state.json</code> (pruned by <code>retentionDays</code>)</td>
+<td>task/review/plan/UI state</td>
+<td><code>~/.local/state/colinear/state.json</code> (pruned by <code>retentionDays</code>; plans only leave when the operator removes them)</td>
+</tr>
+<tr>
+<td>plan drafts</td>
+<td><code>~/.local/state/colinear/plans/&lt;project&gt;.md</code> (workspace only — the tracker's document is the source of truth)</td>
 </tr>
 <tr>
 <td>debug log + diverted stderr</td>
@@ -2102,7 +2106,8 @@ every live worktree looks dead.</p>
   nothing stops daemon-only code from being imported into the client and silently mutating a mirror.</li>
 <li>Snapshots are whole-store; fine at this scale (activity is capped at 200 lines/task) but a diffed
   snapshot is the obvious next move if boards get big.</li>
-<li>The planner and new-issue sessions still run in the TUI process, so <code>R</code>/quit kills them.</li>
+<li>The new-issue and new-project drafting sessions still run in the TUI process, so <code>R</code>/quit kills
+  them. (The planner had the same debt until it became the daemon's <code>:plan</code> session.)</li>
 <li><code>escalated</code> status is vestigial (verdicts now park as needs_input) but kept for old persisted state.</li>
 <li>Interactive attach + headless resume share one session id; concurrent writers are prevented by suspend-first, not enforced.</li>
 <li>No pagination UI past the 500-issue cap; silently truncates.</li>
