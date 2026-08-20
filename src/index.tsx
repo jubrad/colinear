@@ -404,6 +404,14 @@ async function runTui(): Promise<void> {
         openEditor(cfg, action.path);
       }
       conn.dispatcher.reloadReviewDoc(action.reviewId);
+    } else if (action.kind === 'edit-plan') {
+      if (cfg.remote) {
+        // the draft lives in the daemon's state dir, on its host
+        runThere(cfg.remote, `${cfg.editor ?? '\${EDITOR:-vi}'} ${shq(action.path)}`);
+      } else {
+        openEditor(cfg, action.path);
+      }
+      conn.dispatcher.reloadPlanDoc(action.projectId);
     } else if (action.kind === 'edit-config') {
       const editPath = ensureConfigFile(cfg);
       openEditor(cfg, editPath);

@@ -402,19 +402,15 @@ export class PlanManager {
           },
         });
       },
+      // the chat IS the steering channel: routing AskUserQuestion through the
+      // mirror would need its own answer path for a question the operator can
+      // simply answer in the next turn. Tell the agent to ask there instead.
       onQuestion: (question) => {
-        const plan = store.getPlan(id);
-        if (!plan) return;
-        notify(this.cfg, plan.projectName, 'the plan agent needs input', undefined);
-        store.updatePlan(id, {
-          question: {
-            ...question,
-            answer: (answers) => {
-              store.updatePlan(id, { question: undefined });
-              question.answer(answers);
-            },
-          },
-        });
+        question.answer(
+          question.questions.map(
+            () => 'use your best judgment, and put the question in your reply text so the operator sees it in the chat',
+          ),
+        );
       },
     };
   }
