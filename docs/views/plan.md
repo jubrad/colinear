@@ -56,6 +56,12 @@ see "the design changed, re-read it before opening a PR" at their next channel r
 woken or interrupted: live sessions finish on the brief they started with, and future sessions get
 the new design for free.
 
+The experiment also gives the plan session coordinator hands: the same `family_*` tools a tracking
+parent's coordinator gets (see [COORDINATION.md](../../COORDINATION.md)), scoped to the project's
+dispatched issues — live board status, messaging an issue's agent, cancelling one — plus membership
+in the project channel as `plan`. It still cannot create tracker objects: proposing means revising
+the draft's fence, and `A` stays the gate.
+
 ## Publishing is guarded
 
 If the tracker's document changed since your draft was cut — a teammate edited it in Linear —
