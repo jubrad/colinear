@@ -61,6 +61,10 @@ CREATE TABLE IF NOT EXISTS issues (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS documents (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS labels (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS issue_labels (issue_id TEXT NOT NULL, label_id TEXT NOT NULL);
 /* "blocker must land before blocked" — the relation colinear parks tasks on */
@@ -188,6 +192,7 @@ export function sqliteProvider(cfg: Config): IssueProvider {
       priority: true,
       projects: true,
     createProjects: true,
+    documents: true,
       scopes: true,
       workflowStates: true,
       // no upstream to hand us a branch: safeBranch derives one
@@ -278,6 +283,30 @@ export function sqliteProvider(cfg: Config): IssueProvider {
       })) as Project[];
     },
     projectIssues: async (projectId) => issues('WHERE i.project_id = ? ORDER BY i.number', [projectId]),
+    projectDocuments: async (projectId) =>
+      conn()
+        .prepare('SELECT * FROM documents WHERE project_id = ? ORDER BY updated_at DESC')
+        .all(projectId)
+        .map((r) => ({
+          id: String(r.id),
+          title: String(r.title),
+          content: String(r.content ?? ''),
+          updatedAt: String(r.updated_at),
+        })),
+    saveProjectDocument: async (projectId, doc) => {
+      const now = new Date().toISOString();
+      if (doc.id) {
+        conn()
+          .prepare('UPDATE documents SET title = ?, content = ?, updated_at = ? WHERE id = ?')
+          .run(doc.title, doc.content, now, doc.id);
+        return { id: doc.id, updatedAt: now };
+      }
+      const docId = id();
+      conn()
+        .prepare('INSERT INTO documents (id, project_id, title, content, updated_at) VALUES (?, ?, ?, ?, ?)')
+        .run(docId, projectId, doc.title, doc.content, now);
+      return { id: docId, updatedAt: now };
+    },
     createProject: async (input) => {
       const projectId = id();
       conn()

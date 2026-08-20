@@ -26,6 +26,8 @@ export interface ProviderCapabilities {
   projects: boolean;
   /** projects can be created from here → `n` in :projects */
   createProjects: boolean;
+  /** documents attached to a project → the plan's published home (:plan) */
+  documents: boolean;
   /** a scope above the issue to browse by → the `t` picker, `--team` */
   scopes: boolean;
   /** issue states we can move through → stateSync */
@@ -58,6 +60,15 @@ export interface CreateProjectInput {
   state?: string;
   priority?: number;
   targetDate?: string;
+}
+
+export interface ProjectDocument {
+  id: string;
+  title: string;
+  /** markdown */
+  content: string;
+  updatedAt: string;
+  url?: string;
 }
 
 export interface IssueFilter {
@@ -100,6 +111,17 @@ export interface IssueProvider {
   create(input: CreateIssueInput): Promise<{ id: string; identifier: string }>;
   /** throws where capabilities.createProjects is false */
   createProject(input: CreateProjectInput): Promise<{ id: string; name: string; url?: string }>;
+
+  /** a project's documents, newest first; [] where capabilities.documents is false */
+  projectDocuments(projectId: string): Promise<ProjectDocument[]>;
+  /**
+   * Create or update a project document. id absent = create. Returns the
+   * saved identity — updatedAt is what publish-conflict detection compares.
+   */
+  saveProjectDocument(
+    projectId: string,
+    doc: { id?: string; title: string; content: string },
+  ): Promise<{ id: string; updatedAt: string; url?: string }>;
   blockIssue(blockerId: string, blockedId: string): Promise<void>;
   assign(issueId: string, userId: string): Promise<void>;
   comment(issueId: string, body: string): Promise<void>;

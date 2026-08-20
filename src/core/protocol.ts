@@ -37,6 +37,12 @@ export type Command =
   | { name: 'reloadReviewDoc'; id: string }
   | { name: 'postReview'; id: string }
   | { name: 'reviewVerdict'; id: string; verdict: 'approve' | 'request-changes' }
+  | { name: 'startPlan'; projectId: string }
+  | { name: 'planChat'; projectId: string; text: string }
+  | { name: 'reloadPlanDoc'; projectId: string }
+  | { name: 'publishPlan'; projectId: string }
+  | { name: 'approvePlan'; projectId: string; drop: string[]; dispatch: boolean }
+  | { name: 'removePlan'; projectId: string }
   | { name: 'pollReviews' }
   | { name: 'gcScan'; olderThanDays: number }
   /** say something to a task's agent without attaching */
