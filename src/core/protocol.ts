@@ -14,7 +14,7 @@ import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
