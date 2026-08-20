@@ -14,16 +14,35 @@ Operator brief (2026-08-19): "open an agent in the top level project like we do 
 and discuss the plan from there. We could steal the PR review pattern, where the agent creates a
 markdown plan, the user chats with the agent then we start."
 
-## Decisions (made; veto in review)
+## Decisions (agreed in review, 2026-08-19)
 
-1. **Doc lives in the state dir**, `~/.local/state/colinear/plans/<project-slug>.md` — plans span
-   repos, so no single worktree is honest. The plan session's `cwd` is the primary repo (read-only
-   tools, same as today's planner) so the agent can use real component names.
-2. **`D` dispatches wave-by-wave**: create everything, dispatch only issues whose `blockedBy` is
-   empty / whose milestone is first; the existing blocked-recheck sweep pulls later waves as
-   blockers land. All-at-once would make milestones decorative.
-3. **The plan doc stays local** until the operator explicitly posts it (phase 3's project update).
-   Nothing reaches the tracker on `save`, ever — same rule as review posting.
+1. **The tracker is the source of truth for the design.** Priority: a Linear project
+   *document* (capability `documents`; sqlite grows a documents table), falling back to the
+   project description/content where a provider has no documents. Notion noted as future, out
+   of scope. The local file is a **draft workspace only** — publishing is an explicit,
+   operator-gated action, and reopening `:plan` always pulls fresh from the tracker.
+2. **The ```plan fence never appears in the published doc.** Machine JSON doesn't belong in a
+   document teammates read; the issues and milestones *are* the structured store. The fence
+   exists only in the draft, between "agent proposed" and "operator approved", then dissolves
+   into tracker objects. Publish strips it.
+3. **`D` dispatches wave-by-wave**: create everything, dispatch only unblocked/first-milestone
+   issues; the blocked-recheck sweep pulls later waves.
+4. **Approval is reconciliation, not creation**: create what's missing (matched by title
+   against the project's issues), skip what exists and say so, and list what's no longer in
+   the plan without cancelling it — cancellation is a per-item operator keypress (v1 reports
+   only; propose-cancel joins phase 4 with the coordinator).
+5. **Change lifecycle**:
+   - Outside edit (sweep detects `updatedAt` moved): activity line + toast on the project;
+     never a silent rewrite of running agents' instructions; never auto-reconciliation.
+   - Future sessions get the new brief free (prompts rebuild per session); live sessions are
+     nudged via the project channel or `M`, never mid-flight.
+   - Work-discovers-design-is-wrong flows backwards through `:plan` → publish.
+6. **Channel notices** (coordination experiment on): publishing posts to the project channel;
+   outside edits post after a one-sweep quiet debounce (Linear saves continuously mid-edit).
+   Deterministic text, no session. Sender identity `colinear`, distinct from operator posts.
+   No auto-wake — agents read the channel at their pre-PR checkpoint; urgent redirects stay
+   `M`. With coordination off, activity + toast only.
+7. **Provenance**: issues created from a plan carry a footer link to the doc + revision date.
 
 ## The pattern being copied (file:line anchors, main @ 2026-08-19)
 
@@ -66,13 +85,20 @@ Daemon side (`src/core/projectplan.ts`, new):
 - `PlanSession` per project: doc path, watcher, streaming chat session (SessionInbox pattern from
   agent.ts; termination gotcha: close the stream when a result arrives with nothing pending —
   DESIGN.md "Sessions and messages").
-- Store: new `plans` collection? NO — keep it simpler: a `ProjectPlan` record keyed by project id
-  with `{ doc, summary, milestones, issues, status: drafting|ready|approved, sessionId }`, CDC'd
-  like reviews (`plan-*` deltas). Mirrors the review entity precedent exactly.
+- Store: a `ProjectPlan` record keyed by project id, CDC'd like reviews (`plan-*` deltas):
+  `{ draft, docId, docUpdatedAt, publishedAt, summary, milestones, issues, status:
+  drafting|ready|published, sessionId }`. The record mirrors the tracker doc (docId/updatedAt
+  for change detection + publish-conflict refusal) and holds the draft; the tracker copy is
+  authoritative. Sub-issue prompts read the mirrored brief from here (family-context block).
 - Commands: `startPlan {projectId}`, `planChat {projectId, text}`, `reloadPlanDoc {projectId}`,
   `approvePlan {projectId, drop: string[], dispatch: boolean}`.
-- Approval creates milestones first (capability-gated), then issues (project-assigned,
-  `blockIssue` for deps, milestone attached), then dispatches wave 1 if `dispatch`.
+- Approval reconciles (decision 4): milestones first (capability-gated), then missing issues
+  (project-assigned, `blockIssue` deps, milestone attached, provenance footer), skip-existing
+  reported, obsolete listed; wave-1 dispatch if `dispatch`.
+- Publish: strip fence, `documentUpdate`/`documentCreate` (fallback: project content), refuse
+  when tracker `updatedAt` moved since the draft was cut — re-pull, re-apply, retry.
+- Phase 1 includes the `documents` capability (Linear Document API + sqlite table) since
+  publish needs it; milestones stay phase 2.
 - Prompt: adapt planner.ts's prompt + reviewer.ts's doc instructions ("the first entry is the
   lead" analog: prose for the operator, fence for the machine, don't write schedules into prose).
 
@@ -85,6 +111,12 @@ UI:
 Gates: typecheck, build, CDC replay (new deltas!), demo-mode plan (local draft like
 `demoDraft` in newproject.ts — no agent), ttyd walkthrough, docs (`docs/views/plan.md` rewrite).
 Daemon restart note: protocol 8.
+
+### Phase 1.5 — change detection + channel notices
+
+- Sweep compares mirrored `docUpdatedAt` per planned project; on movement: activity + toast,
+  and (coordination on) a debounced deterministic notice to the project channel as identity
+  `colinear`. No auto-wake, no sessions for notices.
 
 ### Phase 2 — milestones capability
 
