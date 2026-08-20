@@ -298,6 +298,8 @@ export interface ProjectPlan {
   publishedAt?: number;
   sessionId?: string;
   question?: PendingQuestion;
+  chat?: ChatTurn[];
+  chatting?: boolean;
   error?: string;
   tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
   costUsd: number;

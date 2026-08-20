@@ -9,6 +9,7 @@ import { notify } from './notify.js';
 import { deletePendingReviews, fetchPrDetails, submitReview, type ReviewEvent } from './reviews.js';
 import { isDemo } from './demo.js';
 import { store } from './store.js';
+import { extractFencedJson, hasFenceOpening } from './fence.js';
 import { questionSummary } from './types.js';
 import type { ChatTurn, Config, Review, ReviewFinding, Severity } from './types.js';
 
@@ -21,8 +22,8 @@ const DOC_LIMIT = 64_000;
 
 const SEVERITIES = new Set(['blocking', 'consider', 'nit', 'praise']);
 
-/** Opening of the findings fence — ```findings preferred, ```json accepted. */
-const FENCE_OPEN = /```(?:findings|json)[^\S\n]*\n?/g;
+/** ```findings preferred, ```json accepted. */
+const FENCE_NAMES = ['findings', 'json'];
 
 /** Drop anything that isn't a finding rather than posting malformed comments. */
 function validFindings(value: unknown): ReviewFinding[] {
@@ -55,7 +56,8 @@ function validFindings(value: unknown): ReviewFinding[] {
  * turn afterwards would need a second pass to keep the two in sync.
  */
 export function parseDoc(text: string): { summary: string; findings: ReviewFinding[]; fencePresent: boolean } {
-  const extracted = extractFindingsBlock(text);
+  // both shapes turn up in the fence: a bare array, and { "findings": [...] }
+  const extracted = extractFencedJson(text, FENCE_NAMES);
   const findings = extracted ? validFindings(extracted.value) : [];
   const prose = (extracted ? text.slice(0, extracted.start) + text.slice(extracted.end) : text).trim();
   const summary =
@@ -63,38 +65,7 @@ export function parseDoc(text: string): { summary: string; findings: ReviewFindi
       .split(/\n{2,}/)
       .map((block) => block.trim())
       .find((block) => block && !block.startsWith('#')) ?? prose.slice(0, 500);
-  return { summary, findings, fencePresent: Boolean(extracted) || hasFenceOpening(text) };
-}
-
-const hasFenceOpening = (text: string): boolean => {
-  FENCE_OPEN.lastIndex = 0;
-  return FENCE_OPEN.test(text);
-};
-
-/**
- * The findings block, ending at the first closing fence where the JSON
- * actually parses. A non-greedy `[\s\S]*?```` regex ended the block at the
- * first ``` it saw — which, for a finding whose comment carries a fenced code
- * suggestion, is the *inside* of a string. That truncated the JSON, the parse
- * failed, and a full review posted as an empty one. The closing fence is the
- * one that completes valid JSON, so try each candidate in order.
- */
-function extractFindingsBlock(text: string): { value: unknown; start: number; end: number } | undefined {
-  FENCE_OPEN.lastIndex = 0;
-  for (let open = FENCE_OPEN.exec(text); open; open = FENCE_OPEN.exec(text)) {
-    const bodyStart = open.index + open[0].length;
-    for (let close = text.indexOf('```', bodyStart); close !== -1; close = text.indexOf('```', close + 3)) {
-      try {
-        // both shapes turn up: a bare array, and { "findings": [...] }
-        const value: unknown = JSON.parse(text.slice(bodyStart, close));
-        const fenceEnd = close + 3;
-        return { value, start: open.index, end: fenceEnd };
-      } catch {
-        // an inner fence mid-string — keep scanning for the real closer
-      }
-    }
-  }
-  return undefined;
+  return { summary, findings, fencePresent: Boolean(extracted) || hasFenceOpening(text, FENCE_NAMES) };
 }
 
 /**

@@ -10,6 +10,9 @@ import { onNotifyForward } from './core/notify.js';
 import { loadState, startPersistence } from './core/persist.js';
 import { startPrPolling } from './core/prs.js';
 import { Reviewer } from './core/reviewer.js';
+import { PlanManager } from './core/projectplan.js';
+import { providerFor } from './core/provider.js';
+import type { Project } from './core/types.js';
 import { pollReviewRequests, startReviewPolling } from './core/reviews.js';
 import {
   createDecoder,
@@ -56,8 +59,10 @@ export async function runDaemon(): Promise<void> {
   const cfg = loadConfig();
   const dispatcher = new Dispatcher(cfg);
   const reviewer = new Reviewer(cfg);
+  const plans = new PlanManager(cfg, (issues) => dispatcher.enqueue(issues));
   loadState(cfg);
   reviewer.resumeWatching(); // reviews restored from disk keep their live doc
+  plans.resumeWatching();
   const stopPersistence = startPersistence();
 
   // demo mode fabricates a board and never reaches the network: polling would
@@ -83,6 +88,7 @@ export async function runDaemon(): Promise<void> {
 
   dispatcher.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
   reviewer.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
+  plans.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
 
   // every store mutation fans out to attached clients as a delta
   let sent = store.version;
@@ -169,6 +175,24 @@ export async function runDaemon(): Promise<void> {
         break;
       case 'pollReviews':
         if (!isDemo(cfg)) void pollReviewRequests(cfg);
+        break;
+      case 'startPlan':
+        void withProject(cmd.projectId, (project) => plans.start(project));
+        break;
+      case 'planChat':
+        void plans.chat(cmd.projectId, cmd.text);
+        break;
+      case 'reloadPlanDoc':
+        plans.reloadDraft(cmd.projectId);
+        break;
+      case 'publishPlan':
+        void plans.publish(cmd.projectId);
+        break;
+      case 'approvePlan':
+        void plans.approve(cmd.projectId, { drop: cmd.drop, dispatch: cmd.dispatch });
+        break;
+      case 'removePlan':
+        plans.remove(cmd.projectId);
         break;
       case 'message':
         dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });
@@ -287,6 +311,7 @@ export async function runDaemon(): Promise<void> {
     log('daemon shutting down');
     dispatcher.shutdown();
     reviewer.shutdown();
+  plans.shutdown();
     stopPrPolling();
     stopReviewPolling();
     setTimeout(() => {
@@ -299,4 +324,15 @@ export async function runDaemon(): Promise<void> {
   };
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
+}
+
+/** Resolve a project id to the full project the PlanManager needs. */
+async function withProject(projectId: string, run: (project: Project) => Promise<void>): Promise<void> {
+  const cfg = loadConfig({ requireKey: false });
+  const project = (await providerFor(cfg).projects().catch(() => [] as Project[])).find((p) => p.id === projectId);
+  if (!project) {
+    log(`startPlan: no project ${projectId}`);
+    return;
+  }
+  await run(project);
 }

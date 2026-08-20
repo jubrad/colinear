@@ -270,6 +270,63 @@ export async function createProject(
   return data.projectCreate.project;
 }
 
+/**
+ * A project's documents. Linear's Document carries markdown in `content`;
+ * `updatedAt` is the conflict token publish compares before overwriting.
+ */
+export async function fetchProjectDocuments(
+  cfg: Config,
+  projectId: string,
+): Promise<Array<{ id: string; title: string; content: string; updatedAt: string; url?: string }>> {
+  const data = await gql<{
+    project: {
+      documents: { nodes: Array<{ id: string; title: string; content?: string; updatedAt: string; url: string }> };
+    };
+  }>(
+    cfg,
+    `query ($id: String!) {
+      project(id: $id) {
+        documents(first: 25) { nodes { id title content updatedAt url } }
+      }
+    }`,
+    { id: projectId },
+  );
+  return (data.project?.documents.nodes ?? [])
+    .map((n) => ({ ...n, content: n.content ?? '' }))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export async function saveProjectDocument(
+  cfg: Config,
+  projectId: string,
+  doc: { id?: string; title: string; content: string },
+): Promise<{ id: string; updatedAt: string; url?: string }> {
+  if (doc.id) {
+    const data = await gql<{
+      documentUpdate: { success: boolean; document?: { id: string; updatedAt: string; url: string } };
+    }>(
+      cfg,
+      `mutation ($id: String!, $input: DocumentUpdateInput!) {
+        documentUpdate(id: $id, input: $input) { success document { id updatedAt url } }
+      }`,
+      { id: doc.id, input: { title: doc.title, content: doc.content } },
+    );
+    if (!data.documentUpdate.success || !data.documentUpdate.document) throw new Error('Linear refused the document update');
+    return data.documentUpdate.document;
+  }
+  const data = await gql<{
+    documentCreate: { success: boolean; document?: { id: string; updatedAt: string; url: string } };
+  }>(
+    cfg,
+    `mutation ($input: DocumentCreateInput!) {
+      documentCreate(input: $input) { success document { id updatedAt url } }
+    }`,
+    { input: { title: doc.title, content: doc.content, projectId } },
+  );
+  if (!data.documentCreate.success || !data.documentCreate.document) throw new Error('Linear refused the document');
+  return data.documentCreate.document;
+}
+
 export async function createIssue(
   cfg: Config,
   input: {
@@ -418,6 +475,7 @@ export function linearProvider(cfg: Config): IssueProvider {
       priority: true,
       projects: true,
     createProjects: true,
+    documents: true,
       scopes: true,
       workflowStates: true,
       branchNames: true,
@@ -435,6 +493,8 @@ export function linearProvider(cfg: Config): IssueProvider {
     projects: () => fetchProjects(cfg),
     projectIssues: (projectId) => fetchProjectIssues(cfg, projectId),
     createProject: (input) => createProject(cfg, input),
+    projectDocuments: (projectId) => fetchProjectDocuments(cfg, projectId),
+    saveProjectDocument: (projectId, doc) => saveProjectDocument(cfg, projectId, doc),
     create: ({ scopeId, title, description, projectId, priority, parentId }) =>
       createIssue(cfg, { teamId: scopeId, title, description, projectId, priority, parentId }),
     blockIssue: (blockerId, blockedId) => createBlocksRelation(cfg, blockerId, blockedId),

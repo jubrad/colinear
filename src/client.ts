@@ -49,6 +49,13 @@ export interface DispatcherApi {
   postReview(id: string): void;
   reviewVerdict(id: string, verdict: 'approve' | 'request-changes'): void;
   pollReviews(): void;
+  /** project plans — the design doc drafted here, owned by the tracker */
+  startPlan(projectId: string): void;
+  planChat(projectId: string, text: string): void;
+  reloadPlanDoc(projectId: string): void;
+  publishPlan(projectId: string): void;
+  approvePlan(projectId: string, drop: string[], dispatch: boolean): void;
+  removePlan(projectId: string): void;
   gcScan(olderThanDays: number): void;
   /** submit answers to a pending question set (used by the $EDITOR path) */
   answer(id: string, answers: string[]): void;
@@ -291,6 +298,12 @@ export async function connectToDaemon(): Promise<Connection> {
             postReview: (id) => command({ name: 'postReview', id }),
             reviewVerdict: (id, verdict) => command({ name: 'reviewVerdict', id, verdict }),
             pollReviews: () => command({ name: 'pollReviews' }),
+          startPlan: (projectId) => command({ name: 'startPlan', projectId }),
+          planChat: (projectId, text) => command({ name: 'planChat', projectId, text }),
+          reloadPlanDoc: (projectId) => command({ name: 'reloadPlanDoc', projectId }),
+          publishPlan: (projectId) => command({ name: 'publishPlan', projectId }),
+          approvePlan: (projectId, drop, dispatch) => command({ name: 'approvePlan', projectId, drop, dispatch }),
+          removePlan: (projectId) => command({ name: 'removePlan', projectId }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),
             answer: (id, answers) => command({ name: 'answer', id, answers }),
             message: (id, text, opts) => command({ name: 'message', id, text, wake: opts?.wake }),
