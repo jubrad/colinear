@@ -34,12 +34,13 @@ export interface ProjectBrief {
 export async function createProjectFromPrompt(
   cfg: Config,
   brief: ProjectBrief,
+  onActivity: (line: string) => void = () => {},
 ): Promise<{ id: string; name: string; url?: string }> {
   const provider = providerFor(cfg);
   if (!provider.capabilities.createProjects) {
     throw new Error(`${provider.name} cannot create projects`);
   }
-  const draft = isDemo(cfg) ? demoDraft(brief.request) : await draftWithAgent(cfg, brief);
+  const draft = isDemo(cfg) ? demoDraft(brief.request) : await draftWithAgent(cfg, brief, onActivity);
   return provider.createProject({
     ...draft,
     scopeIds: brief.scopeIds,
@@ -52,6 +53,7 @@ export async function createProjectFromPrompt(
 async function draftWithAgent(
   cfg: Config,
   brief: ProjectBrief,
+  onActivity: (line: string) => void,
 ): Promise<{ name: string; description: string; content: string }> {
   const result = await runSession({
     permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
@@ -67,7 +69,7 @@ Produce:
 - content: markdown. The problem, what is in scope, what is explicitly not, and how anyone will know it worked. Write for someone who has NOT seen this brief. Do not invent a schedule, owners, or issue breakdowns — issues get filed separately.`,
     cwd: cfg.repos[0].path,
     callbacks: {
-      onActivity: () => {},
+      onActivity,
       onSessionId: () => {},
       onQuestion: (q) => q.answer(q.questions.map(() => 'use your best judgment')),
     },

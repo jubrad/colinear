@@ -18,6 +18,7 @@ export async function createIssueFromPrompt(
   cfg: Config,
   scopeId: string,
   request: string,
+  onActivity: (line: string) => void = () => {},
 ): Promise<{ id: string; identifier: string }> {
   const result = await runSession({
     permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
@@ -32,7 +33,7 @@ Produce:
 - description: markdown with context, scope, and acceptance criteria — written for a reader who has NOT seen this conversation
 - priority (optional): 1 urgent, 2 high, 3 medium, 4 low — omit unless the request implies one`,
     cwd: cfg.repos[0].path,
-    callbacks: { onActivity: () => {}, onSessionId: () => {}, onQuestion: (q) => q.answer(q.questions.map(() => 'use your best judgment')) },
+    callbacks: { onActivity, onSessionId: () => {}, onQuestion: (q) => q.answer(q.questions.map(() => 'use your best judgment')) },
     outputSchema: ISSUE_SCHEMA,
     model: cfg.model,
     maxTurns: 12,
