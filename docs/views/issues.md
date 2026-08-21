@@ -23,6 +23,9 @@ still dispatch.
 
 ## Notes
 
+- `n` keeps you in the loop while it works: a progress popup streams the drafting agent's activity,
+  then holds the result — `created CLO-214`, or the failure — until you dismiss it (`esc`; `esc`
+  mid-flight hides it, the draft keeps running and the toast still lands).
 - `c` → **start: manual — worktree only** cuts the worktree and stops, leaving the card in Working
   for you to lay a skeleton down before `r` hands it to an agent. See
   [dispatch](../dispatch.md#manual-dispatch-a-worktree-no-agent).

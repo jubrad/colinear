@@ -18,6 +18,10 @@ separately, and [`:plan`](plan.md) is where a breakdown comes from.
 
 The form asks only for the facts a model should not be guessing. Everything it can write, it writes.
 
+While it writes, a progress popup streams the agent's activity and then holds the result — the
+project's name (with `o` to open it in the tracker), or the failure — until you dismiss it. `esc`
+mid-flight hides the popup without stopping the draft.
+
 Demo mode runs no agent: the first line of the brief becomes the name and the rest becomes the body,
 which is a plainer version of the same shape.
 

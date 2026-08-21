@@ -8,6 +8,7 @@ import { getUiState, setUiState } from '../core/persist.js';
 import { store } from '../core/store.js';
 import type { Issue } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
+import { CreationProgress, creationHeight, pushActivity, type CreationState } from '../ui/CreationProgress.js';
 import { useColinear } from '../ui/context.js';
 import { Popup, popupPlacement, formHeight } from '../ui/Popup.js';
 import { DispatchModal, type DispatchOptions } from '../ui/DispatchModal.js';
@@ -75,6 +76,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
   const [bar, setBar] = useState<BarMode | null>(null);
   const [dispatching, setDispatching] = useState(false);
+  const [progress, setProgress] = useState<CreationState | null>(null);
   const [sortKey, setSortKey] = useState(spec?.sort ?? 'updated');
   const [sortDesc, setSortDesc] = useState(false);
   const [includeProjects, setIncludeProjects] = useState(false);
@@ -96,7 +98,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   );
 
   useEffect(() => refresh(team), []);
-  useEffect(() => ctx.setCapture(bar !== null || dispatching), [bar, dispatching]);
+  useEffect(() => ctx.setCapture(bar !== null || dispatching || progress !== null), [bar, dispatching, progress]);
   useEffect(() => () => ctx.setCapture(false), []);
 
   const provider = providerFor(cfg);
@@ -191,13 +193,19 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
         ctx.toast('switch to a specific team first (t) so the issue has a home', 'err');
         return;
       }
-      ctx.toast(`drafting issue in ${teamObj.key}…`, 'info');
-      void createIssueFromPrompt(cfg, teamObj.id, request)
+      setProgress({ title: `new issue in ${teamObj.key}: ${request.slice(0, 60)}`, startedAt: Date.now(), activity: [] });
+      const onActivity = (line: string) =>
+        setProgress((p) => (p && !p.done ? pushActivity(p, line) : p));
+      void createIssueFromPrompt(cfg, teamObj.id, request, onActivity)
         .then((issue) => {
           ctx.toast(`created ${issue.identifier}`, 'ok');
+          setProgress((p) => (p ? { ...p, done: { ok: true, summary: `created ${issue.identifier}` } } : p));
           refresh(team);
         })
-        .catch((e) => ctx.toast(`issue creation failed: ${String(e).slice(0, 80)}`, 'err'));
+        .catch((e) => {
+          ctx.toast(`issue creation failed: ${String(e).slice(0, 80)}`, 'err');
+          setProgress((p) => (p ? { ...p, done: { ok: false, summary: `failed: ${String(e).slice(0, 120)}` } } : p));
+        });
     },
     [team, teams, cfg, ctx, refresh],
   );
@@ -252,7 +260,15 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       if (input === 'c' && picked().length) setDispatching(true);
       if (input === 'o' && rows[cursor]) openUrl(rows[cursor].url);
     },
-    { isActive: bar === null && !dispatching && !ctx.cmdOpen },
+    { isActive: bar === null && !dispatching && !progress && !ctx.cmdOpen },
+  );
+
+  useInput(
+    (input, key) => {
+      if (key.escape || (progress?.done && (key.return || input === 'q'))) setProgress(null);
+      if (input === 'o' && progress?.done?.url) openUrl(progress.done.url);
+    },
+    { isActive: progress !== null && !ctx.cmdOpen },
   );
 
   const barCandidates = useMemo<Candidate[]>(() => {
@@ -387,6 +403,17 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
           );
         })()
       )}
+      {progress &&
+        (() => {
+          const inner = Math.min(80, ctx.size.columns - 8) - 4;
+          const lines = 6;
+          const place = popupPlacement(ctx.size, { width: inner + 4, height: creationHeight(lines) }, ctx.cmdOpen);
+          return (
+            <Popup {...place} borderColor={progress.done ? (progress.done.ok ? theme.ok : theme.err) : undefined}>
+              <CreationProgress state={progress} width={inner} lines={lines} now={ctx.now} />
+            </Popup>
+          );
+        })()}
     </Box>
   );
 }

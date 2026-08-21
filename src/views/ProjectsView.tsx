@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { openUrl } from '../core/open.js';
 import type { Project, Scope } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
+import { CreationProgress, creationHeight, pushActivity, type CreationState } from '../ui/CreationProgress.js';
 import { useColinear } from '../ui/context.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { NewProjectModal, type NewProject } from '../ui/NewProjectModal.js';
@@ -48,7 +49,8 @@ export function ProjectsView(_props: { param?: string }) {
     if (!providerFor(ctx.cfg).capabilities.createProjects) return;
     void providerFor(ctx.cfg).scopes().then(setScopes).catch(() => setScopes([]));
   }, [ctx.cfg]);
-  useEffect(() => ctx.setCapture(bar !== null || creating), [bar, creating]);
+  const [progress, setProgress] = useState<CreationState | null>(null);
+  useEffect(() => ctx.setCapture(bar !== null || creating || progress !== null), [bar, creating, progress]);
   useEffect(() => () => ctx.setCapture(false), []);
 
   const hasFilters = query !== '' || teamFilter !== undefined;
@@ -68,15 +70,29 @@ export function ProjectsView(_props: { param?: string }) {
   const create = useCallback(
     (draft: NewProject) => {
       setCreating(false);
-      ctx.toast('drafting the project…', 'info');
-      void createProjectFromPrompt(ctx.cfg, draft)
+      setProgress({ title: `new project: ${draft.request.slice(0, 60)}`, startedAt: Date.now(), activity: [] });
+      const onActivity = (line: string) =>
+        setProgress((p) => (p && !p.done ? pushActivity(p, line) : p));
+      void createProjectFromPrompt(ctx.cfg, draft, onActivity)
         .then((project) => {
           ctx.toast(`created ${project.name}`, 'ok');
+          setProgress((p) => (p ? { ...p, done: { ok: true, summary: `created "${project.name}"`, url: project.url } } : p));
           refresh();
         })
-        .catch((e) => ctx.toast(`project creation failed: ${String(e).slice(0, 80)}`, 'err'));
+        .catch((e) => {
+          ctx.toast(`project creation failed: ${String(e).slice(0, 80)}`, 'err');
+          setProgress((p) => (p ? { ...p, done: { ok: false, summary: `failed: ${String(e).slice(0, 120)}` } } : p));
+        });
     },
     [ctx, refresh],
+  );
+
+  useInput(
+    (input, key) => {
+      if (key.escape || (progress?.done && (key.return || input === 'q'))) setProgress(null);
+      if (input === 'o' && progress?.done?.url) openUrl(progress.done.url);
+    },
+    { isActive: progress !== null && !ctx.cmdOpen },
   );
 
   const columns = useMemo<Array<Column<Project>>>(
@@ -144,7 +160,7 @@ export function ProjectsView(_props: { param?: string }) {
       if (input === 'p' && rows[cursor]) ctx.navigate('plan', rows[cursor].name);
       if (key.return && rows[cursor]) ctx.navigate('project', rows[cursor].name);
     },
-    { isActive: bar === null && !creating && !ctx.cmdOpen },
+    { isActive: bar === null && !creating && !progress && !ctx.cmdOpen },
   );
 
   const barCandidates = useMemo<Candidate[]>(() => {
@@ -243,6 +259,17 @@ export function ProjectsView(_props: { param?: string }) {
                 onSubmit={create}
                 onCancel={() => setCreating(false)}
               />
+            </Popup>
+          );
+        })()}
+      {progress &&
+        (() => {
+          const inner = Math.min(80, ctx.size.columns - 8) - 4;
+          const lines = 6;
+          const place = popupPlacement(ctx.size, { width: inner + 4, height: creationHeight(lines) }, ctx.cmdOpen);
+          return (
+            <Popup {...place} borderColor={progress.done ? (progress.done.ok ? theme.ok : theme.err) : undefined}>
+              <CreationProgress state={progress} width={inner} lines={lines} now={ctx.now} />
             </Popup>
           );
         })()}
