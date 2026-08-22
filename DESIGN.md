@@ -254,6 +254,52 @@ Findings survive missing fields: no `line` or no `file` means the body rather th
 only a missing `comment` drops one. A line outside the diff makes GitHub reject the whole
 review, so the post retries once with everything in the body.
 
+## Project plans
+
+A third entity beside tasks and reviews, same CDC contract (`plan-*` deltas, keyed by project id).
+It is the review-document pattern with the storage **inverted**: there, colinear owns the file and
+GitHub gets a deliberate posting; here the **tracker owns the design** — a project document named
+`Design`, falling back to the project's description — and the file under `plans/` is a draft
+workspace. Reopening always pulls the tracker's copy fresh, because someone else may have edited it.
+
+**Nothing starts on open.** The view pulls the doc and waits. Planning is a conversation, and the
+first move is the operator's — the agent leading with a finished design makes the operator a
+reviewer of its ideas, which is the opposite of the point. Two ways in, one conversation:
+
+- `c` cuts a worktree, mints a session id (`claude --session-id`) and hands the terminal to a real
+  interactive session, primed with the project, its issues and the published design.
+- the chat box runs the same session headlessly, a turn at a time.
+
+The id is minted rather than discovered, which is what lets those two be the same conversation.
+Once a plan has a worktree **every** session for it runs there: Claude Code files transcripts per
+directory, so a resume from anywhere else silently finds nothing.
+
+**The fence is scaffolding, not content.** The draft is prose ending in one ```plan fence
+(milestones, issues, `blockedBy` by sibling title) parsed by the same parse-don't-regex rule the
+review doc uses. Publishing strips it: machine JSON does not belong in a document teammates read.
+The fence dissolves into tracker objects at approval instead.
+
+**Two gates, two decisions.** `U` publishes the prose; `A`/`D` approve the fence. Both refuse
+rather than guess:
+
+- Publish compares the tracker's `updatedAt` against the revision the draft was cut from and
+  refuses when it moved — overwriting a teammate blind is how a shared doc loses work.
+- Approval is **reconciliation**: milestones first (by name), then issues missing from the project
+  (by title), skipping what exists and *listing* what the plan no longer mentions without
+  cancelling it. Cancellation stays a per-item operator keypress. `D` dispatches wave 1 — issues
+  with no in-plan blockers — and the blocked-recheck sweep pulls later waves as those land.
+
+**Outside edits are noticed, never absorbed.** The review poll also compares each planned project's
+mirrored `docUpdatedAt`. A change must survive one quiet sweep (Linear saves continuously while
+someone types) before it raises an activity line, a toast, and — coordination on — a deterministic
+notice to the project channel as the identity `colinear`. The announced revision lands in a
+separate `docSeenAt`: noticing an edit must not disarm the publish guard. No agent is woken; live
+sessions finish on the brief they started with and read the channel at their pre-PR checkpoint.
+
+Plans never leave the store on their own — retention drops finished tasks and settled reviews, but
+a plan is a conversation the operator can return to, so only they remove one. `:gc` spares a live
+plan's worktree for the same reason and offers it once the plan is gone.
+
 ## Issue providers
 
 Everything above `core/provider.ts` is tracker-agnostic; everything below it is one adapter.
