@@ -8,6 +8,7 @@ import { runChecks } from './checks.js';
 import { demoChecks, demoPullRequest, demoSession, demoWorktree, isDemo } from './demo.js';
 import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { coordinatorCwd, coordinatorPrompt, familyStatus, type CoordinatorTools } from './coordinator.js';
+import { isSettledReview, isSettledTask, settledAt } from './gc.js';
 import { experimentOn } from './config.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
@@ -640,17 +641,14 @@ export class Dispatcher {
     const days = this.cfg.retentionDays;
     if (!days) return; // 0 keeps everything
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    // the same predicates :gc offers to forget by hand — see gc.ts
     for (const task of store.list()) {
-      if (!['done', 'cancelled'].includes(task.status)) continue;
-      if ((task.endedAt ?? Date.now()) > cutoff) continue;
+      if (!isSettledTask(task) || settledAt(task) > cutoff) continue;
       store.delete(task.issue.id);
       log(`retention: forgot ${task.issue.identifier} (${task.status})`);
     }
     for (const review of store.listReviews()) {
-      if (!['stale', 'commented', 'approved', 'changes_requested'].includes(review.status)) continue;
-      // a review that never ran has no endedAt; fall back to the PR's own mtime
-      const settledAt = review.endedAt ?? (Date.parse(review.updatedAt) || Date.now());
-      if (settledAt > cutoff) continue;
+      if (!isSettledReview(review) || settledAt(review) > cutoff) continue;
       store.deleteReview(review.id);
       log(`retention: forgot review ${review.id} (${review.status})`);
     }

@@ -100,7 +100,7 @@ const builtinViews: ViewDef[] = [
   {
     name: 'gc',
     aliases: ['disk'],
-    describe: 'worktree disk — reclaim finished checkouts',
+    describe: 'reclaim worktree disk and finished cards',
     Component: GcView,
     keys: gcKeys,
   },
