@@ -63,6 +63,10 @@ export interface PrDetails {
 
 export const reviewId = (repository: string, number: number) => `${repository}#${number}`;
 
+/** The one spelling of "no local clone for this PR", so the poll can recognise
+    the error it is curing rather than string-matching a near-copy. */
+export const notConfigured = (repository: string) => `${repository} is not a configured repo`;
+
 /** owner/repo for each configured repo, read from its git remotes (cached). */
 const slugCache = new Map<string, string[]>();
 
@@ -75,7 +79,12 @@ async function slugsFor(repo: RepoConfig): Promise<string[]> {
     // both git@host:owner/name(.git) and https://host/owner/name(.git)
     slugs = [...stdout.matchAll(/[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\s/g)].map((m) => m[1].toLowerCase());
   } catch (err) {
-    log(`review: could not read remotes for ${repo.name}: ${String(err).slice(0, 80)}`);
+    // a path that doesn't exist yet (bad config, repo not cloned) must not be
+    // remembered as "has no remotes" — that outlives the fix and the operator
+    // is then told the repo isn't in the allowlist, which sends them to the
+    // wrong file entirely
+    log(`review: could not read remotes for ${repo.name} at ${repo.path}: ${String(err).slice(0, 80)}`);
+    return [];
   }
   slugCache.set(repo.path, [...new Set(slugs)]);
   return slugCache.get(repo.path)!;
@@ -142,9 +151,25 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
       baseRefName: pr.baseRefName,
     };
     if (existing) {
+      // A review whose repo never resolved is stuck: the config it needed may
+      // since have been fixed, or the repo cloned, and nothing else ever looks
+      // again. Re-resolving is cheap (slugs are cached per path) and it is the
+      // only way that record heals — retention would otherwise be the cure.
+      const healed = existing.repo ? undefined : await repoForSlug(cfg, pr.repository.nameWithOwner);
+      const patch: Partial<Review> = { ...meta };
+      if (healed) {
+        patch.repo = { name: healed.name, path: healed.path, worktreeRoot: healed.worktreeRoot };
+        // and clear the refusal it caused — but only that one, so a real
+        // failure is never quietly promoted back to reviewable
+        if (existing.status === 'error' && existing.error === notConfigured(pr.repository.nameWithOwner)) {
+          patch.status = 'pending';
+          patch.error = undefined;
+        }
+        log(`review ${id}: repo resolved to ${healed.name}`);
+      }
       // metadata only: status, findings and worktree belong to the operator
-      if (JSON.stringify({ ...existing, ...meta }) !== JSON.stringify(existing)) {
-        store.updateReview(id, meta);
+      if (JSON.stringify({ ...existing, ...patch }) !== JSON.stringify(existing)) {
+        store.updateReview(id, patch);
       }
       continue;
     }
