@@ -1360,7 +1360,9 @@
 <h1 id="projects-and-project-project-views"><code>:projects</code> and <code>:project</code> — project views<a class="headerlink" href="#projects-and-project-project-views" title="Permanent link">&para;</a></h1>
 <p><code>:projects</code> (aliases <code>pj</code>, <code>proj</code>) lists the tracker's projects: state, priority, progress, lead,
 teams, target date. <code>/</code> filters, <code>t</code> switches team, <code>s</code> sorts, <code>enter</code> opens one.</p>
-<p><code>:project NAME</code> (alias <code>p</code>) is a kanban of that project's issues, whether or not they're dispatched.</p>
+<p><code>:project NAME</code> (alias <code>p</code>) is a kanban of that project's issues, whether or not they're dispatched.
+Where the provider has milestones, each card's second line names the milestone the issue is filed
+under, after the assignee.</p>
 <h2 id="new-projects-n">New projects (<code>n</code>)<a class="headerlink" href="#new-projects-n" title="Permanent link">&para;</a></h2>
 <p><code>n</code> opens a template: the <strong>team</strong> it belongs to, the <strong>state</strong> it starts in (planned / started /
 paused), its <strong>priority</strong>, and a <strong>brief</strong> — a paragraph-sized box where <code>enter</code> is a newline and

@@ -87,7 +87,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#plan-planning-chat" class="md-skip">
+        <a href="#plan-the-project-plan" class="md-skip">
           Skip to content
         </a>
       
@@ -899,6 +899,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :plan
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -915,6 +933,80 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keys
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#approval-is-reconciliation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Approval is reconciliation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-the-design-changes-outside-colinear" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When the design changes outside colinear
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#publishing-is-guarded" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Publishing is guarded
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project updates
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1231,6 +1323,69 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keys
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#approval-is-reconciliation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Approval is reconciliation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-the-design-changes-outside-colinear" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When the design changes outside colinear
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#publishing-is-guarded" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Publishing is guarded
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-updates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project updates
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1246,12 +1401,30 @@
 
 
 
-<h1 id="plan-planning-chat"><code>:plan</code> — planning chat<a class="headerlink" href="#plan-planning-chat" title="Permanent link">&para;</a></h1>
-<p>Alias: <code>chat</code>. Argument: the project name (<code>:plan Cloud Migration</code>).</p>
-<p>A long-lived conversation with an agent that can read the repo but not write to it: <code>Write</code> and
-<code>Edit</code> are denied outright. Use it to work out how a project should be split before any of it exists
-as issues.</p>
-<p>When it proposes work it returns a fenced JSON block, which colinear parses into a <strong>draft list</strong>.</p>
+<h1 id="plan-the-project-plan"><code>:plan</code> — the project plan<a class="headerlink" href="#plan-the-project-plan" title="Permanent link">&para;</a></h1>
+<p>Alias: <code>chat</code>. Argument: the project name (<code>:plan Cloud Migration</code>), or <code>p</code> on a project in
+<a href="../projects/"><code>:projects</code></a>.</p>
+<p>A project's <strong>design document</strong>, shaped in a conversation — on the review-document pattern, with
+the storage inverted: <strong>the tracker owns the design</strong> (a project document named <code>Design</code>, falling
+back to the project description), and what you see here is the working draft.</p>
+<p>Opening the view pulls the tracker's copy fresh and starts <strong>nothing</strong>: planning is collaborative,
+and the first move is yours. There are two ways to make it.</p>
+<p><strong><code>c</code> — chat about it.</strong> colinear cuts a worktree off the default branch, mints a session id, and
+hands your terminal to a real <code>claude</code> running in it, already primed with the project, its issues
+and the published design. You are in a normal interactive session: think out loud, read the code,
+argue with it. Quit (<code>/exit</code>) and you land back here. This is the one to reach for when you want to
+work the problem out rather than describe it.</p>
+<p><strong>The chat box — submit a plan.</strong> Type a brief, <code>ctrl+d</code> sends, and the agent takes it from there;
+<code>d</code> has the agent open instead, framing the project and asking you the questions that matter. Turn
+at a time, without leaving the board.</p>
+<p>Both are the <em>same conversation</em> — one session id — so you can start interactively and follow up
+from the box, or the reverse. While you converge, the agent keeps a short notes section current in
+the draft; when the direction is agreed — or you say "write it up" — it replaces the draft with the
+full design: prose for humans, ending in a ```plan fence proposing milestones and issues.</p>
+<p>The fence is scaffolding, not content: it never publishes. The issues and milestones it proposes
+<em>become tracker objects</em> when you approve them; the prose becomes the tracker's document when you
+publish. Two separate keys, because they are two separate decisions.</p>
+<h2 id="keys">Keys<a class="headerlink" href="#keys" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
@@ -1261,31 +1434,93 @@ as issues.</p>
 </thead>
 <tbody>
 <tr>
-<td>type</td>
-<td>talk to it — <code>enter</code> sends</td>
+<td><code>tab</code></td>
+<td>switch between the draft and the chat input</td>
 </tr>
 <tr>
-<td><code>space</code></td>
-<td>toggle a draft off/on</td>
+<td><code>c</code></td>
+<td><strong>chat about it</strong> — a worktree and a live <code>claude</code> session, entered directly</td>
+</tr>
+<tr>
+<td><code>ctrl+d</code></td>
+<td>send a chat turn — the first one starts the session</td>
+</tr>
+<tr>
+<td><code>d</code></td>
+<td>the agent opens the discussion (doc focus)</td>
+</tr>
+<tr>
+<td><code>j/k</code> <code>g/G</code></td>
+<td>scroll the draft (doc focus)</td>
+</tr>
+<tr>
+<td><code>e</code></td>
+<td>edit the draft in <code>$EDITOR</code> (the <code>editor</code> config applies); re-absorbed on return</td>
+</tr>
+<tr>
+<td><code>U</code></td>
+<td><strong>publish</strong> — the prose (fence stripped) becomes the project's <code>Design</code> document</td>
+</tr>
+<tr>
+<td><code>p</code></td>
+<td><strong>post a project update</strong> — the plan's summary, as a tracker status post</td>
 </tr>
 <tr>
 <td><code>A</code></td>
-<td>create the selected drafts as issues in the project</td>
+<td><strong>approve</strong> — the fence's issues, reviewed in a list: <code>space</code> drops one, <code>A</code> creates</td>
 </tr>
 <tr>
 <td><code>D</code></td>
-<td>create <strong>and</strong> dispatch them</td>
+<td>approve and <strong>dispatch wave 1</strong> — only issues with no in-plan blockers; later waves start as their blockers land</td>
 </tr>
 <tr>
-<td><code>esc</code></td>
-<td>leave the input · <code>q</code> back</td>
+<td><code>s</code></td>
+<td>reopen the plan: re-pull the tracker doc, reset the discussion</td>
 </tr>
 </tbody>
 </table>
-<p>Nothing reaches the tracker until <code>A</code> or <code>D</code>. The chat and its drafts survive a restart — the session
-is resumed by id, so context isn't lost.</p>
-<p>Note: the planner still runs in the TUI process rather than the daemon, so <code>R</code> (reload) and quitting
-end it. The board's agents are unaffected.</p>
+<h2 id="approval-is-reconciliation">Approval is reconciliation<a class="headerlink" href="#approval-is-reconciliation" title="Permanent link">&para;</a></h2>
+<p>Approving never duplicates and never destroys: issues that already exist in the project (matched by
+title) are skipped and named; issues in the project that the plan no longer mentions are <strong>listed,
+not cancelled</strong> — cancelling is your call, per issue. Created issues carry a provenance footer
+pointing at the design revision they came from, and <code>blockedBy</code> titles become real blocking
+relations.</p>
+<p>Milestones reconcile the same way, first: where the provider has them, the fence's milestones are
+created if missing (matched by name, existing ones reused, none ever deleted) and each issue is
+filed under the milestone it names. An issue naming a milestone that exists nowhere is created
+without one, with a warning in the plan's activity. Where the provider has no milestones the
+fence's are ignored — also said out loud, not silently.</p>
+<h2 id="when-the-design-changes-outside-colinear">When the design changes outside colinear<a class="headerlink" href="#when-the-design-changes-outside-colinear" title="Permanent link">&para;</a></h2>
+<p>Planned projects are swept on the poll cadence (about five minutes): when the tracker's document
+moves past the revision you last saw — a teammate edited it in Linear — the plan gets an activity
+line and you get a toast. The change must survive one quiet sweep before it counts, because Linear
+saves continuously while someone types. Noticing never disarms the publish guard: the plan still
+refuses to publish over the edit until you reopen (<code>s</code>) and pull it.</p>
+<p>With the <a href="../chan/">coordination experiment</a> on, the same detection posts a deterministic notice to
+the project's channel as <strong><code>colinear</code></strong> — publishing does too — so agents on the project's issues
+see "the design changed, re-read it before opening a PR" at their next channel read. No agent is
+woken or interrupted: live sessions finish on the brief they started with, and future sessions get
+the new design for free.</p>
+<p>The experiment also gives the plan session coordinator hands: the same <code>family_*</code> tools a tracking
+parent's coordinator gets (see <a href="../../../COORDINATION/">COORDINATION.md</a>), scoped to the project's
+dispatched issues — live board status, messaging an issue's agent, cancelling one — plus membership
+in the project channel as <code>plan</code>. It still cannot create tracker objects: proposing means revising
+the draft's fence, and <code>A</code> stays the gate.</p>
+<h2 id="publishing-is-guarded">Publishing is guarded<a class="headerlink" href="#publishing-is-guarded" title="Permanent link">&para;</a></h2>
+<p>If the tracker's document changed since your draft was cut — a teammate edited it in Linear —
+publish refuses rather than overwriting them blind. Reopen the plan (<code>s</code>) to pull their version,
+re-apply your changes, and publish again.</p>
+<h2 id="project-updates">Project updates<a class="headerlink" href="#project-updates" title="Permanent link">&para;</a></h2>
+<p><code>p</code> posts the plan's summary (plus the milestone/issue counts and the design revision) as a
+project update — Linear's status-post stream. Like review posting, the text is <strong>deterministic</strong>,
+composed from the mirrored plan record, never from a session: what reaches the tracker is never an
+agent's claim about itself.</p>
+<p>The worktree <code>c</code> cuts lives at <code>&lt;repo&gt;-worktrees/plan-&lt;project&gt;</code> on a <code>plan/&lt;project&gt;</code> branch.
+Nothing pushes it — it exists so the session can read the code — and <a href="../gc/"><code>:gc</code></a> leaves it alone
+while the plan exists, offering it once the plan is removed.</p>
+<p>Needs a provider with the <code>documents</code> capability for publishing and <code>projectUpdates</code> for <code>p</code>;
+approval works everywhere projects do, and milestones need the <code>milestones</code> capability. Demo mode
+writes a canned draft and runs no agent.</p>
 
 
 
