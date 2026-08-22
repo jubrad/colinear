@@ -5,7 +5,19 @@ import { promisify } from 'node:util';
 import { configPath, loadConfig } from './core/config.js';
 import { CONTEXT, DEFAULT_CONTEXT } from './core/context.js';
 
+
 const exec = promisify(execFile);
+
+/** owner/repo for each remote — the same read `:reviews` matches PRs against. */
+async function remoteSlugs(path: string): Promise<string[]> {
+  try {
+    const { stdout } = await exec('git', ['-C', path, 'remote', '-v']);
+    return [...new Set([...stdout.matchAll(/[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\s/g)].map((m) => m[1]))];
+  } catch {
+    return [];
+  }
+}
+
 
 const ok = (name: string, detail: string) => console.log(`  ✔ ${name}: ${detail}`);
 const bad = (name: string, detail: string) => {
@@ -15,7 +27,9 @@ const bad = (name: string, detail: string) => {
 let failures = 0;
 
 console.log('colinear doctor\n');
-const cfg = loadConfig();
+// requireKey would exit here, taking every other check with it — and a
+// missing key is exactly the kind of thing doctor exists to report
+const cfg = loadConfig({ requireKey: false });
 // which config this run is checking — a green doctor against the wrong
 // context answers a question nobody asked
 console.log(`  · config: ${configPath()}${CONTEXT === DEFAULT_CONTEXT ? '' : ` (context ${CONTEXT})`}`);
@@ -34,8 +48,18 @@ try {
   bad('gh CLI', 'not authenticated — run `gh auth login`');
 }
 
-if (existsSync(`${cfg.repo}/.git`)) ok('repo', cfg.repo);
-else bad('repo', `${cfg.repo} is not a git repository (set "repo" in config)`);
+// Every configured repo, and the GitHub slugs it contributes — because that
+// is what a PR is matched against. A path that doesn't exist contributes
+// nothing and looks, from :reviews, exactly like a repo you never configured.
+for (const repo of cfg.repos) {
+  if (!existsSync(`${repo.path}/.git`)) {
+    bad(`repo ${repo.name}`, `${repo.path} is not a git repository — fix its path in repos`);
+    continue;
+  }
+  const slugs = await remoteSlugs(repo.path);
+  if (slugs.length) ok(`repo ${repo.name}`, slugs.join(', '));
+  else bad(`repo ${repo.name}`, `${repo.path} has no git remotes — PRs there can't be matched to it`);
+}
 
 if (process.env.ANTHROPIC_API_KEY) {
   console.log('  ⚠ ANTHROPIC_API_KEY is set — agents will bill the API key, not your subscription');

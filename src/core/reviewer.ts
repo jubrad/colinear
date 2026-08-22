@@ -6,7 +6,7 @@ import { runSession, type SessionCallbacks } from './agent.js';
 import { guidanceFor } from './guidance.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
-import { deletePendingReviews, fetchPrDetails, submitReview, type ReviewEvent } from './reviews.js';
+import { deletePendingReviews, fetchPrDetails, submitReview, type ReviewEvent, notConfigured } from './reviews.js';
 import { isDemo } from './demo.js';
 import { store } from './store.js';
 import { extractFencedJson, hasFenceOpening } from './fence.js';
@@ -154,8 +154,11 @@ export class Reviewer {
     const review = store.getReview(id);
     if (!review || this.aborts.has(id)) return;
     if (!review.repo) {
-      store.updateReview(id, { status: 'error', error: `${review.repository} is not a configured repo` });
-      this.toast(`${review.repository} isn't in your repos allowlist — add it to review here`, 'err');
+      store.updateReview(id, { status: 'error', error: notConfigured(review.repository) });
+      this.toast(
+        `no local clone matches ${review.repository} — check the paths in repos (the poll retries every 5m)`,
+        'err',
+      );
       return;
     }
 
