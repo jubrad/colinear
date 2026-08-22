@@ -19,6 +19,77 @@ export interface Reclaimable {
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * A finished card: work whose outcome has landed, still sitting on the board.
+ *
+ * Reclaiming these is a different resource from worktree disk — attention
+ * rather than gigabytes — but it's the same question ("what here is over?"),
+ * so `:gc` asks both at once.
+ */
+export interface SettledCard {
+  id: string;
+  kind: 'task' | 'review';
+  /** CLO-203, or cloud#13251 */
+  label: string;
+  /** the tracker/PR title, for telling two finished cards apart */
+  title: string;
+  /** its own terminal status, in the vocabulary its view uses */
+  reason: string;
+  ageDays: number;
+}
+
+/**
+ * Terminal states. Shared with the retention sweep on purpose: "what `:gc`
+ * offers to forget" and "what retention forgets on its own" drifting apart is
+ * how a card becomes unreachable by one and immortal to the other.
+ */
+export const isSettledTask = (task: Task): boolean => task.status === 'done' || task.status === 'cancelled';
+
+export const isSettledReview = (review: Review): boolean =>
+  ['stale', 'commented', 'approved', 'changes_requested'].includes(review.status);
+
+/** When a card's work ended — a review that never ran falls back to the PR's own clock. */
+export const settledAt = (item: Task | Review): number =>
+  'issue' in item
+    ? (item.endedAt ?? Date.now())
+    : (item.endedAt ?? (Date.parse(item.updatedAt) || Date.now()));
+
+/**
+ * Finished tasks and settled reviews, oldest first. `olderThanDays` is the
+ * same grace the worktree scan uses (0 = everything that has finished).
+ */
+export function findSettled(tasks: Task[], reviews: Review[], olderThanDays: number): SettledCard[] {
+  const cutoff = Date.now() - olderThanDays * DAY;
+  const out: SettledCard[] = [];
+  for (const task of tasks) {
+    if (!isSettledTask(task)) continue;
+    const at = settledAt(task);
+    if (at > cutoff) continue;
+    out.push({
+      id: task.issue.id,
+      kind: 'task',
+      label: task.issue.identifier,
+      title: task.issue.title,
+      reason: task.status,
+      ageDays: Math.max(0, (Date.now() - at) / DAY),
+    });
+  }
+  for (const review of reviews) {
+    if (!isSettledReview(review)) continue;
+    const at = settledAt(review);
+    if (at > cutoff) continue;
+    out.push({
+      id: review.id,
+      kind: 'review',
+      label: `${review.repository.split('/')[1] ?? review.repository}#${review.number}`,
+      title: review.title,
+      reason: review.status,
+      ageDays: Math.max(0, (Date.now() - at) / DAY),
+    });
+  }
+  return out.sort((a, b) => b.ageDays - a.ageDays);
+}
+
 async function sizeKb(path: string): Promise<number> {
   const { stdout } = await exec('du', ['-sk', path]).catch(() => ({ stdout: '0' }));
   return Number.parseInt(stdout.split(/\s+/)[0], 10) || 0;

@@ -1,6 +1,9 @@
 import { Box, Text, useInput } from 'ink';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GcItem, GcProgress } from '../client.js';
+import { findSettled } from '../core/gc.js';
+import { useTasks } from '../core/hooks.js';
+import { store } from '../core/store.js';
 import { useColinear } from '../ui/context.js';
 import { cell } from '../ui/format.js';
 import { theme } from '../theme.js';
@@ -10,15 +13,38 @@ const REASON_COLOR: Record<string, string> = {
   cancelled: theme.dim,
   orphan: theme.warn,
   review: theme.accent,
+  stale: theme.dim,
+  approved: theme.ok,
+  commented: theme.accent,
+  changes_requested: theme.warn,
 };
 
 const formatSize = (kb: number): string =>
   kb >= 1048576 ? `${(kb / 1048576).toFixed(1)}G` : kb >= 1024 ? `${Math.round(kb / 1024)}M` : `${kb}K`;
 
+/** One line of "this is over": a worktree on disk, or a finished card on the board. */
+interface Row {
+  key: string;
+  kind: 'tree' | 'task' | 'review';
+  /** worktree rows only */
+  path?: string;
+  /** card rows only */
+  id?: string;
+  kilobytes: number;
+  label: string;
+  reason: string;
+  ageDays: number;
+  detail: string;
+}
+
 /**
- * Worktree disk, and what can go. Everything starts selected except finished
- * work younger than the threshold — the printout is the point, so nothing is
- * removed until you say so.
+ * What can go: worktree disk, and work whose outcome has landed. Everything
+ * starts selected except finished work younger than the threshold — the
+ * printout is the point, so nothing is removed until you say so.
+ *
+ * Two resources, one question. Disk is reclaimed by the daemon (git worktree
+ * remove); a finished card is forgotten through the ordinary store write path,
+ * which on a client forwards to the daemon like any other change.
  */
 export function GcView(_props: { param?: string }) {
   const ctx = useColinear();
@@ -29,6 +55,25 @@ export function GcView(_props: { param?: string }) {
   const [confirming, setConfirming] = useState(false);
   const [progress, setProgress] = useState<GcProgress>();
   const [failures, setFailures] = useState<string[]>([]);
+  const [forgotten, setForgotten] = useState(0);
+  // cards wait for the worktree pass to finish: findReclaimable reads the task
+  // list to decide what a directory belongs to, and forgetting a card first
+  // can turn its own worktree into something the scan no longer recognises
+  const pendingForget = useRef<Row[]>([]);
+
+  const tasks = useTasks(); // settled cards come from the mirror, not the wire
+  // recomputed when the store moves or the window changes — not on the clock:
+  // an age rendered to the nearest day does not need a tick
+  const settled = useMemo(() => findSettled(tasks, store.listReviews(), days), [tasks, days]);
+
+  const forget = (rows: Row[]) => {
+    for (const row of rows) {
+      if (!row.id) continue;
+      if (row.kind === 'review') store.deleteReview(row.id);
+      else store.delete(row.id);
+    }
+    if (rows.length) setForgotten(rows.length);
+  };
 
   useEffect(() => ctx.onGc?.(setItems), []);
   useEffect(
@@ -36,8 +81,12 @@ export function GcView(_props: { param?: string }) {
       ctx.onGcProgress?.((p) => {
         setProgress(p.finished ? undefined : p);
         if (!p.ok && p.path) setFailures((f) => (f.includes(p.path) ? f : [...f, p.path]));
-        // rescan when the daemon says it's done, not on a guessed timer
-        if (p.finished) ctx.dispatcher.gcScan(days);
+        if (p.finished) {
+          forget(pendingForget.current);
+          pendingForget.current = [];
+          // rescan when the daemon says it's done, not on a guessed timer
+          ctx.dispatcher.gcScan(days);
+        }
       }),
     [days],
   );
@@ -46,24 +95,53 @@ export function GcView(_props: { param?: string }) {
     ctx.dispatcher.gcScan(days);
   }, [days]);
 
-  // a fresh scan replaces the selection; everything it lists is fair game
-  useEffect(() => {
-    if (items) setPicked(new Set(items.map((i) => i.path)));
-  }, [items]);
+  const all = useMemo<Row[]>(() => {
+    const trees: Row[] = (items ?? []).map((i) => ({
+      key: i.path,
+      kind: 'tree',
+      path: i.path,
+      kilobytes: i.kilobytes,
+      label: i.label,
+      reason: i.reason,
+      ageDays: i.ageDays,
+      detail: i.path,
+    }));
+    const cards: Row[] = settled.map((c) => ({
+      key: `card:${c.id}`,
+      kind: c.kind,
+      id: c.id,
+      kilobytes: 0,
+      label: c.label,
+      reason: c.reason,
+      ageDays: c.ageDays,
+      detail: c.title,
+    }));
+    return [...trees, ...cards];
+  }, [items, settled]);
 
-  const total = useMemo(
-    () => (items ?? []).filter((i) => picked.has(i.path)).reduce((n, i) => n + i.kilobytes, 0),
-    [items, picked],
-  );
-  const all = items ?? [];
+  // a fresh scan replaces the selection; everything listed is fair game
+  useEffect(() => {
+    setPicked(new Set(all.map((r) => r.key)));
+  }, [items, settled.length]);
+
+  const chosen = useMemo(() => all.filter((r) => picked.has(r.key)), [all, picked]);
+  const total = useMemo(() => chosen.reduce((n, r) => n + r.kilobytes, 0), [chosen]);
+  const chosenTrees = chosen.filter((r) => r.kind === 'tree');
+  const chosenCards = chosen.filter((r) => r.kind !== 'tree');
   const selected = all[Math.min(cursor, Math.max(0, all.length - 1))];
 
   useInput((input, key) => {
     if (confirming) {
       if (input === 'y') {
         setFailures([]);
-        setProgress({ done: 0, total: picked.size, path: '', ok: true, finished: false });
-        ctx.dispatcher.gcRemove([...picked]);
+        setForgotten(0);
+        if (chosenTrees.length) {
+          pendingForget.current = chosenCards;
+          setProgress({ done: 0, total: chosenTrees.length, path: '', ok: true, finished: false });
+          ctx.dispatcher.gcRemove(chosenTrees.map((r) => r.path as string));
+        } else {
+          forget(chosenCards);
+        }
       }
       setConfirming(false);
       return;
@@ -74,11 +152,11 @@ export function GcView(_props: { param?: string }) {
     if (input === ' ' && selected) {
       setPicked((p) => {
         const next = new Set(p);
-        if (!next.delete(selected.path)) next.add(selected.path);
+        if (!next.delete(selected.key)) next.add(selected.key);
         return next;
       });
     }
-    if (input === 'a') setPicked(new Set(all.map((i) => i.path)));
+    if (input === 'a') setPicked(new Set(all.map((r) => r.key)));
     if (input === 'n') setPicked(new Set());
     if (input === '+') setDays((d) => d + 7);
     if (input === '-') setDays((d) => Math.max(0, d - 7));
@@ -87,21 +165,22 @@ export function GcView(_props: { param?: string }) {
   });
 
   const width = ctx.size.columns - 6;
-  const pathWidth = Math.max(20, width - 8 - 14 - 11 - 6);
+  const detailWidth = Math.max(20, width - 8 - 7 - 14 - 11 - 6 - 2);
 
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Box>
         <Text bold color={theme.header}>
-          worktree disk{' '}
+          reclaim{' '}
         </Text>
         <Text dimColor>
-          {items ? `${all.length} reclaimable · ` : 'scanning… '}
+          {items ? `${all.length} listed · ` : 'scanning… '}
           {picked.size ? `${picked.size} selected · ` : ''}
         </Text>
         <Text bold color={theme.ok}>
           {formatSize(total)}
         </Text>
+        {chosenCards.length > 0 && <Text dimColor> + {chosenCards.length} cards</Text>}
         <Text dimColor> · finished work kept for {days}d (+/-)</Text>
       </Box>
       <Text dimColor>
@@ -118,33 +197,40 @@ export function GcView(_props: { param?: string }) {
           ✖ {failures.length} could not be removed — see ~/.local/state/colinear/colinear.log
         </Text>
       )}
+      {forgotten > 0 && !progress && (
+        <Text color={theme.ok} wrap="truncate">
+          ✔ forgot {forgotten} finished card{forgotten === 1 ? '' : 's'} — the tracker and GitHub are untouched
+        </Text>
+      )}
 
       <Box flexDirection="column" marginTop={1} flexGrow={1} overflow="hidden">
         <Text bold color={theme.header} wrap="truncate">
           {'  '}
           {cell('SIZE', 8)}
+          {cell('KIND', 7)}
           {cell('WHAT', 14)}
           {cell('WHY', 11)}
           {cell('AGE', 6)}
-          {cell('WORKTREE', pathWidth)}
+          {cell('DETAIL', detailWidth)}
         </Text>
-        {all.slice(0, Math.max(3, ctx.size.rows - 12)).map((item, i) => {
+        {all.slice(0, Math.max(3, ctx.size.rows - 12)).map((row, i) => {
           // plain on the cursor row — see ui/Table: inverse over coloured cells
           // paints each colour as a background instead of one bar
           const onCursor = i === cursor;
           return (
-            <Text key={item.path} wrap="truncate" inverse={onCursor}>
-              <Text color={onCursor ? undefined : picked.has(item.path) ? theme.ok : theme.dim}>
-                {picked.has(item.path) ? '✔ ' : '· '}
+            <Text key={row.key} wrap="truncate" inverse={onCursor}>
+              <Text color={onCursor ? undefined : picked.has(row.key) ? theme.ok : theme.dim}>
+                {picked.has(row.key) ? '✔ ' : '· '}
               </Text>
-              <Text bold>{cell(formatSize(item.kilobytes), 8)}</Text>
-              <Text>{cell(item.label, 14)}</Text>
-              <Text color={onCursor ? undefined : REASON_COLOR[item.reason] ?? theme.dim}>
-                {cell(item.reason, 11)}
+              <Text bold>{cell(row.kind === 'tree' ? formatSize(row.kilobytes) : '—', 8)}</Text>
+              <Text dimColor={!onCursor}>{cell(row.kind, 7)}</Text>
+              <Text>{cell(row.label, 14)}</Text>
+              <Text color={onCursor ? undefined : REASON_COLOR[row.reason] ?? theme.dim}>
+                {cell(row.reason, 11)}
               </Text>
               <Text dimColor={!onCursor}>
-                {cell(`${Math.floor(item.ageDays)}d`, 6)}
-                {cell(item.path, pathWidth)}
+                {cell(`${Math.floor(row.ageDays)}d`, 6)}
+                {cell(row.detail, detailWidth)}
               </Text>
             </Text>
           );
@@ -155,9 +241,14 @@ export function GcView(_props: { param?: string }) {
       {confirming && (
         <Box borderStyle="double" borderColor={theme.err} paddingX={1}>
           <Text>
-            remove {picked.size} worktrees, freeing {formatSize(total)}?{' '}
+            {chosenTrees.length > 0 && `remove ${chosenTrees.length} worktrees (${formatSize(total)})`}
+            {chosenTrees.length > 0 && chosenCards.length > 0 && ', '}
+            {chosenCards.length > 0 && `forget ${chosenCards.length} finished cards`}?{' '}
             <Text color={theme.key}>y</Text>
-            <Text dimColor> / any other key cancels — the branches and commits stay in the repo</Text>
+            <Text dimColor>
+              {' '}
+              / any other key cancels — branches, commits, tracker issues and PRs all stay
+            </Text>
           </Text>
         </Box>
       )}

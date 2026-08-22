@@ -29,7 +29,7 @@
 | [`:reviews`](views/reviews.md) | `rev` `pr` | PRs awaiting my review + assisted pre-review |
 | [`:costs`](views/costs.md) | `cost` `$` | spend per ticket |
 | [`:logs`](views/logs.md) | `log` `debug` | live debug log (what colinear is actually doing) |
-| [`:gc`](views/gc.md) | `disk` | worktree disk — reclaim finished checkouts |
+| [`:gc`](views/gc.md) | `disk` | reclaim worktree disk and finished cards |
 | [`:chan`](views/chan.md) | `channel` `irc` | coordination channels (experimental — :chan CLO-67) |
 | [`:config`](views/config.md) | `cfg` | view & edit colinear config |
 | [`:help`](views/help.md) | `h` | views, keys, custom view schema |

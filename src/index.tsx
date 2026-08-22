@@ -22,7 +22,7 @@ import {
   stateDirFor,
 } from './core/context.js';
 import { runDaemon, PID_PATH } from './daemon.js';
-import { findReclaimable, formatSize, removeWorktree } from './core/gc.js';
+import { findReclaimable, findSettled, formatSize, removeWorktree } from './core/gc.js';
 import { loadState } from './core/persist.js';
 import { log } from './core/log.js';
 import { SOCKET_PATH } from './core/protocol.js';
@@ -278,7 +278,11 @@ async function gcCommand(args: string[]): Promise<void> {
     );
   }
   const items = await findReclaimable(cfg, tasks, store.listReviews(), olderThanDays);
-  if (!items.length) {
+  // Cards are listed but never forgotten from here: this command edits no
+  // state, and a running daemon owns state.json — writing it behind the
+  // daemon's back loses whichever copy saves second. `:gc` does it live.
+  const cards = findSettled(tasks, store.listReviews(), olderThanDays);
+  if (!items.length && !cards.length) {
     console.log('nothing to reclaim');
     return;
   }
@@ -291,6 +295,15 @@ async function gcCommand(args: string[]): Promise<void> {
     );
   }
   console.log(`\n${items.length} worktrees · ${formatSize(total)}`);
+  if (cards.length) {
+    console.log(
+      `\n${cards.length} finished card${cards.length === 1 ? '' : 's'} on the board ` +
+        `(${cards.slice(0, 6).map((c) => c.label).join(', ')}${cards.length > 6 ? ', …' : ''})` +
+        `\nforget them in \`:gc\` — this command doesn't edit board state`,
+    );
+  }
+
+  if (!items.length) return;
 
   if (!yes) {
     console.log(`\nnothing removed. re-run with --yes to reclaim it` +

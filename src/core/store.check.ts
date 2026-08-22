@@ -129,6 +129,38 @@ if (store.since(store.version - 10)?.length !== 10) throw new Error('since() bro
 if (mirror.get('C')) throw new Error('deleted task still in the mirror');
 if (mirror.getReview('o/r#7')) throw new Error('deleted review still in the mirror');
 if (!mirror.getReview('o/r#8')) throw new Error('later review missing from the mirror');
+
+// The other direction: a delete that STARTS on the mirror (:gc forgetting a
+// finished card) must forward to the owner and come back as a delta, never be
+// applied locally — a mirror that deletes its own row is diverged the moment
+// the owner disagrees.
+store.upsert(task('D'));
+store.update('D', { status: 'done' });
+// the overflow above pushed the mirror off the back of the log, so it does what
+// a real client does at that point: takes a fresh snapshot
+mirror.hydrate(store.snapshot());
+if (!mirror.get('D')) throw new Error('mirror never saw D');
+
+const forwarded: string[] = [];
+mirror.attach(
+  (change) => {
+    forwarded.push(change.kind);
+    store.applyChange(change); // what the daemon does with a `change` command
+  },
+  () => {},
+);
+mirror.delete('D');
+if (forwarded[0] !== 'delete') throw new Error(`mirror did not forward the delete (${forwarded})`);
+if (store.get('D')) throw new Error('owner kept a task the mirror asked to forget');
+if (!mirror.get('D')) throw new Error('mirror applied a delete locally instead of waiting for the delta');
+for (const delta of store.since(mirror.version) ?? []) mirror.apply(delta);
+if (mirror.get('D')) throw new Error('mirror kept a task the owner deleted');
+
+mirror.deleteReview('o/r#8');
+if (forwarded[1] !== 'review-delete') throw new Error(`mirror did not forward the review delete (${forwarded})`);
+if (store.getReview('o/r#8')) throw new Error('owner kept a review the mirror asked to forget');
+for (const delta of store.since(mirror.version) ?? []) mirror.apply(delta);
+if (mirror.getReview('o/r#8')) throw new Error('mirror kept a review the owner deleted');
 console.log(
   `ok — ${captured.length} deltas replayed, ${store.list().length} tasks + ${store.listReviews().length} reviews identical`,
 );

@@ -126,6 +126,8 @@ Two windows, deliberately different numbers — a checkout is exactly what you w
 - `retentionDays` (default `30`, `0` keeps everything) — how long finished work stays on the board. Past it, done and cancelled tasks and settled reviews are forgotten; never anything with a live agent, a pending question, an open PR, or an error, however old. It's also the window the header's `Tokens/30d ($…)` figure covers, so the number and the board always agree.
 - `worktreeRetentionDays` (default `7`) — how long a finished task's **worktree** survives before `coli gc` / `:gc` offer it for removal. Nothing is ever removed without you asking. `--older-than N` overrides it for one run.
 
+Neither window has to be waited out: [`:gc`](views/gc.md) lists finished cards beside reclaimable worktrees and forgets the ones you pick, using the same definition of "finished" the sweep does.
+
 ### New sub-issues
 
 Creating a sub-issue and spending an agent on it are separate statements, so by default they stay separate: `A` on a proposal or split plan creates the issues, `D` creates **and** dispatches, and `u` on the parent dispatches whatever is sitting there. A sub-issue you make in Linear yourself appears on the parent within a minute and waits.
