@@ -87,7 +87,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#gc-reclaim-worktree-disk" class="md-skip">
+        <a href="#gc-reclaim-disk-and-finished-cards" class="md-skip">
           Skip to content
         </a>
       
@@ -1246,9 +1246,10 @@
 
 
 
-<h1 id="gc-reclaim-worktree-disk"><code>:gc</code> — reclaim worktree disk<a class="headerlink" href="#gc-reclaim-worktree-disk" title="Permanent link">&para;</a></h1>
-<p>Alias: <code>disk</code>. A worktree is a full checkout, and one accumulates per task and per PR reviewed. This
-is how you get the space back.</p>
+<h1 id="gc-reclaim-disk-and-finished-cards"><code>:gc</code> — reclaim disk and finished cards<a class="headerlink" href="#gc-reclaim-disk-and-finished-cards" title="Permanent link">&para;</a></h1>
+<p>Alias: <code>disk</code>. Two resources, one question — <em>what here is over?</em> A worktree is a full checkout, and
+one accumulates per task and per PR reviewed; a finished card keeps its row on the board until
+retention forgets it a month later. This is how you get both back on demand.</p>
 <table>
 <thead>
 <tr>
@@ -1275,16 +1276,31 @@ is how you get the space back.</p>
 </tr>
 </tbody>
 </table>
-<p>Three things are offered: worktrees of <strong>finished tasks</strong> past the keep window, <strong>review checkouts</strong>
-whose review has gone stale (the PR merged, closed, or someone else took it), and <strong>orphans</strong> —
-directories no task claims, left behind by repo re-routes or removed tasks.</p>
-<p>Nothing live is ever listed, and branches and commits stay in the repo — only the checkout goes. If
-the task list fails to load, colinear refuses to call anything an orphan rather than guessing.</p>
-<p>The same thing works from a shell, with the daemon down:</p>
+<p>The <code>KIND</code> column says which resource a row is:</p>
+<ul>
+<li><strong><code>tree</code></strong> — a worktree on disk: <strong>finished tasks</strong> past the keep window, <strong>review checkouts</strong>
+  whose review has gone stale (the PR merged, closed, or someone else took it), and <strong>orphans</strong>,
+  directories no task claims, left behind by repo re-routes or removed tasks.</li>
+<li><strong><code>task</code></strong> / <strong><code>review</code></strong> — a <strong>finished card</strong>: a task that is done or cancelled, or a review
+  that has settled (merged or closed away, or one you submitted — commented, approved, changes
+  requested). These are the same states the <code>retentionDays</code> sweep eventually forgets on its own;
+  <code>:gc</code> is how you say "now" instead of waiting out the window.</li>
+</ul>
+<p>Forgetting a card removes it from colinear and nothing else: the tracker issue, the PR, the branch
+and the commits are all untouched, and a task whose issue is still open comes back the next time you
+dispatch it. Worktrees go first and cards second, so a card is never forgotten out from under the
+scan that is still deciding what its directory belongs to.</p>
+<p>Nothing live is ever listed — no agent, no pending question, no review still in play — and removing
+a worktree leaves its branch and commits in the repo. If the task list fails to load, colinear
+refuses to call anything an orphan rather than guessing.</p>
+<p>The same disk pass works from a shell, with the daemon down:</p>
 <div class="highlight"><pre><span></span><code>coli<span class="w"> </span>gc<span class="w">                      </span><span class="c1"># print what could go, remove nothing</span>
 coli<span class="w"> </span>gc<span class="w"> </span>--yes<span class="w">                </span><span class="c1"># do it</span>
 coli<span class="w"> </span>gc<span class="w"> </span>--older-than<span class="w"> </span><span class="m">30</span><span class="w">      </span><span class="c1"># a different keep window for this run</span>
 </code></pre></div>
+<p>It lists finished cards too, but never forgets them: the command edits no board state, and a running
+daemon owns <code>state.json</code> — writing it from underneath would lose whichever copy saved second. Use
+<code>:gc</code> for those.</p>
 
 
 
