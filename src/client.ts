@@ -57,6 +57,7 @@ export interface DispatcherApi {
   approvePlan(projectId: string, drop: string[], dispatch: boolean): void;
   removePlan(projectId: string): void;
   postPlanUpdate(projectId: string): void;
+  startPlanChat(projectId: string): void;
   gcScan(olderThanDays: number): void;
   /** submit answers to a pending question set (used by the $EDITOR path) */
   answer(id: string, answers: string[]): void;
@@ -88,12 +89,23 @@ export interface GcProgress {
   finished: boolean;
 }
 
+/** A design session the daemon has prepared: where it lives, and how to enter it. */
+export interface PlanChatReady {
+  projectId: string;
+  worktree: string;
+  sessionId: string;
+  /** true: start this id with `primer` · false: resume the existing conversation */
+  fresh: boolean;
+  primer?: string;
+}
+
 export interface Connection {
   cfg: Config;
   /** results of a gcScan; returns an unsubscribe */
   onGc(fn: (items: GcItem[]) => void): () => void;
   /** per-worktree progress while gcRemove runs; returns an unsubscribe */
   onGcProgress(fn: (p: GcProgress) => void): () => void;
+  onPlanChatReady(fn: (r: PlanChatReady) => void): () => void;
   /** daemon-side messages (edit results, etc.); returns an unsubscribe */
   onToast(fn: (text: string, kind: 'info' | 'ok' | 'err') => void): () => void;
   /** the daemon's log tail, in reply to requestLogTail */
@@ -220,6 +232,7 @@ export async function connectToDaemon(): Promise<Connection> {
   const notifyListeners = new Set<(n: { title: string; body: string; url?: string }) => void>();
   const gcListeners = new Set<(items: GcItem[]) => void>();
   const gcProgressListeners = new Set<(p: GcProgress) => void>();
+  const planChatListeners = new Set<(r: PlanChatReady) => void>();
 
   return await new Promise<Connection>((resolve, reject) => {
     let ready = false;
@@ -273,6 +286,10 @@ export async function connectToDaemon(): Promise<Connection> {
             gcListeners.add(fn);
             return () => gcListeners.delete(fn);
           },
+          onPlanChatReady: (fn) => {
+            planChatListeners.add(fn);
+            return () => planChatListeners.delete(fn);
+          },
           onGcProgress: (fn) => {
             gcProgressListeners.add(fn);
             return () => gcProgressListeners.delete(fn);
@@ -306,6 +323,7 @@ export async function connectToDaemon(): Promise<Connection> {
           approvePlan: (projectId, drop, dispatch) => command({ name: 'approvePlan', projectId, drop, dispatch }),
           removePlan: (projectId) => command({ name: 'removePlan', projectId }),
           postPlanUpdate: (projectId) => command({ name: 'postPlanUpdate', projectId }),
+          startPlanChat: (projectId) => command({ name: 'startPlanChat', projectId }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),
             answer: (id, answers) => command({ name: 'answer', id, answers }),
             message: (id, text, opts) => command({ name: 'message', id, text, wake: opts?.wake }),
@@ -316,6 +334,8 @@ export async function connectToDaemon(): Promise<Connection> {
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),
           },
         });
+      } else if (msg.t === 'planChatReady') {
+        for (const fn of planChatListeners) fn(msg);
       } else if (msg.t === 'gcProgress') {
         for (const fn of gcProgressListeners) fn(msg);
       } else if (msg.t === 'gc') {

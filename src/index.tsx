@@ -277,7 +277,7 @@ async function gcCommand(args: string[]): Promise<void> {
         'checkouts are considered. Is COLINEAR_STATE_DIR pointing somewhere unexpected?',
     );
   }
-  const items = await findReclaimable(cfg, tasks, store.listReviews(), olderThanDays);
+  const items = await findReclaimable(cfg, tasks, store.listReviews(), store.listPlans(), olderThanDays);
   if (!items.length) {
     console.log('nothing to reclaim');
     return;
@@ -325,6 +325,7 @@ async function runTui(): Promise<void> {
         onToast={conn.onToast}
         onGc={conn.onGc}
         onGcProgress={conn.onGcProgress}
+        onPlanChatReady={conn.onPlanChatReady}
         onLogTail={conn.onLogTail}
         onChannels={conn.onChannels}
         onChannelHistory={conn.onChannelHistory}
@@ -376,6 +377,22 @@ async function runTui(): Promise<void> {
         const answer = await rl.question(`resume ${action.identifier}'s agent in the background? [Y/n] `);
         rl.close();
         if (!/^n/i.test(answer.trim())) conn.dispatcher.resume(action.issueId);
+      }
+    } else if (action.kind === 'plan-chat') {
+      // A design conversation, entered rather than typed into: the daemon cut
+      // the worktree and minted the id, so a fresh session starts under that
+      // id (with the primer as its opening turn) and a later visit resumes it.
+      console.log(
+        `${action.fresh ? 'opening' : 'resuming'} the design session for ${action.projectName}${where(cfg)}` +
+          ` — quit claude (/exit) to return to colinear\n`,
+      );
+      const args = action.fresh
+        ? ['--session-id', action.sessionId, '--permission-mode', cfg.attachPermissionMode, ...(action.primer ? [action.primer] : [])]
+        : ['--resume', action.sessionId, '--permission-mode', cfg.attachPermissionMode];
+      if (cfg.remote) {
+        runThere(cfg.remote, `cd ${shq(action.worktree)} && claude ${args.map(shq).join(' ')}`);
+      } else {
+        spawnSync('claude', args, { cwd: action.worktree, stdio: 'inherit' });
       }
     } else if (action.kind === 'edit-answers') {
       openEditor(cfg, action.path);

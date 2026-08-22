@@ -204,6 +204,27 @@ export async function runDaemon(): Promise<void> {
       case 'postPlanUpdate':
         void plans.postUpdate(cmd.projectId);
         break;
+      case 'startPlanChat': {
+        // the reply goes to the client that asked, once the worktree exists:
+        // it is the one about to hand its terminal to claude
+        const projectId = cmd.projectId;
+        void withProject(projectId, async (project) => {
+          const before = store.getPlan(projectId)?.sessionId;
+          await plans.startChat(project);
+          const plan = store.getPlan(projectId);
+          if (!plan?.worktree || !plan.sessionId) return;
+          const fresh = !before;
+          reply({
+            t: 'planChatReady',
+            projectId,
+            worktree: plan.worktree,
+            sessionId: plan.sessionId,
+            fresh,
+            primer: fresh ? await plans.chatPrimer(projectId) : undefined,
+          });
+        });
+        break;
+      }
       case 'message':
         dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });
         break;
@@ -223,7 +244,7 @@ export async function runDaemon(): Promise<void> {
         dispatcher.channelPost(cmd.channel, cmd.text);
         break;
       case 'gcScan':
-        void findReclaimable(cfg, store.list(), store.listReviews(), cmd.olderThanDays).then((items) =>
+        void findReclaimable(cfg, store.list(), store.listReviews(), store.listPlans(), cmd.olderThanDays).then((items) =>
           broadcast({
             t: 'gc',
             items: items.map(({ path, kilobytes, label, reason, ageDays }) => ({
@@ -240,7 +261,7 @@ export async function runDaemon(): Promise<void> {
         void (async () => {
           // re-check what's reclaimable, but skip du: the sizes came with the
           // scan, and du over a 60G checkout is most of the wait
-          const safe = await findReclaimable(cfg, store.list(), store.listReviews(), 0, { sizes: false });
+          const safe = await findReclaimable(cfg, store.list(), store.listReviews(), store.listPlans(), 0, { sizes: false });
           const targets = safe.filter((i) => cmd.paths.includes(i.path));
           let failed = 0;
           for (const [index, item] of targets.entries()) {

@@ -99,6 +99,17 @@ export type PendingAction =
       /** transcript flush grace when a live agent was just suspended */
       waitMs: number;
     }
+  /** enter a project's design session in a real terminal (see :plan `c`) */
+  | {
+      kind: 'plan-chat';
+      projectId: string;
+      projectName: string;
+      worktree: string;
+      sessionId: string;
+      /** start this id, or resume it */
+      fresh: boolean;
+      primer?: string;
+    }
   | { kind: 'edit-config'; path: string }
   /** open a file in $EDITOR, then tell the daemon to re-read it */
   | { kind: 'edit-file'; path: string; reviewId: string }
