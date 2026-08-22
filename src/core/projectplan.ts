@@ -1,5 +1,8 @@
+import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
 import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { experimentOn } from './config.js';
@@ -12,6 +15,8 @@ import { notify } from './notify.js';
 import { providerFor } from './provider.js';
 import { store } from './store.js';
 import type { ChatTurn, Config, Issue, PlanIssue, PlanMilestone, Project, ProjectPlan } from './types.js';
+
+const exec = promisify(execFile);
 
 const PLANS_DIR = join(STATE_DIR, 'plans');
 const FENCE_NAMES = ['plan'];
@@ -273,7 +278,10 @@ export class PlanManager {
       const result = await runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         prompt,
-        cwd: this.cfg.repos[0]?.path ?? process.cwd(),
+        // a session that was started interactively lives in its worktree:
+        // Claude Code files transcripts per directory, so resuming from
+        // anywhere else would not find the conversation
+        cwd: plan.worktree ?? this.cfg.repos[0]?.path ?? process.cwd(),
         resume: plan.sessionId,
         model: this.cfg.model,
         abortController: controller,
@@ -337,6 +345,81 @@ export class PlanManager {
       issues,
       experimentOn(this.cfg, 'coordination'),
       text,
+    );
+  }
+
+  /**
+   * Prepare an interactive design session: a checkout to think in and a
+   * session id to think under. Both land on the plan record, and the client
+   * hands them to a real `claude` in that directory.
+   *
+   * The id is minted here rather than discovered afterwards (`--session-id`),
+   * so the conversation is colinear's from the first turn: `:plan`'s typed
+   * chat resumes the same one, and `c` re-enters it.
+   */
+  async startChat(project: Project) {
+    const id = project.id;
+    if (!store.getPlan(id)) await this.start(project);
+    const plan = store.getPlan(id);
+    if (!plan) return;
+    if (plan.worktree && plan.sessionId) return; // already prepared; the client attaches
+    if (isDemo(this.cfg)) {
+      this.toast('demo mode — there is no repository to open a session in', 'info');
+      return;
+    }
+    const repo = this.cfg.repos[0];
+    if (!repo) return this.toast('no repository configured to open a design session in', 'err');
+
+    store.updatePlan(id, { preparingChat: true, error: undefined });
+    try {
+      const worktree = plan.worktree ?? (await this.planWorktree(project, repo));
+      store.updatePlan(id, {
+        worktree,
+        sessionId: plan.sessionId ?? randomUUID(),
+        preparingChat: false,
+      });
+      store.addPlanActivity(id, `design session ready in ${worktree}`);
+    } catch (err) {
+      store.updatePlan(id, { preparingChat: false, error: `worktree failed: ${String(err).slice(0, 200)}` });
+      this.toast(`${project.name}: could not cut a worktree — ${String(err).slice(0, 80)}`, 'err');
+    }
+  }
+
+  /**
+   * A checkout for the design conversation, on its own branch off the default
+   * one. Nothing pushes it: it exists so the session can read the code, and
+   * `:gc` reclaims it once the plan is gone.
+   */
+  private async planWorktree(
+    project: Project,
+    repo: { path: string; defaultBranch: string; remote?: string; worktreeRoot: string },
+  ): Promise<string> {
+    const slug = project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'project';
+    const worktree = join(repo.worktreeRoot, `plan-${slug}`);
+    if (existsSync(worktree)) return worktree;
+    const remote = repo.remote ?? 'origin';
+    mkdirSync(repo.worktreeRoot, { recursive: true });
+    await exec('git', ['-C', repo.path, 'fetch', remote, repo.defaultBranch]).catch(() => {});
+    try {
+      await exec('git', ['-C', repo.path, 'worktree', 'add', worktree, '-b', `plan/${slug}`, `${remote}/${repo.defaultBranch}`]);
+    } catch {
+      // the branch already exists (a previous plan chat) — attach to it
+      await exec('git', ['-C', repo.path, 'worktree', 'add', worktree, `plan/${slug}`]);
+    }
+    return worktree;
+  }
+
+  /**
+   * The primer an interactive session opens with: the same brief a typed
+   * first turn would build, with an opener that asks the agent to orient
+   * itself and hand the conversation straight back.
+   */
+  async chatPrimer(id: string): Promise<string | undefined> {
+    return this.discussionOpener(
+      id,
+      'Open the discussion: from what you can see of this project, its issues and the repository, ' +
+        'frame the problem in a few lines and ask me the questions that matter most. Be brief — ' +
+        'we are talking this through together, so do not write a design yet.',
     );
   }
 
@@ -671,10 +754,15 @@ function seedDraft(project: Project, published: string): string {
   if (published.trim()) return `${published.trim()}\n`;
   return `# ${project.name} — design
 
-_No design yet — this is a conversation first. Say where your head is at in the chat below
-(ctrl+d sends), or tab to this pane and press d to have the agent open with what it can see.
-The agent keeps notes here as you converge; say "write it up" when the direction is agreed,
-and the full design (with its \`\`\`plan fence) replaces this page._
+_No design yet — this is a conversation first. Two ways to have it:_
+
+- _**c** — a worktree and a live \`claude\` session you talk to directly, with the code to hand.
+  This page is what it writes down._
+- _the chat box below (**ctrl+d** sends), or **d** to have the agent open with what it can see —
+  the same conversation, composed a turn at a time._
+
+_The agent keeps notes here as you converge; say "write it up" when the direction is agreed, and
+the full design (with its \`\`\`plan fence) replaces this page._
 `;
 }
 

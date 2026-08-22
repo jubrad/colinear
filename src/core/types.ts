@@ -304,7 +304,21 @@ export interface ProjectPlan {
   /** mirrored published content, what sub-issue prompts read */
   published?: string;
   publishedAt?: number;
+  /**
+   * The plan's conversation. One session, two ways in: chat turns typed in
+   * `:plan` resume it headlessly, and `c` hands the same id to an interactive
+   * `claude` in the worktree below.
+   */
   sessionId?: string;
+  /**
+   * Checkout for the plan's session, cut on demand by `c`. A design
+   * conversation wants somewhere to poke at the code from, and a session that
+   * has one must keep using it: Claude Code files transcripts per directory,
+   * so a resume from anywhere else cannot find the conversation.
+   */
+  worktree?: string;
+  /** the worktree is being cut and the session id minted */
+  preparingChat?: boolean;
   question?: PendingQuestion;
   chat?: ChatTurn[];
   chatting?: boolean;

@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
-import { setPendingAction } from '../core/attach.js';
+import { rememberView, setPendingAction } from '../core/attach.js';
 import { usePlans } from '../core/hooks.js';
 import { providerFor } from '../core/provider.js';
 import { STATE_DIR } from '../core/log.js';
@@ -60,6 +60,25 @@ export function ChatView(props: { param?: string }) {
   const plan = project ? plans.find((p) => p.id === project.id) : undefined;
   const proposed = useMemo(() => plan?.issues ?? [], [plan?.issues]);
 
+  useEffect(
+    () =>
+      ctx.onPlanChatReady?.((r) => {
+        if (!project || r.projectId !== project.id) return;
+        rememberView('plan', project.name); // come back here when claude exits
+        setPendingAction({
+          kind: 'plan-chat',
+          projectId: r.projectId,
+          projectName: project.name,
+          worktree: r.worktree,
+          sessionId: r.sessionId,
+          fresh: r.fresh,
+          primer: r.primer,
+        });
+        ctx.quit();
+      }),
+    [project?.id],
+  );
+
   useEffect(() => ctx.setCapture(focus === 'input' && !approving), [focus, approving]);
   useEffect(() => () => ctx.setCapture(false), []);
 
@@ -84,6 +103,9 @@ export function ChatView(props: { param?: string }) {
         });
         ctx.quit();
       }
+      // hand the terminal to a real session in a worktree: thinking out loud
+      // with the code to hand, rather than composing turns into a box
+      if (input === 'c' && project && !plan?.preparingChat) ctx.dispatcher.startPlanChat(project.id);
       if (input === 'U' && project) ctx.dispatcher.publishPlan(project.id);
       if (input === 'p' && project) ctx.dispatcher.postPlanUpdate(project.id);
       // the agent opens the discussion — an ordinary chat turn, so it reads
@@ -209,7 +231,7 @@ function store_has_running_plan(id: string, ctx: { cfg: unknown }): boolean {
 
 function Header(props: { plan?: ProjectPlan; project: Project; now: number }) {
   const { plan, project, now } = props;
-  const busy = plan?.status === 'drafting' || plan?.chatting;
+  const busy = plan?.status === 'drafting' || plan?.chatting || plan?.preparingChat;
   return (
     <Text wrap="truncate">
       <Text bold color={theme.accent}>
@@ -218,7 +240,9 @@ function Header(props: { plan?: ProjectPlan; project: Project; now: number }) {
       <Text> {project.name} </Text>
       {busy && <Text color={theme.warn}>{spinner(now)} </Text>}
       <Text color={plan?.status === 'published' ? theme.ok : theme.dim}>{plan?.status ?? 'not started'}</Text>
+      {plan?.preparingChat && <Text color={theme.warn}>cutting a worktree… </Text>}
       <Text dimColor>
+        {plan?.worktree ? ' · session ready (c)' : ''}
         {plan?.issues?.length ? ` · ${plan.issues.length} proposed` : ''}
         {plan?.milestones?.length ? ` · ${plan.milestones.length} milestone${plan.milestones.length > 1 ? 's' : ''}` : ''}
         {plan?.docId ? ` · tracker doc ${plan.docUpdatedAt ?? ''}` : ' · no tracker doc yet'}
@@ -274,6 +298,7 @@ function ApproveList(props: { proposed: PlanIssue[]; dropped: Set<string>; curso
 
 export const chatKeys: Array<[string, string]> = [
   ['tab', 'doc/chat'],
+  ['c', 'chat in a worktree (live claude)'],
   ['d', 'agent opens the discussion'],
   ['j/k', 'scroll doc'],
   ['e', 'edit draft in $EDITOR'],

@@ -14,7 +14,7 @@ import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 9;
+export const PROTOCOL_VERSION = 10;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -45,6 +45,8 @@ export type Command =
   | { name: 'removePlan'; projectId: string }
   /** deterministic post of the plan summary as a tracker project update */
   | { name: 'postPlanUpdate'; projectId: string }
+  /** cut a worktree and mint a session id, then hand them back to attach with */
+  | { name: 'startPlanChat'; projectId: string }
   | { name: 'pollReviews' }
   | { name: 'gcScan'; olderThanDays: number }
   /** say something to a task's agent without attaching */
@@ -70,6 +72,12 @@ export type ServerMsg =
   | { t: 'snapshot'; snapshot: Snapshot }
   | { t: 'toast'; text: string; kind: 'info' | 'ok' | 'err' }
   | { t: 'logTail'; text: string }
+  /**
+   * A design session is ready to be attached to. `fresh` decides the verb:
+   * a new conversation is started under the id we minted (with `primer` as
+   * its opening turn), an existing one is resumed.
+   */
+  | { t: 'planChatReady'; projectId: string; worktree: string; sessionId: string; fresh: boolean; primer?: string }
   | { t: 'channels'; list: Array<{ name: string; messages: number }> }
   | { t: 'channelHistory'; channel: string; messages: ChannelMessage[] }
   /** something the operator should see — raised by whoever has a screen */
