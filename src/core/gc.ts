@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import type { Config, Review, Task } from './types.js';
+import type { Config, ProjectPlan, Review, Task } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -107,6 +107,8 @@ export async function findReclaimable(
   cfg: Config,
   tasks: Task[],
   reviews: Review[],
+  /** a plan's design-session checkout is live until the operator drops the plan */
+  plans: ProjectPlan[],
   olderThanDays: number,
   /** `du` over a 60G checkout is slow; skip it when only the list matters */
   opts?: { sizes?: boolean },
@@ -117,6 +119,9 @@ export async function findReclaimable(
   // directory looks — only a stale review (merged, closed, taken) releases it
   const reviewWorktrees = new Map<string, Review>();
   for (const review of reviews) if (review.worktree) reviewWorktrees.set(review.worktree, review);
+  // a plan's worktree belongs to a conversation the operator can return to at
+  // any time; it is reclaimable when the plan is removed, not before
+  const planWorktrees = new Set(plans.map((p) => p.worktree).filter(Boolean) as string[]);
 
   // An empty task list can't be told apart from "state didn't load", and in
   // that state every live worktree looks orphaned. Only worktrees we can name
@@ -139,6 +144,8 @@ export async function findReclaimable(
       // the clock, and a negative age reads as "younger than any threshold"
       const ageDays = Math.max(0, (Date.now() - stat.mtimeMs) / DAY);
       const task = byWorktree.get(path);
+
+      if (planWorktrees.has(path)) continue; // a plan's design session lives here
 
       const review = reviewWorktrees.get(path);
       if (review && review.status !== 'stale') continue; // a review still in play

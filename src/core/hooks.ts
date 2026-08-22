@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { store } from './store.js';
-import type { Review, Task } from './types.js';
+import type { ProjectPlan, Review, Task } from './types.js';
 
 function useStoreVersion(): number {
   return useSyncExternalStore(
@@ -13,6 +13,11 @@ function useStoreVersion(): number {
 export function useReviews(): Review[] {
   const version = useStoreVersion();
   return useMemo(() => store.listReviews(), [version]);
+}
+
+export function usePlans(): ProjectPlan[] {
+  const version = useStoreVersion();
+  return useMemo(() => store.listPlans(), [version]);
 }
 
 export function useTasks(): Task[] {

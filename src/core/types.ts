@@ -25,6 +25,8 @@ export interface Issue {
   projectId?: string;
   /** carried so a project channel can be named after the project, not its uuid */
   projectName?: string;
+  /** the project milestone this issue belongs to, where the provider has them */
+  milestoneName?: string;
   /** set when this issue is a sub-issue */
   parent?: { id: string; identifier: string };
 }
@@ -250,6 +252,81 @@ export interface Task {
   inbox?: string[];
   /** superseded session pointers — recovery when a new session clobbers a good one */
   sessionHistory?: Array<{ sessionId: string; worktree?: string; at: number }>;
+}
+
+/** A plan session's lifecycle. The tracker doc is the source of truth;
+    "published" means the draft made it up there. */
+export type PlanStatus = 'drafting' | 'ready' | 'published' | 'error';
+
+export interface PlanMilestone {
+  name: string;
+  targetDate?: string;
+  description?: string;
+}
+
+/** One proposed issue in the ```plan fence. blockedBy names sibling titles. */
+export interface PlanIssue {
+  title: string;
+  description: string;
+  repo?: string;
+  milestone?: string;
+  priority?: number;
+  blockedBy?: string[];
+}
+
+/**
+ * A project's plan: the local draft of a design whose source of truth is the
+ * tracker (project document, description fallback). Keyed by project id —
+ * one plan per project. CDC'd like tasks and reviews.
+ */
+export interface ProjectPlan {
+  /** project id */
+  id: string;
+  projectName: string;
+  status: PlanStatus;
+  activity: string[];
+  /** the draft: prose + ```plan fence. Never the source of truth. */
+  draft?: string;
+  /** parsed from the draft's fence */
+  summary?: string;
+  milestones?: PlanMilestone[];
+  issues?: PlanIssue[];
+  /** the tracker-side document being mirrored */
+  docId?: string;
+  /** tracker's updatedAt when the draft was cut — publish refuses when it moved */
+  docUpdatedAt?: string;
+  /**
+   * the last tracker revision announced (activity/toast/channel notice) —
+   * deliberately separate from docUpdatedAt so noticing an outside edit
+   * never disarms the publish-conflict guard
+   */
+  docSeenAt?: string;
+  /** mirrored published content, what sub-issue prompts read */
+  published?: string;
+  publishedAt?: number;
+  /**
+   * The plan's conversation. One session, two ways in: chat turns typed in
+   * `:plan` resume it headlessly, and `c` hands the same id to an interactive
+   * `claude` in the worktree below.
+   */
+  sessionId?: string;
+  /**
+   * Checkout for the plan's session, cut on demand by `c`. A design
+   * conversation wants somewhere to poke at the code from, and a session that
+   * has one must keep using it: Claude Code files transcripts per directory,
+   * so a resume from anywhere else cannot find the conversation.
+   */
+  worktree?: string;
+  /** the worktree is being cut and the session id minted */
+  preparingChat?: boolean;
+  question?: PendingQuestion;
+  chat?: ChatTurn[];
+  chatting?: boolean;
+  error?: string;
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  costUsd: number;
+  startedAt?: number;
+  endedAt?: number;
 }
 
 export type ReviewStatus =

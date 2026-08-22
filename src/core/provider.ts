@@ -26,6 +26,12 @@ export interface ProviderCapabilities {
   projects: boolean;
   /** projects can be created from here → `n` in :projects */
   createProjects: boolean;
+  /** documents attached to a project → the plan's published home (:plan) */
+  documents: boolean;
+  /** project milestones → plan approval creates them and files issues under them */
+  milestones: boolean;
+  /** status posts on a project → :plan's post-approval update */
+  projectUpdates: boolean;
   /** a scope above the issue to browse by → the `t` picker, `--team` */
   scopes: boolean;
   /** issue states we can move through → stateSync */
@@ -44,6 +50,16 @@ export interface CreateIssueInput {
   priority?: number;
   /** makes the new issue a child of this one */
   parentId?: string;
+  /** files the new issue under a project milestone (capabilities.milestones) */
+  milestoneId?: string;
+}
+
+export interface ProjectMilestone {
+  id: string;
+  name: string;
+  /** ISO date, no time — trackers treat milestone dates as calendar days */
+  targetDate?: string;
+  description?: string;
 }
 
 export interface CreateProjectInput {
@@ -58,6 +74,15 @@ export interface CreateProjectInput {
   state?: string;
   priority?: number;
   targetDate?: string;
+}
+
+export interface ProjectDocument {
+  id: string;
+  title: string;
+  /** markdown */
+  content: string;
+  updatedAt: string;
+  url?: string;
 }
 
 export interface IssueFilter {
@@ -100,6 +125,27 @@ export interface IssueProvider {
   create(input: CreateIssueInput): Promise<{ id: string; identifier: string }>;
   /** throws where capabilities.createProjects is false */
   createProject(input: CreateProjectInput): Promise<{ id: string; name: string; url?: string }>;
+
+  /** a project's documents, newest first; [] where capabilities.documents is false */
+  projectDocuments(projectId: string): Promise<ProjectDocument[]>;
+  /**
+   * Create or update a project document. id absent = create. Returns the
+   * saved identity — updatedAt is what publish-conflict detection compares.
+   */
+  saveProjectDocument(
+    projectId: string,
+    doc: { id?: string; title: string; content: string },
+  ): Promise<{ id: string; updatedAt: string; url?: string }>;
+
+  /** a project's milestones; [] where capabilities.milestones is false */
+  projectMilestones(projectId: string): Promise<ProjectMilestone[]>;
+  /** throws where capabilities.milestones is false */
+  createMilestone(
+    projectId: string,
+    milestone: { name: string; targetDate?: string; description?: string },
+  ): Promise<{ id: string; name: string }>;
+  /** post a status update on a project; throws where capabilities.projectUpdates is false */
+  postProjectUpdate(projectId: string, body: string): Promise<{ id: string; url?: string }>;
   blockIssue(blockerId: string, blockedId: string): Promise<void>;
   assign(issueId: string, userId: string): Promise<void>;
   comment(issueId: string, body: string): Promise<void>;

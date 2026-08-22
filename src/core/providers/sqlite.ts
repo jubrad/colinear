@@ -61,6 +61,17 @@ CREATE TABLE IF NOT EXISTS issues (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS documents (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS milestones (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL,
+  target_date TEXT, description TEXT
+);
+CREATE TABLE IF NOT EXISTS project_updates (
+  id TEXT PRIMARY KEY, project_id TEXT NOT NULL, body TEXT NOT NULL, created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS labels (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS issue_labels (issue_id TEXT NOT NULL, label_id TEXT NOT NULL);
 /* "blocker must land before blocked" — the relation colinear parks tasks on */
@@ -108,6 +119,11 @@ function open(path: string): Db {
       /* already there */
     }
   }
+  try {
+    db.exec('ALTER TABLE issues ADD COLUMN milestone_id TEXT');
+  } catch {
+    /* already there */
+  }
   seed(db);
   return db;
 }
@@ -132,13 +148,15 @@ function seed(db: Db): void {
 const ISSUE_SELECT = `
   SELECT i.*, s.key AS scope_key, st.name AS state_name, st.type AS state_type,
          p.name AS project_name, u.display_name AS assignee_name,
-         par.identifier AS parent_identifier
+         par.identifier AS parent_identifier,
+         m.name AS milestone_name
   FROM issues i
   JOIN scopes s ON s.id = i.scope_id
   JOIN states st ON st.id = i.state_id
   LEFT JOIN projects p ON p.id = i.project_id
   LEFT JOIN users u ON u.id = i.assignee_id
   LEFT JOIN issues par ON par.id = i.parent_id
+  LEFT JOIN milestones m ON m.id = i.milestone_id
 `;
 
 function toIssue(db: Db, row: Row): Issue {
@@ -163,6 +181,7 @@ function toIssue(db: Db, row: Row): Issue {
     teamId: String(row.scope_id),
     projectId: row.project_id ? String(row.project_id) : undefined,
     projectName: row.project_name ? String(row.project_name) : undefined,
+    milestoneName: row.milestone_name ? String(row.milestone_name) : undefined,
     parent: row.parent_id
       ? { id: String(row.parent_id), identifier: String(row.parent_identifier) }
       : undefined,
@@ -187,7 +206,10 @@ export function sqliteProvider(cfg: Config): IssueProvider {
       subIssues: true,
       priority: true,
       projects: true,
-    createProjects: true,
+      createProjects: true,
+      documents: true,
+      milestones: true,
+      projectUpdates: true,
       scopes: true,
       workflowStates: true,
       // no upstream to hand us a branch: safeBranch derives one
@@ -278,6 +300,30 @@ export function sqliteProvider(cfg: Config): IssueProvider {
       })) as Project[];
     },
     projectIssues: async (projectId) => issues('WHERE i.project_id = ? ORDER BY i.number', [projectId]),
+    projectDocuments: async (projectId) =>
+      conn()
+        .prepare('SELECT * FROM documents WHERE project_id = ? ORDER BY updated_at DESC')
+        .all(projectId)
+        .map((r) => ({
+          id: String(r.id),
+          title: String(r.title),
+          content: String(r.content ?? ''),
+          updatedAt: String(r.updated_at),
+        })),
+    saveProjectDocument: async (projectId, doc) => {
+      const now = new Date().toISOString();
+      if (doc.id) {
+        conn()
+          .prepare('UPDATE documents SET title = ?, content = ?, updated_at = ? WHERE id = ?')
+          .run(doc.title, doc.content, now, doc.id);
+        return { id: doc.id, updatedAt: now };
+      }
+      const docId = id();
+      conn()
+        .prepare('INSERT INTO documents (id, project_id, title, content, updated_at) VALUES (?, ?, ?, ?, ?)')
+        .run(docId, projectId, doc.title, doc.content, now);
+      return { id: docId, updatedAt: now };
+    },
     createProject: async (input) => {
       const projectId = id();
       conn()
@@ -319,13 +365,38 @@ export function sqliteProvider(cfg: Config): IssueProvider {
       const now = Date.now();
       db.prepare(
         `INSERT INTO issues (id, identifier, number, title, description, priority, state_id, scope_id,
-                             project_id, parent_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                             project_id, parent_id, milestone_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         issueId, identifier, next, input.title, input.description ?? null, input.priority ?? 0,
-        String(state?.id ?? ''), String(scope.id), input.projectId ?? null, input.parentId ?? null, now, now,
+        String(state?.id ?? ''), String(scope.id), input.projectId ?? null, input.parentId ?? null,
+        input.milestoneId ?? null, now, now,
       );
       return { id: issueId, identifier };
+    },
+    projectMilestones: async (projectId) =>
+      conn()
+        .prepare('SELECT * FROM milestones WHERE project_id = ? ORDER BY target_date IS NULL, target_date, name')
+        .all(projectId)
+        .map((r) => ({
+          id: String(r.id),
+          name: String(r.name),
+          targetDate: r.target_date ? String(r.target_date) : undefined,
+          description: r.description ? String(r.description) : undefined,
+        })),
+    createMilestone: async (projectId, milestone) => {
+      const milestoneId = id();
+      conn()
+        .prepare('INSERT INTO milestones (id, project_id, name, target_date, description) VALUES (?, ?, ?, ?, ?)')
+        .run(milestoneId, projectId, milestone.name, milestone.targetDate ?? null, milestone.description ?? null);
+      return { id: milestoneId, name: milestone.name };
+    },
+    postProjectUpdate: async (projectId, body) => {
+      const updateId = id();
+      conn()
+        .prepare('INSERT INTO project_updates (id, project_id, body, created_at) VALUES (?, ?, ?, ?)')
+        .run(updateId, projectId, body, Date.now());
+      return { id: updateId };
     },
     blockIssue: async (blockerId, blockedId) => {
       conn().prepare('INSERT INTO blocks (blocker_id, blocked_id) VALUES (?, ?)').run(blockerId, blockedId);

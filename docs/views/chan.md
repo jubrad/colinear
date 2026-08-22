@@ -22,5 +22,10 @@ at spawn, so an agent can't post as a sibling or reach a family it isn't in.
 With the experiment off the view still shows history, but the input is replaced by a note: posting
 into a channel nothing is reading is worse than not being able to.
 
+Three senders appear in a channel: agents (as their task username), the operator, and **`colinear`**
+— the system itself, posting deterministic notices such as "the project design changed" from
+[`:plan`](plan.md). A `colinear` message never comes from a session; it is generated text a human
+can audit in the code.
+
 See [COORDINATION.md](../../COORDINATION.md) for the design, the storage layout, and what's
 deliberately deferred.

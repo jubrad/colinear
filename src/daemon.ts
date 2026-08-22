@@ -10,6 +10,9 @@ import { onNotifyForward } from './core/notify.js';
 import { loadState, startPersistence } from './core/persist.js';
 import { startPrPolling } from './core/prs.js';
 import { Reviewer } from './core/reviewer.js';
+import { PlanManager } from './core/projectplan.js';
+import { providerFor } from './core/provider.js';
+import type { Project } from './core/types.js';
 import { pollReviewRequests, startReviewPolling } from './core/reviews.js';
 import {
   createDecoder,
@@ -56,8 +59,14 @@ export async function runDaemon(): Promise<void> {
   const cfg = loadConfig();
   const dispatcher = new Dispatcher(cfg);
   const reviewer = new Reviewer(cfg);
+  const plans = new PlanManager(cfg, {
+    enqueue: (issues) => dispatcher.enqueue(issues),
+    message: (id, text) => dispatcher.message(id, text),
+    cancel: (id) => dispatcher.cancel(id),
+  });
   loadState(cfg);
   reviewer.resumeWatching(); // reviews restored from disk keep their live doc
+  plans.resumeWatching();
   const stopPersistence = startPersistence();
 
   // demo mode fabricates a board and never reaches the network: polling would
@@ -73,6 +82,9 @@ export async function runDaemon(): Promise<void> {
     : startReviewPolling(cfg, async () => {
         // a poll is what discovers a PR is merged or taken, so cleanup follows it
         await reviewer.cleanupStale();
+        // same cadence checks planned projects for outside design edits; the
+        // one-sweep debounce below rides on this interval
+        await plans.sweepDocChanges().catch((err) => log(`plan sweep: ${err}`));
       });
 
   const clients = new Set<Socket>();
@@ -83,6 +95,7 @@ export async function runDaemon(): Promise<void> {
 
   dispatcher.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
   reviewer.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
+  plans.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
 
   // every store mutation fans out to attached clients as a delta
   let sent = store.version;
@@ -170,6 +183,48 @@ export async function runDaemon(): Promise<void> {
       case 'pollReviews':
         if (!isDemo(cfg)) void pollReviewRequests(cfg);
         break;
+      case 'startPlan':
+        void withProject(cmd.projectId, (project) => plans.start(project));
+        break;
+      case 'planChat':
+        void plans.chat(cmd.projectId, cmd.text);
+        break;
+      case 'reloadPlanDoc':
+        plans.reloadDraft(cmd.projectId);
+        break;
+      case 'publishPlan':
+        void plans.publish(cmd.projectId);
+        break;
+      case 'approvePlan':
+        void plans.approve(cmd.projectId, { drop: cmd.drop, dispatch: cmd.dispatch });
+        break;
+      case 'removePlan':
+        plans.remove(cmd.projectId);
+        break;
+      case 'postPlanUpdate':
+        void plans.postUpdate(cmd.projectId);
+        break;
+      case 'startPlanChat': {
+        // the reply goes to the client that asked, once the worktree exists:
+        // it is the one about to hand its terminal to claude
+        const projectId = cmd.projectId;
+        void withProject(projectId, async (project) => {
+          const before = store.getPlan(projectId)?.sessionId;
+          await plans.startChat(project);
+          const plan = store.getPlan(projectId);
+          if (!plan?.worktree || !plan.sessionId) return;
+          const fresh = !before;
+          reply({
+            t: 'planChatReady',
+            projectId,
+            worktree: plan.worktree,
+            sessionId: plan.sessionId,
+            fresh,
+            primer: fresh ? await plans.chatPrimer(projectId) : undefined,
+          });
+        });
+        break;
+      }
       case 'message':
         dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });
         break;
@@ -189,7 +244,7 @@ export async function runDaemon(): Promise<void> {
         dispatcher.channelPost(cmd.channel, cmd.text);
         break;
       case 'gcScan':
-        void findReclaimable(cfg, store.list(), store.listReviews(), cmd.olderThanDays).then((items) =>
+        void findReclaimable(cfg, store.list(), store.listReviews(), store.listPlans(), cmd.olderThanDays).then((items) =>
           broadcast({
             t: 'gc',
             items: items.map(({ path, kilobytes, label, reason, ageDays }) => ({
@@ -206,7 +261,7 @@ export async function runDaemon(): Promise<void> {
         void (async () => {
           // re-check what's reclaimable, but skip du: the sizes came with the
           // scan, and du over a 60G checkout is most of the wait
-          const safe = await findReclaimable(cfg, store.list(), store.listReviews(), 0, { sizes: false });
+          const safe = await findReclaimable(cfg, store.list(), store.listReviews(), store.listPlans(), 0, { sizes: false });
           const targets = safe.filter((i) => cmd.paths.includes(i.path));
           let failed = 0;
           for (const [index, item] of targets.entries()) {
@@ -287,6 +342,7 @@ export async function runDaemon(): Promise<void> {
     log('daemon shutting down');
     dispatcher.shutdown();
     reviewer.shutdown();
+    plans.shutdown();
     stopPrPolling();
     stopReviewPolling();
     setTimeout(() => {
@@ -299,4 +355,15 @@ export async function runDaemon(): Promise<void> {
   };
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
+}
+
+/** Resolve a project id to the full project the PlanManager needs. */
+async function withProject(projectId: string, run: (project: Project) => Promise<void>): Promise<void> {
+  const cfg = loadConfig({ requireKey: false });
+  const project = (await providerFor(cfg).projects().catch(() => [] as Project[])).find((p) => p.id === projectId);
+  if (!project) {
+    log(`startPlan: no project ${projectId}`);
+    return;
+  }
+  await run(project);
 }
