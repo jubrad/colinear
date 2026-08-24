@@ -209,18 +209,17 @@ export async function runDaemon(): Promise<void> {
         // it is the one about to hand its terminal to claude
         const projectId = cmd.projectId;
         void withProject(projectId, async (project) => {
-          const before = store.getPlan(projectId)?.sessionId;
-          await plans.startChat(project);
-          const plan = store.getPlan(projectId);
-          if (!plan?.worktree || !plan.sessionId) return;
-          const fresh = !before;
+          // startChat decides fresh-vs-resume by looking for the transcript,
+          // not by whether an id was once stored
+          const ready = await plans.startChat(project);
+          if (!ready) return;
           reply({
             t: 'planChatReady',
             projectId,
-            worktree: plan.worktree,
-            sessionId: plan.sessionId,
-            fresh,
-            primer: fresh ? await plans.chatPrimer(projectId) : undefined,
+            worktree: ready.worktree,
+            sessionId: ready.sessionId,
+            fresh: ready.fresh,
+            primer: ready.fresh ? await plans.chatPrimer(projectId) : undefined,
           });
         });
         break;
