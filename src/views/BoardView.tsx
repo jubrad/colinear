@@ -5,7 +5,7 @@ import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import { questionSummary, type Task, type TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
-import { formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
+import { blink, formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
 import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
@@ -331,7 +331,7 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
             // blinks where the card already is: an open PR being repaired,
             // not a task back in development
             <Text color={task.maintenance === 'rebase' ? theme.ok : theme.warn}>
-              {Math.floor(now / 500) % 2 ? '●' : '○'}{' '}
+              {blink(now)}{' '}
             </Text>
           )}
           {task.issue.identifier} <Text dimColor>{task.issue.title}</Text>

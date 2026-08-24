@@ -60,6 +60,22 @@ export function cell(text: string, w: number): string {
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
+/**
+ * Animation here is a function of the clock, and the clock ticks once a
+ * second (app.tsx `useClock`) — deliberately slow, because a terminal without
+ * synchronized output redraws the whole screen per frame.
+ *
+ * So a period shorter than the tick does not animate faster, it **aliases to
+ * a constant**: `Math.floor(now / 500) % 2` advances by two per tick and
+ * never changes parity, which is how the maintenance dot spent its life not
+ * blinking. Both helpers below divide by the tick, so each one advances by
+ * exactly one step per render.
+ */
 export function spinner(now: number): string {
   return SPINNER[Math.floor(now / 1000) % SPINNER.length];
+}
+
+/** Alternates every tick — for a card that is being worked on where it sits. */
+export function blink(now: number): string {
+  return Math.floor(now / 1000) % 2 ? '●' : '○';
 }
