@@ -6,6 +6,7 @@ import { ConfigView, configKeys } from './ConfigView.js';
 import { CostsView, costsKeys } from './CostsView.js';
 import { ChannelView, channelKeys } from './ChannelView.js';
 import { ChatView, chatKeys } from './ChatView.js';
+import { FamilyView, familyKeys } from './FamilyView.js';
 import { GcView, gcKeys } from './GcView.js';
 import { HelpView, helpKeys } from './HelpView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
@@ -96,6 +97,13 @@ const builtinViews: ViewDef[] = [
     describe: 'live debug log (what colinear is actually doing)',
     Component: LogsView,
     keys: logsKeys,
+  },
+  {
+    name: 'family',
+    aliases: ['fam', 'subs'],
+    describe: 'split work: every tracking parent and its sub-issue tasks',
+    Component: FamilyView,
+    keys: familyKeys,
   },
   {
     name: 'gc',
