@@ -905,6 +905,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#round-two" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Round two
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#posting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1319,6 +1330,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#round-two" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Round two
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#posting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1371,6 +1393,24 @@ outside colinear.</p>
 with that same agent on the other (<code>tab</code> switches, <code>j/k</code> scrolls, <code>e</code> edits it in <code>$EDITOR</code>). Your
 turn resumes the reviewing session, so the PR is still in context; when the agent needs a decision it
 asks in the same pane.</p>
+<h2 id="round-two">Round two<a class="headerlink" href="#round-two" title="Permanent link">&para;</a></h2>
+<p>Press <code>r</code> again on a review you have already posted and it does something different: instead of
+reviewing the PR from scratch, it <strong>revises the review you sent</strong>. The worktree is reset to the new
+head, the reviewing session is <em>resumed</em> — so it remembers what it said and why — and it is handed
+two things it could not otherwise know:</p>
+<ul>
+<li><strong>what landed since</strong>, as the commits after the exact SHA the author received feedback on
+  (recorded when you posted), so the diff it reads is the response to your comments rather than the
+  whole PR again;</li>
+<li><strong>the conversation</strong>, inline comments and general discussion, fetched with <code>gh api</code> rather than
+  by asking an agent to go and look — replies to your own comments are marked as such.</li>
+</ul>
+<p>It then goes through the existing findings and decides which are <strong>fixed</strong>, which were <strong>answered</strong>
+(the author explained, and was right), which <strong>still stand</strong>, and what is <strong>new</strong> — dropping the
+first two rather than keeping them alive to look thorough, and engaging with the pushback on the
+third rather than restating the original comment. The document is rewritten whole each round, so
+what you see is what round two would post.</p>
+<p><code>p</code> then posts the revised review as a second one on the PR.</p>
 <h2 id="posting">Posting<a class="headerlink" href="#posting" title="Permanent link">&para;</a></h2>
 <p><code>p</code> posts, <code>A</code> approves, <code>X</code> requests changes — the same review with a different event. Posting is
 <strong>deterministic, not agentic</strong>: the findings are already structured, so colinear clears any leftover
@@ -1395,8 +1435,8 @@ says why.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>r</code> start a pre-review · <code>x</code> cancel one · <code>u</code> refresh the list</td>
-<td></td>
+<td><code>r</code></td>
+<td>pre-review · <strong>re-review</strong> once posted · <code>x</code> cancel one · <code>u</code> refresh the list</td>
 </tr>
 <tr>
 <td><code>enter</code></td>
