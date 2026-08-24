@@ -403,8 +403,18 @@ export interface Review {
   chatting?: boolean;
   /** operator's own note, appended to whatever gets posted */
   note?: string;
+  /** head commit the current document was written against — the anchor a
+      second round diffs from, so it reviews what changed rather than the PR again */
+  reviewedSha?: string;
   /** what was sent to GitHub, so a later discussion knows it's already out */
-  posted?: { at: number; event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'; url: string; comments: number };
+  posted?: {
+    at: number;
+    event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
+    url: string;
+    comments: number;
+    /** what the author actually received feedback on */
+    sha?: string;
+  };
   startedAt?: number;
   endedAt?: number;
   tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };

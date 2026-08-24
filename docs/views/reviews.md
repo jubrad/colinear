@@ -19,6 +19,27 @@ with that same agent on the other (`tab` switches, `j/k` scrolls, `e` edits it i
 turn resumes the reviewing session, so the PR is still in context; when the agent needs a decision it
 asks in the same pane.
 
+## Round two
+
+Press `r` again on a review you have already posted and it does something different: instead of
+reviewing the PR from scratch, it **revises the review you sent**. The worktree is reset to the new
+head, the reviewing session is *resumed* — so it remembers what it said and why — and it is handed
+two things it could not otherwise know:
+
+- **what landed since**, as the commits after the exact SHA the author received feedback on
+  (recorded when you posted), so the diff it reads is the response to your comments rather than the
+  whole PR again;
+- **the conversation**, inline comments and general discussion, fetched with `gh api` rather than
+  by asking an agent to go and look — replies to your own comments are marked as such.
+
+It then goes through the existing findings and decides which are **fixed**, which were **answered**
+(the author explained, and was right), which **still stand**, and what is **new** — dropping the
+first two rather than keeping them alive to look thorough, and engaging with the pushback on the
+third rather than restating the original comment. The document is rewritten whole each round, so
+what you see is what round two would post.
+
+`p` then posts the revised review as a second one on the PR.
+
 ## Posting
 
 `p` posts, `A` approves, `X` requests changes — the same review with a different event. Posting is
@@ -40,7 +61,7 @@ The document's prose is written for you, to decide what to send. It never leaves
 
 | key | what |
 |---|---|
-| `r` start a pre-review · `x` cancel one · `u` refresh the list |
+| `r` | pre-review · **re-review** once posted · `x` cancel one · `u` refresh the list |
 | `enter` | the review document + discussion |
 | `p` post · `A` approve · `X` request changes · `n` attach a note that rides along |
 | `s` | hand the terminal to that review's claude session |
