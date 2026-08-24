@@ -3,6 +3,10 @@
 `:projects` (aliases `pj`, `proj`) lists the tracker's projects: state, priority, progress, lead,
 teams, target date. `/` filters, `t` switches team, `s` sorts, `enter` opens one.
 
+`c` on a project hands your terminal straight to a design session for it — a worktree and a live
+`claude`, the same thing [`:plan`](plan.md)'s `c` does, without opening the plan first. Wanting to
+talk something through shouldn't require visiting the document that comes out of it.
+
 `:project NAME` (alias `p`) is a kanban of that project's issues, whether or not they're dispatched.
 Where the provider has milestones, each card's second line names the milestone the issue is filed
 under, after the assignee.

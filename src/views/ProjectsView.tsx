@@ -3,6 +3,7 @@ import { providerFor } from '../core/provider.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { openUrl } from '../core/open.js';
 import type { Project, Scope } from '../core/types.js';
+import { rememberView, setPendingAction } from '../core/attach.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
 import { CreationProgress, creationHeight, pushActivity, type CreationState } from '../ui/CreationProgress.js';
 import { useColinear } from '../ui/context.js';
@@ -50,6 +51,28 @@ export function ProjectsView(_props: { param?: string }) {
     void providerFor(ctx.cfg).scopes().then(setScopes).catch(() => setScopes([]));
   }, [ctx.cfg]);
   const [progress, setProgress] = useState<CreationState | null>(null);
+  /** a project whose design session we asked for and are waiting to enter */
+  const [opening, setOpening] = useState<string | null>(null);
+
+  useEffect(
+    () =>
+      ctx.onPlanChatReady?.((r) => {
+        if (!opening) return; // a plan view asked for this one, not us
+        rememberView('projects');
+        setPendingAction({
+          kind: 'plan-chat',
+          projectId: r.projectId,
+          projectName: opening,
+          worktree: r.worktree,
+          sessionId: r.sessionId,
+          fresh: r.fresh,
+          primer: r.primer,
+        });
+        setOpening(null);
+        ctx.quit();
+      }),
+    [opening],
+  );
   useEffect(() => ctx.setCapture(bar !== null || creating || progress !== null), [bar, creating, progress]);
   useEffect(() => () => ctx.setCapture(false), []);
 
@@ -158,6 +181,14 @@ export function ProjectsView(_props: { param?: string }) {
       if (input === 'n' && providerFor(ctx.cfg).capabilities.createProjects) setCreating(true);
       if (input === 'o' && rows[cursor]) openUrl(rows[cursor].url);
       if (input === 'p' && rows[cursor]) ctx.navigate('plan', rows[cursor].name);
+      // straight into the conversation: the plan view is where the design
+      // document lives, but wanting to talk about a project shouldn't require
+      // opening it first
+      if (input === 'c' && rows[cursor]) {
+        const project = rows[cursor];
+        setOpening(project.name);
+        ctx.dispatcher.startPlanChat(project.id);
+      }
       if (key.return && rows[cursor]) ctx.navigate('project', rows[cursor].name);
     },
     { isActive: bar === null && !creating && !progress && !ctx.cmdOpen },
@@ -285,7 +316,8 @@ function bar10(progress: number, width = 8): string {
 export const projectsKeys: Array<[string, string]> = [
   ['enter', 'open project'],
   ['n', 'new project'],
-  ['p', 'plan chat'],
+  ['p', 'the plan document'],
+  ['c', 'chat about it (worktree + claude)'],
   ['o', 'open in browser'],
   ['/', 'filter'],
   ['t', 'team'],

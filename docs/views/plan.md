@@ -12,7 +12,8 @@ and the first move is yours. There are two ways to make it.
 
 **`c` — chat about it.** colinear cuts a worktree off the default branch, mints a session id, and
 hands your terminal to a real `claude` running in it, already primed with the project, its issues
-and the published design. You are in a normal interactive session: think out loud, read the code,
+and the published design. (`c` in [`:projects`](projects.md) does the same without opening this
+view first.) You are in a normal interactive session: think out loud, read the code,
 argue with it. Quit (`/exit`) and you land back here. This is the one to reach for when you want to
 work the problem out rather than describe it.
 
