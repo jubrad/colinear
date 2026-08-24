@@ -6,7 +6,16 @@ import { runSession, type SessionCallbacks } from './agent.js';
 import { guidanceFor } from './guidance.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
-import { deletePendingReviews, fetchPrDetails, submitReview, type ReviewEvent, notConfigured } from './reviews.js';
+import {
+  deletePendingReviews,
+  fetchPrDetails,
+  fetchReviewThread,
+  formatThread,
+  notConfigured,
+  submitReview,
+  viewerLogin,
+  type ReviewEvent,
+} from './reviews.js';
 import { isDemo } from './demo.js';
 import { store } from './store.js';
 import { extractFencedJson, hasFenceOpening } from './fence.js';
@@ -162,6 +171,11 @@ export class Reviewer {
       return;
     }
 
+    // A review that has already been sent starts a SECOND ROUND rather than a
+    // clean slate: the author has your comments, and re-raising what they
+    // already fixed or argued about is worse than saying nothing. The existing
+    // document is the baseline to revise, so it is deliberately not cleared.
+    const roundTwo = Boolean(review.posted);
     const controller = new AbortController();
     this.aborts.set(id, controller);
     store.updateReview(id, {
@@ -169,8 +183,7 @@ export class Reviewer {
       startedAt: Date.now(),
       endedAt: undefined,
       error: undefined,
-      summary: undefined,
-      findings: undefined,
+      ...(roundTwo ? {} : { summary: undefined, findings: undefined }),
     });
 
     try {
@@ -192,8 +205,13 @@ export class Reviewer {
       await this.excludeReviewFile(worktree);
       const result = await runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
-        prompt: reviewPrompt(this.cfg, review, details),
+        prompt: roundTwo
+          ? rereviewPrompt(this.cfg, review, details, await this.roundTwoContext(review))
+          : reviewPrompt(this.cfg, review, details),
         cwd: worktree,
+        // round two resumes the conversation that wrote the document: it knows
+        // what it said and why, which is the whole point of not starting over
+        resume: roundTwo ? review.sessionId : undefined,
         model: this.cfg.model,
         abortController: controller,
         callbacks: this.callbacks(id),
@@ -218,15 +236,19 @@ export class Reviewer {
         store.updateReview(id, { doc: result.text, summary: result.text.slice(0, 2000), findings: [] });
       }
       const count = store.getReview(id)?.findings?.length ?? 0;
-      if (count === 0) {
+      if (roundTwo) {
+        store.addReviewActivity(id, `round two ready: ${count} finding${count === 1 ? '' : 's'} now stand`);
+        notify(this.cfg, `${review.repository}#${review.number}`, `re-review ready (${count})`, review.url);
+      } else if (count === 0) {
         // a written review with no findings is almost always a parse failure,
         // and quietly saying "0" is how one got posted as an empty review
         store.addReviewActivity(id, '⚠ no findings parsed from the review document — check its ```findings fence');
         this.toast(`${review.repository}#${review.number}: review ready but no findings parsed`, 'err');
+        notify(this.cfg, `${review.repository}#${review.number}`, `pre-review ready (${count})`, review.url);
       } else {
         store.addReviewActivity(id, `pre-review ready: ${count} finding${count === 1 ? '' : 's'}`);
+        notify(this.cfg, `${review.repository}#${review.number}`, `pre-review ready (${count})`, review.url);
       }
-      notify(this.cfg, `${review.repository}#${review.number}`, `pre-review ready (${count})`, review.url);
     } catch (err) {
       store.updateReview(id, { status: 'error', error: String(err).slice(0, 300), endedAt: Date.now() });
       log(`review ${id} failed: ${err}`);
@@ -291,7 +313,9 @@ export class Reviewer {
 
       store.updateReview(id, {
         status: event === 'APPROVE' ? 'approved' : event === 'REQUEST_CHANGES' ? 'changes_requested' : 'commented',
-        posted: { at: Date.now(), event, url: posted.url, comments: anchored.length },
+        // the commit the author is now holding feedback on: round two diffs
+        // from here, not from wherever the branch has drifted to
+        posted: { at: Date.now(), event, url: posted.url, comments: anchored.length, sha: review.reviewedSha },
         error: undefined,
       });
       store.addReviewActivity(id, `posted ${event.toLowerCase()} review: ${posted.url}`);
@@ -535,6 +559,7 @@ export class Reviewer {
     if (existsSync(worktree)) {
       store.addReviewActivity(id, `reusing worktree ${worktree}`);
       await exec('git', ['-C', worktree, 'checkout', '-B', `review/${review.number}`, `${remote}/${head}`]);
+      await this.recordSha(id, worktree);
       return worktree;
     }
     store.addReviewActivity(id, `creating worktree ${worktree}…`);
@@ -546,7 +571,35 @@ export class Reviewer {
       worktree,
       `${remote}/${head}`,
     ]);
+    await this.recordSha(id, worktree);
     return worktree;
+  }
+
+  /**
+   * What a second round needs beyond the checkout: what changed since the
+   * author got your comments, and how they answered. Both are read
+   * deterministically — an agent told to "check the thread" can report having
+   * read replies it never fetched.
+   */
+  private async roundTwoContext(review: Review): Promise<{ delta: string; thread: string }> {
+    const since = review.posted?.sha ?? review.reviewedSha;
+    let delta = '';
+    if (since && review.worktree) {
+      const { stdout } = await exec('git', ['-C', review.worktree, 'log', '--oneline', `${since}..HEAD`], {
+        maxBuffer: 4 * 1024 * 1024,
+      }).catch(() => ({ stdout: '' }));
+      delta = stdout.trim();
+    }
+    const viewer = await viewerLogin().catch(() => undefined);
+    const thread = formatThread(await fetchReviewThread(review, viewer));
+    return { delta, thread };
+  }
+
+  /** What HEAD the document about to be written describes — a later round's anchor. */
+  private async recordSha(id: string, worktree: string) {
+    const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', 'HEAD']).catch(() => ({ stdout: '' }));
+    const sha = stdout.trim();
+    if (sha) store.updateReview(id, { reviewedSha: sha });
   }
 
   /** The remote whose URL matches the PR's repo (forks push elsewhere). */
@@ -629,6 +682,48 @@ function findingsBlock(review: Review): string {
   return (review.findings ?? [])
     .map((f) => `- [${f.severity}] ${f.file ?? 'general'}${f.line ? `:${f.line}` : ''} — ${f.comment}`)
     .join('\n');
+}
+
+/**
+ * Round two. The document already exists and the author has already read it,
+ * so this revises rather than restarts: the session is resumed, the diff is
+ * what landed since they got your comments, and their replies are quoted so
+ * a point they answered is engaged with rather than repeated.
+ */
+export function rereviewPrompt(
+  cfg: Config,
+  review: Review,
+  details: { baseRefName: string; body: string },
+  context: { delta: string; thread: string },
+): string {
+  const since = review.posted?.sha ?? review.reviewedSha;
+  return `You reviewed ${review.repository}#${review.number} before, and your review was posted to GitHub${
+    review.posted ? ` on ${new Date(review.posted.at).toISOString().slice(0, 10)} (${review.posted.event})` : ''
+  }. The author has since pushed changes, replied, or both. This is round two: revise your existing review at \`${REVIEW_FILE}\`, do not start it again.
+
+## What changed since they got your comments
+${
+  since
+    ? context.delta
+      ? `Commits after ${since.slice(0, 8)}:\n${context.delta}\n\nRead that delta first: \`git diff ${since}...HEAD\`. The full PR is still \`git diff ${details.baseRefName}...HEAD\` if you need the wider context.`
+      : `Nothing new has landed since ${since.slice(0, 8)} — if the conversation is the only thing that moved, say so plainly rather than inventing new findings.`
+    : `The commit you reviewed wasn't recorded, so compare against the base yourself: \`git diff ${details.baseRefName}...HEAD\`.`
+}
+
+## The conversation
+${context.thread}
+
+## What to do
+Go through your existing findings one at a time and decide, honestly, which of these each one is:
+
+- **fixed** — the new commits address it. Drop it. Do not keep a finding alive to look thorough.
+- **answered** — the author explained why it is fine and they are right. Drop it, and say in the prose that you were satisfied.
+- **still standing** — not addressed, or the answer doesn't hold. Keep it, and if they pushed back, engage with what they actually said rather than restating the original comment.
+- **new** — the new commits introduced something. Add it.
+
+Then rewrite the document with the same three sections and a closing \`findings\` block, exactly as before — it is fully replaced each round, so it must contain everything you still want posted, not just the changes. The first entry is still the lead: one sentence, and for a second round it should say where things now stand.
+
+Only what is in the findings array reaches GitHub. Keep your chat reply short.${guidanceFor(cfg.guidance, 'review')}`;
 }
 
 function reviewPrompt(cfg: Config, review: Review, details: { baseRefName: string; body: string }): string {

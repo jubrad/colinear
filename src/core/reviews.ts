@@ -335,6 +335,79 @@ export interface PostedReview {
  * this needs no model — which also means it either works or throws, instead
  * of a session reporting success it didn't have.
  */
+/** One message in a PR's review conversation. */
+export interface ThreadComment {
+  author: string;
+  body: string;
+  /** inline comments carry a location; general discussion doesn't */
+  file?: string;
+  line?: number;
+  /** true when it answers one of ours */
+  isReply: boolean;
+  at: string;
+}
+
+/**
+ * The PR's conversation: inline review comments and general discussion,
+ * oldest first. Read deterministically rather than by a session — an agent
+ * asked to "check the thread" can report having read replies it never saw.
+ */
+export async function fetchReviewThread(review: Review, viewer?: string): Promise<ThreadComment[]> {
+  const out: ThreadComment[] = [];
+  const get = async (path: string) => {
+    try {
+      const { stdout } = await exec('gh', ['api', '--paginate', path], { maxBuffer: 10 * 1024 * 1024 });
+      // --paginate concatenates arrays as separate JSON documents on one line
+      return stdout
+        .split(/(?<=\])\s*(?=\[)/)
+        .flatMap((chunk) => (chunk.trim() ? (JSON.parse(chunk) as Record<string, unknown>[]) : []));
+    } catch (err) {
+      log(`review ${review.id}: could not read ${path}: ${String(err).slice(0, 80)}`);
+      return [];
+    }
+  };
+
+  const ours = new Set<number>();
+  for (const c of await get(`/repos/${review.repository}/pulls/${review.number}/comments`)) {
+    const user = String((c.user as { login?: string })?.login ?? '?');
+    const id = Number(c.id);
+    if (viewer && user === viewer) ours.add(id);
+    out.push({
+      author: user,
+      body: String(c.body ?? ''),
+      file: c.path ? String(c.path) : undefined,
+      line: typeof c.line === 'number' ? c.line : undefined,
+      isReply: Boolean(c.in_reply_to_id) && (!viewer || ours.has(Number(c.in_reply_to_id))),
+      at: String(c.created_at ?? ''),
+    });
+  }
+  for (const c of await get(`/repos/${review.repository}/issues/${review.number}/comments`)) {
+    out.push({
+      author: String((c.user as { login?: string })?.login ?? '?'),
+      body: String(c.body ?? ''),
+      isReply: false,
+      at: String(c.created_at ?? ''),
+    });
+  }
+  return out.sort((a, b) => a.at.localeCompare(b.at));
+}
+
+/** The thread as the re-review prompt shows it: locations, authors, replies marked. */
+export function formatThread(comments: ThreadComment[], limit = 40): string {
+  if (!comments.length) return '(no comments on the PR yet)';
+  const shown = comments.slice(-limit);
+  const head = comments.length > shown.length ? `(showing the last ${limit} of ${comments.length})\n` : '';
+  return (
+    head +
+    shown
+      .map((c) => {
+        const where = c.file ? `${c.file}${c.line ? `:${c.line}` : ''}` : 'discussion';
+        return `- **${c.author}** on ${where}${c.isReply ? ' (replying to your comment)' : ''}:\n  ${c.body.trim().replace(/\n/g, '\n  ')}`;
+      })
+      .join('\n')
+  );
+}
+
 export async function submitReview(
   review: Review,
   event: ReviewEvent,

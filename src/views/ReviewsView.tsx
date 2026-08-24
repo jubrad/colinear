@@ -149,7 +149,14 @@ export function ReviewsView(props: { param?: string }) {
       if (key.return || input === 'd') setReading(true);
       if (input === 'r') {
         ctx.dispatcher.startReview(selected.id);
-        ctx.toast(`pre-reviewing ${selected.repository}#${selected.number}`, 'info');
+        // one key, two jobs: a review that has been sent revises itself
+        // against what landed since, rather than reviewing the PR again
+        ctx.toast(
+          selected.posted
+            ? `re-reviewing ${selected.repository}#${selected.number} — changes and replies since you posted`
+            : `pre-reviewing ${selected.repository}#${selected.number}`,
+          'info',
+        );
       }
       if (input === 's') {
         // same as the board: hand this terminal to the review's own session
@@ -457,7 +464,7 @@ function shortRepo(repository: string): string {
 
 export const reviewsKeys: Array<[string, string]> = [
   ['i/k ↑↓', 'row'],
-  ['r', 'pre-review'],
+  ['r', 'pre-review · re-review once posted'],
   ['enter', 'read + chat'],
   ['s', 'attach claude'],
   ['p', 'post comments'],
