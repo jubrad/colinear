@@ -65,6 +65,14 @@ export function useTaskActions(): TaskActions {
       ctx.dispatcher.resume(selected.issue.id);
       ctx.toast(`requeued ${selected.issue.identifier}`, 'ok');
     }
+    // F from anywhere in a family — the parent, or any child that knows its
+    // parent — opens the family view scoped to it
+    if (input === 'F') {
+      const family = selected.subIssues?.length ? selected.issue.identifier : selected.issue.parent?.identifier;
+      if (family) return ctx.navigate('family', family);
+      ctx.toast('not split work — :family lists every parent that is', 'info');
+      return;
+    }
     if (input === 'f' && selected.status === 'blocked') {
       ctx.dispatcher.force(selected.issue.id);
       ctx.toast(`${selected.issue.identifier}: starting now — blockers still gate the merge`, 'ok');
@@ -329,6 +337,7 @@ export const TASK_ACTION_KEYS: Array<[string, string]> = [
   ['S', 'shell'],
   ['r', 'resume'],
   ['f', 'force start'],
+  ['F', 'family view'],
   ['b', 'rebase'],
   ['c', 'escalate'],
   ['o', 'open PR'],
