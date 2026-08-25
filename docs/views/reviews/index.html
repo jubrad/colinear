@@ -1504,11 +1504,20 @@ counts; a review holding nothing but annotations has nothing to post, and says s
 comment that would run into the next one is cut with an <code>…</code> rather than pushing the code out of
 line. <code>e</code> shows it whole. A comment about the PR as a whole has no line to sit beside, so it gets
 its own line under both panes.</p>
-<p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours. <code>e</code> opens it,
-<code>ctrl+d</code> saves, an empty comment removes it, and <code>d</code> drops one outright. <code>e</code> on a line with nothing
-on it writes a new comment there; <strong><code>i</code> writes an annotation instead</strong> — the same editor, saved as
-<code>info</code>, so you can explain a gnarly block to whoever reads the review without saying anything to the
-author. Every edit rewrites the <code>``findings fence in the review document,
+<p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours.</p>
+<p><code>e</code> on any line — whether or not something is already there — asks <strong>what kind</strong> first:</p>
+<div class="highlight"><pre><span></span><code>▸ blocking   would request changes over it
+  consider   worth a second look
+  nit        optional polish
+  praise     worth saying out loud
+  annotation explains the code — never posted
+</code></pre></div>
+<p><code>j</code>/<code>k</code> or the kind's first letter, <code>enter</code> to write it. Editing something that already exists
+pre-selects what it is, so changing your mind about severity is the same keystroke as changing the
+words. Then the editor names the kind <em>and</em> what happens to it — "goes to the author when you post",
+or "stays in colinear — never posted" — because that is the difference that matters.</p>
+<p><code>ctrl+d</code> saves, an empty comment removes it, and <code>d</code> drops one outright. <strong><code>i</code> skips the picker</strong> and
+goes straight to an annotation, which is the common case while reading unfamiliar code. Every edit rewrites the <code>``findings fence in the review document,
 so what you post and what the agent sees never diverge — a later chat turn reads your wording, and</code>p` posts it.</p>
 <p><code>d</code> from the list opens the <strong>document</strong> itself instead — the agent's prose write-up with the same
 chat beside it (<code>tab</code> switches, <code>j/k</code> scrolls, <code>e</code> edits it in <code>$EDITOR</code>). Your turn resumes the
