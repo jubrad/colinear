@@ -82,23 +82,33 @@ export function DispatchModal(props: {
     if (key.return) submit();
   });
 
-  const optionRow = (label: string, field: Field, options: string[], activeIdx: number) => (
-    <Box>
-      <Text bold color={focus === field ? theme.accent : theme.dim}>
-        {label.padEnd(14)}
-      </Text>
-      {options.map((opt, i) => (
-        <Text
-          key={opt}
-          inverse={focus === field && i === activeIdx}
-          color={i === activeIdx ? theme.selection : theme.dim}
-          bold={i === activeIdx}
-        >
-          {` ${opt} `}
+  const optionRow = (label: string, field: Field, options: string[], activeIdx: number) => {
+    // Options are values, not prose: a row wider than the modal used to wrap
+    // mid-name, so "terraform-provider-materialize" arrived as two fragments on
+    // two lines and the selection landed on a syllable. Show whole names and
+    // scroll instead — the ‹ › say the rest are still there.
+    const { start, end } = optionWindow(options, activeIdx, width - 14 - 4);
+    return (
+      <Box>
+        <Text bold color={focus === field ? theme.accent : theme.dim}>
+          {label.padEnd(14)}
         </Text>
-      ))}
-    </Box>
-  );
+        <Text dimColor>{start > 0 ? '‹' : ' '}</Text>
+        {options.slice(start, end).map((opt, i) => (
+          <Text
+            key={opt}
+            wrap="truncate"
+            inverse={focus === field && start + i === activeIdx}
+            color={start + i === activeIdx ? theme.selection : theme.dim}
+            bold={start + i === activeIdx}
+          >
+            {` ${opt} `}
+          </Text>
+        ))}
+        <Text dimColor>{end < options.length ? '›' : ' '}</Text>
+      </Box>
+    );
+  };
 
   const manual = startIdx === 1;
   return (
@@ -140,4 +150,43 @@ export function DispatchModal(props: {
       </Text>
     </Box>
   );
+}
+
+/**
+ * The widest run of whole options that fits, always containing the active one.
+ *
+ * Growing outward from the selection rather than from the left keeps the thing
+ * you are choosing on screen no matter where in the list it sits — and every
+ * name stays whole, which is the point: a truncated repo name is ambiguous
+ * exactly when the repos are similarly named.
+ */
+export function optionWindow(
+  options: string[],
+  activeIdx: number,
+  avail: number,
+): { start: number; end: number } {
+  if (!options.length) return { start: 0, end: 0 };
+  const active = Math.max(0, Math.min(activeIdx, options.length - 1));
+  const cost = (i: number) => options[i].length + 2; // the padding around each
+  let start = active;
+  let end = active + 1;
+  let used = cost(active);
+  // Alternate outward so the selection stays roughly centred. Each side is
+  // re-tested against the *updated* width — testing both against the width
+  // before either grew is how a window ends up one option too wide.
+  for (;;) {
+    let grew = false;
+    if (end < options.length && used + cost(end) <= avail) {
+      used += cost(end);
+      end++;
+      grew = true;
+    }
+    if (start > 0 && used + cost(start - 1) <= avail) {
+      start--;
+      used += cost(start);
+      grew = true;
+    }
+    if (!grew) break;
+  }
+  return { start, end };
 }

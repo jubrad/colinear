@@ -17,7 +17,7 @@ still dispatch.
 | `space` | select — actions apply to the selection, or to the row under the cursor |
 | `enter` | **dispatch** |
 | `D` | dispatch, skipping triage |
-| `c` | custom dispatch: model, repo, whether to triage, whether to **start** — and a paragraph-sized instructions box (enter is a newline there, `ctrl-d` dispatches) |
+| `c` | custom dispatch: model, repo, whether to triage, whether to **start** — and a paragraph-sized instructions box (enter is a newline there, `ctrl-d` dispatches). A row with more options than fit scrolls with `←→`, marked `‹ ›`; names are never cut in half |
 | `n` | **new issue from a description** — an agent drafts the title and body and files it |
 | `o` | open in the tracker · `b` board · `r` refresh |
 
