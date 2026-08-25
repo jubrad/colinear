@@ -1504,9 +1504,12 @@ counts; a review holding nothing but annotations has nothing to post, and says s
 condition's tail live. A wrapped line keeps its line number on the first row only, and the margin
 follows: a line that takes three rows pushes the next annotation down by three, so the two stay
 aligned.</p>
+<p>Each block opens with <strong>what it is</strong> — <code>blocking ·</code>, <code>nit ·</code>, <code>note ·</code> — in the severity's colour,
+so two findings on adjacent lines read as two findings rather than one run-on. Continuation rows are
+dimmed, which is the other half of the same signal.</p>
 <p>Alignment wins over completeness in the margin itself: a comment block starts at its anchor's row
 and never shifts, so one that would run into the next is cut with an <code>…</code> rather than pushing the
-code out of line. <code>e</code> shows it whole. A comment about the PR as a whole has no line to sit beside,
+code out of line. <strong><code>enter</code> reads the cut one in full</strong> in the right pane, and any key returns. A comment about the PR as a whole has no line to sit beside,
 so it gets its own line under both panes.</p>
 <p>The chat along the bottom is one line, so <strong>enter sends it</strong>.</p>
 <p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours.</p>
