@@ -189,6 +189,7 @@ export class Dispatcher {
     store.addActivity(id, 'coordinator session');
     try {
       const result = await this.session({
+        agent: { kind: 'coordinator', label: task.issue.identifier, origin: messages.length ? 'you messaged the parent' : 'you woke the parent' },
         prompt: coordinatorPrompt(task, coordChannels?.scopes.map((c) => c.id) ?? [], messages),
         cwd: coordinatorCwd(task),
         callbacks: this.callbacks(id),
@@ -901,6 +902,7 @@ export class Dispatcher {
         store.addActivity(id, 'triage pass');
         const triageChannels = issue.parent ? sessionChannels : undefined;
         const triage = await this.session({
+          agent: { kind: 'triage', label: task.issue.identifier, origin: mode === 'fixci' ? 'CI failing' : mode === 'rebase' ? 'PR conflicted' : 'dispatch' },
           prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, guidanceFor(this.cfg.guidance, 'triage'))}\n${familyBlock(issue, family)}${triageChannels ? channelBlock(triageChannels) : ''}`,
           cwd: worktree,
           callbacks: this.callbacks(id),
@@ -964,6 +966,13 @@ export class Dispatcher {
       const inbox = new SessionInbox();
       this.inboxes.set(id, inbox);
       const work = await this.session({
+        agent: {
+          // maintenance is a different animal from development: it runs
+          // against an open PR, which is what the board's blinking dot says too
+          kind: mode === 'fixci' || mode === 'rebase' ? 'maintenance' : 'work',
+          label: task.issue.identifier,
+          origin: mode === 'fixci' ? 'CI failing' : mode === 'rebase' ? 'PR conflicted' : mode === 'resume' ? 'you resumed it' : 'dispatch',
+        },
         prompt:
           mode === 'rebase'
             ? rebasePrompt(ctx, issue, current.prs, taskRepo.prBase ?? taskRepo.defaultBranch, taskRepo.remote ?? 'origin', taskRepo.pushRemote ?? taskRepo.remote ?? 'origin')

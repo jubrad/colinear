@@ -3,7 +3,6 @@ import { providerFor } from '../core/provider.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CustomViewSpec } from '../core/customviews.js';
 import { openUrl } from '../core/open.js';
-import { createIssueFromPrompt } from '../core/newissue.js';
 import { getUiState, setUiState } from '../core/persist.js';
 import { store } from '../core/store.js';
 import type { Issue } from '../core/types.js';
@@ -77,6 +76,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const [bar, setBar] = useState<BarMode | null>(null);
   const [dispatching, setDispatching] = useState(false);
   const [progress, setProgress] = useState<CreationState | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState(spec?.sort ?? 'updated');
   const [sortDesc, setSortDesc] = useState(false);
   const [includeProjects, setIncludeProjects] = useState(false);
@@ -98,6 +98,31 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   );
 
   useEffect(() => refresh(team), []);
+
+
+  useEffect(() => ctx.onCreating?.((id) => setDraftId(id)), []);
+  useEffect(() => ctx.onAgents?.((list) => {
+    if (!draftId) return;
+    const mine = list.find((a) => a.id === draftId);
+    if (!mine) return;
+    setProgress((p) => {
+      if (!p) return p;
+      const activity = mine.activity && mine.activity !== p.activity.at(-1) ? pushActivity(p, mine.activity).activity : p.activity;
+      const done = mine.result ?? (mine.status === 'error' ? { ok: false, summary: 'the draft session failed' } : undefined);
+      return { ...p, activity, done };
+    });
+    if (mine.result?.ok) {
+      refresh(team);
+      setDraftId(null);
+    }
+  }), [draftId, team, refresh]);
+  // the popup is a window onto the registry, so it has to ask for it
+  useEffect(() => {
+    if (!progress || progress.done) return;
+    const timer = setInterval(() => ctx.dispatcher.listAgents(), 700);
+    return () => clearInterval(timer);
+  }, [progress?.done, progress !== null]);
+
   useEffect(() => ctx.setCapture(bar !== null || dispatching || progress !== null), [bar, dispatching, progress]);
   useEffect(() => () => ctx.setCapture(false), []);
 
@@ -193,21 +218,12 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
         ctx.toast('switch to a specific team first (t) so the issue has a home', 'err');
         return;
       }
+      // the daemon drafts it, so closing this popup — or reloading the UI —
+      // doesn't kill the agent. :agents is where it lives now.
       setProgress({ title: `new issue in ${teamObj.key}: ${request.slice(0, 60)}`, startedAt: Date.now(), activity: [] });
-      const onActivity = (line: string) =>
-        setProgress((p) => (p && !p.done ? pushActivity(p, line) : p));
-      void createIssueFromPrompt(cfg, teamObj.id, request, onActivity)
-        .then((issue) => {
-          ctx.toast(`created ${issue.identifier}`, 'ok');
-          setProgress((p) => (p ? { ...p, done: { ok: true, summary: `created ${issue.identifier}` } } : p));
-          refresh(team);
-        })
-        .catch((e) => {
-          ctx.toast(`issue creation failed: ${String(e).slice(0, 80)}`, 'err');
-          setProgress((p) => (p ? { ...p, done: { ok: false, summary: `failed: ${String(e).slice(0, 120)}` } } : p));
-        });
+      ctx.dispatcher.createIssue(teamObj.id, request);
     },
-    [team, teams, cfg, ctx, refresh],
+    [team, teams, cfg, ctx],
   );
 
   const dispatch = useCallback(

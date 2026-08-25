@@ -279,6 +279,11 @@ export class PlanManager {
       if (prompt === undefined) return; // opener could not resolve the project; noted in chat
       const result = await runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
+        agent: {
+          kind: 'plan',
+          label: plan.projectName,
+          origin: plan.sessionId ? 'you said something in the plan chat' : 'you opened the discussion',
+        },
         prompt,
         // a session that was started interactively lives in its worktree:
         // Claude Code files transcripts per directory, so resuming from

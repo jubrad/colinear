@@ -6,6 +6,7 @@ import { ConfigView, configKeys } from './ConfigView.js';
 import { CostsView, costsKeys } from './CostsView.js';
 import { ChannelView, channelKeys } from './ChannelView.js';
 import { ChatView, chatKeys } from './ChatView.js';
+import { AgentsView, agentsKeys } from './AgentsView.js';
 import { FamilyView, familyKeys } from './FamilyView.js';
 import { GcView, gcKeys } from './GcView.js';
 import { HelpView, helpKeys } from './HelpView.js';
@@ -97,6 +98,13 @@ const builtinViews: ViewDef[] = [
     describe: 'live debug log (what colinear is actually doing)',
     Component: LogsView,
     keys: logsKeys,
+  },
+  {
+    name: 'agents',
+    aliases: ['ps'],
+    describe: 'every agent running right now, and what started it',
+    Component: AgentsView,
+    keys: agentsKeys,
   },
   {
     name: 'family',

@@ -70,12 +70,14 @@ export function App(props: {
   onGc?: AppCtx['onGc'];
   onGcProgress?: AppCtx['onGcProgress'];
   onPlanChatReady?: AppCtx['onPlanChatReady'];
+  onAgents?: AppCtx['onAgents'];
+  onCreating?: AppCtx['onCreating'];
   onLogTail?: AppCtx['onLogTail'];
   onChannels?: AppCtx['onChannels'];
   onChannelHistory?: AppCtx['onChannelHistory'];
   onNotify?: (fn: (n: { title: string; body: string; url?: string }) => void) => () => void;
 }) {
-  const { cfg, dispatcher, onToast, onGc, onGcProgress, onPlanChatReady, onLogTail, onChannels, onChannelHistory, onNotify } = props;
+  const { cfg, dispatcher, onToast, onGc, onGcProgress, onPlanChatReady, onAgents, onCreating, onLogTail, onChannels, onChannelHistory, onNotify } = props;
   const { exit } = useApp();
   const size = useTerminalSize();
   const tasks = useTasks();
@@ -162,6 +164,8 @@ export function App(props: {
       onGc,
       onGcProgress,
       onPlanChatReady,
+      onAgents,
+      onCreating,
       onLogTail,
       onChannels,
       onChannelHistory,
@@ -182,7 +186,7 @@ export function App(props: {
         escHandlerRef.current = fn;
       },
     }),
-    [cfg, dispatcher, onGc, onGcProgress, onPlanChatReady, onLogTail, onChannels, onChannelHistory, viewer, teams, size, now, navigate, back, exit, cmdOpen],
+    [cfg, dispatcher, onGc, onGcProgress, onPlanChatReady, onAgents, onCreating, onLogTail, onChannels, onChannelHistory, viewer, teams, size, now, navigate, back, exit, cmdOpen],
   );
 
   useInput(

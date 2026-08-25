@@ -24,6 +24,9 @@ import {
   type ServerMsg,
 } from './core/protocol.js';
 import { findReclaimable, removeWorktree } from './core/gc.js';
+import { createIssueFromPrompt } from './core/newissue.js';
+import { createProjectFromPrompt } from './core/newproject.js';
+import { listSessions, updateSession } from './core/sessions.js';
 import { store } from './core/store.js';
 
 /** Liveness marker so `coli daemon status|stop` doesn't need the socket. */
@@ -227,6 +230,48 @@ export async function runDaemon(): Promise<void> {
       case 'message':
         dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });
         break;
+      case 'listAgents':
+        reply({ t: 'agents', list: listSessions() });
+        break;
+      case 'createIssue': {
+        // Drafting runs here rather than in the TUI, so it survives `esc`, a
+        // reload, and the terminal closing — and shows up in :agents like
+        // every other agent. The client watches it there.
+        let agentId: string | undefined;
+        void (async () => {
+          try {
+            const issue = await createIssueFromPrompt(cfg, cmd.scopeId, cmd.request, undefined, (id) => {
+              agentId = id;
+              reply({ t: 'creating', agentId: id });
+            });
+            if (agentId) updateSession(agentId, { result: { ok: true, summary: `created ${issue.identifier}` } });
+            broadcast({ t: 'toast', text: `created ${issue.identifier}`, kind: 'ok' });
+          } catch (err) {
+            if (agentId) updateSession(agentId, { result: { ok: false, summary: String(err).slice(0, 160) } });
+            broadcast({ t: 'toast', text: `issue creation failed: ${String(err).slice(0, 80)}`, kind: 'err' });
+          }
+        })();
+        break;
+      }
+      case 'createProject': {
+        let agentId: string | undefined;
+        void (async () => {
+          try {
+            const project = await createProjectFromPrompt(cfg, cmd.brief, undefined, (id) => {
+              agentId = id;
+              reply({ t: 'creating', agentId: id });
+            });
+            if (agentId) {
+              updateSession(agentId, { result: { ok: true, summary: `created "${project.name}"`, url: project.url } });
+            }
+            broadcast({ t: 'toast', text: `created ${project.name}`, kind: 'ok' });
+          } catch (err) {
+            if (agentId) updateSession(agentId, { result: { ok: false, summary: String(err).slice(0, 160) } });
+            broadcast({ t: 'toast', text: `project creation failed: ${String(err).slice(0, 80)}`, kind: 'err' });
+          }
+        })();
+        break;
+      }
       case 'logTail':
         reply({ t: 'logTail', text: readLogTail(cmd.bytes ?? 512 * 1024) });
         break;

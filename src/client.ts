@@ -17,6 +17,8 @@ import {
 import type { ChannelMessage } from './core/channel.js';
 import { store } from './core/store.js';
 import { openTunnel } from './core/tunnel.js';
+import type { AgentSession } from './core/sessions.js';
+import type { ProjectBrief } from './core/newproject.js';
 import type { Config, Issue, RepoConfig, TaskEdits } from './core/types.js';
 
 /**
@@ -58,6 +60,9 @@ export interface DispatcherApi {
   removePlan(projectId: string): void;
   postPlanUpdate(projectId: string): void;
   startPlanChat(projectId: string): void;
+  listAgents(): void;
+  createIssue(scopeId: string, request: string): void;
+  createProject(brief: ProjectBrief): void;
   gcScan(olderThanDays: number): void;
   /** submit answers to a pending question set (used by the $EDITOR path) */
   answer(id: string, answers: string[]): void;
@@ -106,6 +111,8 @@ export interface Connection {
   /** per-worktree progress while gcRemove runs; returns an unsubscribe */
   onGcProgress(fn: (p: GcProgress) => void): () => void;
   onPlanChatReady(fn: (r: PlanChatReady) => void): () => void;
+  onAgents(fn: (list: AgentSession[]) => void): () => void;
+  onCreating(fn: (agentId: string) => void): () => void;
   /** daemon-side messages (edit results, etc.); returns an unsubscribe */
   onToast(fn: (text: string, kind: 'info' | 'ok' | 'err') => void): () => void;
   /** the daemon's log tail, in reply to requestLogTail */
@@ -233,6 +240,8 @@ export async function connectToDaemon(): Promise<Connection> {
   const gcListeners = new Set<(items: GcItem[]) => void>();
   const gcProgressListeners = new Set<(p: GcProgress) => void>();
   const planChatListeners = new Set<(r: PlanChatReady) => void>();
+  const agentListeners = new Set<(list: AgentSession[]) => void>();
+  const creatingListeners = new Set<(agentId: string) => void>();
 
   return await new Promise<Connection>((resolve, reject) => {
     let ready = false;
@@ -290,6 +299,14 @@ export async function connectToDaemon(): Promise<Connection> {
             planChatListeners.add(fn);
             return () => planChatListeners.delete(fn);
           },
+          onAgents: (fn) => {
+            agentListeners.add(fn);
+            return () => agentListeners.delete(fn);
+          },
+          onCreating: (fn) => {
+            creatingListeners.add(fn);
+            return () => creatingListeners.delete(fn);
+          },
           onGcProgress: (fn) => {
             gcProgressListeners.add(fn);
             return () => gcProgressListeners.delete(fn);
@@ -324,6 +341,9 @@ export async function connectToDaemon(): Promise<Connection> {
           removePlan: (projectId) => command({ name: 'removePlan', projectId }),
           postPlanUpdate: (projectId) => command({ name: 'postPlanUpdate', projectId }),
           startPlanChat: (projectId) => command({ name: 'startPlanChat', projectId }),
+          listAgents: () => command({ name: 'listAgents' }),
+          createIssue: (scopeId, request) => command({ name: 'createIssue', scopeId, request }),
+          createProject: (brief) => command({ name: 'createProject', brief }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),
             answer: (id, answers) => command({ name: 'answer', id, answers }),
             message: (id, text, opts) => command({ name: 'message', id, text, wake: opts?.wake }),
@@ -334,6 +354,10 @@ export async function connectToDaemon(): Promise<Connection> {
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),
           },
         });
+      } else if (msg.t === 'agents') {
+        for (const fn of agentListeners) fn(msg.list);
+      } else if (msg.t === 'creating') {
+        for (const fn of creatingListeners) fn(msg.agentId);
       } else if (msg.t === 'planChatReady') {
         for (const fn of planChatListeners) fn(msg);
       } else if (msg.t === 'gcProgress') {

@@ -35,12 +35,13 @@ export async function createProjectFromPrompt(
   cfg: Config,
   brief: ProjectBrief,
   onActivity: (line: string) => void = () => {},
+  onAgent?: (id: string) => void,
 ): Promise<{ id: string; name: string; url?: string }> {
   const provider = providerFor(cfg);
   if (!provider.capabilities.createProjects) {
     throw new Error(`${provider.name} cannot create projects`);
   }
-  const draft = isDemo(cfg) ? demoDraft(brief.request) : await draftWithAgent(cfg, brief, onActivity);
+  const draft = isDemo(cfg) ? demoDraft(brief.request) : await draftWithAgent(cfg, brief, onActivity, onAgent);
   return provider.createProject({
     ...draft,
     scopeIds: brief.scopeIds,
@@ -54,9 +55,11 @@ async function draftWithAgent(
   cfg: Config,
   brief: ProjectBrief,
   onActivity: (line: string) => void,
+  onAgent?: (id: string) => void,
 ): Promise<{ name: string; description: string; content: string }> {
   const result = await runSession({
     permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
+    agent: { kind: 'draft-project', label: brief.request.slice(0, 60), origin: 'you pressed n in :projects', onRegistered: onAgent },
     prompt: `Draft a project from this brief by the user:
 
 "${brief.request}"

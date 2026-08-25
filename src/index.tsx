@@ -339,6 +339,8 @@ async function runTui(): Promise<void> {
         onGc={conn.onGc}
         onGcProgress={conn.onGcProgress}
         onPlanChatReady={conn.onPlanChatReady}
+        onAgents={conn.onAgents}
+        onCreating={conn.onCreating}
         onLogTail={conn.onLogTail}
         onChannels={conn.onChannels}
         onChannelHistory={conn.onChannelHistory}

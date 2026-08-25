@@ -205,6 +205,11 @@ export class Reviewer {
       await this.excludeReviewFile(worktree);
       const result = await runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
+        agent: {
+          kind: 'review',
+          label: `${review.repository}#${review.number}`,
+          origin: roundTwo ? 'you asked for another round' : 'you pressed r',
+        },
         prompt: roundTwo
           ? rereviewPrompt(this.cfg, review, details, await this.roundTwoContext(review))
           : reviewPrompt(this.cfg, review, details),
@@ -361,6 +366,7 @@ export class Reviewer {
     try {
       const result = await runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
+        agent: { kind: 'review', label: `${review.repository}#${review.number}`, origin: 'you asked it something' },
         prompt: chatPrompt(text, review),
         cwd: review.worktree,
         resume: review.sessionId,

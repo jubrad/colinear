@@ -8,6 +8,7 @@ import {
 import { z } from 'zod';
 import { channels, formatMessages } from './channel.js';
 import type { CoordinatorTools } from './coordinator.js';
+import { endSession, startSession, updateSession, type AgentKind } from './sessions.js';
 import type { SessionChannels } from './channel.js';
 import type { AskedQuestion, PendingQuestion, PlannedSubtask } from './types.js';
 
@@ -232,6 +233,17 @@ export async function runSession(opts: {
   coordinator?: CoordinatorTools;
   /** how much the agent may do on its own, and the operator's deny list */
   permissions?: { mode?: string; deny?: string[] };
+  /**
+   * How this session appears in `:agents`. Registration lives here rather than
+   * at the call sites so a new kind of agent cannot be started invisibly.
+   */
+  agent?: {
+    kind: AgentKind;
+    label: string;
+    origin: string;
+    /** the registry id, as soon as there is one — for a caller that wants to point at it */
+    onRegistered?: (id: string) => void;
+  };
 }): Promise<SessionResult> {
   const {
     prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController,
@@ -324,12 +336,19 @@ export async function runSession(opts: {
     },
   });
 
+  const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const result: SessionResult = { text: '', costUsd: 0, isError: false, errors: [], assistantTurns: 0 };
+  const registered = opts.agent ? startSession({ ...opts.agent, cwd, model }) : undefined;
+  if (registered) opts.agent?.onRegistered?.(registered);
 
+  try {
   for await (const msg of q) {
     switch (msg.type) {
       case 'system':
-        if (msg.subtype === 'init') callbacks.onSessionId(msg.session_id);
+        if (msg.subtype === 'init') {
+          callbacks.onSessionId(msg.session_id);
+          if (registered) updateSession(registered, { sessionId: msg.session_id });
+        }
         break;
       case 'assistant': {
         result.assistantTurns++;
@@ -344,12 +363,22 @@ export async function runSession(opts: {
             cacheWrite: usage.cache_creation_input_tokens ?? 0,
           });
         }
+        if (usage) {
+          totals.input += usage.input_tokens ?? 0;
+          totals.output += usage.output_tokens ?? 0;
+          totals.cacheRead += usage.cache_read_input_tokens ?? 0;
+          totals.cacheWrite += usage.cache_creation_input_tokens ?? 0;
+        }
         for (const block of msg.message.content) {
-          if (block.type === 'text' && block.text.trim()) {
-            callbacks.onActivity(firstLine(block.text));
-          } else if (block.type === 'tool_use') {
-            callbacks.onActivity(`⚒ ${block.name} ${summarizeInput(block.input)}`);
-          }
+          const line =
+            block.type === 'text' && block.text.trim()
+              ? firstLine(block.text)
+              : block.type === 'tool_use'
+                ? `⚒ ${block.name} ${summarizeInput(block.input)}`
+                : undefined;
+          if (!line) continue;
+          callbacks.onActivity(line);
+          if (registered) updateSession(registered, { activity: line });
         }
         break;
       }
@@ -375,9 +404,28 @@ export async function runSession(opts: {
       default:
         break;
     }
+    if (registered) {
+      updateSession(registered, {
+        costUsd: result.costUsd,
+        // the session's own totals, so the list agrees with the card
+        tokens: totals,
+      });
+    }
   }
 
+  if (registered) {
+    endSession(registered, result.isError ? 'error' : 'done', {
+      costUsd: result.costUsd,
+      tokens: totals,
+    });
+  }
   return result;
+  } catch (err) {
+    // a throw here is still an ended session: leaving it "running" forever is
+    // how a list of agents becomes a list of ghosts
+    if (registered) endSession(registered, 'error', { activity: String(err).slice(0, 120) });
+    throw err;
+  }
 }
 
 function firstLine(text: string): string {

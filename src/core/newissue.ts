@@ -19,9 +19,11 @@ export async function createIssueFromPrompt(
   scopeId: string,
   request: string,
   onActivity: (line: string) => void = () => {},
+  onAgent?: (id: string) => void,
 ): Promise<{ id: string; identifier: string }> {
   const result = await runSession({
     permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
+    agent: { kind: 'draft-issue', label: request.slice(0, 60), origin: 'you pressed n in :issues', onRegistered: onAgent },
     prompt: `Draft a Linear issue from this request by the user:
 
 "${request}"

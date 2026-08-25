@@ -10,7 +10,6 @@ import { useColinear } from '../ui/context.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { NewProjectModal, type NewProject } from '../ui/NewProjectModal.js';
 import { Popup, formHeight, popupPlacement } from '../ui/Popup.js';
-import { createProjectFromPrompt } from '../core/newproject.js';
 import { theme } from '../theme.js';
 import { PRIORITY_COLORS, PRIORITY_LABELS } from './IssuesView.js';
 
@@ -51,6 +50,7 @@ export function ProjectsView(_props: { param?: string }) {
     void providerFor(ctx.cfg).scopes().then(setScopes).catch(() => setScopes([]));
   }, [ctx.cfg]);
   const [progress, setProgress] = useState<CreationState | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
   /** a project whose design session we asked for and are waiting to enter */
   const [opening, setOpening] = useState<string | null>(null);
 
@@ -93,22 +93,34 @@ export function ProjectsView(_props: { param?: string }) {
   const create = useCallback(
     (draft: NewProject) => {
       setCreating(false);
+      // drafted in the daemon: esc closes the popup, not the agent
       setProgress({ title: `new project: ${draft.request.slice(0, 60)}`, startedAt: Date.now(), activity: [] });
-      const onActivity = (line: string) =>
-        setProgress((p) => (p && !p.done ? pushActivity(p, line) : p));
-      void createProjectFromPrompt(ctx.cfg, draft, onActivity)
-        .then((project) => {
-          ctx.toast(`created ${project.name}`, 'ok');
-          setProgress((p) => (p ? { ...p, done: { ok: true, summary: `created "${project.name}"`, url: project.url } } : p));
-          refresh();
-        })
-        .catch((e) => {
-          ctx.toast(`project creation failed: ${String(e).slice(0, 80)}`, 'err');
-          setProgress((p) => (p ? { ...p, done: { ok: false, summary: `failed: ${String(e).slice(0, 120)}` } } : p));
-        });
+      ctx.dispatcher.createProject(draft);
     },
-    [ctx, refresh],
+    [ctx],
   );
+
+  useEffect(() => ctx.onCreating?.((id) => setDraftId(id)), []);
+  useEffect(() => ctx.onAgents?.((list) => {
+    if (!draftId) return;
+    const mine = list.find((a) => a.id === draftId);
+    if (!mine) return;
+    setProgress((p) => {
+      if (!p) return p;
+      const activity = mine.activity && mine.activity !== p.activity.at(-1) ? pushActivity(p, mine.activity).activity : p.activity;
+      const done = mine.result ?? (mine.status === 'error' ? { ok: false, summary: 'the draft session failed' } : undefined);
+      return { ...p, activity, done };
+    });
+    if (mine.result?.ok) {
+      refresh();
+      setDraftId(null);
+    }
+  }), [draftId, refresh]);
+  useEffect(() => {
+    if (!progress || progress.done) return;
+    const timer = setInterval(() => ctx.dispatcher.listAgents(), 700);
+    return () => clearInterval(timer);
+  }, [progress?.done, progress !== null]);
 
   useInput(
     (input, key) => {
