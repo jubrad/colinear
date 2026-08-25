@@ -161,3 +161,36 @@ export function layoutMargin(
   }
   return rows;
 }
+
+/** One rendered row of the diff: a source line, or a continuation of one. */
+export interface VisualRow {
+  line: DiffLine;
+  text: string;
+  /** false on the wrapped remainder of a long line */
+  first: boolean;
+}
+
+/**
+ * Expand diff lines into the rows actually drawn, wrapping anything too wide.
+ *
+ * Truncating was losing the end of every long line — exactly where a call's
+ * arguments and a condition's tail live — so long lines wrap. Both panes then
+ * iterate *these* rows rather than the source lines, which is what keeps the
+ * margin aligned: a comment still starts on the row its line starts on, and a
+ * line that takes three rows pushes the next annotation down by three.
+ */
+export function toVisualRows(lines: DiffLine[], width: number): VisualRow[] {
+  const w = Math.max(8, width);
+  const out: VisualRow[] = [];
+  for (const line of lines) {
+    // headers and hunk markers stay one row: they are chrome, not content
+    if (line.kind === 'file' || line.kind === 'hunk' || line.kind === 'meta' || line.text.length <= w) {
+      out.push({ line, text: line.text, first: true });
+      continue;
+    }
+    for (let i = 0; i < line.text.length; i += w) {
+      out.push({ line, text: line.text.slice(i, i + w), first: i === 0 });
+    }
+  }
+  return out;
+}

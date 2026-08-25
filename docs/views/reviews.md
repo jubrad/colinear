@@ -77,10 +77,17 @@ real severity is how "I had to explain this to myself" becomes "the author shoul
 `info` finding is filtered out of the inline comments, out of the body, and out of the severity
 counts; a review holding nothing but annotations has nothing to post, and says so.
 
-Alignment wins over completeness: a block starts at its anchor's row and never shifts, so a long
-comment that would run into the next one is cut with an `…` rather than pushing the code out of
-line. `e` shows it whole. A comment about the PR as a whole has no line to sit beside, so it gets
-its own line under both panes.
+Long code lines **wrap** rather than being cut — the end of a line is where a call's arguments and a
+condition's tail live. A wrapped line keeps its line number on the first row only, and the margin
+follows: a line that takes three rows pushes the next annotation down by three, so the two stay
+aligned.
+
+Alignment wins over completeness in the margin itself: a comment block starts at its anchor's row
+and never shifts, so one that would run into the next is cut with an `…` rather than pushing the
+code out of line. `e` shows it whole. A comment about the PR as a whole has no line to sit beside,
+so it gets its own line under both panes.
+
+The chat along the bottom is one line, so **enter sends it**.
 
 **The right pane is editable**, because the agent's comment is a draft of yours.
 
