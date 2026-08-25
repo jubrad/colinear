@@ -14,10 +14,42 @@ The detail pane shows the review's worktree and its **session id** as a ready-to
 `claude --resume` — the same handles a task shows, and the way back into a review session from
 outside colinear.
 
-`enter` opens the **review document** full screen — the agent's write-up on one side, a discussion
-with that same agent on the other (`tab` switches, `j/k` scrolls, `e` edits it in `$EDITOR`). Your
-turn resumes the reviewing session, so the PR is still in context; when the agent needs a decision it
-asks in the same pane.
+## Reading it against the code
+
+`enter` opens the **annotated diff**: the PR's diff on the left, and beside each line what the agent
+had to say about it. Chat sits along the bottom.
+
+```
+┌ diff ──────────────────────────────┬ annotation ─────────────┐
+│     1  fn reconnect(&mut self) {   │ blocking · src/a.rs:42  │
+│ ▍  42 +    for _ in 0..RETRIES {   │                         │
+│     43        self.call()?;        │ This retry loop has no  │
+│                                    │ backoff…                │
+├────────────────────────────────────┴─────────────────────────┤
+│ you  why does the casing matter?                             │
+└──────────────────────────────────────────────────────────────┘
+```
+
+A review document read end to end gives you the findings in the agent's order; this gives them in
+the **code's** order, which is the order you check them in. `▍` marks a line with something on it,
+and `n`/`N` walk between them — the view opens on the first one rather than on a file header.
+
+The right pane holds one of two things:
+
+- a **comment** the agent would send (severity-coloured, anchored to the line), or
+- a **note** — what this hunk *does*, written for someone reading the code cold. Notes are context
+  and are never posted; anything the agent would say to the author is a comment.
+
+**The right pane is editable**, because the agent's comment is a draft of yours. `e` opens it,
+`ctrl+d` saves, an empty comment removes it, and `d` drops one outright. `e` on a line with nothing
+on it writes a new comment there. Every edit rewrites the ```findings fence in the review document,
+so what you post and what the agent sees never diverge — a later chat turn reads your wording, and
+`p` posts it.
+
+`d` from the list opens the **document** itself instead — the agent's prose write-up with the same
+chat beside it (`tab` switches, `j/k` scrolls, `e` edits it in `$EDITOR`). Your turn resumes the
+reviewing session, so the PR is still in context; when the agent needs a decision it asks in the
+same pane.
 
 ## Round two
 
@@ -62,7 +94,7 @@ The document's prose is written for you, to decide what to send. It never leaves
 | key | what |
 |---|---|
 | `r` | pre-review · **re-review** once posted · `x` cancel one · `u` refresh the list |
-| `enter` | the review document + discussion |
+| `enter` | the annotated diff · `d` the review document |
 | `p` post · `A` approve · `X` request changes · `n` attach a note that rides along |
 | `s` | hand the terminal to that review's claude session |
 | `S` | sort: needs-me / updated / size / repo / author / cost (again reverses) |

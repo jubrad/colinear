@@ -16,7 +16,7 @@ import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 11;
+export const PROTOCOL_VERSION = 12;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -47,6 +47,10 @@ export type Command =
   | { name: 'removePlan'; projectId: string }
   /** deterministic post of the plan summary as a tracker project update */
   | { name: 'postPlanUpdate'; projectId: string }
+  /** the PR's diff, for the annotated review view */
+  | { name: 'reviewDiff'; id: string }
+  /** edit, add or drop the comment anchored at a line (rewrites the document) */
+  | { name: 'editFinding'; id: string; file: string; line: number; comment: string; severity?: string }
   /** every agent the daemon is running, for :agents and the creation popup */
   | { name: 'listAgents' }
   /** draft an issue from a description and file it (runs in the daemon) */
@@ -81,6 +85,7 @@ export type ServerMsg =
   | { t: 'toast'; text: string; kind: 'info' | 'ok' | 'err' }
   | { t: 'logTail'; text: string }
   | { t: 'agents'; list: AgentSession[] }
+  | { t: 'reviewDiff'; id: string; diff: string }
   /** a daemon-side draft started; watch it in :agents by this id */
   | { t: 'creating'; agentId: string }
   /**
