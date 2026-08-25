@@ -2,6 +2,8 @@ import { join } from 'node:path';
 import type { ChannelMessage } from './channel.js';
 import type { Change, Delta, Snapshot } from './delta.js';
 import { STATE_DIR } from './log.js';
+import type { AgentSession } from './sessions.js';
+import type { ProjectBrief } from './newproject.js';
 import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 
 /**
@@ -14,7 +16,7 @@ import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 10;
+export const PROTOCOL_VERSION = 11;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -45,6 +47,12 @@ export type Command =
   | { name: 'removePlan'; projectId: string }
   /** deterministic post of the plan summary as a tracker project update */
   | { name: 'postPlanUpdate'; projectId: string }
+  /** every agent the daemon is running, for :agents and the creation popup */
+  | { name: 'listAgents' }
+  /** draft an issue from a description and file it (runs in the daemon) */
+  | { name: 'createIssue'; scopeId: string; request: string }
+  /** draft a project from a brief and create it (runs in the daemon) */
+  | { name: 'createProject'; brief: ProjectBrief }
   /** cut a worktree and mint a session id, then hand them back to attach with */
   | { name: 'startPlanChat'; projectId: string }
   | { name: 'pollReviews' }
@@ -72,6 +80,9 @@ export type ServerMsg =
   | { t: 'snapshot'; snapshot: Snapshot }
   | { t: 'toast'; text: string; kind: 'info' | 'ok' | 'err' }
   | { t: 'logTail'; text: string }
+  | { t: 'agents'; list: AgentSession[] }
+  /** a daemon-side draft started; watch it in :agents by this id */
+  | { t: 'creating'; agentId: string }
   /**
    * A design session is ready to be attached to. `fresh` decides the verb:
    * a new conversation is started under the id we minted (with `primer` as
