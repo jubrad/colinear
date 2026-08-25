@@ -50,6 +50,8 @@ const SEVERITY_COLOR: Record<string, string> = {
   consider: theme.warn,
   nit: theme.dim,
   praise: theme.ok,
+  // an annotation is not a mild finding, so it is not a mild yellow
+  info: theme.annotation,
 };
 
 /** PRs waiting on my review, with an assisted pre-review per PR. */

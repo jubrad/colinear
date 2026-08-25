@@ -13,6 +13,12 @@ export const theme = {
   warn: 'yellow',
   err: 'red',
   info: 'magenta',
+  /**
+   * Informational review findings. Deliberately off the red → yellow → green
+   * ramp: an annotation explaining what code does is not a mild problem, and
+   * anything on that ramp reads as one.
+   */
+  annotation: '#5fafff',
   dim: 'gray',
   /** column header text */
   header: '#87d7ff',
