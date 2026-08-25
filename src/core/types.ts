@@ -354,7 +354,12 @@ export interface ChatTurn {
   at: number;
 }
 
-export type Severity = 'blocking' | 'consider' | 'nit' | 'praise';
+/**
+ * `info` is the odd one out: it is never posted. It annotates code for whoever
+ * reads the review — what a dense block is doing — so an explanation and a
+ * criticism can live in the same list without one being mistaken for the other.
+ */
+export type Severity = 'blocking' | 'consider' | 'nit' | 'praise' | 'info';
 
 export interface ReviewFinding {
   /** unset when the point isn't about a particular file — it goes in the body */

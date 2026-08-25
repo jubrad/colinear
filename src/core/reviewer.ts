@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, watch, type FSWatcher } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, watch, type FSWatcher, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
@@ -29,7 +29,10 @@ const REVIEW_FILE = '.colinear-review.md';
 /** ~64KB of review is already far more than anyone reads; refuse to mirror more. */
 const DOC_LIMIT = 64_000;
 
-const SEVERITIES = new Set(['blocking', 'consider', 'nit', 'praise']);
+/** A diff past this is not being read line by line anyway. */
+const DIFF_LIMIT = 2_000_000;
+
+const SEVERITIES = new Set(['blocking', 'consider', 'nit', 'praise', 'info']);
 
 /** ```findings preferred, ```json accepted. */
 const FENCE_NAMES = ['findings', 'json'];
@@ -57,6 +60,47 @@ function validFindings(value: unknown): ReviewFinding[] {
     const file = typeof f.file === 'string' && f.file.trim() ? f.file.trim() : undefined;
     return [{ file, line, severity, comment: f.comment }];
   });
+}
+
+/**
+ * Write findings back into the document's fence, leaving the prose exactly as
+ * it was.
+ *
+ * The document is the artifact, so an annotation edited in the diff view has
+ * to land *there* rather than in a second store the agent cannot see. The
+ * splice uses the fence's own offsets for that reason — a rewrite of the whole
+ * file would quietly discard whatever the agent wrote around it.
+ */
+export function writeFindings(text: string, findings: ReviewFinding[]): string {
+  const json = JSON.stringify(findings, null, 2);
+  const block = `\`\`\`findings\n${json}\n\`\`\``;
+  const extracted = extractFencedJson(text, FENCE_NAMES);
+  if (!extracted) return `${text.trimEnd()}\n\n${block}\n`;
+  return `${text.slice(0, extracted.start)}${block}${text.slice(extracted.end)}`;
+}
+
+/**
+ * Replace the comment anchored at file:line, add one if there is none, or drop
+ * it when the comment is emptied. Returns the document unchanged if nothing
+ * would change, so a no-op edit doesn't churn the file the daemon watches.
+ */
+export function upsertFinding(
+  text: string,
+  at: { file: string; line: number },
+  comment: string,
+  severity?: Severity,
+): string {
+  const { findings } = parseDoc(text);
+  const idx = findings.findIndex((f) => f.file === at.file && f.line === at.line);
+  const trimmed = comment.trim();
+  if (!trimmed) {
+    if (idx === -1) return text;
+    return writeFindings(text, findings.filter((_, i) => i !== idx));
+  }
+  const next = [...findings];
+  if (idx === -1) next.push({ file: at.file, line: at.line, severity: severity ?? 'consider', comment: trimmed });
+  else next[idx] = { ...next[idx], comment: trimmed, severity: severity ?? next[idx].severity ?? 'consider' };
+  return writeFindings(text, next);
 }
 
 /**
@@ -276,12 +320,16 @@ export class Reviewer {
       this.toast('nothing to post yet — press r to run a pre-review', 'err');
       return;
     }
-    const anchored = (review.findings ?? []).filter((f) => f.line && f.file);
-    const loose = (review.findings ?? []).filter((f) => !f.line || !f.file);
+    // `info` findings annotate the code for the reader and are deliberately
+    // never sent: they would read as review comments to the author, which is
+    // the one thing they are not
+    const postable = (review.findings ?? []).filter((f) => f.severity !== 'info');
+    const anchored = postable.filter((f) => f.line && f.file);
+    const loose = postable.filter((f) => !f.line || !f.file);
     // zero findings means the fence failed to parse (or was never written):
     // what would go up is the summary — a description of the PR, not feedback.
     // That exact thing has been posted to a real PR; never again.
-    if (!(review.findings ?? []).length && event !== 'APPROVE') {
+    if (!postable.length && event !== 'APPROVE') {
       // refuse WITHOUT touching the status. Setting it to 'ready' here demoted
       // an already-posted review out of the reconcile's protected set, and the
       // next poll staled it — the refusal itself made the review disappear.
@@ -609,6 +657,52 @@ export class Reviewer {
   }
 
   /** The remote whose URL matches the PR's repo (forks push elsewhere). */
+  /**
+   * The PR's diff, for the annotated view. Read on demand rather than mirrored:
+   * it is large, it changes with every push, and it belongs to the worktree
+   * rather than the record.
+   */
+  async diff(id: string): Promise<string> {
+    const review = store.getReview(id);
+    if (!review?.worktree) return '';
+    const remote = review.repo ? await this.remoteFor(review.repo.path, review.repository) : 'origin';
+    // three dots: what this branch added since it left the base, which is the
+    // diff GitHub shows and the one the review is about
+    const { stdout } = await exec(
+      'git',
+      ['-C', review.worktree, 'diff', `${remote}/${review.baseRefName}...HEAD`],
+      { maxBuffer: 32 * 1024 * 1024 },
+    ).catch(async () => {
+      // the base ref may not be fetched (an old worktree, a renamed default);
+      // the merge base with HEAD's own history is the next best anchor
+      const fallback = await exec('git', ['-C', review.worktree!, 'diff', 'HEAD~1...HEAD'], {
+        maxBuffer: 32 * 1024 * 1024,
+      }).catch(() => ({ stdout: '' }));
+      return fallback;
+    });
+    return stdout.length > DIFF_LIMIT ? `${stdout.slice(0, DIFF_LIMIT)}\n\n[diff truncated at ${DIFF_LIMIT} bytes]` : stdout;
+  }
+
+  /**
+   * Edit — or add, or drop — the comment anchored at a line, by rewriting the
+   * document's fence. The operator's words land in the same artifact the agent
+   * writes, so a later chat turn sees them and `p` posts them.
+   */
+  editFinding(id: string, at: { file: string; line: number }, comment: string, severity?: Severity): void {
+    const review = store.getReview(id);
+    if (!review?.worktree) return this.toast('no worktree for this review yet', 'err');
+    const path = join(review.worktree, REVIEW_FILE);
+    if (!existsSync(path)) return this.toast('no review document yet — press r first', 'err');
+    const before = readFileSync(path, 'utf8');
+    const after = upsertFinding(before, at, comment, severity);
+    if (after === before) return;
+    writeFileSync(path, after);
+    // the watcher would catch this too; absorbing directly means the card is
+    // right by the time the keystroke returns
+    this.absorbDoc(id);
+    store.addReviewActivity(id, comment.trim() ? `you edited the comment on ${at.file}:${at.line}` : `you removed the comment on ${at.file}:${at.line}`);
+  }
+
   private async remoteFor(path: string, repository: string): Promise<string> {
     const { stdout } = await exec('git', ['-C', path, 'remote', '-v']).catch(() => ({ stdout: '' }));
     for (const line of stdout.split('\n')) {
@@ -625,6 +719,8 @@ const SEVERITY_LABEL: Record<Severity, [string, string]> = {
   consider: ['consideration', 'considerations'],
   nit: ['nit', 'nits'],
   praise: ['praise', 'praise'],
+  // never reaches a count line: an info finding is not posted
+  info: ['note', 'notes'],
 };
 
 /** The lead: no file, no line, no severity — one sentence opening the review. */
@@ -640,13 +736,15 @@ export function leadFinding(findings: ReviewFinding[]): ReviewFinding | undefine
  * sentence, a count of what was raised, and whatever couldn't be anchored to
  * a line; the inline comments are the review.
  */
-function reviewBody(
+export function reviewBody(
   review: Review,
   unanchored: ReviewFinding[],
   event: ReviewEvent,
   hasInlineComments: boolean,
 ): string {
-  const findings = review.findings ?? [];
+  // info findings never reach GitHub, so they never reach the body either —
+  // filtered here rather than relying on the severity list below to omit them
+  const findings = (review.findings ?? []).filter((f) => f.severity !== 'info');
   const lead = leadFinding(findings);
   const rest = findings.filter((f) => f !== lead);
   const parts: string[] = [];
@@ -776,11 +874,14 @@ End the file with a \`findings\` block: a JSON **array**, one object per finding
 \`\`\`findings
 [
   {"comment": "Solid change; the precedence rule between scoped and global values is the one thing worth a second look."},
-  {"file": "src/x.rs", "line": 42, "severity": "blocking", "comment": "Full comment to the author, in markdown.\\n\\nParagraphs are fine."}
+  {"file": "src/x.rs", "line": 42, "severity": "blocking", "comment": "Full comment to the author, in markdown.\\n\\nParagraphs are fine."},
+  {"file": "src/x.rs", "line": 38, "severity": "info", "comment": "Reads the scoped value first, falling back to the global one."}
 ]
 \`\`\`
 
-Rules for the rest of the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches — omit both only when the point isn't about any particular place, and it will be posted in the review body instead; \`severity\` is one of blocking, consider, nit, praise. Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
+**\`info\` is the other half of the review.** An info finding is never posted: it annotates the code for whoever reads the review — what a dense block is doing, in a plain sentence — so the operator can follow the change without reconstructing it. Write one wherever the code would cost a reader real effort, anchored like any other finding. It is not the place for criticism: anything you would say to the author gets a real severity instead.
+
+Rules for the rest of the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches — omit both only when the point isn't about any particular place, and it will be posted in the review body instead; \`severity\` is one of blocking, consider, nit, praise, or info (never posted). Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
 
 colinear assembles the posted body itself: your lead sentence, then a count of what you raised (\"2 considerations, 1 nit\"), then anything that had no line to attach to. Don't write those parts yourself.
 

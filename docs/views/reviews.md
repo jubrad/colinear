@@ -14,10 +14,56 @@ The detail pane shows the review's worktree and its **session id** as a ready-to
 `claude --resume` — the same handles a task shows, and the way back into a review session from
 outside colinear.
 
-`enter` opens the **review document** full screen — the agent's write-up on one side, a discussion
-with that same agent on the other (`tab` switches, `j/k` scrolls, `e` edits it in `$EDITOR`). Your
-turn resumes the reviewing session, so the PR is still in context; when the agent needs a decision it
-asks in the same pane.
+## Reading it against the code
+
+`enter` opens the **annotated diff**: the PR's diff on the left, and beside each line what the agent
+had to say about it. Chat sits along the bottom.
+
+```
+┌ diff ──────────────────────────────┬──────────────────────────┐
+│     1  fn reconnect(&mut self) {   │                          │
+│ ▍  42 +    for _ in 0..RETRIES {   │ ▌ This retry loop has no │
+│     43        self.call()?;        │ ▌ backoff, so a flapping…│
+│ ▍  44 +    self.handle = sub()?;   │ │ Re-opens the SUBSCRIBE │
+├────────────────────────────────────┴──────────────────────────┤
+│ you  why does the casing matter?                              │
+└───────────────────────────────────────────────────────────────┘
+```
+
+The right column is a **margin**: every comment sits at the height of the line it is about, so you
+read the two together without looking anything up. A review document read end to end gives you the
+findings in the agent's order; this gives them in the **code's** order, which is the order you check
+them in. `▍` marks an annotated line, `n`/`N` walk between them, and the view opens on the first one
+rather than on a file header.
+
+Two kinds share the margin, told apart by their bar:
+
+- **`▌` a comment** the agent would send, coloured by severity (blocking, consider, nit, praise);
+- **`│` an annotation** — severity **`info`**, which is *never posted*. It explains what a dense
+  block is doing so whoever reads the review can follow the change without reconstructing it.
+
+They live in one list, so an annotation is editable exactly like a comment — and promoting one to a
+real severity is how "I had to explain this to myself" becomes "the author should know this". An
+`info` finding is filtered out of the inline comments, out of the body, and out of the severity
+counts; a review holding nothing but annotations has nothing to post, and says so.
+
+Alignment wins over completeness: a block starts at its anchor's row and never shifts, so a long
+comment that would run into the next one is cut with an `…` rather than pushing the code out of
+line. `e` shows it whole. A comment about the PR as a whole has no line to sit beside, so it gets
+its own line under both panes.
+
+**The right pane is editable**, because the agent's comment is a draft of yours. `e` opens it,
+`ctrl+d` saves, an empty comment removes it, and `d` drops one outright. `e` on a line with nothing
+on it writes a new comment there; **`i` writes an annotation instead** — the same editor, saved as
+`info`, so you can explain a gnarly block to whoever reads the review without saying anything to the
+author. Every edit rewrites the ```findings fence in the review document,
+so what you post and what the agent sees never diverge — a later chat turn reads your wording, and
+`p` posts it.
+
+`d` from the list opens the **document** itself instead — the agent's prose write-up with the same
+chat beside it (`tab` switches, `j/k` scrolls, `e` edits it in `$EDITOR`). Your turn resumes the
+reviewing session, so the PR is still in context; when the agent needs a decision it asks in the
+same pane.
 
 ## Round two
 
@@ -62,7 +108,7 @@ The document's prose is written for you, to decide what to send. It never leaves
 | key | what |
 |---|---|
 | `r` | pre-review · **re-review** once posted · `x` cancel one · `u` refresh the list |
-| `enter` | the review document + discussion |
+| `enter` | the annotated diff · `d` the review document |
 | `p` post · `A` approve · `X` request changes · `n` attach a note that rides along |
 | `s` | hand the terminal to that review's claude session |
 | `S` | sort: needs-me / updated / size / repo / author / cost (again reverses) |

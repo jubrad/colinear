@@ -7,6 +7,7 @@ import { useReviews } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import type { Review } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
+import { AnnotatedDiff } from '../ui/AnnotatedDiff.js';
 import { ReviewDocModal } from '../ui/ReviewDocModal.js';
 import { useColinear } from '../ui/context.js';
 import { cell, formatDuration, formatTokens, spinner } from '../ui/format.js';
@@ -62,6 +63,10 @@ export function ReviewsView(props: { param?: string }) {
   const [note, setNote] = useState('');
   const [confirm, setConfirm] = useState<'post' | 'approve' | 'request-changes'>();
   const [reading, setReading] = useState(false);
+  const [diffs, setDiffs] = useState<Record<string, string>>({});
+  const [annotated, setAnnotated] = useState(true);
+
+  useEffect(() => ctx.onReviewDiff?.((id, diff) => setDiffs((d) => ({ ...d, [id]: diff }))), []);
   const [sort, setSort] = useState<SortKey>('needs me');
   const [desc, setDesc] = useState(false);
 
@@ -128,7 +133,11 @@ export function ReviewsView(props: { param?: string }) {
     const idx = rows.findIndex((r) => r.id === id);
     if (idx === -1) return;
     setCursor(idx);
-    if (wantsDoc) setReading(true);
+    if (wantsDoc) {
+      // coming back from $EDITOR on the document: return to the document
+      setAnnotated(false);
+      setReading(true);
+    }
   }, [props.param, rows.length]);
 
   useInput(
@@ -146,7 +155,16 @@ export function ReviewsView(props: { param?: string }) {
       if (input === '/') setFiltering(true);
       if (!selected) return;
       if (input === 'a' && selected.question) return; // answering handled below
-      if (key.return || input === 'd') setReading(true);
+      // enter reads the review against the code; d reads the document itself
+      if (key.return) {
+        setAnnotated(true);
+        setReading(true);
+        if (!diffs[selected.id]) ctx.dispatcher.reviewDiff(selected.id);
+      }
+      if (input === 'd') {
+        setAnnotated(false);
+        setReading(true);
+      }
       if (input === 'r') {
         ctx.dispatcher.startReview(selected.id);
         // one key, two jobs: a review that has been sent revises itself
@@ -208,6 +226,27 @@ export function ReviewsView(props: { param?: string }) {
   const visible = Math.max(3, ctx.size.rows - 16);
   const start = Math.max(0, Math.min(cursor - Math.floor(visible / 2), rows.length - visible));
   const window = rows.slice(start, start + visible);
+
+  if (reading && selected && annotated) {
+    return (
+      <AnnotatedDiff
+        review={selected}
+        diff={diffs[selected.id]}
+        width={ctx.size.columns - 4}
+        height={Math.max(12, ctx.size.rows - 6)}
+        busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
+        onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
+        onEditFinding={(file, line, comment, severity) =>
+          ctx.dispatcher.editFinding(selected.id, file, line, comment, severity)
+        }
+        onPost={() => {
+          ctx.dispatcher.postReview(selected.id);
+          ctx.toast(`posting ${selected.repository}#${selected.number}…`, 'info');
+        }}
+        onClose={() => setReading(false)}
+      />
+    );
+  }
 
   if (reading && selected) {
     return (
@@ -465,7 +504,8 @@ function shortRepo(repository: string): string {
 export const reviewsKeys: Array<[string, string]> = [
   ['i/k ↑↓', 'row'],
   ['r', 'pre-review · re-review once posted'],
-  ['enter', 'read + chat'],
+  ['enter', 'diff + annotations'],
+  ['d', 'the review document'],
   ['s', 'attach claude'],
   ['p', 'post comments'],
   ['A', 'approve'],

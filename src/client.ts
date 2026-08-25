@@ -61,6 +61,8 @@ export interface DispatcherApi {
   postPlanUpdate(projectId: string): void;
   startPlanChat(projectId: string): void;
   listAgents(): void;
+  reviewDiff(id: string): void;
+  editFinding(id: string, file: string, line: number, comment: string, severity?: string): void;
   createIssue(scopeId: string, request: string): void;
   createProject(brief: ProjectBrief): void;
   gcScan(olderThanDays: number): void;
@@ -112,6 +114,7 @@ export interface Connection {
   onGcProgress(fn: (p: GcProgress) => void): () => void;
   onPlanChatReady(fn: (r: PlanChatReady) => void): () => void;
   onAgents(fn: (list: AgentSession[]) => void): () => void;
+  onReviewDiff(fn: (id: string, diff: string) => void): () => void;
   onCreating(fn: (agentId: string) => void): () => void;
   /** daemon-side messages (edit results, etc.); returns an unsubscribe */
   onToast(fn: (text: string, kind: 'info' | 'ok' | 'err') => void): () => void;
@@ -241,6 +244,7 @@ export async function connectToDaemon(): Promise<Connection> {
   const gcProgressListeners = new Set<(p: GcProgress) => void>();
   const planChatListeners = new Set<(r: PlanChatReady) => void>();
   const agentListeners = new Set<(list: AgentSession[]) => void>();
+  const diffListeners = new Set<(id: string, diff: string) => void>();
   const creatingListeners = new Set<(agentId: string) => void>();
 
   return await new Promise<Connection>((resolve, reject) => {
@@ -303,6 +307,10 @@ export async function connectToDaemon(): Promise<Connection> {
             agentListeners.add(fn);
             return () => agentListeners.delete(fn);
           },
+          onReviewDiff: (fn) => {
+            diffListeners.add(fn);
+            return () => diffListeners.delete(fn);
+          },
           onCreating: (fn) => {
             creatingListeners.add(fn);
             return () => creatingListeners.delete(fn);
@@ -342,6 +350,9 @@ export async function connectToDaemon(): Promise<Connection> {
           postPlanUpdate: (projectId) => command({ name: 'postPlanUpdate', projectId }),
           startPlanChat: (projectId) => command({ name: 'startPlanChat', projectId }),
           listAgents: () => command({ name: 'listAgents' }),
+          reviewDiff: (id) => command({ name: 'reviewDiff', id }),
+          editFinding: (id, file, line, comment, severity) =>
+            command({ name: 'editFinding', id, file, line, comment, severity }),
           createIssue: (scopeId, request) => command({ name: 'createIssue', scopeId, request }),
           createProject: (brief) => command({ name: 'createProject', brief }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),
@@ -354,6 +365,8 @@ export async function connectToDaemon(): Promise<Connection> {
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),
           },
         });
+      } else if (msg.t === 'reviewDiff') {
+        for (const fn of diffListeners) fn(msg.id, msg.diff);
       } else if (msg.t === 'agents') {
         for (const fn of agentListeners) fn(msg.list);
       } else if (msg.t === 'creating') {

@@ -12,7 +12,7 @@ import { startPrPolling } from './core/prs.js';
 import { Reviewer } from './core/reviewer.js';
 import { PlanManager } from './core/projectplan.js';
 import { providerFor } from './core/provider.js';
-import type { Project } from './core/types.js';
+import type { Project, Severity } from './core/types.js';
 import { pollReviewRequests, startReviewPolling } from './core/reviews.js';
 import {
   createDecoder,
@@ -229,6 +229,17 @@ export async function runDaemon(): Promise<void> {
       }
       case 'message':
         dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });
+        break;
+      case 'reviewDiff':
+        void reviewer.diff(cmd.id).then((diff) => reply({ t: 'reviewDiff', id: cmd.id, diff }));
+        break;
+      case 'editFinding':
+        reviewer.editFinding(
+          cmd.id,
+          { file: cmd.file, line: cmd.line },
+          cmd.comment,
+          cmd.severity as Severity | undefined,
+        );
         break;
       case 'listAgents':
         reply({ t: 'agents', list: listSessions() });
