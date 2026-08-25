@@ -1428,19 +1428,25 @@ read the two together without looking anything up. A review document read end to
 findings in the agent's order; this gives them in the <strong>code's</strong> order, which is the order you check
 them in. <code>▍</code> marks an annotated line, <code>n</code>/<code>N</code> walk between them, and the view opens on the first one
 rather than on a file header.</p>
-<p>Two kinds of annotation share the margin, told apart by their bar:</p>
+<p>Two kinds share the margin, told apart by their bar:</p>
 <ul>
-<li><strong><code>▌</code> a comment</strong> the agent would send, coloured by severity, and</li>
-<li><strong><code>│</code> a note</strong> — what this hunk <em>does</em>, written for someone reading the code cold. Notes are
-  context and are never posted; anything the agent would say to the author is a comment.</li>
+<li><strong><code>▌</code> a comment</strong> the agent would send, coloured by severity (blocking, consider, nit, praise);</li>
+<li><strong><code>│</code> an annotation</strong> — severity <strong><code>info</code></strong>, which is <em>never posted</em>. It explains what a dense
+  block is doing so whoever reads the review can follow the change without reconstructing it.</li>
 </ul>
+<p>They live in one list, so an annotation is editable exactly like a comment — and promoting one to a
+real severity is how "I had to explain this to myself" becomes "the author should know this". An
+<code>info</code> finding is filtered out of the inline comments, out of the body, and out of the severity
+counts; a review holding nothing but annotations has nothing to post, and says so.</p>
 <p>Alignment wins over completeness: a block starts at its anchor's row and never shifts, so a long
 comment that would run into the next one is cut with an <code>…</code> rather than pushing the code out of
 line. <code>e</code> shows it whole. A comment about the PR as a whole has no line to sit beside, so it gets
 its own line under both panes.</p>
 <p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours. <code>e</code> opens it,
 <code>ctrl+d</code> saves, an empty comment removes it, and <code>d</code> drops one outright. <code>e</code> on a line with nothing
-on it writes a new comment there. Every edit rewrites the <code>``findings fence in the review document,
+on it writes a new comment there; <strong><code>i</code> writes an annotation instead</strong> — the same editor, saved as
+<code>info</code>, so you can explain a gnarly block to whoever reads the review without saying anything to the
+author. Every edit rewrites the <code>``findings fence in the review document,
 so what you post and what the agent sees never diverge — a later chat turn reads your wording, and</code>p` posts it.</p>
 <p><code>d</code> from the list opens the <strong>document</strong> itself instead — the agent's prose write-up with the same
 chat beside it (<code>tab</code> switches, <code>j/k</code> scrolls, <code>e</code> edits it in <code>$EDITOR</code>). Your turn resumes the
