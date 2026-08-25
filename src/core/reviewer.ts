@@ -32,7 +32,7 @@ const DOC_LIMIT = 64_000;
 /** A diff past this is not being read line by line anyway. */
 const DIFF_LIMIT = 2_000_000;
 
-const SEVERITIES = new Set(['blocking', 'consider', 'nit', 'praise']);
+const SEVERITIES = new Set(['blocking', 'consider', 'nit', 'praise', 'info']);
 
 /** ```findings preferred, ```json accepted. */
 const FENCE_NAMES = ['findings', 'json'];
@@ -62,30 +62,6 @@ function validFindings(value: unknown): ReviewFinding[] {
   });
 }
 
-/** A note is the agent explaining what a hunk does — read-only context, not a comment to post. */
-export interface DiffNote {
-  file: string;
-  line: number;
-  note: string;
-}
-
-function validNotes(value: unknown): DiffNote[] {
-  const list = Array.isArray((value as { notes?: unknown })?.notes) ? (value as { notes: unknown[] }).notes : [];
-  return list.flatMap((raw) => {
-    const n = raw as Partial<DiffNote>;
-    if (typeof n?.note !== 'string' || !n.note.trim()) return [];
-    if (typeof n.file !== 'string' || !n.file.trim()) return [];
-    if (typeof n.line !== 'number' || !Number.isFinite(n.line)) return [];
-    return [{ file: n.file.trim(), line: n.line, note: n.note }];
-  });
-}
-
-/** The agent's per-hunk explanations, when the document carries any. */
-export function parseNotes(text: string): DiffNote[] {
-  const extracted = extractFencedJson(text, FENCE_NAMES);
-  return extracted ? validNotes(extracted.value) : [];
-}
-
 /**
  * Write findings back into the document's fence, leaving the prose exactly as
  * it was.
@@ -95,9 +71,8 @@ export function parseNotes(text: string): DiffNote[] {
  * splice uses the fence's own offsets for that reason — a rewrite of the whole
  * file would quietly discard whatever the agent wrote around it.
  */
-export function writeFindings(text: string, findings: ReviewFinding[], notes: DiffNote[] = []): string {
-  const body = notes.length ? { findings, notes } : findings;
-  const json = JSON.stringify(body, null, 2);
+export function writeFindings(text: string, findings: ReviewFinding[]): string {
+  const json = JSON.stringify(findings, null, 2);
   const block = `\`\`\`findings\n${json}\n\`\`\``;
   const extracted = extractFencedJson(text, FENCE_NAMES);
   if (!extracted) return `${text.trimEnd()}\n\n${block}\n`;
@@ -116,17 +91,16 @@ export function upsertFinding(
   severity?: Severity,
 ): string {
   const { findings } = parseDoc(text);
-  const notes = parseNotes(text);
   const idx = findings.findIndex((f) => f.file === at.file && f.line === at.line);
   const trimmed = comment.trim();
   if (!trimmed) {
     if (idx === -1) return text;
-    return writeFindings(text, findings.filter((_, i) => i !== idx), notes);
+    return writeFindings(text, findings.filter((_, i) => i !== idx));
   }
   const next = [...findings];
   if (idx === -1) next.push({ file: at.file, line: at.line, severity: severity ?? 'consider', comment: trimmed });
   else next[idx] = { ...next[idx], comment: trimmed, severity: severity ?? next[idx].severity ?? 'consider' };
-  return writeFindings(text, next, notes);
+  return writeFindings(text, next);
 }
 
 /**
@@ -346,12 +320,16 @@ export class Reviewer {
       this.toast('nothing to post yet — press r to run a pre-review', 'err');
       return;
     }
-    const anchored = (review.findings ?? []).filter((f) => f.line && f.file);
-    const loose = (review.findings ?? []).filter((f) => !f.line || !f.file);
+    // `info` findings annotate the code for the reader and are deliberately
+    // never sent: they would read as review comments to the author, which is
+    // the one thing they are not
+    const postable = (review.findings ?? []).filter((f) => f.severity !== 'info');
+    const anchored = postable.filter((f) => f.line && f.file);
+    const loose = postable.filter((f) => !f.line || !f.file);
     // zero findings means the fence failed to parse (or was never written):
     // what would go up is the summary — a description of the PR, not feedback.
     // That exact thing has been posted to a real PR; never again.
-    if (!(review.findings ?? []).length && event !== 'APPROVE') {
+    if (!postable.length && event !== 'APPROVE') {
       // refuse WITHOUT touching the status. Setting it to 'ready' here demoted
       // an already-posted review out of the reconcile's protected set, and the
       // next poll staled it — the refusal itself made the review disappear.
@@ -741,6 +719,8 @@ const SEVERITY_LABEL: Record<Severity, [string, string]> = {
   consider: ['consideration', 'considerations'],
   nit: ['nit', 'nits'],
   praise: ['praise', 'praise'],
+  // never reaches a count line: an info finding is not posted
+  info: ['note', 'notes'],
 };
 
 /** The lead: no file, no line, no severity — one sentence opening the review. */
@@ -756,13 +736,15 @@ export function leadFinding(findings: ReviewFinding[]): ReviewFinding | undefine
  * sentence, a count of what was raised, and whatever couldn't be anchored to
  * a line; the inline comments are the review.
  */
-function reviewBody(
+export function reviewBody(
   review: Review,
   unanchored: ReviewFinding[],
   event: ReviewEvent,
   hasInlineComments: boolean,
 ): string {
-  const findings = review.findings ?? [];
+  // info findings never reach GitHub, so they never reach the body either —
+  // filtered here rather than relying on the severity list below to omit them
+  const findings = (review.findings ?? []).filter((f) => f.severity !== 'info');
   const lead = leadFinding(findings);
   const rest = findings.filter((f) => f !== lead);
   const parts: string[] = [];
@@ -890,20 +872,16 @@ End the file with a \`findings\` block: a JSON **array**, one object per finding
 **The first entry is the lead**: no \`file\`, no \`line\`, no \`severity\` — one sentence that opens the posted review. Say what the PR does and whether it looks sound; the author reads this first and it is the only thing they see if they read nothing else. One sentence, not a paragraph.
 
 \`\`\`findings
-{
-  "findings": [
-    {"comment": "Solid change; the precedence rule between scoped and global values is the one thing worth a second look."},
-    {"file": "src/x.rs", "line": 42, "severity": "blocking", "comment": "Full comment to the author, in markdown.\\n\\nParagraphs are fine."}
-  ],
-  "notes": [
-    {"file": "src/x.rs", "line": 38, "note": "Reads the scoped value first, falling back to the global one."}
-  ]
-}
+[
+  {"comment": "Solid change; the precedence rule between scoped and global values is the one thing worth a second look."},
+  {"file": "src/x.rs", "line": 42, "severity": "blocking", "comment": "Full comment to the author, in markdown.\\n\\nParagraphs are fine."},
+  {"file": "src/x.rs", "line": 38, "severity": "info", "comment": "Reads the scoped value first, falling back to the global one."}
+]
 \`\`\`
 
-**\`notes\` is the other half of the review**: a short plain-sentence explanation of what a hunk *does*, anchored the same way. The operator reads these beside the diff, so write one for each meaningful hunk — what changed and why it matters to someone reading the code cold. They are context, never posted to GitHub, and they are not the place for criticism: anything you would say to the author is a finding.
+**\`info\` is the other half of the review.** An info finding is never posted: it annotates the code for whoever reads the review — what a dense block is doing, in a plain sentence — so the operator can follow the change without reconstructing it. Write one wherever the code would cost a reader real effort, anchored like any other finding. It is not the place for criticism: anything you would say to the author gets a real severity instead.
 
-Rules for the rest of the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches — omit both only when the point isn't about any particular place, and it will be posted in the review body instead; \`severity\` is one of blocking, consider, nit, praise. Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
+Rules for the rest of the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches — omit both only when the point isn't about any particular place, and it will be posted in the review body instead; \`severity\` is one of blocking, consider, nit, praise, or info (never posted). Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
 
 colinear assembles the posted body itself: your lead sentence, then a count of what you raised (\"2 considerations, 1 nit\"), then anything that had no line to attach to. Don't write those parts yourself.
 

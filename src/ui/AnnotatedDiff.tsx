@@ -27,7 +27,6 @@ type Focus = 'diff' | 'edit' | 'chat';
 export function AnnotatedDiff(props: {
   review: Review;
   diff?: string;
-  notes: Array<{ file: string; line: number; note: string }>;
   width: number;
   height: number;
   busy: boolean;
@@ -36,34 +35,34 @@ export function AnnotatedDiff(props: {
   onPost: () => void;
   onClose: () => void;
 }) {
-  const { review, diff, notes, width, height, busy, onSend, onEditFinding, onPost, onClose } = props;
+  const { review, diff, width, height, busy, onSend, onEditFinding, onPost, onClose } = props;
   const [cursor, setCursor] = useState(0);
   const [scroll, setScroll] = useState(0);
   const [focus, setFocus] = useState<Focus>('diff');
   const [draft, setDraft] = useState('');
+  /** which kind the editor is writing: a comment to send, or an annotation that never is */
+  const [editAs, setEditAs] = useState<Severity | undefined>(undefined);
   const [chat, setChat] = useState('');
 
   const lines = useMemo(() => (diff ? parseDiff(diff) : []), [diff]);
 
-  /** file:line → the comment anchored there, and the agent's note about it */
-  const { byLine, noteByLine } = useMemo(() => {
-    const byLine = new Map<string, ReviewFinding>();
+  /** file:line → what is anchored there. `info` entries are annotations, the rest are comments. */
+  const byLine = useMemo(() => {
+    const map = new Map<string, ReviewFinding>();
     for (const f of review.findings ?? []) {
-      if (f.file && typeof f.line === 'number') byLine.set(anchorKey(f.file, f.line), f);
+      if (f.file && typeof f.line === 'number') map.set(anchorKey(f.file, f.line), f);
     }
-    const noteByLine = new Map<string, string>();
-    for (const n of notes) noteByLine.set(anchorKey(n.file, n.line), n.note);
-    return { byLine, noteByLine };
-  }, [review.findings, notes]);
+    return map;
+  }, [review.findings]);
 
   const annotatedRows = useMemo(
     () =>
       lines.reduce<number[]>((acc, line, i) => {
         const key = line.newLine !== undefined ? anchorKey(line.file, line.newLine) : undefined;
-        if (key && (byLine.has(key) || noteByLine.has(key))) acc.push(i);
+        if (key && byLine.has(key)) acc.push(i);
         return acc;
       }, []),
-    [lines, byLine, noteByLine],
+    [lines, byLine],
   );
 
   const chatRows = 6;
@@ -84,15 +83,16 @@ export function AnnotatedDiff(props: {
     const annotated = visible.map((line) => {
       const key = line.newLine !== undefined ? anchorKey(line.file, line.newLine) : undefined;
       const finding = key ? byLine.get(key) : undefined;
+      const info = finding?.severity === 'info';
       return {
         key,
-        comment: finding?.comment,
+        comment: info ? undefined : finding?.comment,
+        note: info ? finding?.comment : undefined,
         severity: finding?.severity,
-        note: finding ? undefined : key ? noteByLine.get(key) : undefined,
       };
     });
     return layoutMargin(annotated, noteWidth - 4, wrapText);
-  }, [visible, byLine, noteByLine, noteWidth]);
+  }, [visible, byLine, noteWidth]);
 
   const current = lines[cursor];
   const anchor =
@@ -144,6 +144,14 @@ export function AnnotatedDiff(props: {
     if (input === 'N') jump(-1);
     if (input === 'e' && anchor) {
       setDraft(finding?.comment ?? '');
+      // keep what it already is; a brand-new one is a comment to send
+      setEditAs(finding?.severity ?? 'consider');
+      setFocus('edit');
+    }
+    // an annotation for whoever reads the code, never sent to the author
+    if (input === 'i' && anchor) {
+      setDraft(finding?.severity === 'info' ? finding.comment : '');
+      setEditAs('info');
       setFocus('edit');
     }
     if (input === 'd' && anchor && finding) onEditFinding(anchor.file, anchor.line, '');
@@ -175,9 +183,10 @@ export function AnnotatedDiff(props: {
               line={line}
               width={diffWidth - 4}
               onCursor={scroll + i === cursor}
-              annotated={
+              annotated={line.newLine !== undefined && byLine.has(anchorKey(line.file, line.newLine))}
+              info={
                 line.newLine !== undefined &&
-                (byLine.has(anchorKey(line.file, line.newLine)) || noteByLine.has(anchorKey(line.file, line.newLine)))
+                byLine.get(anchorKey(line.file, line.newLine))?.severity === 'info'
               }
             />
           ))}
@@ -207,8 +216,9 @@ export function AnnotatedDiff(props: {
             })
           ) : anchor ? (
             <>
-              <Text bold color={theme.key} wrap="truncate">
-                comment on {anchor.file}:{anchor.line}
+              <Text bold color={editAs === 'info' ? theme.info : theme.key} wrap="truncate">
+                {editAs === 'info' ? 'annotation on ' : 'comment on '}
+                {anchor.file}:{anchor.line}
               </Text>
               <TextArea
                 value={draft}
@@ -216,9 +226,13 @@ export function AnnotatedDiff(props: {
                 focus
                 width={noteWidth - 4}
                 height={paneHeight - 5}
-                placeholder="what you'd say to the author — ctrl+d saves, esc cancels"
+                placeholder={
+                  editAs === 'info'
+                    ? 'what this code does, for whoever reads the review — never posted'
+                    : "what you'd say to the author — ctrl+d saves, esc cancels"
+                }
                 onSubmit={() => {
-                  onEditFinding(anchor.file, anchor.line, draft, finding?.severity);
+                  onEditFinding(anchor.file, anchor.line, draft, editAs);
                   setFocus('diff');
                   setDraft('');
                 }}
@@ -258,14 +272,14 @@ export function AnnotatedDiff(props: {
       </Box>
 
       <Text dimColor wrap="truncate">
-        j/k move · n/N next annotation · e comment · d drop · tab chat · p post · esc close
+        j/k move · n/N next · e comment · i annotate (never posted) · d drop · tab chat · p post · esc
       </Text>
     </Box>
   );
 }
 
-function DiffRow(props: { line: DiffLine; width: number; onCursor: boolean; annotated: boolean }) {
-  const { line, width, onCursor, annotated } = props;
+function DiffRow(props: { line: DiffLine; width: number; onCursor: boolean; annotated: boolean; info?: boolean }) {
+  const { line, width, onCursor, annotated, info } = props;
   if (line.kind === 'file') {
     return (
       <Text bold color={theme.accent} wrap="truncate" inverse={onCursor}>
@@ -286,7 +300,10 @@ function DiffRow(props: { line: DiffLine; width: number; onCursor: boolean; anno
   return (
     <Text wrap="truncate" inverse={onCursor}>
       {/* the marker column: where a comment lives, visible while scrolling past */}
-      <Text color={annotated ? theme.key : undefined}>{annotated ? '▍' : ' '}</Text>
+      {/* the marker says which kind: a comment to send, or an annotation */}
+      <Text color={annotated ? (info ? theme.info : theme.key) : undefined}>
+        {annotated ? (info ? '│' : '▍') : ' '}
+      </Text>
       <Text dimColor>{num} </Text>
       <Text color={onCursor ? undefined : color}>
         {sign}

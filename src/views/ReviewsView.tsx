@@ -8,7 +8,6 @@ import { store } from '../core/store.js';
 import type { Review } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
 import { AnnotatedDiff } from '../ui/AnnotatedDiff.js';
-import { parseNotes } from '../core/reviewer.js';
 import { ReviewDocModal } from '../ui/ReviewDocModal.js';
 import { useColinear } from '../ui/context.js';
 import { cell, formatDuration, formatTokens, spinner } from '../ui/format.js';
@@ -233,7 +232,6 @@ export function ReviewsView(props: { param?: string }) {
       <AnnotatedDiff
         review={selected}
         diff={diffs[selected.id]}
-        notes={parseNotes(selected.doc ?? '')}
         width={ctx.size.columns - 4}
         height={Math.max(12, ctx.size.rows - 6)}
         busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}

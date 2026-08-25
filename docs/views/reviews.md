@@ -36,11 +36,16 @@ findings in the agent's order; this gives them in the **code's** order, which is
 them in. `▍` marks an annotated line, `n`/`N` walk between them, and the view opens on the first one
 rather than on a file header.
 
-Two kinds of annotation share the margin, told apart by their bar:
+Two kinds share the margin, told apart by their bar:
 
-- **`▌` a comment** the agent would send, coloured by severity, and
-- **`│` a note** — what this hunk *does*, written for someone reading the code cold. Notes are
-  context and are never posted; anything the agent would say to the author is a comment.
+- **`▌` a comment** the agent would send, coloured by severity (blocking, consider, nit, praise);
+- **`│` an annotation** — severity **`info`**, which is *never posted*. It explains what a dense
+  block is doing so whoever reads the review can follow the change without reconstructing it.
+
+They live in one list, so an annotation is editable exactly like a comment — and promoting one to a
+real severity is how "I had to explain this to myself" becomes "the author should know this". An
+`info` finding is filtered out of the inline comments, out of the body, and out of the severity
+counts; a review holding nothing but annotations has nothing to post, and says so.
 
 Alignment wins over completeness: a block starts at its anchor's row and never shifts, so a long
 comment that would run into the next one is cut with an `…` rather than pushing the code out of
@@ -49,7 +54,9 @@ its own line under both panes.
 
 **The right pane is editable**, because the agent's comment is a draft of yours. `e` opens it,
 `ctrl+d` saves, an empty comment removes it, and `d` drops one outright. `e` on a line with nothing
-on it writes a new comment there. Every edit rewrites the ```findings fence in the review document,
+on it writes a new comment there; **`i` writes an annotation instead** — the same editor, saved as
+`info`, so you can explain a gnarly block to whoever reads the review without saying anything to the
+author. Every edit rewrites the ```findings fence in the review document,
 so what you post and what the agent sees never diverge — a later chat turn reads your wording, and
 `p` posts it.
 
