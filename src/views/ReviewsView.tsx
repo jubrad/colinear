@@ -33,7 +33,11 @@ export function freshness(r: Review): { glyph: string; color: string; why: strin
   }
   // only meaningful while the PR is open: a settled review is asking nobody
   if (r.requested && r.status !== 'stale') {
-    return { glyph: '●', color: theme.key, why: 'your review is requested' };
+    // a request aimed at you personally is yours to answer; one that reached
+    // you through a team may already be someone else's, so it reads quieter
+    return r.requestedVia === 'team'
+      ? { glyph: '○', color: theme.dim, why: 'requested from a team you are on — anyone on it can take this' }
+      : { glyph: '●', color: theme.key, why: 'your review is requested' };
   }
   return undefined;
 }
@@ -101,6 +105,9 @@ export function ReviewsView(props: { param?: string }) {
     const rank = (r: Review) => {
       const reviewed = r.posted?.sha ?? r.reviewedSha;
       if (reviewed && r.headSha && r.headSha !== reviewed) return -1;
+      // a team request is not addressed to you in particular, so it sits below
+      // work that is
+      if (r.requestedVia === 'team' && r.status === 'pending') return 3.5;
       return r.status === 'ready'
         ? 0
         : ACTIVE.includes(r.status)
