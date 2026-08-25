@@ -11,12 +11,19 @@ Two facts decide whether a row needs you, and neither is the review's status:
 
 | | |
 |---|---|
-| **`●`** | the PR is **asking for your review** right now |
+| **`●`** | **you** were asked, by name |
+| **`○`** | a **team you are on** was asked — anyone on it can take it |
 | **`↻`** | the author has **pushed since you reviewed** — what you said may no longer apply |
 
-`●` disappears the moment you post, because submitting a review fulfils the request: the PR leaves
-GitHub's review-requested search while the row stays here. That is the difference between "waiting
-on you" and "you have had your say".
+GitHub's `review-requested:<you>` search returns both kinds, and the PR lists its requested
+reviewers: if you are there by name it was asked of you, and if you are not — yet the PR came back
+from a search for *your* requests — it reached you through a team. Naming the team would need an org
+scope colinear doesn't ask for, and the distinction doesn't. A team request sorts below work
+addressed to you, because it may already be someone else's.
+
+`●`/`○` disappear the moment you post, because submitting a review fulfils the request: the PR
+leaves the search while the row stays here. That is the difference between "waiting on you" and "you
+have had your say".
 
 `↻` compares the PR's current head against the commit your review was posted about (or, before
 posting, the one the document was written against). It outranks `●` — a review that no longer

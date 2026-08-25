@@ -417,6 +417,14 @@ export interface Review {
    * record stays. It is the difference between "waiting on you" and "done".
    */
   requested?: boolean;
+  /**
+   * Who it was asked of. GitHub's `review-requested:<you>` search returns both
+   * kinds, so the two are told apart by whether you are listed as a reviewer
+   * yourself: if you are not, it reached you through a team. `team` therefore
+   * also covers the case where the team's name is unreadable — naming it needs
+   * an org scope colinear does not ask for, and the distinction does not.
+   */
+  requestedVia?: 'you' | 'team';
   /** the PR's head as of the last poll — compared against what you reviewed */
   headSha?: string;
   /** the head we last said had moved, so a push is announced once, not every poll */

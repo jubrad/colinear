@@ -21,6 +21,9 @@ interface SearchedPr {
   headRefName: string;
   baseRefName: string;
   headRefOid: string;
+  // a team's entry comes back null without an org scope, which is all the
+  // signal needed: a request that is not you by name reached you by team
+  reviewRequests?: { nodes: Array<{ requestedReviewer: { __typename?: string; login?: string } | null }> };
   author: { login: string } | null;
   repository: { nameWithOwner: string };
 }
@@ -37,6 +40,7 @@ query($q: String!) {
       number title url isDraft updatedAt additions deletions changedFiles
       headRefName baseRefName
       headRefOid
+      reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } } } }
       author { login }
       repository { nameWithOwner }
     } }
@@ -117,8 +121,11 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
     await recoverPostedReviews().catch((err) => log(`review recovery failed: ${String(err).slice(0, 160)}`));
   }
   let prs: SearchedPr[];
+  // needed past the query too: it is what tells a request of you from a
+  // request of a team you are on
+  let login = '';
   try {
-    const login = await viewerLogin();
+    login = await viewerLogin();
     const { stdout } = await exec(
       'gh',
       [
@@ -154,6 +161,7 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
       headSha: pr.headRefOid,
       // it came back from a review-requested search, so it is asking for yours
       requested: true,
+      requestedVia: requestedVia(pr, login),
     };
     if (existing) {
       // A review whose repo never resolved is stuck: the config it needed may
@@ -223,7 +231,7 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
       const current = await prCurrentState(review.repository, review.number);
       if (current.state === 'OPEN' || current.state === undefined) {
         // still open, but no longer asking: you have already had your say
-        const patch: Partial<Review> = { requested: false };
+        const patch: Partial<Review> = { requested: false, requestedVia: undefined };
         if (current.headSha) patch.headSha = current.headSha;
         store.updateReview(review.id, patch);
         announceNewCommits(review.id, current.headSha);
@@ -309,6 +317,19 @@ async function prCurrentState(
  * already been announced, so a push is reported on the poll that finds it and
  * not on every poll thereafter.
  */
+/**
+ * Directly, or through a team you are on.
+ *
+ * The search returns both, and the PR lists its requested reviewers: if you
+ * are among them by name it was asked of you, and if you are not — yet the PR
+ * came back from a search for *your* requests — it reached you through a team.
+ */
+function requestedVia(pr: SearchedPr, login: string): 'you' | 'team' {
+  const nodes = pr.reviewRequests?.nodes ?? [];
+  const byName = nodes.some((n) => n.requestedReviewer?.login?.toLowerCase() === login.toLowerCase());
+  return byName ? 'you' : 'team';
+}
+
 function announceNewCommits(id: string, headSha?: string): void {
   const review = store.getReview(id);
   if (!review || !headSha) return;
