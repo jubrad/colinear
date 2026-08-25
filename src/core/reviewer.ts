@@ -898,11 +898,22 @@ End the file with a \`findings\` block: a JSON **array**, one object per finding
 [
   {"comment": "Solid change; the precedence rule between scoped and global values is the one thing worth a second look."},
   {"file": "src/x.rs", "line": 42, "severity": "blocking", "comment": "Full comment to the author, in markdown.\\n\\nParagraphs are fine."},
-  {"file": "src/x.rs", "line": 38, "severity": "info", "comment": "Reads the scoped value first, falling back to the global one."}
+  {"file": "src/x.rs", "line": 38, "severity": "info", "comment": "Scoped values win over global ones here; the precedence is set in config::merge and nothing else depends on the order, so this is safe to read on its own."}
 ]
 \`\`\`
 
-**\`info\` is the other half of the review.** An info finding is never posted: it annotates the code for whoever reads the review — what a dense block is doing, in a plain sentence — so the operator can follow the change without reconstructing it. Write one wherever the code would cost a reader real effort, anchored like any other finding. It is not the place for criticism: anything you would say to the author gets a real severity instead.
+**\`info\` findings exist to make a human's review possible.** They are never posted. Their reader is the person who has to decide whether this change is safe, and who has not spent the last twenty minutes in this file the way you have. Write them to close that gap: the context that lets someone judge the code, not a paraphrase of it.
+
+What earns an info finding — anchored like any other, wherever the reader would otherwise have to go and find out for themselves:
+
+- **what this code is doing and why it is here**, when the intent is not evident from the lines themselves
+- **the invariant or assumption it rests on**, and where that is established — a lock already held, a value already validated, an ordering the caller guarantees
+- **what the change actually changes** in behaviour, when the diff looks larger or smaller than its effect: a rename that alters a comparison, a moved line that changes when something runs
+- **what a reviewer should check** to satisfy themselves it is right — the call site that would break, the case that is easy to miss
+
+What does not: restating a line in English (\`increments the counter\`), narrating the obvious, or padding a hunk that reads fine on its own. An annotation that tells the reader nothing they could not see costs them the time it takes to read it, so write none rather than a weak one.
+
+And it is not the place for criticism: anything you would say to the author gets a real severity instead.
 
 Rules for the rest of the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches — omit both only when the point isn't about any particular place, and it will be posted in the review body instead; \`severity\` is one of blocking, consider, nit, praise, or info (never posted). Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
 

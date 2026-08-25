@@ -67,10 +67,13 @@ Two kinds share the margin, told apart by their bar:
 
 - **`▌` a comment** the agent would send, coloured by severity — red *blocking*, yellow *consider*,
   grey *nit*, green *praise*;
-- **`│` an annotation** in **blue** — severity **`info`**, which is *never posted*. It explains what
-  a dense block is doing so whoever reads the review can follow the change without reconstructing
-  it. Blue is deliberately off the red → yellow → green ramp: an explanation is not a mild problem,
-  and any colour on that ramp reads as one.
+- **`│` an annotation** in **blue** — severity **`info`**, which is *never posted*. Its job is to
+  make **your** review possible: the context that lets you judge the code rather than a paraphrase
+  of it. The agent is asked for the intent behind a hunk, the invariant it rests on and where that
+  is established, what the change really changes when the diff misleads, and what you should check
+  to satisfy yourself — and asked *not* to narrate lines that read fine on their own. Blue is
+  deliberately off the red → yellow → green ramp: context is not a mild problem, and any colour on
+  that ramp reads as one.
 
 They live in one list, so an annotation is editable exactly like a comment — and promoting one to a
 real severity is how "I had to explain this to myself" becomes "the author should know this". An
