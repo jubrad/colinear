@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
-import { anchorKey, layoutMargin, parseDiff, type DiffLine } from '../core/diff.js';
+import { anchorKey, layoutMargin, parseDiff, toVisualRows, type DiffLine, type VisualRow } from '../core/diff.js';
 import type { ChatTurn, Review, ReviewFinding, Severity } from '../core/types.js';
 import { TextArea } from './TextArea.js';
 import { theme } from '../theme.js';
@@ -46,7 +46,11 @@ export function AnnotatedDiff(props: {
   const [editAs, setEditAs] = useState<Severity | undefined>(undefined);
   const [chat, setChat] = useState('');
 
-  const lines = useMemo(() => (diff ? parseDiff(diff) : []), [diff]);
+  const parsed = useMemo(() => (diff ? parseDiff(diff) : []), [diff]);
+  // the gutter this pane spends before the code: marker, line number, sign
+  const codeWidth = Math.max(8, Math.floor(width * 0.62) - 11);
+  /** what is actually drawn — long lines wrap, so a row is not always a line */
+  const lines = useMemo(() => toVisualRows(parsed, codeWidth), [parsed, codeWidth]);
 
   /** file:line → what is anchored there. `info` entries are annotations, the rest are comments. */
   const byLine = useMemo(() => {
@@ -59,9 +63,11 @@ export function AnnotatedDiff(props: {
 
   const annotatedRows = useMemo(
     () =>
-      lines.reduce<number[]>((acc, line, i) => {
-        const key = line.newLine !== undefined ? anchorKey(line.file, line.newLine) : undefined;
-        if (key && byLine.has(key)) acc.push(i);
+      lines.reduce<number[]>((acc, row, i) => {
+        // only the first row of a wrapped line: n/N should land on the line,
+        // not walk its continuations
+        if (!row.first || row.line.newLine === undefined) return acc;
+        if (byLine.has(anchorKey(row.line.file, row.line.newLine))) acc.push(i);
         return acc;
       }, []),
     [lines, byLine],
@@ -82,8 +88,10 @@ export function AnnotatedDiff(props: {
   const visible = lines.slice(scroll, scroll + visibleRows);
   /** the right column, row-for-row with the diff on the left */
   const margin = useMemo(() => {
-    const annotated = visible.map((line) => {
-      const key = line.newLine !== undefined ? anchorKey(line.file, line.newLine) : undefined;
+    const annotated = visible.map((row) => {
+      // a continuation carries no annotation of its own: the block already
+      // started on the row above, and starting it again would double it
+      const key = row.first && row.line.newLine !== undefined ? anchorKey(row.line.file, row.line.newLine) : undefined;
       const finding = key ? byLine.get(key) : undefined;
       const info = finding?.severity === 'info';
       return {
@@ -96,7 +104,7 @@ export function AnnotatedDiff(props: {
     return layoutMargin(annotated, noteWidth - 4, wrapText);
   }, [visible, byLine, noteWidth]);
 
-  const current = lines[cursor];
+  const current = lines[cursor]?.line;
   const anchor =
     current?.newLine !== undefined ? { file: current.file, line: current.newLine } : undefined;
   const finding = anchor ? byLine.get(anchorKey(anchor.file, anchor.line)) : undefined;
@@ -179,16 +187,16 @@ export function AnnotatedDiff(props: {
         <Box flexDirection="column" width={diffWidth} borderStyle="single" borderColor={focus === 'diff' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
           {!diff && <Text dimColor>loading the diff…</Text>}
           {diff && !lines.length && <Text dimColor>no diff — has the branch been fetched?</Text>}
-          {lines.slice(scroll, scroll + paneHeight - 2).map((line, i) => (
+          {lines.slice(scroll, scroll + paneHeight - 2).map((row, i) => (
             <DiffRow
-              key={`${scroll + i}-${line.text.slice(0, 12)}`}
-              line={line}
+              key={`${scroll + i}-${row.text.slice(0, 12)}`}
+              row={row}
               width={diffWidth - 4}
               onCursor={scroll + i === cursor}
-              annotated={line.newLine !== undefined && byLine.has(anchorKey(line.file, line.newLine))}
+              annotated={row.line.newLine !== undefined && byLine.has(anchorKey(row.line.file, row.line.newLine))}
               info={
-                line.newLine !== undefined &&
-                byLine.get(anchorKey(line.file, line.newLine))?.severity === 'info'
+                row.line.newLine !== undefined &&
+                byLine.get(anchorKey(row.line.file, row.line.newLine))?.severity === 'info'
               }
             />
           ))}
@@ -197,9 +205,9 @@ export function AnnotatedDiff(props: {
         <Box flexDirection="column" width={noteWidth} borderStyle="single" borderColor={focus === 'edit' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
           {focus !== 'edit' ? (
             margin.map((row, i) => {
-              const line = visible[i];
+              const source = visible[i]?.line;
               const mine =
-                line?.newLine !== undefined && anchor && row.owner === anchorKey(anchor.file, anchor.line);
+                source?.newLine !== undefined && anchor && row.owner === anchorKey(anchor.file, anchor.line);
               const bar = row.kind === 'empty' ? ' ' : row.kind === 'note' ? '│' : '▌';
               const barColor =
                 row.kind === 'note' ? theme.annotation : SEVERITY_COLOR[row.severity ?? 'consider'] ?? theme.dim;
@@ -263,7 +271,8 @@ export function AnnotatedDiff(props: {
             focus={focus === 'chat'}
             width={width - 6}
             height={1}
-            placeholder={focus === 'chat' ? 'ask the agent — ctrl+d sends' : 'tab to talk to the agent'}
+            submitOnEnter
+            placeholder={focus === 'chat' ? 'ask the agent — enter sends' : 'tab to talk to the agent'}
             onSubmit={() => {
               if (chat.trim()) onSend(chat.trim());
               setChat('');
@@ -280,8 +289,9 @@ export function AnnotatedDiff(props: {
   );
 }
 
-function DiffRow(props: { line: DiffLine; width: number; onCursor: boolean; annotated: boolean; info?: boolean }) {
-  const { line, width, onCursor, annotated, info } = props;
+function DiffRow(props: { row: VisualRow; width: number; onCursor: boolean; annotated: boolean; info?: boolean }) {
+  const { row, width, onCursor, annotated, info } = props;
+  const line = { ...row.line, text: row.text };
   if (line.kind === 'file') {
     return (
       <Text bold color={theme.accent} wrap="truncate" inverse={onCursor}>
@@ -296,9 +306,10 @@ function DiffRow(props: { line: DiffLine; width: number; onCursor: boolean; anno
       </Text>
     );
   }
-  const sign = line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' ';
+  const sign = row.first ? (line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' ') : ' ';
   const color = line.kind === 'add' ? theme.ok : line.kind === 'del' ? theme.err : undefined;
-  const num = (line.newLine ?? line.oldLine ?? '').toString().padStart(4);
+  // a continuation shows no number: it is the same line, still
+  const num = (row.first ? (line.newLine ?? line.oldLine ?? '') : '').toString().padStart(4);
   return (
     <Text wrap="truncate" inverse={onCursor}>
       {/* the marker column: where a comment lives, visible while scrolling past */}
@@ -309,7 +320,7 @@ function DiffRow(props: { line: DiffLine; width: number; onCursor: boolean; anno
       <Text dimColor>{num} </Text>
       <Text color={onCursor ? undefined : color}>
         {sign}
-        {line.text.slice(0, Math.max(0, width - 7))}
+        {line.text}
       </Text>
     </Text>
   );

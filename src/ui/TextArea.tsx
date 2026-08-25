@@ -26,8 +26,14 @@ export function TextArea(props: {
   placeholder?: string;
   /** ctrl-d, the "I'm done" key everywhere else in a terminal */
   onSubmit?: () => void;
+  /**
+   * Enter sends instead of inserting a newline. For a one-row input, where a
+   * newline scrolls what you typed out of a box that can only show one line —
+   * which looks exactly like the box being broken.
+   */
+  submitOnEnter?: boolean;
 }) {
-  const { value, onChange, focus, width, height, placeholder, onSubmit } = props;
+  const { value, onChange, focus, width, height, placeholder, onSubmit, submitOnEnter } = props;
   const [cursor, setCursor] = useState(value.length);
   // the parent owns the value and may hand us anything (an old draft, a paste
   // it assembled itself); heal control characters once rather than rendering them
@@ -56,7 +62,7 @@ export function TextArea(props: {
   useInput(
     (input, key) => {
       if (key.ctrl && input === 'd') return void onSubmit?.();
-      if (key.return) return insertAt('\n');
+      if (key.return) return submitOnEnter ? void onSubmit?.() : insertAt('\n');
       if (key.backspace || key.delete) {
         if (cur === 0) return;
         onChange(value.slice(0, cur - 1) + value.slice(cur));
