@@ -21,6 +21,9 @@ type Focus = 'diff' | 'severity' | 'edit' | 'chat';
  * means, because the difference that matters is not severity but whether the
  * author ever sees it.
  */
+/** Rows the PR-wide comment may take before it costs the diff too much. */
+const ABOUT_MAX = 3;
+
 const KINDS: Array<{ severity: Severity; label: string; hint: string }> = [
   { severity: 'blocking', label: 'blocking', hint: 'would request changes over it' },
   { severity: 'consider', label: 'consider', hint: 'worth a second look' },
@@ -88,9 +91,32 @@ export function AnnotatedDiff(props: {
   );
 
   const chatRows = 6;
-  const paneHeight = Math.max(4, height - chatRows - 3);
+  /** findings with no anchor: the lead, and anything about the PR as a whole */
+  const unanchored = (review.findings ?? []).filter((f) => !f.file || typeof f.line !== 'number');
+  /**
+   * The PR-wide comments, wrapped rather than cut at the right edge — the lead
+   * is usually the sentence saying whether the whole thing is sound, so losing
+   * its second half loses the point. Capped: these rows come out of the diff's,
+   * and three lines is a paragraph. The document has the rest.
+   */
+  const aboutLines = useMemo(() => {
+    if (!unanchored.length) return [];
+    const text = unanchored.map((f) => f.comment.trim()).join(' · ');
+    const wrapped = wrapText(text, Math.max(20, width - 15));
+    if (wrapped.length <= ABOUT_MAX) return wrapped;
+    const shown = wrapped.slice(0, ABOUT_MAX);
+    shown[ABOUT_MAX - 1] = `${shown[ABOUT_MAX - 1].trimEnd()}…`;
+    return shown;
+  }, [unanchored, width]);
+  // the panes get what is left: one row per line the PR-wide comment takes
+  const paneHeight = Math.max(4, height - chatRows - 2 - Math.max(1, aboutLines.length));
   const diffWidth = Math.max(30, Math.floor(width * 0.62));
   const noteWidth = width - diffWidth - 3;
+  // What a margin row has left for words: the pane's border and padding (4),
+  // then the severity bar and its space (2). Wrapping to anything wider makes
+  // every line overflow by exactly that much and lose its tail to truncation —
+  // which reads as the text being mangled rather than the column being narrow.
+  const marginText = Math.max(8, noteWidth - 6);
 
   useEffect(() => {
     // keep the cursor on screen, following it rather than snapping to it
@@ -102,10 +128,15 @@ export function AnnotatedDiff(props: {
   const visible = lines.slice(scroll, scroll + visibleRows);
   /** the right column, row-for-row with the diff on the left */
   const margin = useMemo(() => {
-    const annotated = visible.map((row) => {
+    // Lay out over the pane's rows rather than only the diff's: a comment
+    // anchored near the end of a short file would otherwise be cut off with
+    // blank screen underneath it, having no more code rows to flow into.
+    const slots = Math.max(visible.length, visibleRows);
+    const annotated = Array.from({ length: slots }, (_, i) => visible[i]).map((row) => {
       // a continuation carries no annotation of its own: the block already
       // started on the row above, and starting it again would double it
-      const key = row.first && row.line.newLine !== undefined ? anchorKey(row.line.file, row.line.newLine) : undefined;
+      const key =
+        row?.first && row.line.newLine !== undefined ? anchorKey(row.line.file, row.line.newLine) : undefined;
       const finding = key ? byLine.get(key) : undefined;
       const info = finding?.severity === 'info';
       return {
@@ -115,15 +146,13 @@ export function AnnotatedDiff(props: {
         severity: finding?.severity,
       };
     });
-    return layoutMargin(annotated, noteWidth - 4, wrapText);
-  }, [visible, byLine, noteWidth]);
+    return layoutMargin(annotated, marginText, wrapText);
+  }, [visible, visibleRows, byLine, marginText]);
 
   const current = lines[cursor]?.line;
   const anchor =
     current?.newLine !== undefined ? { file: current.file, line: current.newLine } : undefined;
   const finding = anchor ? byLine.get(anchorKey(anchor.file, anchor.line)) : undefined;
-  /** findings with no anchor: the lead, and anything about the PR as a whole */
-  const unanchored = (review.findings ?? []).filter((f) => !f.file || typeof f.line !== 'number');
 
   // open on the first thing the agent flagged rather than on a file header:
   // the point of this view is the annotations, so start at one
@@ -310,14 +339,14 @@ export function AnnotatedDiff(props: {
         </Box>
       </Box>
 
-      {unanchored.length > 0 && (
+      {aboutLines.map((line, i) => (
         // outside both columns on purpose: a comment about the PR as a whole
         // has no line to sit beside, and inventing one would break the margin
-        <Text wrap="truncate">
-          <Text color={theme.header}>about the PR </Text>
-          <Text dimColor>{unanchored.map((f) => f.comment.split('\n')[0]).join(' · ')}</Text>
+        <Text key={`about${i}`} wrap="truncate">
+          <Text color={theme.header}>{i === 0 ? 'about the PR ' : '             '}</Text>
+          <Text dimColor>{line}</Text>
         </Text>
-      )}
+      ))}
       <Box flexDirection="column" height={chatRows} borderStyle="single" borderColor={focus === 'chat' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
         <Chat turns={review.chat ?? []} rows={chatRows - 4} busy={busy} />
         <Box>
