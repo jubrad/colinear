@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
-import { anchorKey, parseDiff, type DiffLine } from '../core/diff.js';
+import { anchorKey, layoutMargin, parseDiff, type DiffLine } from '../core/diff.js';
 import type { ChatTurn, Review, ReviewFinding, Severity } from '../core/types.js';
 import { TextArea } from './TextArea.js';
 import { theme } from '../theme.js';
@@ -77,11 +77,27 @@ export function AnnotatedDiff(props: {
     else if (cursor >= scroll + paneHeight) setScroll(cursor - paneHeight + 1);
   }, [cursor, paneHeight]);
 
+  const visibleRows = Math.max(1, paneHeight - 2);
+  const visible = lines.slice(scroll, scroll + visibleRows);
+  /** the right column, row-for-row with the diff on the left */
+  const margin = useMemo(() => {
+    const annotated = visible.map((line) => {
+      const key = line.newLine !== undefined ? anchorKey(line.file, line.newLine) : undefined;
+      const finding = key ? byLine.get(key) : undefined;
+      return {
+        key,
+        comment: finding?.comment,
+        severity: finding?.severity,
+        note: finding ? undefined : key ? noteByLine.get(key) : undefined,
+      };
+    });
+    return layoutMargin(annotated, noteWidth - 4, wrapText);
+  }, [visible, byLine, noteByLine, noteWidth]);
+
   const current = lines[cursor];
   const anchor =
     current?.newLine !== undefined ? { file: current.file, line: current.newLine } : undefined;
   const finding = anchor ? byLine.get(anchorKey(anchor.file, anchor.line)) : undefined;
-  const note = anchor ? noteByLine.get(anchorKey(anchor.file, anchor.line)) : undefined;
   /** findings with no anchor: the lead, and anything about the PR as a whole */
   const unanchored = (review.findings ?? []).filter((f) => !f.file || typeof f.line !== 'number');
 
@@ -168,7 +184,28 @@ export function AnnotatedDiff(props: {
         </Box>
 
         <Box flexDirection="column" width={noteWidth} borderStyle="single" borderColor={focus === 'edit' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
-          {focus === 'edit' && anchor ? (
+          {focus !== 'edit' ? (
+            margin.map((row, i) => {
+              const line = visible[i];
+              const mine =
+                line?.newLine !== undefined && anchor && row.owner === anchorKey(anchor.file, anchor.line);
+              const bar = row.kind === 'empty' ? ' ' : row.kind === 'note' ? '│' : '▌';
+              const barColor =
+                row.kind === 'note' ? theme.info : SEVERITY_COLOR[row.severity ?? 'consider'] ?? theme.dim;
+              return (
+                <Text key={`m${scroll + i}`} wrap="truncate">
+                  <Text color={barColor}>{bar} </Text>
+                  <Text
+                    bold={Boolean(mine)}
+                    dimColor={!mine && row.kind === 'note'}
+                    color={mine ? undefined : row.kind === 'comment' ? undefined : undefined}
+                  >
+                    {row.text}
+                  </Text>
+                </Text>
+              );
+            })
+          ) : anchor ? (
             <>
               <Text bold color={theme.key} wrap="truncate">
                 comment on {anchor.file}:{anchor.line}
@@ -188,19 +225,18 @@ export function AnnotatedDiff(props: {
               />
               <Text dimColor>ctrl+d saves · esc cancels · empty removes the comment</Text>
             </>
-          ) : (
-            <Annotation
-              anchor={anchor}
-              finding={finding}
-              note={note}
-              unanchored={unanchored}
-              width={noteWidth - 4}
-              height={paneHeight - 2}
-            />
-          )}
+          ) : null}
         </Box>
       </Box>
 
+      {unanchored.length > 0 && (
+        // outside both columns on purpose: a comment about the PR as a whole
+        // has no line to sit beside, and inventing one would break the margin
+        <Text wrap="truncate">
+          <Text color={theme.header}>about the PR </Text>
+          <Text dimColor>{unanchored.map((f) => f.comment.split('\n')[0]).join(' · ')}</Text>
+        </Text>
+      )}
       <Box flexDirection="column" height={chatRows} borderStyle="single" borderColor={focus === 'chat' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
         <Chat turns={review.chat ?? []} rows={chatRows - 4} busy={busy} />
         <Box>
@@ -257,81 +293,6 @@ function DiffRow(props: { line: DiffLine; width: number; onCursor: boolean; anno
         {line.text.slice(0, Math.max(0, width - 7))}
       </Text>
     </Text>
-  );
-}
-
-function Annotation(props: {
-  anchor?: { file: string; line: number };
-  finding?: ReviewFinding;
-  note?: string;
-  unanchored: ReviewFinding[];
-  width: number;
-  height: number;
-}) {
-  const { anchor, finding, note, unanchored, width, height } = props;
-  if (finding) {
-    return (
-      <Box flexDirection="column">
-        <Text wrap="truncate">
-          <Text bold color={SEVERITY_COLOR[finding.severity ?? 'consider']}>
-            {finding.severity ?? 'comment'}
-          </Text>
-          <Text dimColor>
-            {' '}
-            · {anchor?.file}:{anchor?.line}
-          </Text>
-        </Text>
-        <Box height={1} />
-        {wrapText(finding.comment, width)
-          .slice(0, height - 4)
-          .map((l, i) => (
-            <Text key={`${i}-${l.slice(0, 8)}`}>{l}</Text>
-          ))}
-        <Box flexGrow={1} />
-        <Text dimColor>e edits this · d drops it</Text>
-      </Box>
-    );
-  }
-  if (note) {
-    return (
-      <Box flexDirection="column">
-        <Text bold color={theme.info}>
-          what this does
-        </Text>
-        <Box height={1} />
-        {wrapText(note, width)
-          .slice(0, height - 4)
-          .map((l, i) => (
-            <Text key={`${i}-${l.slice(0, 8)}`} dimColor>
-              {l}
-            </Text>
-          ))}
-        <Box flexGrow={1} />
-        <Text dimColor>e writes a comment here</Text>
-      </Box>
-    );
-  }
-  return (
-    <Box flexDirection="column">
-      <Text dimColor>{anchor ? 'nothing flagged on this line — e writes a comment' : 'no line selected'}</Text>
-      {unanchored.length > 0 && (
-        <>
-          <Box height={1} />
-          <Text bold color={theme.header}>
-            about the PR as a whole
-          </Text>
-          {unanchored.slice(0, 3).flatMap((f, i) =>
-            wrapText(f.comment, width)
-              .slice(0, 3)
-              .map((l, j) => (
-                <Text key={`${i}-${j}-${l.slice(0, 8)}`} dimColor>
-                  {l}
-                </Text>
-              )),
-          )}
-        </>
-      )}
-    </Box>
   );
 }
 

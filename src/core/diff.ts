@@ -105,3 +105,59 @@ export function filesIn(lines: DiffLine[]): string[] {
 export function anchorKey(file: string, line: number): string {
   return `${file}:${line}`;
 }
+
+/** What the margin shows beside one diff row. */
+export interface MarginRow {
+  text: string;
+  /** a comment the agent would send, a note about what the code does, or filler */
+  kind: 'comment' | 'note' | 'empty';
+  /** the anchor whose block this row belongs to, so the cursor's block can be highlighted */
+  owner?: string;
+  severity?: string;
+  /** true on the first row of a block — where the severity bar reads */
+  head?: boolean;
+}
+
+/**
+ * Lay annotations out beside the code, one column, aligned row for row.
+ *
+ * The alignment is the whole point: a comment that sits at the height of the
+ * line it is about can be read without looking anything up. So a block starts
+ * exactly at its anchor's row and never shifts — which means a long comment
+ * runs into the next one, and the honest thing is to cut it and say so with an
+ * ellipsis rather than push the code out of alignment to make room.
+ */
+export function layoutMargin(
+  visible: Array<{ comment?: string; note?: string; severity?: string; key?: string }>,
+  width: number,
+  wrap: (text: string, width: number) => string[],
+): MarginRow[] {
+  const rows: MarginRow[] = visible.map(() => ({ text: '', kind: 'empty' as const }));
+  // where the next block may not reach: the row of the following annotation
+  const starts = visible.flatMap((v, i) => (v.comment || v.note ? [i] : []));
+
+  for (const [n, start] of starts.entries()) {
+    const item = visible[start];
+    const body = item.comment ?? item.note ?? '';
+    const limit = starts[n + 1] ?? visible.length;
+    const room = limit - start;
+    if (room <= 0) continue;
+    const lines = wrap(body, Math.max(4, width));
+    const shown = lines.slice(0, room);
+    // the block was cut off: say so on its last visible row
+    if (lines.length > shown.length && shown.length) {
+      const last = shown[shown.length - 1];
+      shown[shown.length - 1] = `${last.slice(0, Math.max(0, width - 1)).trimEnd()}…`;
+    }
+    shown.forEach((text, k) => {
+      rows[start + k] = {
+        text,
+        kind: item.comment ? 'comment' : 'note',
+        owner: item.key,
+        severity: item.severity,
+        head: k === 0,
+      };
+    });
+  }
+  return rows;
+}

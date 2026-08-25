@@ -20,25 +20,32 @@ outside colinear.
 had to say about it. Chat sits along the bottom.
 
 ```
-┌ diff ──────────────────────────────┬ annotation ─────────────┐
-│     1  fn reconnect(&mut self) {   │ blocking · src/a.rs:42  │
-│ ▍  42 +    for _ in 0..RETRIES {   │                         │
-│     43        self.call()?;        │ This retry loop has no  │
-│                                    │ backoff…                │
-├────────────────────────────────────┴─────────────────────────┤
-│ you  why does the casing matter?                             │
-└──────────────────────────────────────────────────────────────┘
+┌ diff ──────────────────────────────┬──────────────────────────┐
+│     1  fn reconnect(&mut self) {   │                          │
+│ ▍  42 +    for _ in 0..RETRIES {   │ ▌ This retry loop has no │
+│     43        self.call()?;        │ ▌ backoff, so a flapping…│
+│ ▍  44 +    self.handle = sub()?;   │ │ Re-opens the SUBSCRIBE │
+├────────────────────────────────────┴──────────────────────────┤
+│ you  why does the casing matter?                              │
+└───────────────────────────────────────────────────────────────┘
 ```
 
-A review document read end to end gives you the findings in the agent's order; this gives them in
-the **code's** order, which is the order you check them in. `▍` marks a line with something on it,
-and `n`/`N` walk between them — the view opens on the first one rather than on a file header.
+The right column is a **margin**: every comment sits at the height of the line it is about, so you
+read the two together without looking anything up. A review document read end to end gives you the
+findings in the agent's order; this gives them in the **code's** order, which is the order you check
+them in. `▍` marks an annotated line, `n`/`N` walk between them, and the view opens on the first one
+rather than on a file header.
 
-The right pane holds one of two things:
+Two kinds of annotation share the margin, told apart by their bar:
 
-- a **comment** the agent would send (severity-coloured, anchored to the line), or
-- a **note** — what this hunk *does*, written for someone reading the code cold. Notes are context
-  and are never posted; anything the agent would say to the author is a comment.
+- **`▌` a comment** the agent would send, coloured by severity, and
+- **`│` a note** — what this hunk *does*, written for someone reading the code cold. Notes are
+  context and are never posted; anything the agent would say to the author is a comment.
+
+Alignment wins over completeness: a block starts at its anchor's row and never shifts, so a long
+comment that would run into the next one is cut with an `…` rather than pushing the code out of
+line. `e` shows it whole. A comment about the PR as a whole has no line to sit beside, so it gets
+its own line under both panes.
 
 **The right pane is editable**, because the agent's comment is a draft of yours. `e` opens it,
 `ctrl+d` saves, an empty comment removes it, and `d` drops one outright. `e` on a line with nothing
