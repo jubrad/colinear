@@ -82,11 +82,25 @@ comment that would run into the next one is cut with an `…` rather than pushin
 line. `e` shows it whole. A comment about the PR as a whole has no line to sit beside, so it gets
 its own line under both panes.
 
-**The right pane is editable**, because the agent's comment is a draft of yours. `e` opens it,
-`ctrl+d` saves, an empty comment removes it, and `d` drops one outright. `e` on a line with nothing
-on it writes a new comment there; **`i` writes an annotation instead** — the same editor, saved as
-`info`, so you can explain a gnarly block to whoever reads the review without saying anything to the
-author. Every edit rewrites the ```findings fence in the review document,
+**The right pane is editable**, because the agent's comment is a draft of yours.
+
+`e` on any line — whether or not something is already there — asks **what kind** first:
+
+```
+▸ blocking   would request changes over it
+  consider   worth a second look
+  nit        optional polish
+  praise     worth saying out loud
+  annotation explains the code — never posted
+```
+
+`j`/`k` or the kind's first letter, `enter` to write it. Editing something that already exists
+pre-selects what it is, so changing your mind about severity is the same keystroke as changing the
+words. Then the editor names the kind *and* what happens to it — "goes to the author when you post",
+or "stays in colinear — never posted" — because that is the difference that matters.
+
+`ctrl+d` saves, an empty comment removes it, and `d` drops one outright. **`i` skips the picker** and
+goes straight to an annotation, which is the common case while reading unfamiliar code. Every edit rewrites the ```findings fence in the review document,
 so what you post and what the agent sees never diverge — a later chat turn reads your wording, and
 `p` posts it.
 
