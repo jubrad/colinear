@@ -10,6 +10,8 @@ const SEVERITY_COLOR: Record<string, string> = {
   consider: theme.warn,
   nit: theme.dim,
   praise: theme.ok,
+  // never posted, never a problem: blue keeps it off the severity ramp
+  info: theme.annotation,
 };
 
 type Focus = 'diff' | 'edit' | 'chat';
@@ -200,7 +202,7 @@ export function AnnotatedDiff(props: {
                 line?.newLine !== undefined && anchor && row.owner === anchorKey(anchor.file, anchor.line);
               const bar = row.kind === 'empty' ? ' ' : row.kind === 'note' ? '│' : '▌';
               const barColor =
-                row.kind === 'note' ? theme.info : SEVERITY_COLOR[row.severity ?? 'consider'] ?? theme.dim;
+                row.kind === 'note' ? theme.annotation : SEVERITY_COLOR[row.severity ?? 'consider'] ?? theme.dim;
               return (
                 <Text key={`m${scroll + i}`} wrap="truncate">
                   <Text color={barColor}>{bar} </Text>
@@ -216,7 +218,7 @@ export function AnnotatedDiff(props: {
             })
           ) : anchor ? (
             <>
-              <Text bold color={editAs === 'info' ? theme.info : theme.key} wrap="truncate">
+              <Text bold color={editAs === 'info' ? theme.annotation : theme.key} wrap="truncate">
                 {editAs === 'info' ? 'annotation on ' : 'comment on '}
                 {anchor.file}:{anchor.line}
               </Text>
@@ -301,7 +303,7 @@ function DiffRow(props: { line: DiffLine; width: number; onCursor: boolean; anno
     <Text wrap="truncate" inverse={onCursor}>
       {/* the marker column: where a comment lives, visible while scrolling past */}
       {/* the marker says which kind: a comment to send, or an annotation */}
-      <Text color={annotated ? (info ? theme.info : theme.key) : undefined}>
+      <Text color={annotated ? (info ? theme.annotation : theme.key) : undefined}>
         {annotated ? (info ? '│' : '▍') : ' '}
       </Text>
       <Text dimColor>{num} </Text>

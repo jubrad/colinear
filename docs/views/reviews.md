@@ -58,9 +58,12 @@ rather than on a file header.
 
 Two kinds share the margin, told apart by their bar:
 
-- **`▌` a comment** the agent would send, coloured by severity (blocking, consider, nit, praise);
-- **`│` an annotation** — severity **`info`**, which is *never posted*. It explains what a dense
-  block is doing so whoever reads the review can follow the change without reconstructing it.
+- **`▌` a comment** the agent would send, coloured by severity — red *blocking*, yellow *consider*,
+  grey *nit*, green *praise*;
+- **`│` an annotation** in **blue** — severity **`info`**, which is *never posted*. It explains what
+  a dense block is doing so whoever reads the review can follow the change without reconstructing
+  it. Blue is deliberately off the red → yellow → green ramp: an explanation is not a mild problem,
+  and any colour on that ramp reads as one.
 
 They live in one list, so an annotation is editable exactly like a comment — and promoting one to a
 real severity is how "I had to explain this to myself" becomes "the author should know this". An
