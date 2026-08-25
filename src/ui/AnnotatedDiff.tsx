@@ -14,13 +14,27 @@ const SEVERITY_COLOR: Record<string, string> = {
   info: theme.annotation,
 };
 
-type Focus = 'diff' | 'severity' | 'edit' | 'chat';
+type Focus = 'diff' | 'severity' | 'edit' | 'chat' | 'read';
 
 /**
  * What a finding can be, in the order you are offered it — and what each one
  * means, because the difference that matters is not severity but whether the
  * author ever sees it.
  */
+/**
+ * How a block announces itself. Two findings on adjacent lines are two blocks
+ * with nothing between them, so the first row of each says what it is — which
+ * is both the separator and the severity, for the price of a few characters
+ * rather than a whole row nobody has to spare.
+ */
+const KIND_WORD: Record<string, string> = {
+  blocking: 'blocking',
+  consider: 'consider',
+  nit: 'nit',
+  praise: 'praise',
+  info: 'note',
+};
+
 /** Rows the PR-wide comment may take before it costs the diff too much. */
 const ABOUT_MAX = 3;
 
@@ -139,10 +153,11 @@ export function AnnotatedDiff(props: {
         row?.first && row.line.newLine !== undefined ? anchorKey(row.line.file, row.line.newLine) : undefined;
       const finding = key ? byLine.get(key) : undefined;
       const info = finding?.severity === 'info';
+      const label = finding ? `${KIND_WORD[finding.severity ?? 'consider'] ?? 'comment'} · ` : '';
       return {
         key,
-        comment: info ? undefined : finding?.comment,
-        note: info ? finding?.comment : undefined,
+        comment: info ? undefined : finding ? `${label}${finding.comment}` : undefined,
+        note: info ? `${label}${finding.comment}` : undefined,
         severity: finding?.severity,
       };
     });
@@ -197,6 +212,11 @@ export function AnnotatedDiff(props: {
       if (key.escape || key.tab) setFocus('diff');
       return;
     }
+    if (focus === 'read') {
+      // any key closes it: it is a reading pane, not a mode to get stuck in
+      setFocus('diff');
+      return;
+    }
     if (key.escape || input === 'q') return onClose();
     if (key.tab) return setFocus('chat');
     if (input === 'j' || key.downArrow) setCursor((c) => Math.min(lines.length - 1, c + 1));
@@ -206,6 +226,9 @@ export function AnnotatedDiff(props: {
     if (input === 'g') setCursor(0);
     if (input === 'G') setCursor(Math.max(0, lines.length - 1));
     // the reason this view exists: walk what the agent flagged, in code order
+    // the margin cuts a block that would run into the next one; this is how you
+    // read the rest without editing it
+    if (key.return && finding) return setFocus('read');
     if (input === 'n') jump(1);
     if (input === 'N') jump(-1);
     // pick what kind of finding this is *before* writing it: the old default
@@ -262,7 +285,21 @@ export function AnnotatedDiff(props: {
         </Box>
 
         <Box flexDirection="column" width={noteWidth} borderStyle="single" borderColor={focus === 'edit' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
-          {focus === 'severity' && anchor ? (
+          {focus === 'read' && finding && anchor ? (
+            <Box flexDirection="column">
+              <Text bold color={SEVERITY_COLOR[finding.severity ?? 'consider']} wrap="truncate">
+                {KIND_WORD[finding.severity ?? 'consider'] ?? 'comment'} · {anchor.file}:{anchor.line}
+              </Text>
+              <Box height={1} />
+              {wrapText(finding.comment, noteWidth - 4)
+                .slice(0, paneHeight - 5)
+                .map((line, i) => (
+                  <Text key={`r${i}-${line.slice(0, 8)}`}>{line}</Text>
+                ))}
+              <Box flexGrow={1} />
+              <Text dimColor>any key returns · e edits it</Text>
+            </Box>
+          ) : focus === 'severity' && anchor ? (
             <Box flexDirection="column">
               <Text bold color={theme.key} wrap="truncate">
                 {finding ? 'change' : 'new'} finding on {anchor.file}:{anchor.line}
@@ -294,9 +331,12 @@ export function AnnotatedDiff(props: {
                 <Text key={`m${scroll + i}`} wrap="truncate">
                   <Text color={barColor}>{bar} </Text>
                   <Text
-                    bold={Boolean(mine)}
-                    dimColor={!mine && row.kind === 'note'}
-                    color={mine ? undefined : row.kind === 'comment' ? undefined : undefined}
+                    // the head row carries the severity word and wears its
+                    // colour, so where one finding ends and the next begins is
+                    // visible even when their lines are adjacent
+                    bold={row.head}
+                    color={row.head ? barColor : undefined}
+                    dimColor={!row.head && !mine}
                   >
                     {row.text}
                   </Text>
@@ -369,7 +409,7 @@ export function AnnotatedDiff(props: {
       </Box>
 
       <Text dimColor wrap="truncate">
-        j/k move · n/N next · e finding · i annotate · d drop · tab chat · p post · esc
+        j/k move · n/N next · enter reads · e finding · i annotate · d drop · tab chat · p post · esc
       </Text>
     </Box>
   );
