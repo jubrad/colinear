@@ -5,6 +5,26 @@ refreshed every five minutes.
 
 ![The review queue: two PRs, the selected one pre-reviewed with four findings graded lead, blocking, consider and nit](../images/reviews.png)
 
+## What wants you
+
+Two facts decide whether a row needs you, and neither is the review's status:
+
+| | |
+|---|---|
+| **`●`** | the PR is **asking for your review** right now |
+| **`↻`** | the author has **pushed since you reviewed** — what you said may no longer apply |
+
+`●` disappears the moment you post, because submitting a review fulfils the request: the PR leaves
+GitHub's review-requested search while the row stays here. That is the difference between "waiting
+on you" and "you have had your say".
+
+`↻` compares the PR's current head against the commit your review was posted about (or, before
+posting, the one the document was written against). It outranks `●` — a review that no longer
+applies is more urgent than one not yet started — and sorts to the top under `needs me`. Pressing
+`r` on it starts [round two](#round-two) rather than a fresh review.
+
+The push is also written to the review's activity, once, on the poll that finds it.
+
 ## Assisted pre-review
 
 `r` checks the PR out in a worktree and runs one agent over the diff in context. Progress streams

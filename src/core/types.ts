@@ -411,6 +411,16 @@ export interface Review {
   /** head commit the current document was written against — the anchor a
       second round diffs from, so it reviews what changed rather than the PR again */
   reviewedSha?: string;
+  /**
+   * Is the PR asking for *your* review right now? False once you have posted:
+   * submitting fulfils the request, and the PR leaves the search while the
+   * record stays. It is the difference between "waiting on you" and "done".
+   */
+  requested?: boolean;
+  /** the PR's head as of the last poll — compared against what you reviewed */
+  headSha?: string;
+  /** the head we last said had moved, so a push is announced once, not every poll */
+  movedSince?: string;
   /** what was sent to GitHub, so a later discussion knows it's already out */
   posted?: {
     at: number;

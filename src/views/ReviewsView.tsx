@@ -19,7 +19,24 @@ const ACTIVE: Review['status'][] = ['reviewing', 'posting', 'queued'];
  * Column widths. Status/PR always show; author and size drop out on narrow
  * terminals so the row never wraps (a wrapped row breaks the whole table).
  */
-const W = { status: 12, pr: 24, draft: 9, author: 18, size: 14 };
+const W = { flag: 4, status: 12, pr: 24, draft: 9, author: 18, size: 14 };
+
+/**
+ * Two facts that decide whether a row wants you, neither of which the status
+ * says: is the PR still asking for your review, and has the author pushed
+ * since you gave it?
+ */
+export function freshness(r: Review): { glyph: string; color: string; why: string } | undefined {
+  const reviewed = r.posted?.sha ?? r.reviewedSha;
+  if (reviewed && r.headSha && r.headSha !== reviewed) {
+    return { glyph: '↻', color: theme.warn, why: 'pushed since your review — r re-reviews' };
+  }
+  // only meaningful while the PR is open: a settled review is asking nobody
+  if (r.requested && r.status !== 'stale') {
+    return { glyph: '●', color: theme.key, why: 'your review is requested' };
+  }
+  return undefined;
+}
 
 /** Sort fields, cycled with S; picking the same one again flips direction. */
 const SORTS = ['needs me', 'updated', 'size', 'repo', 'author', 'cost'] as const;
@@ -42,7 +59,7 @@ function layout(columns: number) {
   return {
     size,
     author,
-    title: Math.max(16, avail - W.status - W.pr - W.draft - author - size),
+    title: Math.max(16, avail - W.flag - W.status - W.pr - W.draft - author - size),
   };
 }
 const SEVERITY_COLOR: Record<string, string> = {
@@ -79,9 +96,21 @@ export function ReviewsView(props: { param?: string }) {
       const hay = `${r.repository} ${r.number} ${r.title} ${r.author} ${r.status}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
     });
-    // needs-me-first: ready findings, then in-flight, then untouched
-    const rank = (r: Review) =>
-      r.status === 'ready' ? 0 : ACTIVE.includes(r.status) ? 1 : r.status === 'error' ? 2 : r.status === 'pending' ? 3 : 4;
+    // needs-me-first: a review whose PR moved under it comes before everything,
+    // because it is the one where what you already did no longer applies
+    const rank = (r: Review) => {
+      const reviewed = r.posted?.sha ?? r.reviewedSha;
+      if (reviewed && r.headSha && r.headSha !== reviewed) return -1;
+      return r.status === 'ready'
+        ? 0
+        : ACTIVE.includes(r.status)
+          ? 1
+          : r.status === 'error'
+            ? 2
+            : r.status === 'pending'
+              ? 3
+              : 4;
+    };
     const size = (r: Review) => r.additions + r.deletions;
     const compare = (a: Review, b: Review) => {
       switch (sort) {
@@ -312,6 +341,7 @@ export function ReviewsView(props: { param?: string }) {
       <Box flexDirection="column" marginTop={1} flexShrink={0}>
         <Text bold color={theme.header} wrap="truncate">
           {'  '}
+          {cell('', W.flag)}
           {cell('REVIEW', W.status)}
           {cell('PR', W.pr)}
           {cell('PR STATE', W.draft)}
@@ -324,8 +354,10 @@ export function ReviewsView(props: { param?: string }) {
           // colour into a background, so a coloured row inverts into a strip of
           // mismatched blocks rather than one bar (same rule as ui/Table)
           const onCursor = start + i === cursor;
+          const flag = freshness(r);
           return (
             <Text key={r.id} wrap="truncate" inverse={onCursor}>
+              <Text color={onCursor ? undefined : flag?.color}>{cell(flag?.glyph ?? '', W.flag)}</Text>
               <Text color={onCursor ? undefined : REVIEW_COLORS[r.status] ?? theme.dim}>
                 {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)}{' '}
                 {cell(STATUS_LABEL[r.status] ?? r.status, W.status)}
@@ -408,8 +440,15 @@ function Detail(props: { review: Review; now: number }) {
   const { review, now } = props;
   const findings = review.findings ?? [];
   const blocking = findings.filter((f) => f.severity === 'blocking').length;
+  // the glyph in the row is a hint; this is where it says what it means
+  const flag = freshness(review);
   return (
     <Box flexDirection="column" flexGrow={1} marginTop={1} borderStyle="single" borderColor={theme.border} paddingX={1} overflow="hidden">
+      {flag && (
+        <Text color={flag.color} wrap="truncate">
+          {flag.glyph} {flag.why}
+        </Text>
+      )}
       <Text bold wrap="truncate">
         {review.repository}#{review.number}{' '}
         <Text dimColor>
