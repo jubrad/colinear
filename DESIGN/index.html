@@ -2168,8 +2168,10 @@ every live worktree looks dead.</p>
   nothing stops daemon-only code from being imported into the client and silently mutating a mirror.</li>
 <li>Snapshots are whole-store; fine at this scale (activity is capped at 200 lines/task) but a diffed
   snapshot is the obvious next move if boards get big.</li>
-<li>The new-issue and new-project drafting sessions still run in the TUI process, so <code>R</code>/quit kills
-  them. (The planner had the same debt until it became the daemon's <code>:plan</code> session.)</li>
+<li>Every session registers in <code>core/sessions.ts</code> from inside <code>runSession</code>, which is what <code>:agents</code>
+  reads. It is a plain in-memory registry rather than a CDC entity: the client asks for the list
+  while the view is open instead of following deltas, because it is a "what is happening now"
+  question and nothing persists it across a daemon restart.</li>
 <li><code>escalated</code> status is vestigial (verdicts now park as needs_input) but kept for old persisted state.</li>
 <li>Interactive attach + headless resume share one session id; concurrent writers are prevented by suspend-first, not enforced.</li>
 <li>No pagination UI past the 500-issue cap; silently truncates.</li>

@@ -10,13 +10,9 @@
       
       
       
-        <link rel="canonical" href="https://jubrad.github.io/colinear/docs/views/projects/">
+        <link rel="canonical" href="https://jubrad.github.io/colinear/docs/views/agents/">
       
       
-        <link rel="prev" href="../reviews/">
-      
-      
-        <link rel="next" href="../plan/">
       
       
         
@@ -27,7 +23,7 @@
     
     
       
-        <title>:projects - colinear</title>
+        <title>:agents — what is running right now - colinear</title>
       
     
     
@@ -87,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#projects-and-project-project-views" class="md-skip">
+        <a href="#agents-what-is-running-right-now" class="md-skip">
           Skip to content
         </a>
       
@@ -123,7 +119,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              :projects
+              :agents — what is running right now
             
           </span>
         </div>
@@ -665,8 +661,6 @@
       
   
   
-    
-  
   
   
     
@@ -679,11 +673,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
         
           
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
@@ -704,7 +698,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -859,37 +853,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    :projects
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../projects/" class="md-nav__link">
         
   
   
@@ -905,59 +872,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#new-projects-n" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        New projects (n)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#keys-projects" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Keys (:projects)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#keys-project" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Keys (:project)
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1308,32 +1222,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#new-projects-n" class="md-nav__link">
+  <a href="#drafts" class="md-nav__link">
     <span class="md-ellipsis">
       
-        New projects (n)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#keys-projects" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Keys (:projects)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#keys-project" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Keys (:project)
+        Drafts
       
     </span>
   </a>
@@ -1357,99 +1249,59 @@
 
 
 
-<h1 id="projects-and-project-project-views"><code>:projects</code> and <code>:project</code> — project views<a class="headerlink" href="#projects-and-project-project-views" title="Permanent link">&para;</a></h1>
-<p><code>:projects</code> (aliases <code>pj</code>, <code>proj</code>) lists the tracker's projects: state, priority, progress, lead,
-teams, target date. <code>/</code> filters, <code>t</code> switches team, <code>s</code> sorts, <code>enter</code> opens one.</p>
-<p><code>c</code> on a project hands your terminal straight to a design session for it — a worktree and a live
-<code>claude</code>, the same thing <a href="../plan/"><code>:plan</code></a>'s <code>c</code> does, without opening the plan first. Wanting to
-talk something through shouldn't require visiting the document that comes out of it.</p>
-<p><code>:project NAME</code> (alias <code>p</code>) is a kanban of that project's issues, whether or not they're dispatched.
-Where the provider has milestones, each card's second line names the milestone the issue is filed
-under, after the assignee.</p>
-<h2 id="new-projects-n">New projects (<code>n</code>)<a class="headerlink" href="#new-projects-n" title="Permanent link">&para;</a></h2>
-<p><code>n</code> opens a template: the <strong>team</strong> it belongs to, the <strong>state</strong> it starts in (planned / started /
-paused), its <strong>priority</strong>, and a <strong>brief</strong> — a paragraph-sized box where <code>enter</code> is a newline and
-<code>ctrl-d</code> creates.</p>
-<p>An agent turns the brief into the project: a name someone can read, the one line the list shows, and
-a body covering the problem, what is in scope, what is explicitly not, and how anyone will know it
-worked. It is told not to invent a schedule, owners, or an issue breakdown — issues get filed
-separately, and <a href="../plan/"><code>:plan</code></a> is where a breakdown comes from.</p>
-<p>The form asks only for the facts a model should not be guessing. Everything it can write, it writes.</p>
-<p>While it writes, a progress popup streams the agent's activity and then holds the result — the
-project's name (with <code>o</code> to open it in the tracker), or the failure — until you dismiss it. The
-drafting agent runs in the daemon, so <code>esc</code> closes the popup without stopping it; it carries on in
-<a href="../agents/"><code>:agents</code></a>.</p>
-<p>Demo mode runs no agent: the first line of the brief becomes the name and the rest becomes the body,
-which is a plainer version of the same shape.</p>
-<p>Needs a provider with the <code>createProjects</code> capability.</p>
-<h2 id="keys-projects">Keys (<code>:projects</code>)<a class="headerlink" href="#keys-projects" title="Permanent link">&para;</a></h2>
+<h1 id="agents-what-is-running-right-now"><code>:agents</code> — what is running right now<a class="headerlink" href="#agents-what-is-running-right-now" title="Permanent link">&para;</a></h1>
+<p>Alias: <code>ps</code>. No argument.</p>
+<p>Every agent the daemon has running, in one list, with <strong>what started it</strong>. Sessions belong to
+four different things — a task, a review, a project plan, a one-off draft — and each was only
+visible in the view that owned it, if it had one at all.</p>
+<div class="highlight"><pre><span></span><code>  KIND            WORKING ON            STARTED BY            FOR      TOKENS   DOING
+⠙ work            CLO-203               dispatch              4m12s    182k     ⚒ Bash cargo clippy -p mz…
+⠹ review          cloud#13251           you pressed r         1m03s    54k      ⚒ Read src/analytics.py
+  draft-issue     make the retry back…  you pressed n in :i…  8s       2k       created CLO-214
+</code></pre></div>
 <table>
 <thead>
 <tr>
-<th>key</th>
+<th>column</th>
 <th>what</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>enter</code></td>
-<td>open the project's board</td>
+<td><code>KIND</code></td>
+<td><code>work</code> · <code>triage</code> · <code>maintenance</code> (a CI fix or rebase on an open PR) · <code>coordinator</code> · <code>review</code> · <code>plan</code> · <code>draft-issue</code> · <code>draft-project</code></td>
 </tr>
 <tr>
-<td><code>n</code></td>
-<td><strong>new project</strong> — the template above</td>
+<td><code>WORKING ON</code></td>
+<td>the issue, PR or project it belongs to</td>
 </tr>
 <tr>
-<td><code>p</code></td>
-<td>the <a href="../plan/">planning chat</a> for the project under the cursor</td>
+<td><code>STARTED BY</code></td>
+<td>why it exists — <em>dispatch</em>, <em>CI failing</em>, <em>you pressed r</em>, <em>you messaged the parent</em></td>
 </tr>
 <tr>
-<td><code>/</code> filter · <code>t</code> team · <code>s</code> sort · <code>o</code> open in the tracker · <code>r</code> refresh</td>
-<td></td>
+<td><code>FOR</code></td>
+<td>how long it has been going</td>
+</tr>
+<tr>
+<td><code>DOING</code></td>
+<td>its last line, or its outcome once finished</td>
 </tr>
 </tbody>
 </table>
-<h2 id="keys-project">Keys (<code>:project</code>)<a class="headerlink" href="#keys-project" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>key</th>
-<th>what</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>h/l</code> <code>j/k</code> / arrows</td>
-<td>move between issues</td>
-</tr>
-<tr>
-<td><code>space</code></td>
-<td>select</td>
-</tr>
-<tr>
-<td><code>d</code> dispatch · <code>D</code> dispatch skipping triage · <code>c</code> custom dispatch</td>
-<td></td>
-</tr>
-<tr>
-<td><code>p</code></td>
-<td>open the <a href="../plan/">planning chat</a> for this project</td>
-</tr>
-<tr>
-<td><code>M</code></td>
-<td>the project's <a href="../chan/">coordination channel</a> — one message to every agent working an issue in it (experimental)</td>
-</tr>
-<tr>
-<td><code>enter</code></td>
-<td>task detail, for issues already dispatched</td>
-</tr>
-<tr>
-<td><code>o</code> open in the tracker · <code>r</code> refresh</td>
-<td></td>
-</tr>
-</tbody>
-</table>
-<p>Both views need a provider with the <code>projects</code> capability; one without says so rather than showing an
-empty table.</p>
+<p><code>enter</code> opens whatever owns it — the task, the review, the plan. A finished agent stays listed for
+ten minutes so you can see what just happened; a running one is never aged out, because an agent
+that has been going for an hour is a fact worth seeing rather than something to tidy away.</p>
+<p>The selected agent's worktree and a ready-to-paste <code>claude --resume</code> are shown underneath.</p>
+<h2 id="drafts">Drafts<a class="headerlink" href="#drafts" title="Permanent link">&para;</a></h2>
+<p><code>n</code> in <a href="../issues/"><code>:issues</code></a> or <a href="../projects/"><code>:projects</code></a> starts a drafting agent, and those used
+to run inside the TUI: closing the progress popup left it invisible, and reloading the UI (<code>R</code>) or
+quitting killed it outright. They run in the daemon now, like every other agent. <code>esc</code> closes the
+popup, not the session — the draft keeps going, it appears here, and the toast still lands when the
+issue is filed.</p>
+<p>This view is read-only. What you can do to an agent depends on what it is working on — <code>x</code> cancels
+a task in one place and a review in another — so <code>enter</code> takes you where those keys mean something
+rather than pretending one verb fits all of them.</p>
 
 
 
