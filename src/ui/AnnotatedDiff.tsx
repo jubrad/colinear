@@ -14,7 +14,20 @@ const SEVERITY_COLOR: Record<string, string> = {
   info: theme.annotation,
 };
 
-type Focus = 'diff' | 'edit' | 'chat';
+type Focus = 'diff' | 'severity' | 'edit' | 'chat';
+
+/**
+ * What a finding can be, in the order you are offered it — and what each one
+ * means, because the difference that matters is not severity but whether the
+ * author ever sees it.
+ */
+const KINDS: Array<{ severity: Severity; label: string; hint: string }> = [
+  { severity: 'blocking', label: 'blocking', hint: 'would request changes over it' },
+  { severity: 'consider', label: 'consider', hint: 'worth a second look' },
+  { severity: 'nit', label: 'nit', hint: 'optional polish' },
+  { severity: 'praise', label: 'praise', hint: 'worth saying out loud' },
+  { severity: 'info', label: 'annotation', hint: 'explains the code — never posted' },
+];
 
 /**
  * The review, read the way it was written: the diff on the left, and beside
@@ -44,6 +57,7 @@ export function AnnotatedDiff(props: {
   const [draft, setDraft] = useState('');
   /** which kind the editor is writing: a comment to send, or an annotation that never is */
   const [editAs, setEditAs] = useState<Severity | undefined>(undefined);
+  const [kindIdx, setKindIdx] = useState(1);
   const [chat, setChat] = useState('');
 
   const lines = useMemo(() => (diff ? parseDiff(diff) : []), [diff]);
@@ -122,6 +136,19 @@ export function AnnotatedDiff(props: {
   };
 
   useInput((input, key) => {
+    if (focus === 'severity') {
+      if (key.escape) return setFocus('diff');
+      if (key.leftArrow || input === 'k' || key.upArrow) setKindIdx((i) => Math.max(0, i - 1));
+      if (key.rightArrow || input === 'j' || key.downArrow) setKindIdx((i) => Math.min(KINDS.length - 1, i + 1));
+      // the first letter of each kind, for anyone who already knows what they want
+      const typed = KINDS.findIndex((k) => k.severity[0] === input);
+      if (typed !== -1) setKindIdx(typed);
+      if (key.return || input === ' ') {
+        setEditAs(KINDS[typed !== -1 ? typed : kindIdx].severity);
+        setFocus('edit');
+      }
+      return;
+    }
     if (focus === 'edit') {
       if (key.escape) {
         setFocus('diff');
@@ -144,13 +171,16 @@ export function AnnotatedDiff(props: {
     // the reason this view exists: walk what the agent flagged, in code order
     if (input === 'n') jump(1);
     if (input === 'N') jump(-1);
+    // pick what kind of finding this is *before* writing it: the old default
+    // put every new comment on the author's PR at `consider` without asking,
+    // and left blocking, nit and praise unreachable from this view entirely
     if (input === 'e' && anchor) {
       setDraft(finding?.comment ?? '');
-      // keep what it already is; a brand-new one is a comment to send
-      setEditAs(finding?.severity ?? 'consider');
-      setFocus('edit');
+      const existing = KINDS.findIndex((k) => k.severity === finding?.severity);
+      setKindIdx(existing === -1 ? 1 : existing);
+      setFocus('severity');
     }
-    // an annotation for whoever reads the code, never sent to the author
+    // straight to an annotation: the common case when reading unfamiliar code
     if (input === 'i' && anchor) {
       setDraft(finding?.severity === 'info' ? finding.comment : '');
       setEditAs('info');
@@ -195,7 +225,27 @@ export function AnnotatedDiff(props: {
         </Box>
 
         <Box flexDirection="column" width={noteWidth} borderStyle="single" borderColor={focus === 'edit' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
-          {focus !== 'edit' ? (
+          {focus === 'severity' && anchor ? (
+            <Box flexDirection="column">
+              <Text bold color={theme.key} wrap="truncate">
+                {finding ? 'change' : 'new'} finding on {anchor.file}:{anchor.line}
+              </Text>
+              <Box height={1} />
+              {KINDS.map((kind, i) => (
+                <Text key={kind.severity} wrap="truncate" inverse={i === kindIdx}>
+                  <Text color={i === kindIdx ? undefined : SEVERITY_COLOR[kind.severity]}>
+                    {i === kindIdx ? '▸ ' : '  '}
+                    {kind.label.padEnd(11)}
+                  </Text>
+                  <Text dimColor={i !== kindIdx}>{kind.hint}</Text>
+                </Text>
+              ))}
+              <Box flexGrow={1} />
+              <Text dimColor wrap="truncate">
+                j/k or the first letter · enter writes it · esc cancels
+              </Text>
+            </Box>
+          ) : focus !== 'edit' ? (
             margin.map((row, i) => {
               const line = visible[i];
               const mine =
@@ -218,16 +268,21 @@ export function AnnotatedDiff(props: {
             })
           ) : anchor ? (
             <>
-              <Text bold color={editAs === 'info' ? theme.annotation : theme.key} wrap="truncate">
-                {editAs === 'info' ? 'annotation on ' : 'comment on '}
+              <Text bold color={editAs ? SEVERITY_COLOR[editAs] : theme.key} wrap="truncate">
+                {editAs === 'info' ? 'annotation on ' : `${editAs ?? 'comment'} on `}
                 {anchor.file}:{anchor.line}
+              </Text>
+              {/* the consequence, said plainly: this is the difference between
+                  thinking out loud and writing on someone else's PR */}
+              <Text dimColor wrap="truncate">
+                {editAs === 'info' ? 'stays in colinear — never posted' : 'goes to the author when you post'}
               </Text>
               <TextArea
                 value={draft}
                 onChange={setDraft}
                 focus
                 width={noteWidth - 4}
-                height={paneHeight - 5}
+                height={paneHeight - 6}
                 placeholder={
                   editAs === 'info'
                     ? 'what this code does, for whoever reads the review — never posted'
@@ -239,7 +294,9 @@ export function AnnotatedDiff(props: {
                   setDraft('');
                 }}
               />
-              <Text dimColor>ctrl+d saves · esc cancels · empty removes the comment</Text>
+              <Text dimColor wrap="truncate">
+                ctrl+d saves · esc cancels · empty removes it
+              </Text>
             </>
           ) : null}
         </Box>
@@ -274,7 +331,7 @@ export function AnnotatedDiff(props: {
       </Box>
 
       <Text dimColor wrap="truncate">
-        j/k move · n/N next · e comment · i annotate (never posted) · d drop · tab chat · p post · esc
+        j/k move · n/N next · e finding · i annotate · d drop · tab chat · p post · esc
       </Text>
     </Box>
   );
