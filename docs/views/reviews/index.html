@@ -1480,9 +1480,12 @@ them in. <code>▍</code> marks an annotated line, <code>n</code>/<code>N</code>
 rather than on a file header.</p>
 <p>Two kinds share the margin, told apart by their bar:</p>
 <ul>
-<li><strong><code>▌</code> a comment</strong> the agent would send, coloured by severity (blocking, consider, nit, praise);</li>
-<li><strong><code>│</code> an annotation</strong> — severity <strong><code>info</code></strong>, which is <em>never posted</em>. It explains what a dense
-  block is doing so whoever reads the review can follow the change without reconstructing it.</li>
+<li><strong><code>▌</code> a comment</strong> the agent would send, coloured by severity — red <em>blocking</em>, yellow <em>consider</em>,
+  grey <em>nit</em>, green <em>praise</em>;</li>
+<li><strong><code>│</code> an annotation</strong> in <strong>blue</strong> — severity <strong><code>info</code></strong>, which is <em>never posted</em>. It explains what
+  a dense block is doing so whoever reads the review can follow the change without reconstructing
+  it. Blue is deliberately off the red → yellow → green ramp: an explanation is not a mild problem,
+  and any colour on that ramp reads as one.</li>
 </ul>
 <p>They live in one list, so an annotation is editable exactly like a comment — and promoting one to a
 real severity is how "I had to explain this to myself" becomes "the author should know this". An
