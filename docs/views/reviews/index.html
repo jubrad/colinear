@@ -1439,7 +1439,11 @@ refreshed every five minutes.</p>
 <tbody>
 <tr>
 <td><strong><code>●</code></strong></td>
-<td>the PR is <strong>asking for your review</strong> right now</td>
+<td><strong>you</strong> were asked, by name</td>
+</tr>
+<tr>
+<td><strong><code>○</code></strong></td>
+<td>a <strong>team you are on</strong> was asked — anyone on it can take it</td>
 </tr>
 <tr>
 <td><strong><code>↻</code></strong></td>
@@ -1447,9 +1451,14 @@ refreshed every five minutes.</p>
 </tr>
 </tbody>
 </table>
-<p><code>●</code> disappears the moment you post, because submitting a review fulfils the request: the PR leaves
-GitHub's review-requested search while the row stays here. That is the difference between "waiting
-on you" and "you have had your say".</p>
+<p>GitHub's <code>review-requested:&lt;you&gt;</code> search returns both kinds, and the PR lists its requested
+reviewers: if you are there by name it was asked of you, and if you are not — yet the PR came back
+from a search for <em>your</em> requests — it reached you through a team. Naming the team would need an org
+scope colinear doesn't ask for, and the distinction doesn't. A team request sorts below work
+addressed to you, because it may already be someone else's.</p>
+<p><code>●</code>/<code>○</code> disappear the moment you post, because submitting a review fulfils the request: the PR
+leaves the search while the row stays here. That is the difference between "waiting on you" and "you
+have had your say".</p>
 <p><code>↻</code> compares the PR's current head against the commit your review was posted about (or, before
 posting, the one the document was written against). It outranks <code>●</code> — a review that no longer
 applies is more urgent than one not yet started — and sorts to the top under <code>needs me</code>. Pressing
