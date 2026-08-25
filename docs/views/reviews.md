@@ -86,10 +86,16 @@ Each block opens with **what it is** — `blocking ·`, `nit ·`, `note ·` — 
 so two findings on adjacent lines read as two findings rather than one run-on. Continuation rows are
 dimmed, which is the other half of the same signal.
 
-Alignment wins over completeness in the margin itself: a comment block starts at its anchor's row
-and never shifts, so one that would run into the next is cut with an `…` rather than pushing the
-code out of line. **`enter` reads the cut one in full** in the right pane, and any key returns. A comment about the PR as a whole has no line to sit beside,
-so it gets its own line under both panes.
+A block starts on its line's row, or **just after the block above it finishes** — whichever is
+later. Two findings a line apart cannot both start opposite their own line and both be readable, and
+cutting the first one off mid-sentence is the worst of the three ways out, so a crowded block is
+pushed down instead of truncated. When that happens it says which line it belongs to (`↑40`),
+because that is exactly when you can no longer read it off the row opposite.
+
+Nothing is cut against the next finding any more; a block is only ever shortened by the bottom of
+the pane or a cap on runaway length, and **`enter` reads the current one in full** in the right
+pane. A comment about the PR as a whole has no line to sit beside, so it gets its own line under
+both panes.
 
 The chat along the bottom is one line, so **enter sends it**.
 

@@ -116,48 +116,64 @@ export interface MarginRow {
   severity?: string;
   /** true on the first row of a block — where the severity bar reads */
   head?: boolean;
+  /** the block was pushed below its own line to fit, so it must name the line */
+  drifted?: boolean;
+  /** the line it is about, for when it has drifted away from it */
+  line?: number;
 }
 
 /**
- * Lay annotations out beside the code, one column, aligned row for row.
+ * Lay annotations out beside the code.
  *
- * The alignment is the whole point: a comment that sits at the height of the
- * line it is about can be read without looking anything up. So a block starts
- * exactly at its anchor's row and never shifts — which means a long comment
- * runs into the next one, and the honest thing is to cut it and say so with an
- * ellipsis rather than push the code out of alignment to make room.
+ * Alignment is what makes the margin worth having, but it cannot be absolute:
+ * two findings a line apart cannot both start at their own row and both be
+ * readable, and cutting the first one off mid-sentence is the worst of the
+ * three options. So a block starts at its line **or just after the block above
+ * it finishes**, whichever is later, and is never truncated for want of room.
+ *
+ * A block that has been pushed down says which line it belongs to (`drifted`),
+ * because that is exactly when you can no longer read it off the row opposite.
  */
 export function layoutMargin(
-  visible: Array<{ comment?: string; note?: string; severity?: string; key?: string }>,
+  visible: Array<{ comment?: string; note?: string; severity?: string; key?: string; line?: number }>,
   width: number,
   wrap: (text: string, width: number) => string[],
+  /** a single enormous finding should not push every other one off the screen */
+  maxRows = 14,
 ): MarginRow[] {
   const rows: MarginRow[] = visible.map(() => ({ text: '', kind: 'empty' as const }));
-  // where the next block may not reach: the row of the following annotation
-  const starts = visible.flatMap((v, i) => (v.comment || v.note ? [i] : []));
+  let next = 0; // the first row not already spoken for
 
-  for (const [n, start] of starts.entries()) {
-    const item = visible[start];
-    const body = item.comment ?? item.note ?? '';
-    const limit = starts[n + 1] ?? visible.length;
-    const room = limit - start;
-    if (room <= 0) continue;
-    const lines = wrap(body, Math.max(4, width));
+  for (const [start, item] of visible.entries()) {
+    const body = item.comment ?? item.note;
+    if (!body) continue;
+    const at = Math.max(start, next);
+    if (at >= visible.length) break; // below the fold; it appears once scrolled
+    const drifted = at !== start;
+    // the marker is wrapped WITH the text, not painted over it: a prefix the
+    // wrap width does not know about is a row that overflows and loses its end
+    const marked = drifted && item.line !== undefined ? `↑${item.line} ${body}` : body;
+    const lines = wrap(marked, Math.max(4, width));
+    const room = Math.min(visible.length - at, maxRows);
     const shown = lines.slice(0, room);
-    // the block was cut off: say so on its last visible row
+    // cut only against the bottom of the pane or the cap — never against the
+    // next finding, which is what used to eat the end of a sentence
     if (lines.length > shown.length && shown.length) {
       const last = shown[shown.length - 1];
       shown[shown.length - 1] = `${last.slice(0, Math.max(0, width - 1)).trimEnd()}…`;
     }
     shown.forEach((text, k) => {
-      rows[start + k] = {
+      rows[at + k] = {
         text,
         kind: item.comment ? 'comment' : 'note',
         owner: item.key,
         severity: item.severity,
         head: k === 0,
+        drifted,
+        line: item.line,
       };
     });
+    next = at + shown.length;
   }
   return rows;
 }
