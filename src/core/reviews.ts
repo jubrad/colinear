@@ -20,6 +20,7 @@ interface SearchedPr {
   changedFiles: number;
   headRefName: string;
   baseRefName: string;
+  headRefOid: string;
   author: { login: string } | null;
   repository: { nameWithOwner: string };
 }
@@ -35,6 +36,7 @@ query($q: String!) {
     nodes { ... on PullRequest {
       number title url isDraft updatedAt additions deletions changedFiles
       headRefName baseRefName
+      headRefOid
       author { login }
       repository { nameWithOwner }
     } }
@@ -149,6 +151,9 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
       changedFiles: pr.changedFiles,
       headRefName: pr.headRefName,
       baseRefName: pr.baseRefName,
+      headSha: pr.headRefOid,
+      // it came back from a review-requested search, so it is asking for yours
+      requested: true,
     };
     if (existing) {
       // A review whose repo never resolved is stuck: the config it needed may
@@ -171,6 +176,9 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
       if (JSON.stringify({ ...existing, ...patch }) !== JSON.stringify(existing)) {
         store.updateReview(id, patch);
       }
+      // a PR can be pushed to and re-request review in one go, so this is
+      // checked here too rather than only for the ones that left the search
+      announceNewCommits(id, pr.headRefOid);
       continue;
     }
     const repo = await repoForSlug(cfg, pr.repository.nameWithOwner);
@@ -212,8 +220,16 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
       // stale only when the PR actually settles. Until then it stays on the
       // list — the author may push again, and the worktree is deliberately
       // kept for exactly that (docs/views/reviews.md)
-      const state = await prCurrentState(review.repository, review.number);
-      if (state === 'OPEN' || state === undefined) continue;
+      const current = await prCurrentState(review.repository, review.number);
+      if (current.state === 'OPEN' || current.state === undefined) {
+        // still open, but no longer asking: you have already had your say
+        const patch: Partial<Review> = { requested: false };
+        if (current.headSha) patch.headSha = current.headSha;
+        store.updateReview(review.id, patch);
+        announceNewCommits(review.id, current.headSha);
+        continue;
+      }
+      const state = current.state;
       store.updateReview(review.id, { status: 'stale' });
       store.addReviewActivity(review.id, `PR ${state.toLowerCase()} — review settled`);
       continue;
@@ -270,16 +286,42 @@ async function recoverPostedReviews(): Promise<void> {
  * any failure: "could not check" must never read as "closed", or a rate limit
  * would stale every posted review on the list.
  */
-async function prCurrentState(slug: string, number: number): Promise<string | undefined> {
+async function prCurrentState(
+  slug: string,
+  number: number,
+): Promise<{ state?: string; headSha?: string }> {
   try {
     const { stdout } = await exec('gh', [
-      'pr', 'view', String(number), '--repo', slug, '--json', 'state', '--jq', '.state',
+      'pr', 'view', String(number), '--repo', slug, '--json', 'state,headRefOid',
     ]);
-    const state = stdout.trim();
-    return state || undefined;
+    const parsed = JSON.parse(stdout) as { state?: string; headRefOid?: string };
+    return { state: parsed.state || undefined, headSha: parsed.headRefOid || undefined };
   } catch {
-    return undefined;
+    return {};
   }
+}
+
+/**
+ * Say once when the author pushes past what you reviewed.
+ *
+ * The anchor is the commit your review was posted about (or, before posting,
+ * the one the document was written against). `movedSince` records what has
+ * already been announced, so a push is reported on the poll that finds it and
+ * not on every poll thereafter.
+ */
+function announceNewCommits(id: string, headSha?: string): void {
+  const review = store.getReview(id);
+  if (!review || !headSha) return;
+  const reviewed = review.posted?.sha ?? review.reviewedSha;
+  if (!reviewed || headSha === reviewed) return;
+  if (review.movedSince === headSha) return;
+  store.updateReview(id, { movedSince: headSha });
+  store.addReviewActivity(
+    id,
+    review.posted
+      ? `the author pushed since your review (${headSha.slice(0, 8)}) — r re-reviews`
+      : `the author pushed since this was written (${headSha.slice(0, 8)}) — r refreshes it`,
+  );
 }
 
 /** Fields the search endpoint doesn't return; needed before checking out. */
