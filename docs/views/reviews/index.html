@@ -905,6 +905,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#reading-it-against-the-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading it against the code
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#round-two" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1330,6 +1341,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#reading-it-against-the-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading it against the code
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#round-two" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1389,10 +1411,47 @@ onto the card. <strong>Nothing is posted.</strong></p>
 <p>The detail pane shows the review's worktree and its <strong>session id</strong> as a ready-to-paste
 <code>claude --resume</code> — the same handles a task shows, and the way back into a review session from
 outside colinear.</p>
-<p><code>enter</code> opens the <strong>review document</strong> full screen — the agent's write-up on one side, a discussion
-with that same agent on the other (<code>tab</code> switches, <code>j/k</code> scrolls, <code>e</code> edits it in <code>$EDITOR</code>). Your
-turn resumes the reviewing session, so the PR is still in context; when the agent needs a decision it
-asks in the same pane.</p>
+<h2 id="reading-it-against-the-code">Reading it against the code<a class="headerlink" href="#reading-it-against-the-code" title="Permanent link">&para;</a></h2>
+<p><code>enter</code> opens the <strong>annotated diff</strong>: the PR's diff on the left, and beside each line what the agent
+had to say about it. Chat sits along the bottom.</p>
+<div class="highlight"><pre><span></span><code>┌ diff ──────────────────────────────┬──────────────────────────┐
+│     1  fn reconnect(&amp;mut self) {   │                          │
+│ ▍  42 +    for _ in 0..RETRIES {   │ ▌ This retry loop has no │
+│     43        self.call()?;        │ ▌ backoff, so a flapping…│
+│ ▍  44 +    self.handle = sub()?;   │ │ Re-opens the SUBSCRIBE │
+├────────────────────────────────────┴──────────────────────────┤
+│ you  why does the casing matter?                              │
+└───────────────────────────────────────────────────────────────┘
+</code></pre></div>
+<p>The right column is a <strong>margin</strong>: every comment sits at the height of the line it is about, so you
+read the two together without looking anything up. A review document read end to end gives you the
+findings in the agent's order; this gives them in the <strong>code's</strong> order, which is the order you check
+them in. <code>▍</code> marks an annotated line, <code>n</code>/<code>N</code> walk between them, and the view opens on the first one
+rather than on a file header.</p>
+<p>Two kinds share the margin, told apart by their bar:</p>
+<ul>
+<li><strong><code>▌</code> a comment</strong> the agent would send, coloured by severity (blocking, consider, nit, praise);</li>
+<li><strong><code>│</code> an annotation</strong> — severity <strong><code>info</code></strong>, which is <em>never posted</em>. It explains what a dense
+  block is doing so whoever reads the review can follow the change without reconstructing it.</li>
+</ul>
+<p>They live in one list, so an annotation is editable exactly like a comment — and promoting one to a
+real severity is how "I had to explain this to myself" becomes "the author should know this". An
+<code>info</code> finding is filtered out of the inline comments, out of the body, and out of the severity
+counts; a review holding nothing but annotations has nothing to post, and says so.</p>
+<p>Alignment wins over completeness: a block starts at its anchor's row and never shifts, so a long
+comment that would run into the next one is cut with an <code>…</code> rather than pushing the code out of
+line. <code>e</code> shows it whole. A comment about the PR as a whole has no line to sit beside, so it gets
+its own line under both panes.</p>
+<p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours. <code>e</code> opens it,
+<code>ctrl+d</code> saves, an empty comment removes it, and <code>d</code> drops one outright. <code>e</code> on a line with nothing
+on it writes a new comment there; <strong><code>i</code> writes an annotation instead</strong> — the same editor, saved as
+<code>info</code>, so you can explain a gnarly block to whoever reads the review without saying anything to the
+author. Every edit rewrites the <code>``findings fence in the review document,
+so what you post and what the agent sees never diverge — a later chat turn reads your wording, and</code>p` posts it.</p>
+<p><code>d</code> from the list opens the <strong>document</strong> itself instead — the agent's prose write-up with the same
+chat beside it (<code>tab</code> switches, <code>j/k</code> scrolls, <code>e</code> edits it in <code>$EDITOR</code>). Your turn resumes the
+reviewing session, so the PR is still in context; when the agent needs a decision it asks in the
+same pane.</p>
 <h2 id="round-two">Round two<a class="headerlink" href="#round-two" title="Permanent link">&para;</a></h2>
 <p>Press <code>r</code> again on a review you have already posted and it does something different: instead of
 reviewing the PR from scratch, it <strong>revises the review you sent</strong>. The worktree is reset to the new
@@ -1440,7 +1499,7 @@ says why.</p>
 </tr>
 <tr>
 <td><code>enter</code></td>
-<td>the review document + discussion</td>
+<td>the annotated diff · <code>d</code> the review document</td>
 </tr>
 <tr>
 <td><code>p</code> post · <code>A</code> approve · <code>X</code> request changes · <code>n</code> attach a note that rides along</td>
