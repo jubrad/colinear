@@ -82,9 +82,13 @@ condition's tail live. A wrapped line keeps its line number on the first row onl
 follows: a line that takes three rows pushes the next annotation down by three, so the two stay
 aligned.
 
+Each block opens with **what it is** — `blocking ·`, `nit ·`, `note ·` — in the severity's colour,
+so two findings on adjacent lines read as two findings rather than one run-on. Continuation rows are
+dimmed, which is the other half of the same signal.
+
 Alignment wins over completeness in the margin itself: a comment block starts at its anchor's row
 and never shifts, so one that would run into the next is cut with an `…` rather than pushing the
-code out of line. `e` shows it whole. A comment about the PR as a whole has no line to sit beside,
+code out of line. **`enter` reads the cut one in full** in the right pane, and any key returns. A comment about the PR as a whole has no line to sit beside,
 so it gets its own line under both panes.
 
 The chat along the bottom is one line, so **enter sends it**.
