@@ -1414,24 +1414,30 @@ outside colinear.</p>
 <h2 id="reading-it-against-the-code">Reading it against the code<a class="headerlink" href="#reading-it-against-the-code" title="Permanent link">&para;</a></h2>
 <p><code>enter</code> opens the <strong>annotated diff</strong>: the PR's diff on the left, and beside each line what the agent
 had to say about it. Chat sits along the bottom.</p>
-<div class="highlight"><pre><span></span><code>┌ diff ──────────────────────────────┬ annotation ─────────────┐
-│     1  fn reconnect(&amp;mut self) {   │ blocking · src/a.rs:42  │
-│ ▍  42 +    for _ in 0..RETRIES {   │                         │
-│     43        self.call()?;        │ This retry loop has no  │
-│                                    │ backoff…                │
-├────────────────────────────────────┴─────────────────────────┤
-│ you  why does the casing matter?                             │
-└──────────────────────────────────────────────────────────────┘
+<div class="highlight"><pre><span></span><code>┌ diff ──────────────────────────────┬──────────────────────────┐
+│     1  fn reconnect(&amp;mut self) {   │                          │
+│ ▍  42 +    for _ in 0..RETRIES {   │ ▌ This retry loop has no │
+│     43        self.call()?;        │ ▌ backoff, so a flapping…│
+│ ▍  44 +    self.handle = sub()?;   │ │ Re-opens the SUBSCRIBE │
+├────────────────────────────────────┴──────────────────────────┤
+│ you  why does the casing matter?                              │
+└───────────────────────────────────────────────────────────────┘
 </code></pre></div>
-<p>A review document read end to end gives you the findings in the agent's order; this gives them in
-the <strong>code's</strong> order, which is the order you check them in. <code>▍</code> marks a line with something on it,
-and <code>n</code>/<code>N</code> walk between them — the view opens on the first one rather than on a file header.</p>
-<p>The right pane holds one of two things:</p>
+<p>The right column is a <strong>margin</strong>: every comment sits at the height of the line it is about, so you
+read the two together without looking anything up. A review document read end to end gives you the
+findings in the agent's order; this gives them in the <strong>code's</strong> order, which is the order you check
+them in. <code>▍</code> marks an annotated line, <code>n</code>/<code>N</code> walk between them, and the view opens on the first one
+rather than on a file header.</p>
+<p>Two kinds of annotation share the margin, told apart by their bar:</p>
 <ul>
-<li>a <strong>comment</strong> the agent would send (severity-coloured, anchored to the line), or</li>
-<li>a <strong>note</strong> — what this hunk <em>does</em>, written for someone reading the code cold. Notes are context
-  and are never posted; anything the agent would say to the author is a comment.</li>
+<li><strong><code>▌</code> a comment</strong> the agent would send, coloured by severity, and</li>
+<li><strong><code>│</code> a note</strong> — what this hunk <em>does</em>, written for someone reading the code cold. Notes are
+  context and are never posted; anything the agent would say to the author is a comment.</li>
 </ul>
+<p>Alignment wins over completeness: a block starts at its anchor's row and never shifts, so a long
+comment that would run into the next one is cut with an <code>…</code> rather than pushing the code out of
+line. <code>e</code> shows it whole. A comment about the PR as a whole has no line to sit beside, so it gets
+its own line under both panes.</p>
 <p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours. <code>e</code> opens it,
 <code>ctrl+d</code> saves, an empty comment removes it, and <code>d</code> drops one outright. <code>e</code> on a line with nothing
 on it writes a new comment there. Every edit rewrites the <code>``findings fence in the review document,
