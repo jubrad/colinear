@@ -1500,10 +1500,15 @@ rather than on a file header.</p>
 real severity is how "I had to explain this to myself" becomes "the author should know this". An
 <code>info</code> finding is filtered out of the inline comments, out of the body, and out of the severity
 counts; a review holding nothing but annotations has nothing to post, and says so.</p>
-<p>Alignment wins over completeness: a block starts at its anchor's row and never shifts, so a long
-comment that would run into the next one is cut with an <code>…</code> rather than pushing the code out of
-line. <code>e</code> shows it whole. A comment about the PR as a whole has no line to sit beside, so it gets
-its own line under both panes.</p>
+<p>Long code lines <strong>wrap</strong> rather than being cut — the end of a line is where a call's arguments and a
+condition's tail live. A wrapped line keeps its line number on the first row only, and the margin
+follows: a line that takes three rows pushes the next annotation down by three, so the two stay
+aligned.</p>
+<p>Alignment wins over completeness in the margin itself: a comment block starts at its anchor's row
+and never shifts, so one that would run into the next is cut with an <code>…</code> rather than pushing the
+code out of line. <code>e</code> shows it whole. A comment about the PR as a whole has no line to sit beside,
+so it gets its own line under both panes.</p>
+<p>The chat along the bottom is one line, so <strong>enter sends it</strong>.</p>
 <p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours.</p>
 <p><code>e</code> on any line — whether or not something is already there — asks <strong>what kind</strong> first:</p>
 <div class="highlight"><pre><span></span><code>▸ blocking   would request changes over it
