@@ -91,6 +91,11 @@ export function AnnotatedDiff(props: {
   const paneHeight = Math.max(4, height - chatRows - 3);
   const diffWidth = Math.max(30, Math.floor(width * 0.62));
   const noteWidth = width - diffWidth - 3;
+  // What a margin row has left for words: the pane's border and padding (4),
+  // then the severity bar and its space (2). Wrapping to anything wider makes
+  // every line overflow by exactly that much and lose its tail to truncation —
+  // which reads as the text being mangled rather than the column being narrow.
+  const marginText = Math.max(8, noteWidth - 6);
 
   useEffect(() => {
     // keep the cursor on screen, following it rather than snapping to it
@@ -102,10 +107,15 @@ export function AnnotatedDiff(props: {
   const visible = lines.slice(scroll, scroll + visibleRows);
   /** the right column, row-for-row with the diff on the left */
   const margin = useMemo(() => {
-    const annotated = visible.map((row) => {
+    // Lay out over the pane's rows rather than only the diff's: a comment
+    // anchored near the end of a short file would otherwise be cut off with
+    // blank screen underneath it, having no more code rows to flow into.
+    const slots = Math.max(visible.length, visibleRows);
+    const annotated = Array.from({ length: slots }, (_, i) => visible[i]).map((row) => {
       // a continuation carries no annotation of its own: the block already
       // started on the row above, and starting it again would double it
-      const key = row.first && row.line.newLine !== undefined ? anchorKey(row.line.file, row.line.newLine) : undefined;
+      const key =
+        row?.first && row.line.newLine !== undefined ? anchorKey(row.line.file, row.line.newLine) : undefined;
       const finding = key ? byLine.get(key) : undefined;
       const info = finding?.severity === 'info';
       return {
@@ -115,8 +125,8 @@ export function AnnotatedDiff(props: {
         severity: finding?.severity,
       };
     });
-    return layoutMargin(annotated, noteWidth - 4, wrapText);
-  }, [visible, byLine, noteWidth]);
+    return layoutMargin(annotated, marginText, wrapText);
+  }, [visible, visibleRows, byLine, marginText]);
 
   const current = lines[cursor]?.line;
   const anchor =
