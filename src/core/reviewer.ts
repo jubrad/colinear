@@ -602,17 +602,40 @@ export class Reviewer {
     const worktree = join(repo.worktreeRoot, `review-${review.number}`);
     const remote = await this.remoteFor(repo.path, review.repository);
 
-    // a cold fetch on a big repo runs for minutes — say so, or the card looks
-    // stuck with nothing to show for it
-    store.addReviewActivity(id, `fetching ${head} from ${remote}…`);
-    await exec('git', ['-C', repo.path, 'fetch', remote, `${head}:refs/remotes/${remote}/${head}`]).catch(
-      () => exec('git', ['-C', repo.path, 'fetch', remote]).catch(() => {}),
+    // The head branch of a fork's PR does not exist on the base repository, so
+    // fetching `<remote>/<branch>` fails and takes the whole review with it —
+    // and no amount of adding the contributor's remote helps, because the
+    // branch is then under *their* name, not the one the PR reports. GitHub
+    // publishes every PR's head on the BASE repo as refs/pull/<n>/head, fork
+    // or not, so that is what colinear fetches: one ref, one code path, no
+    // remotes to keep in step with whoever opened the PR.
+    const prRef = `refs/remotes/${remote}/pr/${review.number}`;
+    store.addReviewActivity(id, `fetching pull/${review.number}/head from ${remote}…`);
+    const viaPullRef = await exec('git', [
+      '-C', repo.path,
+      'fetch', remote,
+      `+refs/pull/${review.number}/head:${prRef}`,
+    ]).then(
+      () => true,
+      () => false,
     );
+
+    let source = prRef;
+    if (!viaPullRef) {
+      // not GitHub, or the ref is not published: fall back to the branch name,
+      // which is right for a same-repo PR and the best available guess otherwise
+      store.addReviewActivity(id, `pull/${review.number}/head unavailable — trying the branch ${head}`);
+      await exec('git', ['-C', repo.path, 'fetch', remote, `${head}:refs/remotes/${remote}/${head}`]).catch(
+        () => exec('git', ['-C', repo.path, 'fetch', remote]).catch(() => {}),
+      );
+      source = `${remote}/${head}`;
+    }
+    // the base is needed too: it is what the diff is taken against
     await exec('git', ['-C', repo.path, 'fetch', remote, base]).catch(() => {});
 
     if (existsSync(worktree)) {
       store.addReviewActivity(id, `reusing worktree ${worktree}`);
-      await exec('git', ['-C', worktree, 'checkout', '-B', `review/${review.number}`, `${remote}/${head}`]);
+      await exec('git', ['-C', worktree, 'checkout', '-B', `review/${review.number}`, source]);
       await this.recordSha(id, worktree);
       return worktree;
     }
@@ -623,7 +646,7 @@ export class Reviewer {
       'worktree', 'add',
       '-B', `review/${review.number}`,
       worktree,
-      `${remote}/${head}`,
+      source,
     ]);
     await this.recordSha(id, worktree);
     return worktree;
