@@ -16,7 +16,7 @@ import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
 export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.sock');
 
 /** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 13;
+export const PROTOCOL_VERSION = 14;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -47,18 +47,20 @@ export type Command =
   | { name: 'removePlan'; projectId: string }
   /** deterministic post of the plan summary as a tracker project update */
   | { name: 'postPlanUpdate'; projectId: string }
+  /** ask the reviewing agent what a range of lines does, as an annotation */
+  | { name: 'explainLines'; id: string; file: string; startLine: number; endLine: number }
   /** the diff of a task's own branch, for reading it before promoting the PR */
   | { name: 'taskDiff'; id: string }
   /** review a task's own work with a fresh session */
   | { name: 'reviewTask'; id: string }
   /** edit, add or drop a finding on a task's self-review */
-  | { name: 'editTaskFinding'; id: string; file: string; line: number; comment: string; severity?: string }
+  | { name: 'editTaskFinding'; id: string; file: string; line: number; comment: string; severity?: string; startLine?: number }
   /** hand the self-review back to the agent that wrote the code */
   | { name: 'sendFindings'; id: string }
   /** the PR's diff, for the annotated review view */
   | { name: 'reviewDiff'; id: string }
   /** edit, add or drop the comment anchored at a line (rewrites the document) */
-  | { name: 'editFinding'; id: string; file: string; line: number; comment: string; severity?: string }
+  | { name: 'editFinding'; id: string; file: string; line: number; comment: string; severity?: string; startLine?: number }
   /** every agent the daemon is running, for :agents and the creation popup */
   | { name: 'listAgents' }
   /** draft an issue from a description and file it (runs in the daemon) */

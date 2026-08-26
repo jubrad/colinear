@@ -63,10 +63,11 @@ export interface DispatcherApi {
   listAgents(): void;
   reviewDiff(id: string): void;
   taskDiff(id: string): void;
+  explainLines(id: string, file: string, startLine: number, endLine: number): void;
   reviewTask(id: string): void;
-  editTaskFinding(id: string, file: string, line: number, comment: string, severity?: string): void;
+  editTaskFinding(id: string, file: string, line: number, comment: string, severity?: string, startLine?: number): void;
   sendFindings(id: string): void;
-  editFinding(id: string, file: string, line: number, comment: string, severity?: string): void;
+  editFinding(id: string, file: string, line: number, comment: string, severity?: string, startLine?: number): void;
   createIssue(scopeId: string, request: string): void;
   createProject(brief: ProjectBrief): void;
   gcScan(olderThanDays: number): void;
@@ -362,12 +363,14 @@ export async function connectToDaemon(): Promise<Connection> {
           listAgents: () => command({ name: 'listAgents' }),
           reviewDiff: (id) => command({ name: 'reviewDiff', id }),
           taskDiff: (id) => command({ name: 'taskDiff', id }),
+          explainLines: (id, file, startLine, endLine) =>
+            command({ name: 'explainLines', id, file, startLine, endLine }),
           reviewTask: (id) => command({ name: 'reviewTask', id }),
-          editTaskFinding: (id, file, line, comment, severity) =>
-            command({ name: 'editTaskFinding', id, file, line, comment, severity }),
+          editTaskFinding: (id, file, line, comment, severity, startLine) =>
+            command({ name: 'editTaskFinding', id, file, line, comment, severity, startLine }),
           sendFindings: (id) => command({ name: 'sendFindings', id }),
-          editFinding: (id, file, line, comment, severity) =>
-            command({ name: 'editFinding', id, file, line, comment, severity }),
+          editFinding: (id, file, line, comment, severity, startLine) =>
+            command({ name: 'editFinding', id, file, line, comment, severity, startLine }),
           createIssue: (scopeId, request) => command({ name: 'createIssue', scopeId, request }),
           createProject: (brief) => command({ name: 'createProject', brief }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),

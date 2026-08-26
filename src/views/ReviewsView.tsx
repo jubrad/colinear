@@ -272,10 +272,14 @@ export function ReviewsView(props: { param?: string }) {
         diff={diffs[selected.id]}
         width={ctx.size.columns - 4}
         height={Math.max(12, ctx.size.rows - 6)}
-        busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
+        now={ctx.now}
+      busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
         onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
-        onEditFinding={(file, line, comment, severity) =>
-          ctx.dispatcher.editFinding(selected.id, file, line, comment, severity)
+        onEditFinding={(file, line, comment, severity, startLine) =>
+          ctx.dispatcher.editFinding(selected.id, file, line, comment, severity, startLine)
+        }
+        onExplain={(file, startLine, endLine) =>
+          ctx.dispatcher.explainLines(selected.id, file, startLine, endLine)
         }
         onPost={() => {
           ctx.dispatcher.postReview(selected.id);

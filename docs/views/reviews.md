@@ -124,6 +124,36 @@ goes straight to an annotation, which is the common case while reading unfamilia
 so what you post and what the agent sees never diverge — a later chat turn reads your wording, and
 `p` posts it.
 
+### Commenting on a block
+
+A comment is often about a *passage*, not a line: the loop rather than its first statement. **`v`
+marks a block** — press it, move, and the range grows with the cursor; `▏` runs down the gutter
+beside every line in it and the header says what is marked (`▏41–43 selected`). `v` again or `esc`
+drops it, and `esc` drops the selection before it closes the view.
+
+With a block marked, `e` writes one finding across the whole range and `d` removes it whole. It is
+stored — and posted — the way GitHub stores a multi-line comment: anchored to the **last** line,
+with the first recorded as its start. That is why the picker and the editor name the range rather
+than the cursor; mark upward from 43 to 41 and the finding is still on 43.
+
+In the margin the block is marked on every line it covers, so its extent is visible in the diff,
+while the text hangs off the anchor row alone rather than being drawn once per line.
+
+### Asking what a passage does
+
+**`a` hands the marked lines to an agent and asks it to explain them**, as an `info` annotation on
+that range — the same annotation a review writes unprompted, asked for on demand while you are
+reading. It is a short, focused session rather than a whole review: it reads those lines and enough
+around them to answer properly, appends one finding to the review document, and changes nothing
+else.
+
+The row you asked about holds itself open with a spinner (`⠋ explaining these lines…`) until the
+answer lands, which it does in place, in the margin, beside the code — the view follows the document
+rather than waiting for you to reopen it. A session that dies writes nothing, so after five minutes
+the row says **`no explanation came back — see :logs`** instead of spinning for the rest of the day.
+
+`a` with nothing marked asks about the line under the cursor.
+
 `d` from the list opens the **document** itself instead — the agent's prose write-up with the same
 chat beside it (`tab` switches, `j/k` scrolls, `e` edits it in `$EDITOR`). Your turn resumes the
 reviewing session, so the PR is still in context; when the agent needs a decision it asks in the

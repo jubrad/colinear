@@ -11,7 +11,9 @@ code** instead of posting it to an author.
 | key | what |
 |---|---|
 | `R` | have a **fresh** agent review the branch and write the findings |
+| `v` | mark a block, so a comment covers the passage rather than a line |
 | `e` `i` | write a comment · write an annotation — the same picker as a PR review |
+| `a` | ask an agent what the marked lines do — the answer lands as an annotation |
 | `enter` `n`/`N` | read the current finding in full · walk between them |
 | `p` | hand the comments back to the agent |
 | `tab` | say something to the agent directly |

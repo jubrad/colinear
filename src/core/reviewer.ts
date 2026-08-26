@@ -17,6 +17,7 @@ import {
   type ReviewEvent,
 } from './reviews.js';
 import { isDemo } from './demo.js';
+import { explainPrompt } from './selfreview.js';
 import { store } from './store.js';
 import { extractFencedJson, hasFenceOpening } from './fence.js';
 import { questionSummary } from './types.js';
@@ -59,7 +60,11 @@ function validFindings(value: unknown): ReviewFinding[] {
           : 'consider';
     const line = typeof f.line === 'number' && Number.isFinite(f.line) ? f.line : undefined;
     const file = typeof f.file === 'string' && f.file.trim() ? f.file.trim() : undefined;
-    return [{ file, line, severity, comment: f.comment }];
+    // a range that does not end after it starts is not a range; keeping the
+    // anchor and dropping the start is better than refusing the whole comment
+    const rawStart = typeof f.startLine === 'number' && Number.isFinite(f.startLine) ? f.startLine : undefined;
+    const startLine = rawStart !== undefined && line !== undefined && rawStart < line ? rawStart : undefined;
+    return [{ file, line, startLine, severity, comment: f.comment }];
   });
 }
 
@@ -87,7 +92,7 @@ export function writeFindings(text: string, findings: ReviewFinding[]): string {
  */
 export function upsertFinding(
   text: string,
-  at: { file: string; line: number },
+  at: { file: string; line: number; startLine?: number },
   comment: string,
   severity?: Severity,
 ): string {
@@ -99,8 +104,24 @@ export function upsertFinding(
     return writeFindings(text, findings.filter((_, i) => i !== idx));
   }
   const next = [...findings];
-  if (idx === -1) next.push({ file: at.file, line: at.line, severity: severity ?? 'consider', comment: trimmed });
-  else next[idx] = { ...next[idx], comment: trimmed, severity: severity ?? next[idx].severity ?? 'consider' };
+  if (idx === -1) {
+    next.push({
+      file: at.file,
+      line: at.line,
+      ...(at.startLine ? { startLine: at.startLine } : {}),
+      severity: severity ?? 'consider',
+      comment: trimmed,
+    });
+  } else {
+    next[idx] = {
+      ...next[idx],
+      comment: trimmed,
+      severity: severity ?? next[idx].severity ?? 'consider',
+      // re-commenting on a single line does not silently un-block an existing
+      // range, but selecting a new one replaces it
+      ...(at.startLine ? { startLine: at.startLine } : {}),
+    };
+  }
   return writeFindings(text, next);
 }
 
@@ -712,7 +733,12 @@ export class Reviewer {
    * document's fence. The operator's words land in the same artifact the agent
    * writes, so a later chat turn sees them and `p` posts them.
    */
-  editFinding(id: string, at: { file: string; line: number }, comment: string, severity?: Severity): void {
+  editFinding(
+    id: string,
+    at: { file: string; line: number; startLine?: number },
+    comment: string,
+    severity?: Severity,
+  ): void {
     const review = store.getReview(id);
     if (!review?.worktree) return this.toast('no worktree for this review yet', 'err');
     const path = join(review.worktree, REVIEW_FILE);
@@ -725,6 +751,39 @@ export class Reviewer {
     // right by the time the keystroke returns
     this.absorbDoc(id);
     store.addReviewActivity(id, comment.trim() ? `you edited the comment on ${at.file}:${at.line}` : `you removed the comment on ${at.file}:${at.line}`);
+  }
+
+  /**
+   * Ask what a range of lines does, on a PR you are reviewing. The answer
+   * lands as an `info` finding in the same document — annotating the code for
+   * you, never posted to the author.
+   */
+  async explainLines(id: string, at: { file: string; startLine: number; endLine: number }): Promise<void> {
+    const review = store.getReview(id);
+    if (!review?.worktree) return this.toast('no worktree for this review yet', 'err');
+    if (this.refuseInDemo(id, 'explaining code')) return;
+    const where = at.startLine === at.endLine ? `line ${at.endLine}` : `lines ${at.startLine}\u2013${at.endLine}`;
+    store.addReviewActivity(id, `asked what ${at.file} ${where} does`);
+    try {
+      await runSession({
+        permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
+        agent: {
+          kind: 'review',
+          label: `${review.repository}#${review.number}`,
+          origin: `you asked about ${at.file}:${at.endLine}`,
+        },
+        prompt: explainPrompt(this.cfg, at, where),
+        cwd: review.worktree,
+        model: this.cfg.model,
+        callbacks: this.callbacks(id),
+      });
+    } catch (err) {
+      store.addReviewActivity(id, `explain failed: ${String(err).slice(0, 120)}`);
+    } finally {
+      // the watcher usually catches the write; absorbing here means the margin
+      // is right the moment the session ends rather than a beat later
+      this.absorbDoc(id);
+    }
   }
 
   private async remoteFor(path: string, repository: string): Promise<string> {
