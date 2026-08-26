@@ -1510,10 +1510,15 @@ aligned.</p>
 <p>Each block opens with <strong>what it is</strong> — <code>blocking ·</code>, <code>nit ·</code>, <code>note ·</code> — in the severity's colour,
 so two findings on adjacent lines read as two findings rather than one run-on. Continuation rows are
 dimmed, which is the other half of the same signal.</p>
-<p>Alignment wins over completeness in the margin itself: a comment block starts at its anchor's row
-and never shifts, so one that would run into the next is cut with an <code>…</code> rather than pushing the
-code out of line. <strong><code>enter</code> reads the cut one in full</strong> in the right pane, and any key returns. A comment about the PR as a whole has no line to sit beside,
-so it gets its own line under both panes.</p>
+<p>A block starts on its line's row, or <strong>just after the block above it finishes</strong> — whichever is
+later. Two findings a line apart cannot both start opposite their own line and both be readable, and
+cutting the first one off mid-sentence is the worst of the three ways out, so a crowded block is
+pushed down instead of truncated. When that happens it says which line it belongs to (<code>↑40</code>),
+because that is exactly when you can no longer read it off the row opposite.</p>
+<p>Nothing is cut against the next finding any more; a block is only ever shortened by the bottom of
+the pane or a cap on runaway length, and <strong><code>enter</code> reads the current one in full</strong> in the right
+pane. A comment about the PR as a whole has no line to sit beside, so it gets its own line under
+both panes.</p>
 <p>The chat along the bottom is one line, so <strong>enter sends it</strong>.</p>
 <p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours.</p>
 <p><code>e</code> on any line — whether or not something is already there — asks <strong>what kind</strong> first:</p>
