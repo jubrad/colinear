@@ -374,7 +374,13 @@ export type Severity = 'blocking' | 'consider' | 'nit' | 'praise' | 'info';
 export interface ReviewFinding {
   /** unset when the point isn't about a particular file — it goes in the body */
   file?: string;
+  /**
+   * The line the comment anchors to — the LAST line of the range, which is
+   * what GitHub's inline comments take. `startLine` makes it a block.
+   */
   line?: number;
+  /** first line of a multi-line comment; absent for a single-line one */
+  startLine?: number;
   /**
    * blocking = would request changes over it; nit = optional polish. Unset on
    * the lead entry: no file, no line, no severity, one sentence — it opens the

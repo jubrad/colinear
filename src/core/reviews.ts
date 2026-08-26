@@ -488,7 +488,15 @@ export async function submitReview(
       .filter((f) => f.line && f.file)
       .map((f) => {
         const text = f.severity ? `**${f.severity}** — ${f.comment}` : f.comment;
-        return { path: f.file, line: f.line, side: 'RIGHT', body: scope === 'all' ? sign(text) : text };
+        return {
+          path: f.file,
+          line: f.line,
+          side: 'RIGHT',
+          // GitHub takes a block as start_line..line; both sides must be given
+          // or it rejects the whole review rather than the one comment
+          ...(f.startLine ? { start_line: f.startLine, start_side: 'RIGHT' } : {}),
+          body: scope === 'all' ? sign(text) : text,
+        };
       }),
   };
   const dir = mkdtempSync(join(tmpdir(), 'coli-review-'));

@@ -92,13 +92,21 @@ dimmed, which is the other half of the same signal.
 A block starts on its line's row, or **just after the block above it finishes** — whichever is
 later. Two findings a line apart cannot both start opposite their own line and both be readable, and
 cutting the first one off mid-sentence is the worst of the three ways out, so a crowded block is
-pushed down instead of truncated. When that happens it says which line it belongs to (`↑40`),
-because that is exactly when you can no longer read it off the row opposite.
+pushed down instead of truncated. When a block has moved off its own line it says which line it
+belongs to (`↑40`, or `↓40` if it moved the other way), because that is exactly when you can no
+longer read it off the row opposite.
 
-Nothing is cut against the next finding any more; a block is only ever shortened by the bottom of
-the pane or a cap on runaway length, and **`enter` reads the current one in full** in the right
-pane. A comment about the PR as a whole has no line to sit beside, so it gets its own line under
-both panes.
+**The block you are standing in is the exception to all of it.** It is the one you are reading, so
+it is exempt from the cap that keeps a runaway finding from hiding the rest, and it may climb *up*
+the pane to find the rows it needs rather than hanging off its own line and running out of them. A
+long annotation anchored three rows from the bottom used to show three lines and an ellipsis; now it
+takes the pane. Move off it and everything returns to where it was.
+
+Nothing is cut against the next finding; a block is only ever shortened by the bottom of the pane.
+When even that is not enough, **`enter` reads the current one in full** in the right pane — `j`/`k`,
+`g`/`G` and page keys scroll it, it says where you are (`16/25`), `e` edits what you are reading,
+and anything else returns. A comment about the PR as a whole has no line to sit beside, so it gets
+its own line under both panes.
 
 The chat along the bottom is one line, so **enter sends it**.
 
@@ -123,6 +131,36 @@ or "stays in colinear — never posted" — because that is the difference that 
 goes straight to an annotation, which is the common case while reading unfamiliar code. Every edit rewrites the ```findings fence in the review document,
 so what you post and what the agent sees never diverge — a later chat turn reads your wording, and
 `p` posts it.
+
+### Commenting on a block
+
+A comment is often about a *passage*, not a line: the loop rather than its first statement. **`v`
+marks a block** — press it, move, and the range grows with the cursor; `▏` runs down the gutter
+beside every line in it and the header says what is marked (`▏41–43 selected`). `v` again or `esc`
+drops it, and `esc` drops the selection before it closes the view.
+
+With a block marked, `e` writes one finding across the whole range and `d` removes it whole. It is
+stored — and posted — the way GitHub stores a multi-line comment: anchored to the **last** line,
+with the first recorded as its start. That is why the picker and the editor name the range rather
+than the cursor; mark upward from 43 to 41 and the finding is still on 43.
+
+In the margin the block is marked on every line it covers, so its extent is visible in the diff,
+while the text hangs off the anchor row alone rather than being drawn once per line.
+
+### Asking what a passage does
+
+**`a` hands the marked lines to an agent and asks it to explain them**, as an `info` annotation on
+that range — the same annotation a review writes unprompted, asked for on demand while you are
+reading. It is a short, focused session rather than a whole review: it reads those lines and enough
+around them to answer properly, appends one finding to the review document, and changes nothing
+else.
+
+The row you asked about holds itself open with a spinner (`⠋ explaining these lines…`) until the
+answer lands, which it does in place, in the margin, beside the code — the view follows the document
+rather than waiting for you to reopen it. A session that dies writes nothing, so after five minutes
+the row says **`no explanation came back — see :logs`** instead of spinning for the rest of the day.
+
+`a` with nothing marked asks about the line under the cursor.
 
 `d` from the list opens the **document** itself instead — the agent's prose write-up with the same
 chat beside it (`tab` switches, `j/k` scrolls, `e` edits it in `$EDITOR`). Your turn resumes the

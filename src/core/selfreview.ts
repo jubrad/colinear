@@ -106,10 +106,75 @@ export async function reviewTask(cfg: Config, task: Task): Promise<void> {
   }
 }
 
+/**
+ * Ask what a range of lines does, and write the answer where you asked.
+ *
+ * A short, focused session rather than a whole review: you are reading a diff
+ * and one block is opaque. The answer lands as an `info` finding anchored to
+ * that range, which means it appears in the margin beside the code and is
+ * never posted — the same annotation the agent would have written unprompted,
+ * asked for on demand.
+ */
+export async function explainLines(
+  cfg: Config,
+  task: Task,
+  at: { file: string; startLine: number; endLine: number },
+): Promise<void> {
+  const id = task.issue.id;
+  const path = docPath(task);
+  if (!path || !task.worktree) return;
+  if (isDemo(cfg)) {
+    store.addActivity(id, 'demo mode — nothing was explained');
+    return;
+  }
+  const where = at.startLine === at.endLine ? `line ${at.endLine}` : `lines ${at.startLine}–${at.endLine}`;
+  store.addActivity(id, `asked what ${at.file} ${where} does`);
+  try {
+    await runSession({
+      permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
+      agent: { kind: 'review', label: task.issue.identifier, origin: `you asked about ${at.file}:${at.endLine}` },
+      prompt: explainPrompt(cfg, at, where),
+      cwd: task.worktree,
+      model: cfg.model,
+      callbacks: {
+        onActivity: (line) => store.addActivity(id, line),
+        onSessionId: () => {},
+        onQuestion: (q) => q.answer(q.questions.map(() => 'use your best judgment')),
+      },
+    });
+  } catch (err) {
+    store.addActivity(id, `explain failed: ${String(err).slice(0, 120)}`);
+  } finally {
+    // whatever happened, read the document back: a partial answer is worth
+    // more than a spinner that never stops
+    absorb(store.get(id) ?? task);
+  }
+}
+
+export function explainPrompt(
+  cfg: Config,
+  at: { file: string; startLine: number; endLine: number },
+  where: string,
+): string {
+  return `The operator is reading a diff and wants to understand one part of it: **${at.file}, ${where}**.
+
+Read those lines and enough of the code around them to explain them properly, then add ONE finding to the \`\`\`findings block in \`${REVIEW_FILE}\` in this directory — creating the file with a short prose header if it does not exist, and leaving every finding already in it exactly as it is.
+
+The finding is:
+
+\`\`\`json
+{"file": "${at.file}", "line": ${at.endLine}${at.startLine !== at.endLine ? `, "startLine": ${at.startLine}` : ''}, "severity": "info", "comment": "…"}
+\`\`\`
+
+\`info\` is never posted anywhere — it annotates the code for the person reading the diff. So write what lets them judge it rather than a paraphrase: what this code is doing and why it is here, the invariant or assumption it rests on and where that is established, and anything they would otherwise have to go and find out for themselves. If the answer is genuinely "exactly what it looks like", say that in one line rather than padding it.
+
+Change nothing else. Reply with one sentence.${guidanceFor(cfg.guidance, 'review')}`;
+}
+
 /** Edit, add or drop a finding — the same rewrite a PR review does. */
 export function editFinding(
   task: Task,
-  at: { file: string; line: number },
+  at: { file: string; line: number; startLine?: number },
   comment: string,
   severity?: Severity,
 ): void {

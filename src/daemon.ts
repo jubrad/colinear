@@ -231,6 +231,15 @@ export async function runDaemon(): Promise<void> {
       case 'message':
         dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });
         break;
+      case 'explainLines': {
+        // reviews are keyed "owner/repo#n" and tasks by tracker id, so which
+        // one this is needs no extra flag — the same trick `answer` uses
+        const at = { file: cmd.file, startLine: cmd.startLine, endLine: cmd.endLine };
+        const task = store.get(cmd.id);
+        if (task) void selfreview.explainLines(cfg, task, at);
+        else if (store.getReview(cmd.id)) void reviewer.explainLines(cmd.id, at);
+        break;
+      }
       case 'taskDiff': {
         const task = store.get(cmd.id);
         if (task) void selfreview.taskDiff(cfg, task).then((diff) => reply({ t: 'taskDiff', id: cmd.id, diff }));
@@ -281,7 +290,7 @@ export async function runDaemon(): Promise<void> {
       case 'editFinding':
         reviewer.editFinding(
           cmd.id,
-          { file: cmd.file, line: cmd.line },
+          { file: cmd.file, line: cmd.line, startLine: cmd.startLine },
           cmd.comment,
           cmd.severity as Severity | undefined,
         );

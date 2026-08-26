@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
 import type { Review } from '../core/types.js';
 import { AnnotatedDiff } from '../ui/AnnotatedDiff.js';
-import { useColinear } from '../ui/context.js';
+import { useColinear, useViewSize } from '../ui/context.js';
 import { theme } from '../theme.js';
 
 /**
@@ -20,6 +20,7 @@ import { theme } from '../theme.js';
  */
 export function DiffView(props: { param?: string }) {
   const ctx = useColinear();
+  const pane = useViewSize();
   const tasks = useTasks();
   const [diffs, setDiffs] = useState<Record<string, string>>({});
 
@@ -77,14 +78,18 @@ export function DiffView(props: { param?: string }) {
     <AnnotatedDiff
       review={asReview}
       diff={diffs[task.issue.id]}
-      width={ctx.size.columns - 4}
-      height={Math.max(12, ctx.size.rows - 6)}
+      width={pane.width}
+      height={Math.max(12, pane.height)}
+      now={ctx.now}
       busy={Boolean(task.reviewing)}
       // the chat here talks to the agent that wrote the code, because that is
       // the one you would tell something to
       onSend={(text) => ctx.dispatcher.message(task.issue.id, text, { wake: false })}
-      onEditFinding={(file, line, comment, severity) =>
-        ctx.dispatcher.editTaskFinding(task.issue.id, file, line, comment, severity)
+      onEditFinding={(file, line, comment, severity, startLine) =>
+        ctx.dispatcher.editTaskFinding(task.issue.id, file, line, comment, severity, startLine)
+      }
+      onExplain={(file, startLine, endLine) =>
+        ctx.dispatcher.explainLines(task.issue.id, file, startLine, endLine)
       }
       onPost={() => {
         ctx.dispatcher.sendFindings(task.issue.id);
@@ -103,7 +108,9 @@ export const diffKeys: Array<[string, string]> = [
   ['j/k ↑↓', 'row'],
   ['n/N', 'next annotation'],
   ['enter', 'read it in full'],
+  ['v', 'mark a block'],
   ['e', 'comment · i annotate'],
+  ['a', 'ask what it does'],
   ['R', 'have an agent review it'],
   ['p', 'hand the comments to the agent'],
   ['tab', 'message the agent'],

@@ -9,7 +9,7 @@ import type { Review } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
 import { AnnotatedDiff } from '../ui/AnnotatedDiff.js';
 import { ReviewDocModal } from '../ui/ReviewDocModal.js';
-import { useColinear } from '../ui/context.js';
+import { useColinear, useViewSize } from '../ui/context.js';
 import { cell, formatDuration, formatTokens, spinner } from '../ui/format.js';
 import { REVIEW_COLORS, theme } from '../theme.js';
 
@@ -78,6 +78,7 @@ const SEVERITY_COLOR: Record<string, string> = {
 /** PRs waiting on my review, with an assisted pre-review per PR. */
 export function ReviewsView(props: { param?: string }) {
   const ctx = useColinear();
+  const pane = useViewSize();
   const reviews = useReviews();
   const [cursor, setCursor] = useState(0);
   const [query, setQuery] = useState('');
@@ -270,12 +271,16 @@ export function ReviewsView(props: { param?: string }) {
       <AnnotatedDiff
         review={selected}
         diff={diffs[selected.id]}
-        width={ctx.size.columns - 4}
-        height={Math.max(12, ctx.size.rows - 6)}
-        busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
+        width={pane.width}
+        height={Math.max(12, pane.height)}
+        now={ctx.now}
+      busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
         onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
-        onEditFinding={(file, line, comment, severity) =>
-          ctx.dispatcher.editFinding(selected.id, file, line, comment, severity)
+        onEditFinding={(file, line, comment, severity, startLine) =>
+          ctx.dispatcher.editFinding(selected.id, file, line, comment, severity, startLine)
+        }
+        onExplain={(file, startLine, endLine) =>
+          ctx.dispatcher.explainLines(selected.id, file, startLine, endLine)
         }
         onPost={() => {
           ctx.dispatcher.postReview(selected.id);
@@ -290,8 +295,8 @@ export function ReviewsView(props: { param?: string }) {
     return (
       <ReviewDocModal
         review={selected}
-        width={ctx.size.columns - 4}
-        height={Math.max(10, ctx.size.rows - 6)}
+        width={pane.width}
+        height={Math.max(10, pane.height)}
         busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
         onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
         onPost={() => {

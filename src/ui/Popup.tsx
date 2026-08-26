@@ -1,5 +1,6 @@
 import { Box, Text } from 'ink';
 import type { ReactNode } from 'react';
+import { viewPaneSize } from './context.js';
 import { theme } from '../theme.js';
 
 /**
@@ -65,9 +66,7 @@ export function popupPlacement(
   wanted: { width: number; height: number },
   cmdOpen = false,
 ): { width: number; height: number; top: number; left: number } {
-  // the view pane's inner box: root padding (2) + border (2) + padding (2)
-  const viewWidth = Math.max(20, size.columns - 6);
-  const viewHeight = Math.max(6, size.rows - 8 - (cmdOpen ? 4 : 0));
+  const { width: viewWidth, height: viewHeight } = viewPaneSize(size, cmdOpen);
   const width = Math.min(wanted.width, viewWidth);
   const height = Math.min(wanted.height, viewHeight);
   return {
