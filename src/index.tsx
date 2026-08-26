@@ -341,6 +341,7 @@ async function runTui(): Promise<void> {
         onPlanChatReady={conn.onPlanChatReady}
         onAgents={conn.onAgents}
         onReviewDiff={conn.onReviewDiff}
+        onTaskDiff={conn.onTaskDiff}
         onCreating={conn.onCreating}
         onLogTail={conn.onLogTail}
         onChannels={conn.onChannels}

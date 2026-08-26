@@ -62,6 +62,10 @@ export interface DispatcherApi {
   startPlanChat(projectId: string): void;
   listAgents(): void;
   reviewDiff(id: string): void;
+  taskDiff(id: string): void;
+  reviewTask(id: string): void;
+  editTaskFinding(id: string, file: string, line: number, comment: string, severity?: string): void;
+  sendFindings(id: string): void;
   editFinding(id: string, file: string, line: number, comment: string, severity?: string): void;
   createIssue(scopeId: string, request: string): void;
   createProject(brief: ProjectBrief): void;
@@ -115,6 +119,7 @@ export interface Connection {
   onPlanChatReady(fn: (r: PlanChatReady) => void): () => void;
   onAgents(fn: (list: AgentSession[]) => void): () => void;
   onReviewDiff(fn: (id: string, diff: string) => void): () => void;
+  onTaskDiff(fn: (id: string, diff: string) => void): () => void;
   onCreating(fn: (agentId: string) => void): () => void;
   /** daemon-side messages (edit results, etc.); returns an unsubscribe */
   onToast(fn: (text: string, kind: 'info' | 'ok' | 'err') => void): () => void;
@@ -245,6 +250,7 @@ export async function connectToDaemon(): Promise<Connection> {
   const planChatListeners = new Set<(r: PlanChatReady) => void>();
   const agentListeners = new Set<(list: AgentSession[]) => void>();
   const diffListeners = new Set<(id: string, diff: string) => void>();
+  const taskDiffListeners = new Set<(id: string, diff: string) => void>();
   const creatingListeners = new Set<(agentId: string) => void>();
 
   return await new Promise<Connection>((resolve, reject) => {
@@ -311,6 +317,10 @@ export async function connectToDaemon(): Promise<Connection> {
             diffListeners.add(fn);
             return () => diffListeners.delete(fn);
           },
+          onTaskDiff: (fn) => {
+            taskDiffListeners.add(fn);
+            return () => taskDiffListeners.delete(fn);
+          },
           onCreating: (fn) => {
             creatingListeners.add(fn);
             return () => creatingListeners.delete(fn);
@@ -351,6 +361,11 @@ export async function connectToDaemon(): Promise<Connection> {
           startPlanChat: (projectId) => command({ name: 'startPlanChat', projectId }),
           listAgents: () => command({ name: 'listAgents' }),
           reviewDiff: (id) => command({ name: 'reviewDiff', id }),
+          taskDiff: (id) => command({ name: 'taskDiff', id }),
+          reviewTask: (id) => command({ name: 'reviewTask', id }),
+          editTaskFinding: (id, file, line, comment, severity) =>
+            command({ name: 'editTaskFinding', id, file, line, comment, severity }),
+          sendFindings: (id) => command({ name: 'sendFindings', id }),
           editFinding: (id, file, line, comment, severity) =>
             command({ name: 'editFinding', id, file, line, comment, severity }),
           createIssue: (scopeId, request) => command({ name: 'createIssue', scopeId, request }),
@@ -365,6 +380,8 @@ export async function connectToDaemon(): Promise<Connection> {
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),
           },
         });
+      } else if (msg.t === 'taskDiff') {
+        for (const fn of taskDiffListeners) fn(msg.id, msg.diff);
       } else if (msg.t === 'reviewDiff') {
         for (const fn of diffListeners) fn(msg.id, msg.diff);
       } else if (msg.t === 'agents') {

@@ -65,9 +65,11 @@ export function AnnotatedDiff(props: {
   onSend: (text: string) => void;
   onEditFinding: (file: string, line: number, comment: string, severity?: Severity) => void;
   onPost: () => void;
+  /** run an agent over this diff; absent where the review already has one */
+  onReview?: () => void;
   onClose: () => void;
 }) {
-  const { review, diff, width, height, busy, onSend, onEditFinding, onPost, onClose } = props;
+  const { review, diff, width, height, busy, onSend, onEditFinding, onPost, onReview, onClose } = props;
   const [cursor, setCursor] = useState(0);
   const [scroll, setScroll] = useState(0);
   const [focus, setFocus] = useState<Focus>('diff');
@@ -249,6 +251,7 @@ export function AnnotatedDiff(props: {
     }
     if (input === 'd' && anchor && finding) onEditFinding(anchor.file, anchor.line, '');
     if (input === 'p') onPost();
+    if (input === 'R' && onReview) onReview();
   });
 
   return (
@@ -410,7 +413,8 @@ export function AnnotatedDiff(props: {
       </Box>
 
       <Text dimColor wrap="truncate">
-        j/k move · n/N next · enter reads · e finding · i annotate · d drop · tab chat · p post · esc
+        j/k move · n/N next · enter reads · e finding · i annotate · d drop · tab chat ·{' '}
+        {onReview ? 'R review · p hand back' : 'p post'} · esc
       </Text>
     </Box>
   );

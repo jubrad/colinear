@@ -24,6 +24,7 @@ import {
   type ServerMsg,
 } from './core/protocol.js';
 import { findReclaimable, removeWorktree } from './core/gc.js';
+import * as selfreview from './core/selfreview.js';
 import { createIssueFromPrompt } from './core/newissue.js';
 import { createProjectFromPrompt } from './core/newproject.js';
 import { listSessions, updateSession } from './core/sessions.js';
@@ -230,6 +231,50 @@ export async function runDaemon(): Promise<void> {
       case 'message':
         dispatcher.message(cmd.id, cmd.text, { wake: cmd.wake });
         break;
+      case 'taskDiff': {
+        const task = store.get(cmd.id);
+        if (task) void selfreview.taskDiff(cfg, task).then((diff) => reply({ t: 'taskDiff', id: cmd.id, diff }));
+        break;
+      }
+      case 'reviewTask': {
+        const task = store.get(cmd.id);
+        // only on an open draft PR: the work is committed and the agent is
+        // idle, so the diff being read is the diff that exists
+        if (task?.status === 'pr_open') void selfreview.reviewTask(cfg, task);
+        break;
+      }
+      case 'editTaskFinding': {
+        const task = store.get(cmd.id);
+        if (task) {
+          selfreview.editFinding(
+            task,
+            { file: cmd.file, line: cmd.line },
+            cmd.comment,
+            cmd.severity as Severity | undefined,
+          );
+        }
+        break;
+      }
+      case 'sendFindings': {
+        const task = store.get(cmd.id);
+        const handed = task && selfreview.handBack(task);
+        if (!task || !handed) {
+          broadcast({ t: 'toast', text: 'nothing to hand back — no findings to act on', kind: 'err' });
+          break;
+        }
+        // maintenance, not a wake: waking would set the task back to `queued`
+        // and drop it out of PR Open, which is not what happened
+        if (!dispatcher.revise(task.issue.id, handed.text)) {
+          broadcast({ t: 'toast', text: `${task.issue.identifier}: not idle on an open PR — nothing sent`, kind: 'err' });
+          break;
+        }
+        broadcast({
+          t: 'toast',
+          text: `${task.issue.identifier}: ${handed.count} comment${handed.count === 1 ? '' : 's'} handed to the agent`,
+          kind: 'ok',
+        });
+        break;
+      }
       case 'reviewDiff':
         void reviewer.diff(cmd.id).then((diff) => reply({ t: 'reviewDiff', id: cmd.id, diff }));
         break;

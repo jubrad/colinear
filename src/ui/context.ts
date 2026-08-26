@@ -16,6 +16,7 @@ export interface AppCtx {
   onPlanChatReady?: (fn: (r: PlanChatReady) => void) => () => void;
   onAgents?: (fn: (list: AgentSession[]) => void) => () => void;
   onReviewDiff?: (fn: (id: string, diff: string) => void) => () => void;
+  onTaskDiff?: (fn: (id: string, diff: string) => void) => () => void;
   onCreating?: (fn: (agentId: string) => void) => () => void;
   /** the daemon's own disk, for when it isn't this machine's disk */
   onLogTail?: (fn: (text: string) => void) => () => void;

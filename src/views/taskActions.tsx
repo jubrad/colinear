@@ -73,6 +73,15 @@ export function useTaskActions(): TaskActions {
       ctx.toast('not split work — :family lists every parent that is', 'info');
       return;
     }
+    // reading your own agent's work: only once the draft PR is open, when the
+    // branch has stopped moving
+    if (input === 'v') {
+      if (selected.status !== 'pr_open') {
+        ctx.toast('open its draft PR first — until then the branch is still moving', 'info');
+        return;
+      }
+      return ctx.navigate('diff', selected.issue.identifier);
+    }
     if (input === 'f' && selected.status === 'blocked') {
       ctx.dispatcher.force(selected.issue.id);
       ctx.toast(`${selected.issue.identifier}: starting now — blockers still gate the merge`, 'ok');
@@ -338,6 +347,7 @@ export const TASK_ACTION_KEYS: Array<[string, string]> = [
   ['r', 'resume'],
   ['f', 'force start'],
   ['F', 'family view'],
+  ['v', 'read the diff (pr open)'],
   ['b', 'rebase'],
   ['c', 'escalate'],
   ['o', 'open PR'],
