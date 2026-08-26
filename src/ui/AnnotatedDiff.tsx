@@ -107,6 +107,8 @@ export function AnnotatedDiff(props: {
     Array<{ file: string; start: number; end: number; was?: string; since: number }>
   >([]);
   const [chat, setChat] = useState('');
+  /** how far into a finding being read in full we have scrolled */
+  const [readScroll, setReadScroll] = useState(0);
 
   const parsed = useMemo(() => (diff ? parseDiff(diff) : []), [diff]);
   // the gutter this pane spends before the code: marker, line number, sign
@@ -179,6 +181,30 @@ export function AnnotatedDiff(props: {
     else if (cursor >= scroll + paneHeight) setScroll(cursor - paneHeight + 1);
   }, [cursor, paneHeight]);
 
+  const current = lines[cursor]?.line;
+  const anchor =
+    current?.newLine !== undefined ? { file: current.file, line: current.newLine } : undefined;
+  const finding = anchor ? byLine.get(anchorKey(anchor.file, anchor.line)) : undefined;
+  /**
+   * The block the cursor is in, by its anchor — which is not the cursor's own
+   * line when the finding covers a range. This is what gets read in full and
+   * what stays undimmed, so it has to survive standing anywhere inside it.
+   */
+  const focusedKey =
+    finding?.file && typeof finding.line === 'number' ? anchorKey(finding.file, finding.line) : undefined;
+
+  /**
+   * The finding under the cursor, wrapped for the reading pane. Computed here
+   * rather than in the render because the keys that scroll it need to know how
+   * far there is to go — a reader that scrolls past the end is worse than one
+   * that does not scroll.
+   */
+  const readLines = useMemo(
+    () => (finding ? wrapText(finding.comment, Math.max(8, noteWidth - 4)) : []),
+    [finding?.comment, noteWidth],
+  );
+  const readRows = Math.max(1, paneHeight - 5);
+
   const visibleRows = Math.max(1, paneHeight - 2);
   const visible = lines.slice(scroll, scroll + visibleRows);
   /** the right column, row-for-row with the diff on the left */
@@ -226,13 +252,9 @@ export function AnnotatedDiff(props: {
         line: finding ? row?.line.newLine : undefined,
       };
     });
-    return layoutMargin(annotated, marginText, wrapText);
-  }, [visible, visibleRows, byLine, marginText, pending, now]);
+    return layoutMargin(annotated, marginText, wrapText, 14, focusedKey);
+  }, [visible, visibleRows, byLine, marginText, pending, now, focusedKey]);
 
-  const current = lines[cursor]?.line;
-  const anchor =
-    current?.newLine !== undefined ? { file: current.file, line: current.newLine } : undefined;
-  const finding = anchor ? byLine.get(anchorKey(anchor.file, anchor.line)) : undefined;
   /**
    * Where a comment written now would land, spelled the way it is stored: a
    * block hangs off its last line, which is not always where the cursor is —
@@ -302,7 +324,22 @@ export function AnnotatedDiff(props: {
       return;
     }
     if (focus === 'read') {
-      // any key closes it: it is a reading pane, not a mode to get stuck in
+      // long enough to need scrolling is exactly why you opened it — but it is
+      // still a reading pane, so anything that is not a movement leaves
+      const last = Math.max(0, readLines.length - readRows);
+      if (input === 'j' || key.downArrow) return setReadScroll((r) => Math.min(last, r + 1));
+      if (input === 'k' || key.upArrow) return setReadScroll((r) => Math.max(0, r - 1));
+      if (key.pageDown || input === ' ') return setReadScroll((r) => Math.min(last, r + readRows));
+      if (key.pageUp) return setReadScroll((r) => Math.max(0, r - readRows));
+      if (input === 'G') return setReadScroll(last);
+      if (input === 'g') return setReadScroll(0);
+      // the one thing the pane offers besides reading: rewrite what you just read
+      if (input === 'e' && anchor) {
+        setDraft(finding?.comment ?? '');
+        const existing = KINDS.findIndex((k) => k.severity === finding?.severity);
+        setKindIdx(existing === -1 ? 1 : existing);
+        return setFocus('severity');
+      }
       setFocus('diff');
       return;
     }
@@ -319,7 +356,10 @@ export function AnnotatedDiff(props: {
     // the reason this view exists: walk what the agent flagged, in code order
     // the margin cuts a block that would run into the next one; this is how you
     // read the rest without editing it
-    if (key.return && finding) return setFocus('read');
+    if (key.return && finding) {
+      setReadScroll(0);
+      return setFocus('read');
+    }
     if (input === 'n') jump(1);
     if (input === 'N') jump(-1);
     // pick what kind of finding this is *before* writing it: the old default
@@ -406,16 +446,22 @@ export function AnnotatedDiff(props: {
           {focus === 'read' && finding && anchor ? (
             <Box flexDirection="column">
               <Text bold color={SEVERITY_COLOR[finding.severity ?? 'consider']} wrap="truncate">
-                {KIND_WORD[finding.severity ?? 'consider'] ?? 'comment'} · {anchor.file}:{anchor.line}
+                {KIND_WORD[finding.severity ?? 'consider'] ?? 'comment'} · {finding.file}:
+                {finding.startLine && finding.startLine < (finding.line ?? 0)
+                  ? `${finding.startLine}–${finding.line}`
+                  : finding.line}
               </Text>
               <Box height={1} />
-              {wrapText(finding.comment, noteWidth - 4)
-                .slice(0, paneHeight - 5)
-                .map((line, i) => (
-                  <Text key={`r${i}-${line.slice(0, 8)}`}>{line}</Text>
-                ))}
+              {readLines.slice(readScroll, readScroll + readRows).map((line, i) => (
+                <Text key={`r${readScroll + i}-${line.slice(0, 8)}`}>{line}</Text>
+              ))}
               <Box flexGrow={1} />
-              <Text dimColor>any key returns · e edits it</Text>
+              <Text dimColor wrap="truncate">
+                {readLines.length > readRows
+                  ? `j/k scrolls · ${Math.min(readScroll + readRows, readLines.length)}/${readLines.length} · `
+                  : ''}
+                any other key returns · e edits it
+              </Text>
             </Box>
           ) : focus === 'severity' && anchor ? (
             <Box flexDirection="column">
@@ -439,9 +485,9 @@ export function AnnotatedDiff(props: {
             </Box>
           ) : focus !== 'edit' ? (
             margin.map((row, i) => {
-              const source = visible[i]?.line;
-              const mine =
-                source?.newLine !== undefined && anchor && row.owner === anchorKey(anchor.file, anchor.line);
+              // the block the cursor is in stays lit even when the cursor is on
+              // one of its middle lines, which is where you stand while reading it
+              const mine = row.owner !== undefined && row.owner === focusedKey;
               const bar = row.kind === 'empty' ? ' ' : row.kind === 'note' ? '│' : '▌';
               const barColor =
                 row.kind === 'note' ? theme.annotation : SEVERITY_COLOR[row.severity ?? 'consider'] ?? theme.dim;

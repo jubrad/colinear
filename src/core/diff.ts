@@ -116,7 +116,7 @@ export interface MarginRow {
   severity?: string;
   /** true on the first row of a block — where the severity bar reads */
   head?: boolean;
-  /** the block was pushed below its own line to fit, so it must name the line */
+  /** the block moved off its own line to fit, so it must name the line */
   drifted?: boolean;
   /** the line it is about, for when it has drifted away from it */
   line?: number;
@@ -131,8 +131,11 @@ export interface MarginRow {
  * three options. So a block starts at its line **or just after the block above
  * it finishes**, whichever is later, and is never truncated for want of room.
  *
- * A block that has been pushed down says which line it belongs to (`drifted`),
- * because that is exactly when you can no longer read it off the row opposite.
+ * A block that has moved off its line says which line it belongs to
+ * (`drifted`), because that is exactly when you can no longer read it off the
+ * row opposite. The block the cursor is in is the exception to all of it: it is
+ * the one being read, so it takes as many rows as it needs and may climb *up*
+ * the pane to get them.
  */
 export function layoutMargin(
   visible: Array<{ comment?: string; note?: string; severity?: string; key?: string; line?: number }>,
@@ -140,6 +143,13 @@ export function layoutMargin(
   wrap: (text: string, width: number) => string[],
   /** a single enormous finding should not push every other one off the screen */
   maxRows = 14,
+  /**
+   * The block the cursor is in, which is the one being read. It is exempt from
+   * the cap and may start higher than its own line, because a cap that saves
+   * room for findings you are not reading — by cutting the one you are — has
+   * the trade backwards.
+   */
+  focused?: string,
 ): MarginRow[] {
   const rows: MarginRow[] = visible.map(() => ({ text: '', kind: 'empty' as const }));
   let next = 0; // the first row not already spoken for
@@ -147,14 +157,23 @@ export function layoutMargin(
   for (const [start, item] of visible.entries()) {
     const body = item.comment ?? item.note;
     if (!body) continue;
-    const at = Math.max(start, next);
+    const mine = focused !== undefined && item.key === focused;
+    // measured unmarked first: whether it needs to move is what decides
+    // whether it carries a marker, and the marker costs a line of its own
+    const height = wrap(body, Math.max(4, width)).length;
+    // the one being read climbs toward its own end of the pane rather than
+    // hanging off its line and running out of rows — every line it gains this
+    // way is a line that was being thrown away
+    const wanted = mine ? Math.max(next, Math.min(start, visible.length - height)) : start;
+    const at = Math.max(wanted, next);
     if (at >= visible.length) break; // below the fold; it appears once scrolled
     const drifted = at !== start;
     // the marker is wrapped WITH the text, not painted over it: a prefix the
     // wrap width does not know about is a row that overflows and loses its end
-    const marked = drifted && item.line !== undefined ? `↑${item.line} ${body}` : body;
+    const marked =
+      drifted && item.line !== undefined ? `${at > start ? '↑' : '↓'}${item.line} ${body}` : body;
     const lines = wrap(marked, Math.max(4, width));
-    const room = Math.min(visible.length - at, maxRows);
+    const room = Math.min(visible.length - at, mine ? visible.length : maxRows);
     const shown = lines.slice(0, room);
     // cut only against the bottom of the pane or the cap — never against the
     // next finding, which is what used to eat the end of a sentence

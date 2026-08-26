@@ -92,13 +92,21 @@ dimmed, which is the other half of the same signal.
 A block starts on its line's row, or **just after the block above it finishes** — whichever is
 later. Two findings a line apart cannot both start opposite their own line and both be readable, and
 cutting the first one off mid-sentence is the worst of the three ways out, so a crowded block is
-pushed down instead of truncated. When that happens it says which line it belongs to (`↑40`),
-because that is exactly when you can no longer read it off the row opposite.
+pushed down instead of truncated. When a block has moved off its own line it says which line it
+belongs to (`↑40`, or `↓40` if it moved the other way), because that is exactly when you can no
+longer read it off the row opposite.
 
-Nothing is cut against the next finding any more; a block is only ever shortened by the bottom of
-the pane or a cap on runaway length, and **`enter` reads the current one in full** in the right
-pane. A comment about the PR as a whole has no line to sit beside, so it gets its own line under
-both panes.
+**The block you are standing in is the exception to all of it.** It is the one you are reading, so
+it is exempt from the cap that keeps a runaway finding from hiding the rest, and it may climb *up*
+the pane to find the rows it needs rather than hanging off its own line and running out of them. A
+long annotation anchored three rows from the bottom used to show three lines and an ellipsis; now it
+takes the pane. Move off it and everything returns to where it was.
+
+Nothing is cut against the next finding; a block is only ever shortened by the bottom of the pane.
+When even that is not enough, **`enter` reads the current one in full** in the right pane — `j`/`k`,
+`g`/`G` and page keys scroll it, it says where you are (`16/25`), `e` edits what you are reading,
+and anything else returns. A comment about the PR as a whole has no line to sit beside, so it gets
+its own line under both panes.
 
 The chat along the bottom is one line, so **enter sends it**.
 
