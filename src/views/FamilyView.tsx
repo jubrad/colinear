@@ -2,7 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
-import { useColinear } from '../ui/context.js';
+import { useColinear, useViewSize } from '../ui/context.js';
 import { cell, formatTokens, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { prState, PR_STATE_COLOR } from './BoardView.js';
@@ -92,7 +92,7 @@ export function FamilyView(props: { param?: string }) {
     );
   }
 
-  const width = ctx.size.columns - 4;
+  const { width } = useViewSize();
   const titleWidth = Math.max(16, width - 12 - 15 - 17 - 10 - 9 - 4);
 
   return (

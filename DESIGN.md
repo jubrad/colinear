@@ -387,10 +387,17 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
   rendered before its siblings is silently overdrawn by them, so it goes last in the view.
   Height is passed in rather than measured (yoga lays out after we'd need it); overshooting just
   makes the dialog roomier, undershooting clips it, so callers round up.
-- **A view's vertical budget is `rows - 8`** (`- 4` more while the command bar is open): the
-  app pane is `rows - 4 - 2 - cmd` and its border costs 2. Anything with a fixed-height
-  companion — TasksView's 15-row detail pane — has to subtract it *and* the table's own header
-  and count rows, and drop the companion when what's left is unreadable.
+- **A view's budget is `rows - 8` by `columns - 6`** (`- 4` more rows while the command bar is
+  open): the app pane is `rows - 4 - 2 - cmd` and its border costs 2; the width goes to the
+  root's padding, the frame's border and its padding. `useViewSize()` (ui/context.ts) is the
+  one place those numbers live — **use it rather than measuring off `ctx.size` yourself.**
+  Overshooting does *not* clip politely: boxes laid out past the bottom are written **over** the
+  ones above them, so a terminal row ends up holding two lines and one of them looks like it
+  simply vanished. The annotated diff asked for `rows - 6` for months and dropped roughly a
+  third of its rows on a 44-row terminal, with the tail of the overwritten line still showing
+  past the end of the shorter one. Anything with a fixed-height companion — TasksView's 15-row
+  detail pane — has to subtract it *and* the table's own header and count rows, and drop the
+  companion when what's left is unreadable.
 
 - **Ink full-clears every frame when output height ≥ terminal rows (equality included).** Root box renders `rows - 1` lines, `overflow="hidden"`, fixed heights on panes. Violate this and the app "vibrates".
 - **Identity stability is load-bearing.** useTasks memoizes per store.version; BoardView's cursor-clamp effect returns the same object when unchanged. A fresh-array-every-render regression once caused an infinite render loop that looked like terminal flicker (React "Maximum update depth" — found via the stderr diversion).

@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
 import type { AgentSession } from '../core/sessions.js';
-import { useColinear } from '../ui/context.js';
+import { useColinear, useViewSize } from '../ui/context.js';
 import { cell, formatTokens, spinner } from '../ui/format.js';
 import { theme } from '../theme.js';
 
@@ -62,7 +62,7 @@ export function AgentsView(_props: { param?: string }) {
     }
   });
 
-  const width = ctx.size.columns - 4;
+  const { width } = useViewSize();
   const originWidth = Math.max(18, Math.floor((width - 14 - 20 - 9 - 9 - 8) * 0.4));
   const activityWidth = Math.max(16, width - 14 - 20 - 9 - 9 - 8 - originWidth);
 

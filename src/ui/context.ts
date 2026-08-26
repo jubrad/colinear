@@ -43,3 +43,30 @@ export const AppContext = createContext<AppCtx>(null as unknown as AppCtx);
 export function useColinear(): AppCtx {
   return useContext(AppContext);
 }
+
+/**
+ * The pane a view actually gets to draw in — not the terminal.
+ *
+ * `size` is the whole terminal; between it and a view sit the root's padding
+ * (2 columns), the view frame's border (2 each way), its padding (2 columns),
+ * the four-row header, the crumbs line, and the command bar when it is open.
+ * A view that sizes itself against `size` directly overruns its frame, and an
+ * overrun does not simply clip: boxes laid out past the bottom are written
+ * *over* the ones above them, so a row ends up holding two lines at once and
+ * one of them appears to have gone missing. Ask for these numbers instead.
+ */
+export function viewPaneSize(
+  size: { columns: number; rows: number },
+  cmdOpen = false,
+): { width: number; height: number } {
+  return {
+    width: Math.max(20, size.columns - 6),
+    height: Math.max(6, size.rows - 8 - (cmdOpen ? 4 : 0)),
+  };
+}
+
+/** The same, for a view that can just ask. */
+export function useViewSize(): { width: number; height: number } {
+  const { size, cmdOpen } = useColinear();
+  return viewPaneSize(size, cmdOpen);
+}
