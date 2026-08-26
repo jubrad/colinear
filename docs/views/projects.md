@@ -5,7 +5,15 @@ teams, target date. `/` filters, `t` switches team, `s` sorts, `enter` opens one
 
 `c` on a project hands your terminal straight to a design session for it — a worktree and a live
 `claude`, the same thing [`:plan`](plan.md)'s `c` does, without opening the plan first. Wanting to
-talk something through shouldn't require visiting the document that comes out of it.
+talk something through shouldn't require visiting the document that comes out of it. `S` is the
+same door with a different destination: the same worktree, handed to your shell instead of an
+agent.
+
+Either way the checkout has to exist first, and cutting one is a `fetch` and a `worktree add` —
+long enough on a large repository that a keypress with no response reads as a keypress that did
+nothing. So the wait is shown: a panel naming what the worktree is for, how long it has been going,
+and the plan agent's own activity underneath. `esc` stops watching without leaving the view; the
+checkout is still cut, so the next `c` or `S` is instant.
 
 `:project NAME` (alias `p`) is a kanban of that project's issues, whether or not they're dispatched.
 Where the provider has milestones, each card's second line names the milestone the issue is filed
@@ -41,6 +49,8 @@ Needs a provider with the `createProjects` capability.
 | `enter` | open the project's board |
 | `n` | **new project** — the template above |
 | `p` | the [planning chat](plan.md) for the project under the cursor |
+| `c` | **a design session** — a worktree and a live `claude`, entered directly |
+| `S` | **a shell** in that same worktree |
 | `/` filter · `t` team · `s` sort · `o` open in the tracker · `r` refresh |
 
 ## Keys (`:project`)

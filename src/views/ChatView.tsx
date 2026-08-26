@@ -1,11 +1,12 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
-import { rememberView, setPendingAction } from '../core/attach.js';
+import { rememberView, setPendingAction, shellIn } from '../core/attach.js';
 import { usePlans } from '../core/hooks.js';
 import { providerFor } from '../core/provider.js';
 import { STATE_DIR } from '../core/log.js';
 import type { PlanIssue, Project, ProjectPlan } from '../core/types.js';
 import { fuzzyMatch } from '../ui/CommandBar.js';
+import { CreationProgress, creationHeight } from '../ui/CreationProgress.js';
 import { useColinear } from '../ui/context.js';
 import { spinner } from '../ui/format.js';
 import { TextArea } from '../ui/TextArea.js';
@@ -30,6 +31,12 @@ export function ChatView(props: { param?: string }) {
   const [approving, setApproving] = useState(false);
   const [dropped, setDropped] = useState<Set<string>>(new Set());
   const [approveCursor, setApproveCursor] = useState(0);
+  /**
+   * A worktree we asked for and what it is for. Cutting one is a fetch and a
+   * `worktree add`, which is long enough that an unacknowledged keypress reads
+   * as a keypress that did nothing.
+   */
+  const [opening, setOpening] = useState<{ then: 'chat' | 'shell'; at: number } | null>(null);
 
   useEffect(() => {
     const param = (props.param ?? '').toLowerCase();
@@ -65,6 +72,12 @@ export function ChatView(props: { param?: string }) {
       ctx.onPlanChatReady?.((r) => {
         if (!project || r.projectId !== project.id) return;
         rememberView('plan', project.name); // come back here when claude exits
+        if (opening?.then === 'shell') {
+          setOpening(null);
+          shellIn(r.worktree, project.name, ctx);
+          return;
+        }
+        setOpening(null);
         setPendingAction({
           kind: 'plan-chat',
           projectId: r.projectId,
@@ -76,10 +89,15 @@ export function ChatView(props: { param?: string }) {
         });
         ctx.quit();
       }),
-    [project?.id],
+    [project?.id, opening?.then],
   );
 
-  useEffect(() => ctx.setCapture(focus === 'input' && !approving), [focus, approving]);
+  // the waiting popup takes the keyboard as well, or esc would dismiss it and
+  // pop the view out from under it in the same keystroke
+  useEffect(
+    () => ctx.setCapture(opening !== null || (focus === 'input' && !approving)),
+    [focus, approving, opening],
+  );
   useEffect(() => () => ctx.setCapture(false), []);
 
   const docLines = useMemo(() => (plan?.draft ?? '').split('\n'), [plan?.draft]);
@@ -89,7 +107,21 @@ export function ChatView(props: { param?: string }) {
   // doc-focus keys (and the ones that work from anywhere via modifiers)
   useInput(
     (input, key) => {
+      // waiting on a worktree is not a mode to get stuck in: esc stops
+      // watching and whatever the daemon is doing carries on
+      if (opening) {
+        if (key.escape) setOpening(null);
+        return;
+      }
       if (key.tab) return setFocus((f) => (f === 'doc' ? 'input' : 'doc'));
+      // the chat box holds capture while it is focused, which means the app's
+      // own esc never fires and the footer's "esc: back" was a lie. Handle it
+      // here: an unsent draft is worth one keystroke to keep, so the first esc
+      // puts the doc in focus (releasing capture) and the second leaves.
+      if (key.escape && focus === 'input' && !approving) {
+        if (draft.trim()) return setFocus('doc');
+        return ctx.back();
+      }
       if (focus !== 'doc' || approving) return;
       if (key.downArrow || input === 'j') setScroll((s) => Math.min(maxScroll, s + 1));
       if (key.upArrow || input === 'k') setScroll((s) => Math.max(0, s - 1));
@@ -105,7 +137,12 @@ export function ChatView(props: { param?: string }) {
       }
       // hand the terminal to a real session in a worktree: thinking out loud
       // with the code to hand, rather than composing turns into a box
-      if (input === 'c' && project && !plan?.preparingChat) ctx.dispatcher.startPlanChat(project.id);
+      // one command for both doors: the daemon cuts the checkout and mints an
+      // id, and we decide here whether the terminal goes to claude or a shell
+      if ((input === 'c' || input === 'S') && project && !plan?.preparingChat) {
+        setOpening({ then: input === 'S' ? 'shell' : 'chat', at: Date.now() });
+        ctx.dispatcher.startPlanChat(project.id);
+      }
       if (input === 'U' && project) ctx.dispatcher.publishPlan(project.id);
       if (input === 'p' && project) ctx.dispatcher.postPlanUpdate(project.id);
       // the agent opens the discussion — an ordinary chat turn, so it reads
@@ -205,9 +242,35 @@ export function ChatView(props: { param?: string }) {
         />
       </Box>
       <Text dimColor>
-        tab: doc/chat · doc: j/k scroll · e edit in $EDITOR · U publish · A/D approve
+        tab: doc/chat · doc: j/k scroll · c session · S shell · e $EDITOR · U publish · A/D approve
         {' · '}s reopen · ctrl+d: send · esc: back
       </Text>
+      {opening &&
+        !plan?.worktree &&
+        (() => {
+          const inner = Math.min(80, ctx.size.columns - 8) - 4;
+          const lines = 5;
+          const place = popupPlacement(ctx.size, { width: inner + 4, height: creationHeight(lines) }, ctx.cmdOpen);
+          return (
+            <Popup {...place}>
+              <CreationProgress
+                state={{
+                  title: `${project.name} — ${opening.then === 'shell' ? 'a shell in its worktree' : 'a design session'}`,
+                  startedAt: opening.at,
+                  activity: (plan?.activity ?? []).slice(-lines),
+                  // a checkout that could not be cut never sends a ready, so
+                  // the spinner has to learn about it from the record
+                  done: plan?.error ? { ok: false, summary: plan.error } : undefined,
+                }}
+                verb="cutting a worktree"
+                hint="esc: stop watching — the checkout is still cut, and c or S will be instant"
+                width={inner}
+                lines={lines}
+                now={ctx.now}
+              />
+            </Popup>
+          );
+        })()}
       {approving && (
         <Popup
           {...popupPlacement(
@@ -299,6 +362,7 @@ function ApproveList(props: { proposed: PlanIssue[]; dropped: Set<string>; curso
 export const chatKeys: Array<[string, string]> = [
   ['tab', 'doc/chat'],
   ['c', 'chat in a worktree (live claude)'],
+  ['S', 'shell in that worktree'],
   ['d', 'agent opens the discussion'],
   ['j/k', 'scroll doc'],
   ['e', 'edit draft in $EDITOR'],

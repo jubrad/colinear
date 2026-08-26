@@ -3,9 +3,10 @@ import { providerFor } from '../core/provider.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { openUrl } from '../core/open.js';
 import type { Project, Scope } from '../core/types.js';
-import { rememberView, setPendingAction } from '../core/attach.js';
+import { rememberView, setPendingAction, shellIn } from '../core/attach.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
 import { CreationProgress, creationHeight, pushActivity, type CreationState } from '../ui/CreationProgress.js';
+import { usePlans } from '../core/hooks.js';
 import { useColinear } from '../ui/context.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { NewProjectModal, type NewProject } from '../ui/NewProjectModal.js';
@@ -20,6 +21,7 @@ type BarMode = 'fuzzy' | 'team' | 'sort';
 
 export function ProjectsView(_props: { param?: string }) {
   const ctx = useColinear();
+  const plans = usePlans();
   const [projects, setProjects] = useState<Project[]>(projectCache);
   const [loading, setLoading] = useState(projectCache.length === 0);
   const [error, setError] = useState<string>();
@@ -51,18 +53,30 @@ export function ProjectsView(_props: { param?: string }) {
   }, [ctx.cfg]);
   const [progress, setProgress] = useState<CreationState | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
-  /** a project whose design session we asked for and are waiting to enter */
-  const [opening, setOpening] = useState<string | null>(null);
+  /**
+   * A project whose worktree we asked the daemon to prepare, and what we mean
+   * to do with it when it lands. Cutting a checkout takes a fetch and a
+   * `worktree add` — long enough that a keypress with no response reads as a
+   * keypress that did nothing, so the wait is shown rather than hidden.
+   */
+  const [opening, setOpening] = useState<{ name: string; id: string; then: 'chat' | 'shell'; at: number } | null>(
+    null,
+  );
 
   useEffect(
     () =>
       ctx.onPlanChatReady?.((r) => {
         if (!opening) return; // a plan view asked for this one, not us
         rememberView('projects');
+        if (opening.then === 'shell') {
+          setOpening(null);
+          shellIn(r.worktree, opening.name, ctx);
+          return;
+        }
         setPendingAction({
           kind: 'plan-chat',
           projectId: r.projectId,
-          projectName: opening,
+          projectName: opening.name,
           worktree: r.worktree,
           sessionId: r.sessionId,
           fresh: r.fresh,
@@ -73,7 +87,12 @@ export function ProjectsView(_props: { param?: string }) {
       }),
     [opening],
   );
-  useEffect(() => ctx.setCapture(bar !== null || creating || progress !== null), [bar, creating, progress]);
+  // the waiting popup takes the keyboard too, or esc would dismiss it *and*
+  // pop the view out from under it
+  useEffect(
+    () => ctx.setCapture(bar !== null || creating || progress !== null || opening !== null),
+    [bar, creating, progress, opening],
+  );
   useEffect(() => () => ctx.setCapture(false), []);
 
   const hasFilters = query !== '' || teamFilter !== undefined;
@@ -196,14 +215,26 @@ export function ProjectsView(_props: { param?: string }) {
       // straight into the conversation: the plan view is where the design
       // document lives, but wanting to talk about a project shouldn't require
       // opening it first
-      if (input === 'c' && rows[cursor]) {
+      if ((input === 'c' || input === 'S') && rows[cursor]) {
         const project = rows[cursor];
-        setOpening(project.name);
+        // one command for both doors: the daemon cuts the checkout and mints
+        // an id, and we decide here whether to hand the terminal to claude or
+        // to a shell
+        setOpening({ name: project.name, id: project.id, then: input === 'S' ? 'shell' : 'chat', at: Date.now() });
         ctx.dispatcher.startPlanChat(project.id);
       }
       if (key.return && rows[cursor]) ctx.navigate('project', rows[cursor].name);
     },
-    { isActive: bar === null && !creating && !progress && !ctx.cmdOpen },
+    { isActive: bar === null && !creating && !progress && !opening && !ctx.cmdOpen },
+  );
+
+  // the wait is not a mode to get stuck in: esc stops watching, and whatever
+  // the daemon is doing carries on
+  useInput(
+    (_input, key) => {
+      if (key.escape) setOpening(null);
+    },
+    { isActive: opening !== null && !ctx.cmdOpen },
   );
 
   const barCandidates = useMemo<Candidate[]>(() => {
@@ -305,6 +336,34 @@ export function ProjectsView(_props: { param?: string }) {
             </Popup>
           );
         })()}
+      {opening &&
+        (() => {
+          const inner = Math.min(80, ctx.size.columns - 8) - 4;
+          const lines = 5;
+          const place = popupPlacement(ctx.size, { width: inner + 4, height: creationHeight(lines) }, ctx.cmdOpen);
+          return (
+            <Popup {...place}>
+              <CreationProgress
+                state={{
+                  title: `${opening.name} — ${opening.then === 'shell' ? 'a shell in its worktree' : 'a design session'}`,
+                  startedAt: opening.at,
+                  activity: plans.find((p) => p.id === opening.id)?.activity.slice(-lines) ?? [],
+                  // a checkout that could not be cut never sends a ready, so
+                  // the spinner has to learn about it from the record
+                  done: (() => {
+                    const err = plans.find((p) => p.id === opening.id)?.error;
+                    return err ? { ok: false, summary: err } : undefined;
+                  })(),
+                }}
+                verb="cutting a worktree"
+                hint="esc: stop watching — the checkout is still cut, and c or S will be instant"
+                width={inner}
+                lines={lines}
+                now={ctx.now}
+              />
+            </Popup>
+          );
+        })()}
       {progress &&
         (() => {
           const inner = Math.min(80, ctx.size.columns - 8) - 4;
@@ -330,6 +389,7 @@ export const projectsKeys: Array<[string, string]> = [
   ['n', 'new project'],
   ['p', 'the plan document'],
   ['c', 'chat about it (worktree + claude)'],
+  ['S', 'shell in its worktree'],
   ['o', 'open in browser'],
   ['/', 'filter'],
   ['t', 'team'],
