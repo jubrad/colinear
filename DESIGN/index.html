@@ -2086,10 +2086,17 @@ every live worktree looks dead.</p>
   Height is passed in rather than measured (yoga lays out after we'd need it); overshooting just
   makes the dialog roomier, undershooting clips it, so callers round up.</li>
 <li>
-<p><strong>A view's vertical budget is <code>rows - 8</code></strong> (<code>- 4</code> more while the command bar is open): the
-  app pane is <code>rows - 4 - 2 - cmd</code> and its border costs 2. Anything with a fixed-height
-  companion — TasksView's 15-row detail pane — has to subtract it <em>and</em> the table's own header
-  and count rows, and drop the companion when what's left is unreadable.</p>
+<p><strong>A view's budget is <code>rows - 8</code> by <code>columns - 6</code></strong> (<code>- 4</code> more rows while the command bar is
+  open): the app pane is <code>rows - 4 - 2 - cmd</code> and its border costs 2; the width goes to the
+  root's padding, the frame's border and its padding. <code>useViewSize()</code> (ui/context.ts) is the
+  one place those numbers live — <strong>use it rather than measuring off <code>ctx.size</code> yourself.</strong>
+  Overshooting does <em>not</em> clip politely: boxes laid out past the bottom are written <strong>over</strong> the
+  ones above them, so a terminal row ends up holding two lines and one of them looks like it
+  simply vanished. The annotated diff asked for <code>rows - 6</code> for months and dropped roughly a
+  third of its rows on a 44-row terminal, with the tail of the overwritten line still showing
+  past the end of the shorter one. Anything with a fixed-height companion — TasksView's 15-row
+  detail pane — has to subtract it <em>and</em> the table's own header and count rows, and drop the
+  companion when what's left is unreadable.</p>
 </li>
 <li>
 <p><strong>Ink full-clears every frame when output height ≥ terminal rows (equality included).</strong> Root box renders <code>rows - 1</code> lines, <code>overflow="hidden"</code>, fixed heights on panes. Violate this and the app "vibrates".</p>

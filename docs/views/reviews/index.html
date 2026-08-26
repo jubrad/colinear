@@ -924,6 +924,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Reading it against the code">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#commenting-on-a-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Commenting on a block
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#asking-what-a-passage-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asking what a passage does
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1371,6 +1399,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Reading it against the code">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#commenting-on-a-block" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Commenting on a block
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#asking-what-a-passage-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asking what a passage does
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1513,12 +1569,19 @@ dimmed, which is the other half of the same signal.</p>
 <p>A block starts on its line's row, or <strong>just after the block above it finishes</strong> — whichever is
 later. Two findings a line apart cannot both start opposite their own line and both be readable, and
 cutting the first one off mid-sentence is the worst of the three ways out, so a crowded block is
-pushed down instead of truncated. When that happens it says which line it belongs to (<code>↑40</code>),
-because that is exactly when you can no longer read it off the row opposite.</p>
-<p>Nothing is cut against the next finding any more; a block is only ever shortened by the bottom of
-the pane or a cap on runaway length, and <strong><code>enter</code> reads the current one in full</strong> in the right
-pane. A comment about the PR as a whole has no line to sit beside, so it gets its own line under
-both panes.</p>
+pushed down instead of truncated. When a block has moved off its own line it says which line it
+belongs to (<code>↑40</code>, or <code>↓40</code> if it moved the other way), because that is exactly when you can no
+longer read it off the row opposite.</p>
+<p><strong>The block you are standing in is the exception to all of it.</strong> It is the one you are reading, so
+it is exempt from the cap that keeps a runaway finding from hiding the rest, and it may climb <em>up</em>
+the pane to find the rows it needs rather than hanging off its own line and running out of them. A
+long annotation anchored three rows from the bottom used to show three lines and an ellipsis; now it
+takes the pane. Move off it and everything returns to where it was.</p>
+<p>Nothing is cut against the next finding; a block is only ever shortened by the bottom of the pane.
+When even that is not enough, <strong><code>enter</code> reads the current one in full</strong> in the right pane — <code>j</code>/<code>k</code>,
+<code>g</code>/<code>G</code> and page keys scroll it, it says where you are (<code>16/25</code>), <code>e</code> edits what you are reading,
+and anything else returns. A comment about the PR as a whole has no line to sit beside, so it gets
+its own line under both panes.</p>
 <p>The chat along the bottom is one line, so <strong>enter sends it</strong>.</p>
 <p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours.</p>
 <p><code>e</code> on any line — whether or not something is already there — asks <strong>what kind</strong> first:</p>
@@ -1535,6 +1598,28 @@ or "stays in colinear — never posted" — because that is the difference that 
 <p><code>ctrl+d</code> saves, an empty comment removes it, and <code>d</code> drops one outright. <strong><code>i</code> skips the picker</strong> and
 goes straight to an annotation, which is the common case while reading unfamiliar code. Every edit rewrites the <code>``findings fence in the review document,
 so what you post and what the agent sees never diverge — a later chat turn reads your wording, and</code>p` posts it.</p>
+<h3 id="commenting-on-a-block">Commenting on a block<a class="headerlink" href="#commenting-on-a-block" title="Permanent link">&para;</a></h3>
+<p>A comment is often about a <em>passage</em>, not a line: the loop rather than its first statement. <strong><code>v</code>
+marks a block</strong> — press it, move, and the range grows with the cursor; <code>▏</code> runs down the gutter
+beside every line in it and the header says what is marked (<code>▏41–43 selected</code>). <code>v</code> again or <code>esc</code>
+drops it, and <code>esc</code> drops the selection before it closes the view.</p>
+<p>With a block marked, <code>e</code> writes one finding across the whole range and <code>d</code> removes it whole. It is
+stored — and posted — the way GitHub stores a multi-line comment: anchored to the <strong>last</strong> line,
+with the first recorded as its start. That is why the picker and the editor name the range rather
+than the cursor; mark upward from 43 to 41 and the finding is still on 43.</p>
+<p>In the margin the block is marked on every line it covers, so its extent is visible in the diff,
+while the text hangs off the anchor row alone rather than being drawn once per line.</p>
+<h3 id="asking-what-a-passage-does">Asking what a passage does<a class="headerlink" href="#asking-what-a-passage-does" title="Permanent link">&para;</a></h3>
+<p><strong><code>a</code> hands the marked lines to an agent and asks it to explain them</strong>, as an <code>info</code> annotation on
+that range — the same annotation a review writes unprompted, asked for on demand while you are
+reading. It is a short, focused session rather than a whole review: it reads those lines and enough
+around them to answer properly, appends one finding to the review document, and changes nothing
+else.</p>
+<p>The row you asked about holds itself open with a spinner (<code>⠋ explaining these lines…</code>) until the
+answer lands, which it does in place, in the margin, beside the code — the view follows the document
+rather than waiting for you to reopen it. A session that dies writes nothing, so after five minutes
+the row says <strong><code>no explanation came back — see :logs</code></strong> instead of spinning for the rest of the day.</p>
+<p><code>a</code> with nothing marked asks about the line under the cursor.</p>
 <p><code>d</code> from the list opens the <strong>document</strong> itself instead — the agent's prose write-up with the same
 chat beside it (<code>tab</code> switches, <code>j/k</code> scrolls, <code>e</code> edits it in <code>$EDITOR</code>). Your turn resumes the
 reviewing session, so the PR is still in context; when the agent needs a decision it asks in the
