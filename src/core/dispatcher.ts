@@ -8,6 +8,7 @@ import { runChecks } from './checks.js';
 import { demoChecks, demoPullRequest, demoSession, demoWorktree, isDemo } from './demo.js';
 import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { coordinatorCwd, coordinatorPrompt, familyStatus, type CoordinatorTools } from './coordinator.js';
+import { REVIEW_FILE } from './reviewer.js';
 import { isSettledReview, isSettledTask, settledAt } from './gc.js';
 import { experimentOn } from './config.js';
 import { log } from './log.js';
@@ -95,7 +96,7 @@ export class Dispatcher {
   private running = 0;
   private aborts = new Map<string, AbortController>();
   private suspended = new Set<string>();
-  private modes = new Map<string, 'fixci' | 'rebase' | 'coordinate'>();
+  private modes = new Map<string, 'fixci' | 'rebase' | 'coordinate' | 'revise'>();
   /** mailboxes of the sessions running right now, keyed by task id */
   private inboxes = new Map<string, SessionInbox>();
   private viewer?: { id: string; displayName: string };
@@ -291,6 +292,25 @@ export class Dispatcher {
     notify(this.cfg, task.issue.identifier, 'CI failing — dispatching fix', task.prs[0]?.url);
     this.queue.push(id);
     this.pump();
+  }
+
+  /**
+   * Act on the operator's review of this branch.
+   *
+   * Maintenance rather than a wake, deliberately: waking sets the task back to
+   * `queued`, which drops it out of PR Open and reads as the feature going
+   * back into development. It is not — the PR stays where it is, the card
+   * blinks, and the agent works through comments on code it already wrote.
+   */
+  revise(id: string, instructions: string): boolean {
+    const task = store.get(id);
+    if (!task || task.status !== 'pr_open' || this.aborts.has(id) || this.queue.includes(id)) return false;
+    this.modes.set(id, 'revise');
+    store.update(id, { maintenance: 'revise', inbox: [...(task.inbox ?? []), instructions], error: undefined });
+    store.addActivity(id, 'revising on your review');
+    this.queue.push(id);
+    this.pump();
+    return true;
   }
 
   /**
@@ -969,15 +989,26 @@ export class Dispatcher {
         agent: {
           // maintenance is a different animal from development: it runs
           // against an open PR, which is what the board's blinking dot says too
-          kind: mode === 'fixci' || mode === 'rebase' ? 'maintenance' : 'work',
+          kind: mode === 'fixci' || mode === 'rebase' || mode === 'revise' ? 'maintenance' : 'work',
           label: task.issue.identifier,
-          origin: mode === 'fixci' ? 'CI failing' : mode === 'rebase' ? 'PR conflicted' : mode === 'resume' ? 'you resumed it' : 'dispatch',
+          origin:
+            mode === 'fixci'
+              ? 'CI failing'
+              : mode === 'rebase'
+                ? 'PR conflicted'
+                : mode === 'revise'
+                  ? 'your review of the branch'
+                  : mode === 'resume'
+                    ? 'you resumed it'
+                    : 'dispatch',
         },
         prompt:
           mode === 'rebase'
             ? rebasePrompt(ctx, issue, current.prs, taskRepo.prBase ?? taskRepo.defaultBranch, taskRepo.remote ?? 'origin', taskRepo.pushRemote ?? taskRepo.remote ?? 'origin')
             : mode === 'fixci'
               ? ciFixPrompt(ctx, issue, current.prs)
+              : mode === 'revise'
+                ? revisePrompt(ctx, current.prs)
               : resumeSession && queued.length
                 ? `${ctx}\n\nYou were idle and the operator sent you the message(s) above. Deal with them — check ${SUBTASKS_FILE} and git status to reorient first if you need to. If a message asks for a change, make it and push; if it only asks a question, answer it and stop.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
                 : resumeSession
@@ -1256,13 +1287,21 @@ export class Dispatcher {
   }
 
   /** Keep the subtask scratch file out of git via the per-worktree exclude file. */
+  /**
+   * Keep colinear's own scratch files out of git, per worktree. Both of them:
+   * the subtask checklist the agent writes, and the review document the
+   * operator's read of the branch lands in — a review accidentally committed
+   * to a PR is worse than no review at all.
+   */
   private async excludeSubtasksFile(worktree: string) {
     try {
       const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', '--absolute-git-dir']);
       const excludePath = join(stdout.trim(), 'info', 'exclude');
       mkdirSync(dirname(excludePath), { recursive: true });
       const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : '';
-      if (!existing.includes(SUBTASKS_FILE)) appendFileSync(excludePath, `${SUBTASKS_FILE}\n`);
+      for (const file of [SUBTASKS_FILE, REVIEW_FILE]) {
+        if (!existing.includes(file)) appendFileSync(excludePath, `${file}\n`);
+      }
     } catch {
       // non-fatal; the prompt also tells the agent not to commit it
     }
@@ -1553,6 +1592,23 @@ Your PR for ${issue.identifier}${pr ? ` (#${pr.number}, branch "${pr.headRefName
 Do NOT change scope, add features, or "improve" anything while you are in here — a rebase that also refactors is impossible to review. If a conflict cannot be resolved without a decision only a human can make (the base removed something you depend on, two features genuinely collide), stop and use AskUserQuestion rather than guessing.
 
 Never mark the PR ready; promoting it stays the operator's call. Say plainly in your final message what conflicted and how you resolved it.`;
+}
+
+/**
+ * The operator read this branch and left comments on it. This is not new work
+ * and it is not a rewrite: the PR stays where it is, and the agent answers
+ * what was raised — including by pushing back, which is more useful than a
+ * change made to satisfy a comment the agent thinks is wrong.
+ */
+function revisePrompt(ctx: string, prs: Task['prs']): string {
+  const pr = prs[0];
+  return `${ctx}
+
+The operator has read your branch and left review comments — they are in the message(s) above, and in \`.colinear-review.md\` in this worktree with any wording they changed.
+
+Work through them one at a time. Fix what should be fixed and push to the same branch${pr ? ` (PR #${pr.number}, branch "${pr.headRefName}" — do NOT open a new one)` : ''}. Where you disagree, say so plainly in your reply and leave the code alone: a change you believe is wrong, made because you were asked, is worse than the disagreement.
+
+Do not take on anything that was not raised. When you are done, say briefly what you changed and what you pushed back on.`;
 }
 
 function ciFixPrompt(ctx: string, issue: Issue, prs: Task['prs']): string {

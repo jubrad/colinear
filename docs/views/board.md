@@ -12,7 +12,7 @@ conflicting, green approved, grey draft, orange awaiting, purple merged, red clo
 A card shows live duration, tokens, repo, subtask progress, its question if it has one, blocked-by
 chains, checks, and each PR with CI and review state. A **blinking dot** means a maintenance session
 is running on an already-open PR — green rebasing, amber fixing CI — rather than the feature being
-rewritten.
+rewritten. Green is a rebase, amber a CI fix, and a `revise` dot means it is working through your review of the branch ([`:diff`](diff.md)).
 
 ## Keys
 

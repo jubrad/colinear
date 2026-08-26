@@ -222,7 +222,17 @@ export interface Task {
    * status throughout — it is not back in development — and the card shows a
    * blinking dot instead of moving columns.
    */
-  maintenance?: 'rebase' | 'fixci';
+  maintenance?: 'rebase' | 'fixci' | 'revise';
+  /**
+   * Your review of the agent's own work, read before the draft PR is promoted.
+   * Parsed from `.colinear-review.md` in the task's worktree — the same
+   * document a PR review writes, so the annotated diff reads it unchanged.
+   */
+  findings?: ReviewFinding[];
+  /** the commit the findings were written against, so they can go stale */
+  reviewedSha?: string;
+  /** a self-review session is running over the worktree */
+  reviewing?: boolean;
   /** one rebase per conflict; re-arms when the PR is mergeable again */
   rebaseAttempted?: boolean;
   /** operator-pinned PR number: PR matching uses exactly this, never guesses */

@@ -29,6 +29,7 @@
 | [`:reviews`](views/reviews.md) | `rev` `pr` | PRs awaiting my review + assisted pre-review |
 | [`:costs`](views/costs.md) | `cost` `$` | spend per ticket |
 | [`:logs`](views/logs.md) | `log` `debug` | live debug log (what colinear is actually doing) |
+| [`:diff`](views/diff.md) | `selfreview` | read a task's own branch before promoting its draft PR |
 | [`:agents`](views/agents.md) | `ps` | every agent running right now, and what started it |
 | [`:family`](views/family.md) | `fam` `subs` | split work: every tracking parent and its sub-issue tasks |
 | [`:gc`](views/gc.md) | `disk` | reclaim worktree disk and finished cards |

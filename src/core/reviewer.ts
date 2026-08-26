@@ -24,7 +24,8 @@ import type { ChatTurn, Config, Review, ReviewFinding, Severity } from './types.
 
 const exec = promisify(execFile);
 
-const REVIEW_FILE = '.colinear-review.md';
+/** Also the self-review's document: a task's worktree carries the same file. */
+export const REVIEW_FILE = '.colinear-review.md';
 
 /** ~64KB of review is already far more than anyone reads; refuse to mirror more. */
 const DOC_LIMIT = 64_000;
