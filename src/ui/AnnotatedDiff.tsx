@@ -159,6 +159,7 @@ export function AnnotatedDiff(props: {
         comment: info ? undefined : finding ? `${label}${finding.comment}` : undefined,
         note: info ? `${label}${finding.comment}` : undefined,
         severity: finding?.severity,
+        line: finding ? row?.line.newLine : undefined,
       };
     });
     return layoutMargin(annotated, marginText, wrapText);
