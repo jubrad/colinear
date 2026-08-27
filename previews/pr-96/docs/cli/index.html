@@ -695,6 +695,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#a-different-username" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A different username
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#the-round-trip-is-a-gate" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1436,6 +1447,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#a-different-username" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A different username
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#the-round-trip-is-a-gate" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1605,11 +1627,22 @@ them here — they are added back by name, because a review's findings are not a
 <h3 id="restoring">Restoring<a class="headerlink" href="#restoring" title="Permanent link">&para;</a></h3>
 <p>Restore refuses across colinear versions and across operating systems. That is the bargain that
 keeps it honest: a patch and a transcript both assume the thing that wrote them.</p>
-<p>It handles the one thing that really does differ between two machines — <strong>where home is</strong>. Every
-absolute path is rewritten: in the config, in the board's worktree paths inside <code>state.json</code>, and in
-the <em>name</em> of each transcript directory, which encodes the working directory it belongs to. A
-conversation restored under its old name would be filed against a path that no longer exists, and
-<code>c</code> would open an empty session.</p>
+<h3 id="a-different-username">A different username<a class="headerlink" href="#a-different-username" title="Permanent link">&para;</a></h3>
+<p>The one thing that really does differ between two machines is <strong>where home is</strong>, and restore
+rewrites every absolute path that crosses: the config, the board's worktree paths in <code>state.json</code>,
+plans and channels that name a checkout in prose, the <em>name</em> of each transcript directory — and the
+transcripts themselves.</p>
+<p>That last one is the part that is easy to miss. A transcript directory is named after the working
+directory it belongs to, encoded, so a conversation restored under its old name is filed against a
+path that no longer exists and <code>c</code> opens an empty session. But the name is only half of it: <strong>every
+record inside carries the absolute directory it happened in</strong>, along with the absolute path of every
+file a tool read or wrote and every command that named one. In one 49 MB transcript here that is
+13,834 of 18,966 records. Restored with the name fixed and the contents left alone, the conversation
+loads and then talks about another user's files.</p>
+<p>So the contents are rewritten too — by extension (<code>.json</code>, <code>.jsonl</code>, <code>.md</code>, <code>.txt</code>) rather than by
+sniffing, because a git bundle and an sqlite database are in the same tree and a "does this look
+like text" guess that is wrong once corrupts one of them. Measured on the real transcripts on this
+machine: 49 MB in 33 ms, every record still parsing, no mention of the old home left.</p>
 <p>Nothing is overwritten in place: anything already there is moved aside as <code>&lt;name&gt;.before-restore</code>
 first, an existing worktree is left alone and reported, and transcripts merge rather than replace.
 <code>--dry-run</code> prints the whole plan and writes nothing; <code>--list</code> reads just the manifest.</p>
