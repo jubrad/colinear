@@ -11,6 +11,7 @@
     "dev": "tsx src/index.tsx",
     "doctor": "tsx src/doctor.ts",
     "build": "tsc && chmod +x dist/index.js",
+    "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
     "check": "tsx src/core/store.check.ts",
     "check:backup": "tsx src/core/backup.check.ts"
