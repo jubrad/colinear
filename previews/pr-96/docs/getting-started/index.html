@@ -1476,9 +1476,14 @@
 <p>macOS is the tested platform. Node 20 or newer.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/jubrad/colinear<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>colinear
-npm<span class="w"> </span>install
-npm<span class="w"> </span>link<span class="w">          </span><span class="c1"># puts `coli` (and `colinear`) on PATH, building dist first</span>
+npm<span class="w"> </span>install<span class="w">       </span><span class="c1"># installs dependencies, then builds dist</span>
+npm<span class="w"> </span>link<span class="w">          </span><span class="c1"># puts `coli` (and `colinear`) on PATH</span>
 </code></pre></div>
+<p><code>dist/</code> is not in the repository, and the <code>coli</code> on your PATH is a symlink straight into it, so the
+build has to happen before the link is worth anything. That is what the <code>prepare</code> script is for: npm
+runs it on <code>npm install</code> and again on <code>npm link</code>, so neither step can leave you with a <code>coli</code> that
+points at a file which was never built. If you skip <code>npm install</code> — a <code>git pull</code> onto an existing
+clone, say — run <code>npm run build</code> yourself; the linked <code>coli</code> runs <code>dist</code>, not <code>src</code>.</p>
 <h2 id="configure">Configure<a class="headerlink" href="#configure" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>coli<span class="w"> </span>init
 </code></pre></div>
