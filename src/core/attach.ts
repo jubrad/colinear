@@ -211,13 +211,22 @@ export function attachShell(
     ctx.toast('no worktree yet', 'err');
     return;
   }
-  pending = {
-    kind: 'attach',
-    mode: 'shell',
-    worktree: task.worktree,
-    identifier: task.issue.identifier,
-    issueId: task.issue.id,
-    waitMs: 0,
-  };
+  shellIn(task.worktree, task.issue.identifier, ctx, task.issue.id);
+}
+
+/**
+ * A shell in any checkout colinear cut — a task's, or a project's design
+ * worktree. The same door as `S` on a task: nothing is suspended and nothing
+ * is resumed on the way out, because opening a shell is not taking over a
+ * conversation. `issueId` is only there so the caller that *is* a task keeps
+ * its "resume in the background?" prompt.
+ */
+export function shellIn(
+  worktree: string,
+  identifier: string,
+  ctx: { quit: () => void },
+  issueId = '',
+): void {
+  pending = { kind: 'attach', mode: 'shell', worktree, identifier, issueId, waitMs: 0 };
   ctx.quit();
 }

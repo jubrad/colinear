@@ -36,6 +36,7 @@ publish. Two separate keys, because they are two separate decisions.
 |---|---|
 | `tab` | switch between the draft and the chat input |
 | `c` | **chat about it** — a worktree and a live `claude` session, entered directly |
+| `S` | **a shell** in that same worktree, without starting a session |
 | `ctrl+d` | send a chat turn — the first one starts the session |
 | `d` | the agent opens the discussion (doc focus) |
 | `j/k` `g/G` | scroll the draft (doc focus) |
@@ -45,6 +46,28 @@ publish. Two separate keys, because they are two separate decisions.
 | `A` | **approve** — the fence's issues, reviewed in a list: `space` drops one, `A` creates |
 | `D` | approve and **dispatch wave 1** — only issues with no in-plan blockers; later waves start as their blockers land |
 | `s` | reopen the plan: re-pull the tracker doc, reset the discussion |
+| `esc` | back — from the chat box too, which used to swallow it |
+
+`c` and `S` both need the doc in focus (`tab`), because the chat box takes every printable key.
+
+### Waiting for the worktree
+
+Cutting the checkout is a `fetch` and a `worktree add`, and on a large repository that is long
+enough that a keypress with no response reads as a keypress that did nothing. So it says so: a
+panel naming what the worktree is for, how long it has been going, and the plan agent's own
+activity underneath. `esc` stops watching without leaving the view — the checkout is still cut, and
+the next `c` or `S` is instant. A checkout that *fails* never sends a ready, so the panel reads the
+failure off the plan record rather than spinning forever.
+
+`S` is the same door with a different destination. One command asks the daemon for the worktree;
+what the terminal is handed to — `claude` or your shell — is decided here. That is also why `S`
+works before you have ever pressed `c`: the checkout gets cut either way.
+
+### `esc` in the chat box
+
+The chat input claims the keyboard while it is focused, so the app's own `esc` never fired and the
+footer's "esc: back" was a lie. It now leaves the view — unless you have typed something unsent, in
+which case the first `esc` moves focus to the draft (keeping what you wrote) and the second leaves.
 
 ## Approval is reconciliation
 

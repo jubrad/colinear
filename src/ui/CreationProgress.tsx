@@ -26,8 +26,17 @@ export function pushActivity(state: CreationState, line: string): CreationState 
   return { ...state, activity: [...state.activity.slice(-30), line] };
 }
 
-export function CreationProgress(props: { state: CreationState; width: number; lines: number; now: number }) {
-  const { state, width, lines, now } = props;
+export function CreationProgress(props: {
+  state: CreationState;
+  width: number;
+  lines: number;
+  now: number;
+  /** what the agent is doing, for the ones that aren't drafting */
+  verb?: string;
+  /** what esc does here, when it isn't "hide and wait for the toast" */
+  hint?: string;
+}) {
+  const { state, width, lines, now, verb = 'drafting', hint } = props;
   const tail = state.activity.slice(-lines);
   return (
     <Box flexDirection="column" width={width}>
@@ -40,7 +49,7 @@ export function CreationProgress(props: { state: CreationState; width: number; l
         </Text>
       ) : (
         <Text color={theme.warn}>
-          {spinner(now)} drafting — {Math.max(0, Math.round((now - state.startedAt) / 1000))}s
+          {spinner(now)} {verb} — {Math.max(0, Math.round((now - state.startedAt) / 1000))}s
         </Text>
       )}
       <Box flexDirection="column" marginTop={1} height={lines} overflow="hidden">
@@ -52,7 +61,9 @@ export function CreationProgress(props: { state: CreationState; width: number; l
         {!tail.length && <Text dimColor>…</Text>}
       </Box>
       <Text dimColor>
-        {state.done ? `${state.done.url ? 'o: open · ' : ''}esc: close` : 'esc: hide — it keeps running, the toast still lands'}
+        {state.done
+          ? `${state.done.url ? 'o: open · ' : ''}esc: close`
+          : (hint ?? 'esc: hide — it keeps running, the toast still lands')}
       </Text>
     </Box>
   );
