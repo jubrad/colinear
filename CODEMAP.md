@@ -97,6 +97,13 @@ src/core/
                      in, plus the files tools touched) — by extension, never by sniffing
   backup.check.ts    the round trip as a gate: a whole fake installation moved between two
                      home directories, asserting on what came out (bin/check runs it)
+  worktrees.ts       what git thinks is checked out vs what is there. A worktree removed by
+                     anything but `git worktree remove` stays *registered* (`prunable` in
+                     the porcelain), and that stale entry was what the branch lookup
+                     answered with — so a resume started an agent in a deleted directory.
+                     The lookup prunes, skips prunable/locked, and reports what was lost
+  worktrees.check.ts clobber a checkout and prove it comes back: branch, HEAD and committed
+                     work restored, uncommitted honestly not (bin/check runs it)
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
                      read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
                      approve() creates Linear sub-issues; snapshot/restore for persistence

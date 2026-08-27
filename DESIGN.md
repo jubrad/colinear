@@ -221,6 +221,16 @@ session ends. The bias is towards repeating a message rather than losing one.
 
 Sessions are Claude Code sessions keyed by worktree cwd (`~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`). colinear stores only the session id + worktree; interactive attach (`claude --resume`) and headless resume share the same transcript.
 
+**A stored worktree path is a claim, not a fact.** A checkout can be removed by anything — you, an
+agent, a disk sweep, a recycled host — and git keeps the *registration* when it goes: the porcelain
+still names the path and the branch and marks it `prunable`. Reading that list without pruning
+answers "where is this branch?" with a directory that is not there, which is how a resume once
+started an agent in nothing. `core/worktrees.ts` owns the lookup: prune first, skip `prunable` and
+`locked`, check the directory anyway, and report what was cleared. Anything that takes `task.worktree`
+on faith gets the same treatment — `existsSync` before spawning into it, and a message rather than a
+mystery. The recovery is real but partial, and saying which half is missing is part of the fix:
+commits and the transcript come back, uncommitted work does not.
+
 ## PR review
 
 A second entity beside tasks, with the same CDC contract (`review-*` deltas, keyed

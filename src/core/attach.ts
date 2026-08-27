@@ -182,6 +182,13 @@ export function attachTo(
     toast('no session to attach yet', 'err');
     return;
   }
+  // The stored path is a claim, not a fact — a checkout can be removed by
+  // anything, and dropping someone into a directory that is not there is a
+  // worse answer than saying so. `r` rebuilds it from the branch.
+  if (!existsSync(target.worktree)) {
+    toast(`${target.identifier}: its worktree is gone — r rebuilds it from the branch`, 'err');
+    return;
+  }
   if (target.live) suspend(target.id);
 
   if (cfg.terminal === 'ghostty' || cfg.terminal === 'terminal') {
@@ -209,6 +216,10 @@ export function attachShell(
 ): void {
   if (!task.worktree) {
     ctx.toast('no worktree yet', 'err');
+    return;
+  }
+  if (!existsSync(task.worktree)) {
+    ctx.toast(`${task.issue.identifier}: its worktree is gone — r rebuilds it from the branch`, 'err');
     return;
   }
   shellIn(task.worktree, task.issue.identifier, ctx, task.issue.id);
