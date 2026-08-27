@@ -3,9 +3,10 @@
 #
 #   bin/check
 #
-# There is no test suite — verification here is the typechecker, a build, and
-# the CDC replay that proves the client mirror matches the daemon's store.
-# Smoke-booting the TUI stays manual (see CLAUDE.md).
+# There is no test suite — verification here is the typechecker, a build, the
+# CDC replay that proves the client mirror matches the daemon's store, and a
+# backup/restore round trip between two home directories. Smoke-booting the TUI
+# stays manual (see CLAUDE.md).
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,6 +22,12 @@ echo
 echo '── CDC replay'
 # never touch a real state dir
 COLINEAR_STATE_DIR="$(mktemp -d)" npm run check
+
+echo
+echo '── backup round trip'
+# builds a whole fake installation under two temporary homes and moves one to
+# the other; touches nothing of yours, and unsets COLINEAR_STATE_DIR itself
+npm run check:backup
 
 echo
 echo 'ok'

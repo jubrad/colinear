@@ -87,6 +87,14 @@ src/core/
                      checkouts of stale reviews, and directories no task claims (repo
                      re-routes leave those). Refuses to classify anything as an orphan
                      when no tasks loaded — empty state is indistinguishable from live work
+  backup.ts          `coli backup` / `coli restore`: one archive per machine. Worktrees are
+                     recorded as (git bundle of un-upstreamed commits, patch of the dirty
+                     tree, tar of untracked) rather than copied — a copied worktree is inert
+                     (.git is a pointer file) and git's own ignore rules drop target/ and
+                     friends for free. Restore rewrites every absolute path when home moves,
+                     including the *encoding* of transcript directory names
+  backup.check.ts    the round trip as a gate: a whole fake installation moved between two
+                     home directories, asserting on what came out (bin/check runs it)
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
                      read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
                      approve() creates Linear sub-issues; snapshot/restore for persistence

@@ -1295,7 +1295,13 @@ export class Dispatcher {
    */
   private async excludeSubtasksFile(worktree: string) {
     try {
-      const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', '--absolute-git-dir']);
+      // the COMMON git dir, not this worktree's. `info/exclude` is only ever
+      // read from the shared one — writing it under
+      // `.git/worktrees/<name>/info/` looks right, is what
+      // `--absolute-git-dir` hands you in a linked worktree, and is silently
+      // ignored, which left both scratch files showing up in every agent's
+      // `git status` (and one `git add -A` away from being committed).
+      const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', '--path-format=absolute', '--git-common-dir']);
       const excludePath = join(stdout.trim(), 'info', 'exclude');
       mkdirSync(dirname(excludePath), { recursive: true });
       const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : '';

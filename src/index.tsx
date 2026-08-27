@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { render } from 'ink';
-import { App } from './app.js';
+import { App, VERSION } from './app.js';
 import { connectToDaemon } from './client.js';
 import { consumePendingAction } from './core/attach.js';
 import { parseAnswerDoc } from './core/answers.js';
@@ -22,6 +22,13 @@ import {
   stateDirFor,
 } from './core/context.js';
 import { runDaemon, PID_PATH } from './daemon.js';
+import {
+  createBackup,
+  defaultBackupName,
+  formatBytes,
+  readManifest,
+  restoreBackup,
+} from './core/backup.js';
 import { findReclaimable, findSettled, formatSize, removeWorktree } from './core/gc.js';
 import { loadState } from './core/persist.js';
 import { log } from './core/log.js';
@@ -461,6 +468,108 @@ function supervise(): never {
 }
 
 /**
+ * `coli backup [--out FILE] [--no-worktrees] [--max-file MB]` — one archive
+ * holding everything a new machine needs: conversations, work in progress,
+ * state and config. See core/backup.ts for what that means and why worktrees
+ * are recorded rather than copied.
+ */
+async function backupCommand(args: string[]): Promise<void> {
+  const cfg = loadConfig({ requireKey: false });
+  const out = flagValue(args, '--out');
+  const maxFile = flagValue(args, '--max-file');
+  if (daemonPid()) {
+    console.log(
+      'the daemon is running — its state file is written every few seconds, so a backup\n' +
+        'taken now can catch it mid-flight. `coli daemon stop` first (agents resume with r).',
+    );
+    process.exit(1);
+  }
+  console.log(`backing up to ${out ?? join(process.cwd(), defaultBackupName())}\n`);
+  const { path, manifest } = await createBackup(cfg, {
+    out,
+    version: VERSION,
+    noWorktrees: args.includes('--no-worktrees'),
+    maxFileMb: maxFile ? Number.parseFloat(maxFile) : undefined,
+    onProgress: (line) => console.log(`  ${line}`),
+  });
+  const skipped = manifest.worktrees.flatMap((w) => w.skipped);
+  if (skipped.length) {
+    console.log(`\n${skipped.length} untracked file(s) left out for size:`);
+    for (const s of skipped.slice(0, 10)) console.log(`  ${s}`);
+    if (skipped.length > 10) console.log(`  … and ${skipped.length - 10} more`);
+    console.log('raise the limit with --max-file <MB> if you need them.');
+  }
+  console.log(
+    `\n${manifest.worktrees.length} worktrees · ` +
+      `${manifest.transcripts.reduce((n, t) => n + t.sessions, 0)} conversations · ` +
+      `${manifest.contexts.length} context(s) · ${formatBytes(statSync(path).size)}`,
+  );
+  console.log(`\nrestore on the other machine with:\n  coli restore ${basename(path)}`);
+}
+
+/**
+ * `coli restore FILE [--dry-run] [--clone] [--list]` — put it all back.
+ *
+ * Refuses across colinear versions and across operating systems, which is the
+ * bargain that keeps this honest: a patch and a transcript both assume the
+ * thing that wrote them. Everything it would overwrite is moved aside as
+ * `<name>.before-restore` first.
+ */
+async function restoreCommand(args: string[]): Promise<void> {
+  const archive = args.find((a) => !a.startsWith('--'));
+  if (!archive || !existsSync(archive)) {
+    console.error(`usage: coli restore <archive.tar.gz> [--dry-run] [--clone] [--list]`);
+    process.exit(1);
+  }
+  if (args.includes('--list')) {
+    const m = await readManifest(archive);
+    console.log(`colinear ${m.colinear} · ${m.platform} · ${m.host} · ${m.createdAt}`);
+    console.log(`home ${m.home}`);
+    for (const c of m.contexts) console.log(`  context ${c.name}`);
+    for (const r of m.repos) console.log(`  repo    ${r.name} → ${r.path}`);
+    for (const w of m.worktrees) {
+      console.log(
+        `  wt      ${w.branch} (${w.commits} commits, ${w.dirtyFiles} modified, ${w.untrackedFiles} untracked)`,
+      );
+    }
+    const sessions = m.transcripts.reduce((n, t) => n + t.sessions, 0);
+    console.log(`  chats   ${sessions} in ${m.transcripts.length} directories`);
+    return;
+  }
+  if (daemonPid()) {
+    console.log('the daemon is running — `coli daemon stop` before restoring over its state.');
+    process.exit(1);
+  }
+  const dryRun = args.includes('--dry-run');
+  const plan = await restoreBackup({
+    archive,
+    version: VERSION,
+    dryRun,
+    clone: args.includes('--clone'),
+    onProgress: (line) => console.log(`  ${line}`),
+  });
+  console.log('');
+  for (const item of plan) {
+    console.log(`  ${item.blocked ? '✖' : dryRun ? '·' : '✓'} ${item.what.padEnd(13)} ${item.detail}`);
+    if (item.blocked) console.log(`      ${item.blocked}`);
+  }
+  const blocked = plan.filter((p) => p.blocked);
+  if (dryRun) {
+    console.log(`\nnothing was written — drop --dry-run to do it${blocked.length ? ' (the ✖ lines will still fail)' : ''}`);
+  } else if (blocked.length) {
+    console.log(`\n${blocked.length} item(s) need you — fix them and re-run; what succeeded is left in place.`);
+  } else {
+    console.log('\nrestored. `coli` to start the daemon and see the board.');
+  }
+}
+
+/** The value after a flag, or undefined. */
+function flagValue(args: string[], flag: string): string | undefined {
+  const i = args.indexOf(flag);
+  return i === -1 ? undefined : args[i + 1];
+}
+
+/**
  * The context selector is resolved in core/context.ts (it has to be, so paths
  * derive from it) and travels to children in the environment — strip it here
  * so it can sit anywhere on the command line without becoming the command.
@@ -482,6 +591,8 @@ else if (command === 'gc') await gcCommand(argv.slice(1));
 else if (command === 'contexts') contextsCommand();
 else if (command === 'init') await runInit({ yes: argv.includes('--yes') || argv.includes('-y') });
 else if (command === 'issue') await issueCommand(argv.slice(1));
+else if (command === 'backup') await backupCommand(argv.slice(1));
+else if (command === 'restore') await restoreCommand(argv.slice(1));
 else if (command === 'demo') demoCommand();
 else if (command === '--tui') await runTui();
 else supervise();
