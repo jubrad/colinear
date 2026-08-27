@@ -958,6 +958,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Keys">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#waiting-for-the-worktree" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Waiting for the worktree
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#esc-in-the-chat-box" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        esc in the chat box
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1338,6 +1366,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Keys">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#waiting-for-the-worktree" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Waiting for the worktree
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#esc-in-the-chat-box" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        esc in the chat box
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1443,6 +1499,10 @@ publish. Two separate keys, because they are two separate decisions.</p>
 <td><strong>chat about it</strong> — a worktree and a live <code>claude</code> session, entered directly</td>
 </tr>
 <tr>
+<td><code>S</code></td>
+<td><strong>a shell</strong> in that same worktree, without starting a session</td>
+</tr>
+<tr>
 <td><code>ctrl+d</code></td>
 <td>send a chat turn — the first one starts the session</td>
 </tr>
@@ -1478,8 +1538,27 @@ publish. Two separate keys, because they are two separate decisions.</p>
 <td><code>s</code></td>
 <td>reopen the plan: re-pull the tracker doc, reset the discussion</td>
 </tr>
+<tr>
+<td><code>esc</code></td>
+<td>back — from the chat box too, which used to swallow it</td>
+</tr>
 </tbody>
 </table>
+<p><code>c</code> and <code>S</code> both need the doc in focus (<code>tab</code>), because the chat box takes every printable key.</p>
+<h3 id="waiting-for-the-worktree">Waiting for the worktree<a class="headerlink" href="#waiting-for-the-worktree" title="Permanent link">&para;</a></h3>
+<p>Cutting the checkout is a <code>fetch</code> and a <code>worktree add</code>, and on a large repository that is long
+enough that a keypress with no response reads as a keypress that did nothing. So it says so: a
+panel naming what the worktree is for, how long it has been going, and the plan agent's own
+activity underneath. <code>esc</code> stops watching without leaving the view — the checkout is still cut, and
+the next <code>c</code> or <code>S</code> is instant. A checkout that <em>fails</em> never sends a ready, so the panel reads the
+failure off the plan record rather than spinning forever.</p>
+<p><code>S</code> is the same door with a different destination. One command asks the daemon for the worktree;
+what the terminal is handed to — <code>claude</code> or your shell — is decided here. That is also why <code>S</code>
+works before you have ever pressed <code>c</code>: the checkout gets cut either way.</p>
+<h3 id="esc-in-the-chat-box"><code>esc</code> in the chat box<a class="headerlink" href="#esc-in-the-chat-box" title="Permanent link">&para;</a></h3>
+<p>The chat input claims the keyboard while it is focused, so the app's own <code>esc</code> never fired and the
+footer's "esc: back" was a lie. It now leaves the view — unless you have typed something unsent, in
+which case the first <code>esc</code> moves focus to the draft (keeping what you wrote) and the second leaves.</p>
 <h2 id="approval-is-reconciliation">Approval is reconciliation<a class="headerlink" href="#approval-is-reconciliation" title="Permanent link">&para;</a></h2>
 <p>Approving never duplicates and never destroys: issues that already exist in the project (matched by
 title) are skipped and named; issues in the project that the plan no longer mentions are <strong>listed,

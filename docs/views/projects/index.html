@@ -1362,7 +1362,14 @@
 teams, target date. <code>/</code> filters, <code>t</code> switches team, <code>s</code> sorts, <code>enter</code> opens one.</p>
 <p><code>c</code> on a project hands your terminal straight to a design session for it — a worktree and a live
 <code>claude</code>, the same thing <a href="../plan/"><code>:plan</code></a>'s <code>c</code> does, without opening the plan first. Wanting to
-talk something through shouldn't require visiting the document that comes out of it.</p>
+talk something through shouldn't require visiting the document that comes out of it. <code>S</code> is the
+same door with a different destination: the same worktree, handed to your shell instead of an
+agent.</p>
+<p>Either way the checkout has to exist first, and cutting one is a <code>fetch</code> and a <code>worktree add</code> —
+long enough on a large repository that a keypress with no response reads as a keypress that did
+nothing. So the wait is shown: a panel naming what the worktree is for, how long it has been going,
+and the plan agent's own activity underneath. <code>esc</code> stops watching without leaving the view; the
+checkout is still cut, so the next <code>c</code> or <code>S</code> is instant.</p>
 <p><code>:project NAME</code> (alias <code>p</code>) is a kanban of that project's issues, whether or not they're dispatched.
 Where the provider has milestones, each card's second line names the milestone the issue is filed
 under, after the assignee.</p>
@@ -1402,6 +1409,14 @@ which is a plainer version of the same shape.</p>
 <tr>
 <td><code>p</code></td>
 <td>the <a href="../plan/">planning chat</a> for the project under the cursor</td>
+</tr>
+<tr>
+<td><code>c</code></td>
+<td><strong>a design session</strong> — a worktree and a live <code>claude</code>, entered directly</td>
+</tr>
+<tr>
+<td><code>S</code></td>
+<td><strong>a shell</strong> in that same worktree</td>
 </tr>
 <tr>
 <td><code>/</code> filter · <code>t</code> team · <code>s</code> sort · <code>o</code> open in the tracker · <code>r</code> refresh</td>
