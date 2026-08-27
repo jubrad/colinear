@@ -12,7 +12,8 @@
     "doctor": "tsx src/doctor.ts",
     "build": "tsc && chmod +x dist/index.js",
     "typecheck": "tsc --noEmit",
-    "check": "tsx src/core/store.check.ts"
+    "check": "tsx src/core/store.check.ts",
+    "check:worktrees": "tsx src/core/worktrees.check.ts"
   },
   "engines": {
     "node": ">=20"

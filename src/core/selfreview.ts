@@ -37,6 +37,12 @@ export const docPath = (task: Task): string | undefined =>
  */
 export async function taskDiff(cfg: Config, task: Task): Promise<string> {
   if (!task.worktree) return '';
+  // both git calls below swallow their errors, so a missing checkout would
+  // read as "this branch changed nothing" — which is the one wrong answer
+  if (!existsSync(task.worktree)) {
+    return `the worktree at ${task.worktree} is gone — press r to rebuild it from the branch, then read it again
+`;
+  }
   const base = task.repo ? cfg.repos.find((r) => r.name === task.repo?.name)?.defaultBranch : undefined;
   const remote = 'origin';
   const against = base ? `${remote}/${base}` : 'HEAD~1';

@@ -87,6 +87,13 @@ src/core/
                      checkouts of stale reviews, and directories no task claims (repo
                      re-routes leave those). Refuses to classify anything as an orphan
                      when no tasks loaded — empty state is indistinguishable from live work
+  worktrees.ts       what git thinks is checked out vs what is there. A worktree removed by
+                     anything but `git worktree remove` stays *registered* (`prunable` in
+                     the porcelain), and that stale entry was what the branch lookup
+                     answered with — so a resume started an agent in a deleted directory.
+                     The lookup prunes, skips prunable/locked, and reports what was lost
+  worktrees.check.ts clobber a checkout and prove it comes back: branch, HEAD and committed
+                     work restored, uncommitted honestly not (bin/check runs it)
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
                      read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
                      approve() creates Linear sub-issues; snapshot/restore for persistence
