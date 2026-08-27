@@ -91,8 +91,10 @@ src/core/
                      recorded as (git bundle of un-upstreamed commits, patch of the dirty
                      tree, tar of untracked) rather than copied — a copied worktree is inert
                      (.git is a pointer file) and git's own ignore rules drop target/ and
-                     friends for free. Restore rewrites every absolute path when home moves,
-                     including the *encoding* of transcript directory names
+                     friends for free. Restore rewrites every absolute path when home moves:
+                     config, state, plans, the *encoding* of transcript directory names, and
+                     the transcripts' own contents (every record carries the cwd it happened
+                     in, plus the files tools touched) — by extension, never by sniffing
   backup.check.ts    the round trip as a gate: a whole fake installation moved between two
                      home directories, asserting on what came out (bin/check runs it)
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),

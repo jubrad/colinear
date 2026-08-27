@@ -393,12 +393,10 @@ export async function restoreBackup(opts: RestoreOptions): Promise<RestorePlanIt
         keepExisting(to);
         copyTree(join(src, entry), to);
       }
-      // the store snapshot holds worktree paths; they have to point at this
-      // machine's disk or every card comes back pointing into nowhere
-      const snapshot = join(target, 'state.json');
-      if (moved && existsSync(snapshot)) {
-        writeFileSync(snapshot, rewritePaths(readFileSync(snapshot, 'utf8'), manifest.home, homedir()));
-      }
+      // the store snapshot holds worktree paths, and a plan or a channel can
+      // name one in prose; they all have to point at this machine's disk or
+      // the board comes back referring to a directory that is not there
+      if (moved) rewriteTree(target, manifest.home, homedir());
     }
 
     // ── conversations ────────────────────────────────────────────────────
@@ -409,8 +407,19 @@ export async function restoreBackup(opts: RestoreOptions): Promise<RestorePlanIt
       const src = join(staging, 'transcripts', basename(t.dir));
       if (!existsSync(src)) continue;
       const target = transcriptDir(rehome(t.cwd));
-      done.push({ what: 'conversations', detail: `${t.sessions} from ${basename(t.cwd)} → ${target}` });
-      if (!opts.dryRun) copyTree(src, target, { merge: true });
+      done.push({
+        what: 'conversations',
+        detail: `${t.sessions} from ${basename(t.cwd)} → ${target}${moved ? ' (paths rewritten)' : ''}`,
+      });
+      if (opts.dryRun) continue;
+      copyTree(src, target, { merge: true });
+      // The directory name is only half of it. Every record in a transcript
+      // carries the absolute directory it happened in — and the absolute path
+      // of every file that was read or written, and every command that named
+      // one. A conversation restored under the right name but still claiming
+      // to have happened in another user's home is a conversation about files
+      // that do not exist.
+      if (moved) rewriteTree(target, manifest.home, homedir());
     }
 
     // ── repositories ─────────────────────────────────────────────────────
@@ -605,6 +614,43 @@ function keepExisting(path: string): void {
 export function rewritePaths(text: string, oldHome: string, newHome: string): string {
   if (oldHome === newHome) return text;
   return text.split(JSON.stringify(oldHome).slice(1, -1)).join(JSON.stringify(newHome).slice(1, -1));
+}
+
+/** Extensions we will rewrite. Anything else is left byte-for-byte. */
+const TEXT_FILES = ['.json', '.jsonl', '.md', '.txt'];
+
+/**
+ * Repoint every path in a tree, and say how many files moved.
+ *
+ * By extension rather than by sniffing: a git bundle and an sqlite database
+ * both live under here, and a "does this look like text" heuristic that is
+ * wrong once corrupts one of them. The list is short because the things that
+ * need rewriting are all things colinear or Claude Code wrote as JSON.
+ */
+function rewriteTree(dir: string, oldHome: string, newHome: string): number {
+  if (oldHome === newHome || !existsSync(dir)) return 0;
+  let changed = 0;
+  const walk = (path: string) => {
+    let stat;
+    try {
+      stat = statSync(path);
+    } catch {
+      return;
+    }
+    if (stat.isDirectory()) {
+      for (const entry of readdirSync(path)) walk(join(path, entry));
+      return;
+    }
+    if (!TEXT_FILES.some((ext) => path.endsWith(ext))) return;
+    const before = readFileSync(path, 'utf8');
+    const after = rewritePaths(before, oldHome, newHome);
+    if (after !== before) {
+      writeFileSync(path, after);
+      changed++;
+    }
+  };
+  walk(dir);
+  return changed;
 }
 
 function dirSize(path: string): number {

@@ -83,11 +83,25 @@ them here — they are added back by name, because a review's findings are not a
 Restore refuses across colinear versions and across operating systems. That is the bargain that
 keeps it honest: a patch and a transcript both assume the thing that wrote them.
 
-It handles the one thing that really does differ between two machines — **where home is**. Every
-absolute path is rewritten: in the config, in the board's worktree paths inside `state.json`, and in
-the *name* of each transcript directory, which encodes the working directory it belongs to. A
-conversation restored under its old name would be filed against a path that no longer exists, and
-`c` would open an empty session.
+### A different username
+
+The one thing that really does differ between two machines is **where home is**, and restore
+rewrites every absolute path that crosses: the config, the board's worktree paths in `state.json`,
+plans and channels that name a checkout in prose, the *name* of each transcript directory — and the
+transcripts themselves.
+
+That last one is the part that is easy to miss. A transcript directory is named after the working
+directory it belongs to, encoded, so a conversation restored under its old name is filed against a
+path that no longer exists and `c` opens an empty session. But the name is only half of it: **every
+record inside carries the absolute directory it happened in**, along with the absolute path of every
+file a tool read or wrote and every command that named one. In one 49 MB transcript here that is
+13,834 of 18,966 records. Restored with the name fixed and the contents left alone, the conversation
+loads and then talks about another user's files.
+
+So the contents are rewritten too — by extension (`.json`, `.jsonl`, `.md`, `.txt`) rather than by
+sniffing, because a git bundle and an sqlite database are in the same tree and a "does this look
+like text" guess that is wrong once corrupts one of them. Measured on the real transcripts on this
+machine: 49 MB in 33 ms, every record still parsing, no mention of the old home left.
 
 Nothing is overwritten in place: anything already there is moved aside as `<name>.before-restore`
 first, an existing worktree is left alone and reported, and transcripts merge rather than replace.

@@ -48,8 +48,10 @@ function git(cwd: string, ...args: string[]): string {
 }
 
 const root = mkdtempSync(join(tmpdir(), 'coli-backup-check-'));
-const oldHome = join(root, 'home-old');
-const newHome = join(root, 'a-different-home');
+// two homes, two usernames, deliberately different lengths — the case a
+// backup taken for a new computer actually hits
+const oldHome = join(root, 'Users', 'ada');
+const newHome = join(root, 'Users', 'grace-h');
 
 try {
   // ── the machine being left behind ──────────────────────────────────────
@@ -119,12 +121,26 @@ try {
     join(stateDir, 'state.json'),
     `${JSON.stringify({ version: 3, tasks: [{ issue: { id: 'i1', identifier: 'WID-1' }, worktree }], reviews: [], plans: [] })}\n`,
   );
-  writeFileSync(join(stateDir, 'plans', 'p1.md'), '# a plan\n');
   writeFileSync(join(stateDir, 'colinear.log'), 'x'.repeat(4 * 1024 * 1024));
   writeFileSync(join(stateDir, 'coli.pid'), '99999\n');
   const chatDir = join(oldHome, '.claude', 'projects', worktree.replace(/[^a-zA-Z0-9]/g, '-'));
   mkdirSync(chatDir, { recursive: true });
-  writeFileSync(join(chatDir, 'sess-1.jsonl'), '{"type":"user","text":"hello"}\n');
+  // a transcript the way Claude Code writes one: every record names the
+  // directory it happened in, and the tool calls name absolute files
+  writeFileSync(
+    join(chatDir, 'sess-1.jsonl'),
+    [
+      JSON.stringify({ type: 'user', cwd: worktree, sessionId: 'sess-1', text: 'have a look at the README' }),
+      JSON.stringify({
+        type: 'assistant',
+        cwd: worktree,
+        toolUse: { name: 'Read', input: { file_path: join(worktree, 'README.md') } },
+      }),
+      JSON.stringify({ type: 'assistant', cwd: worktree, toolUse: { name: 'Bash', input: { command: `ls ${worktree}` } } }),
+    ].join('\n') + '\n',
+  );
+  // a plan can name a checkout in prose, and a channel can quote one
+  writeFileSync(join(stateDir, 'plans', 'p1.md'), `# a plan\n\nthe work is in ${worktree}\n`);
 
   // ── back it up ─────────────────────────────────────────────────────────
   const archive = join(root, 'backup.tar.gz');
@@ -170,9 +186,28 @@ try {
   }
 
   // the conversation, re-filed under the directory it will actually resume in
+  // — name *and* contents
   const newWorktree = join(newHome, 'work', 'trees', 'WID-1');
   const newChatDir = join(newHome, '.claude', 'projects', newWorktree.replace(/[^a-zA-Z0-9]/g, '-'));
-  check('the conversation is filed where a resume will look for it', existsSync(join(newChatDir, 'sess-1.jsonl')));
+  const restoredChat = join(newChatDir, 'sess-1.jsonl');
+  check('the conversation is filed where a resume will look for it', existsSync(restoredChat));
+  if (existsSync(restoredChat)) {
+    const body = readFileSync(restoredChat, 'utf8');
+    const records = body.trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+    check(
+      'every record now says it happened in the new home',
+      records.every((r) => r.cwd === newWorktree),
+      JSON.stringify(records[0]?.cwd),
+    );
+    check('the file a tool read was repointed too', body.includes(join(newWorktree, 'README.md')));
+    check('and a command that named the directory', body.includes(`ls ${newWorktree}`));
+    check('nothing still points at the old home', !body.includes(oldHome), body.slice(0, 200));
+  }
+  const restoredPlan = join(newState, 'plans', 'p1.md');
+  check(
+    'a plan that named a checkout was rewritten',
+    existsSync(restoredPlan) && readFileSync(restoredPlan, 'utf8').includes(newWorktree),
+  );
 
   // the worktree itself
   check('the worktree was rebuilt', existsSync(newWorktree), done.slice(-500));
