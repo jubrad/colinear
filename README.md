@@ -29,7 +29,7 @@ coli demo                        # a populated board — no account, no agents, 
 
 ```bash
 git clone https://github.com/jubrad/colinear && cd colinear
-npm install && npm link          # installs `coli` on PATH
+npm install && npm link          # builds dist, puts `coli` on PATH
 coli init                        # pick `sqlite` to try it with no account, or `linear` for the real thing
 npm run doctor                   # claude CLI, gh auth, key, repos
 coli                             # `?` for help, `:` to jump between views
