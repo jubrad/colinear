@@ -650,6 +650,78 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#coli-backup-and-coli-restore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        coli backup and coli restore
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="coli backup and coli restore">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-is-in-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is in it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-worktrees-are-recorded-rather-than-copied" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why worktrees are recorded rather than copied
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#restoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Restoring
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-different-username" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A different username
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-round-trip-is-a-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The round trip is a gate
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#coli-demo" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1330,6 +1402,78 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#coli-backup-and-coli-restore" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        coli backup and coli restore
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="coli backup and coli restore">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-is-in-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is in it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-worktrees-are-recorded-rather-than-copied" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why worktrees are recorded rather than copied
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#restoring" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Restoring
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-different-username" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A different username
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-round-trip-is-a-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The round trip is a gate
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#coli-demo" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1423,6 +1567,14 @@
 <td>list contexts: config path, state dir, and which have a daemon running</td>
 </tr>
 <tr>
+<td><code>coli backup [--out FILE]</code></td>
+<td>one archive holding conversations, work in progress, state and config — <a href="#coli-backup-and-coli-restore">below</a></td>
+</tr>
+<tr>
+<td><code>coli restore FILE</code></td>
+<td>put it back on another machine (<code>--dry-run</code>, <code>--list</code>, <code>--clone</code>)</td>
+</tr>
+<tr>
 <td><code>npm run doctor</code></td>
 <td>env sanity: <code>claude</code> CLI, <code>gh</code> auth, Linear key, repos</td>
 </tr>
@@ -1437,6 +1589,71 @@ scopes that come back, suggests the repository you are standing in and reads its
 </code></pre></div>
 <p>An existing config is never overwritten without a yes, and a key found in the environment is not
 written into the file.</p>
+<h2 id="coli-backup-and-coli-restore"><code>coli backup</code> and <code>coli restore</code><a class="headerlink" href="#coli-backup-and-coli-restore" title="Permanent link">&para;</a></h2>
+<p>A new computer. One archive, and everything colinear knows how to do for you carries over.</p>
+<div class="highlight"><pre><span></span><code>coli<span class="w"> </span>daemon<span class="w"> </span>stop<span class="w">                 </span><span class="c1"># its state file is written every few seconds</span>
+coli<span class="w"> </span>backup<span class="w">                      </span><span class="c1"># → coli-backup-&lt;host&gt;-&lt;date&gt;.tar.gz</span>
+<span class="c1"># … on the other machine, same colinear version, same OS …</span>
+coli<span class="w"> </span>restore<span class="w"> </span>coli-backup-…tar.gz<span class="w"> </span>--dry-run
+coli<span class="w"> </span>restore<span class="w"> </span>coli-backup-…tar.gz
+</code></pre></div>
+<h3 id="what-is-in-it">What is in it<a class="headerlink" href="#what-is-in-it" title="Permanent link">&para;</a></h3>
+<p>Four things, in order of how hard they are to get back:</p>
+<ul>
+<li><strong>conversations</strong> — the Claude Code transcripts behind every <code>r</code> and <code>c</code>. Claude Code files them
+  per working directory, which is why they are the part a plain <code>rsync</code> of your config would miss;</li>
+<li><strong>work in progress</strong> — each worktree as a git bundle of the commits that are not upstream, a
+  patch of what is uncommitted, and a tar of what is untracked;</li>
+<li><strong>state</strong> — the store snapshot, plans and channels, for every context;</li>
+<li><strong>config</strong> — every context's config file.</li>
+</ul>
+<p>Not the repositories. A monorepo clone dwarfs all of the above and is one command to recreate; the
+manifest records each repo's remote URL, so restore either tells you the exact <code>git clone</code> to run
+or runs it for you with <code>--clone</code>.</p>
+<h3 id="why-worktrees-are-recorded-rather-than-copied">Why worktrees are recorded rather than copied<a class="headerlink" href="#why-worktrees-are-recorded-rather-than-copied" title="Permanent link">&para;</a></h3>
+<p>A worktree is not a self-contained directory — its <code>.git</code> is a <em>file</em> pointing into the parent
+repository, so a copied one is inert on the far side. Recording (bundle, patch, untracked) instead
+is both correct, because <code>git worktree add</code> on the new machine produces a real registered worktree,
+and very much smaller: <strong>282 GB of checkouts came to an 18 MB archive</strong> on the machine this was
+written for.</p>
+<p>That size is not compression, it is knowing what to leave out. <code>target/</code>, <code>.venv/</code>,
+<code>node_modules/</code>, <code>dist/</code> — everything the repository's own <code>.gitignore</code> declares uninteresting is
+excluded for free, which beats any list colinear could carry, because it is the list the repository
+already maintains. Untracked files above <code>--max-file</code> (64M) are named in the output rather than
+carried, so nothing large disappears quietly.</p>
+<p>The two exceptions are colinear's own scratch files, <code>.colinear-review.md</code> and
+<code>.colinear-subtasks.md</code>. They are git-excluded so no agent commits them, which would also have hidden
+them here — they are added back by name, because a review's findings are not a build artefact.</p>
+<h3 id="restoring">Restoring<a class="headerlink" href="#restoring" title="Permanent link">&para;</a></h3>
+<p>Restore refuses across colinear versions and across operating systems. That is the bargain that
+keeps it honest: a patch and a transcript both assume the thing that wrote them.</p>
+<h3 id="a-different-username">A different username<a class="headerlink" href="#a-different-username" title="Permanent link">&para;</a></h3>
+<p>The one thing that really does differ between two machines is <strong>where home is</strong>, and restore
+rewrites every absolute path that crosses: the config, the board's worktree paths in <code>state.json</code>,
+plans and channels that name a checkout in prose, the <em>name</em> of each transcript directory — and the
+transcripts themselves.</p>
+<p>That last one is the part that is easy to miss. A transcript directory is named after the working
+directory it belongs to, encoded, so a conversation restored under its old name is filed against a
+path that no longer exists and <code>c</code> opens an empty session. But the name is only half of it: <strong>every
+record inside carries the absolute directory it happened in</strong>, along with the absolute path of every
+file a tool read or wrote and every command that named one. In one 49 MB transcript here that is
+13,834 of 18,966 records. Restored with the name fixed and the contents left alone, the conversation
+loads and then talks about another user's files.</p>
+<p>So the contents are rewritten too — by extension (<code>.json</code>, <code>.jsonl</code>, <code>.md</code>, <code>.txt</code>) rather than by
+sniffing, because a git bundle and an sqlite database are in the same tree and a "does this look
+like text" guess that is wrong once corrupts one of them. Measured on the real transcripts on this
+machine: 49 MB in 33 ms, every record still parsing, no mention of the old home left.</p>
+<p>Nothing is overwritten in place: anything already there is moved aside as <code>&lt;name&gt;.before-restore</code>
+first, an existing worktree is left alone and reported, and transcripts merge rather than replace.
+<code>--dry-run</code> prints the whole plan and writes nothing; <code>--list</code> reads just the manifest.</p>
+<p>The daemon must be stopped for both commands — it rewrites <code>state.json</code> every few seconds, so a
+backup taken while it runs can catch the file mid-write.</p>
+<h3 id="the-round-trip-is-a-gate">The round trip is a gate<a class="headerlink" href="#the-round-trip-is-a-gate" title="Permanent link">&para;</a></h3>
+<p><code>bin/check</code> builds a complete fake installation — a repository with an upstream, a worktree with
+unpushed commits, uncommitted edits, untracked files, a build directory that must not travel, a
+review document that must — backs it up, restores it onto a <strong>second home directory with a
+different path</strong>, and asserts on what came out. This is the one feature where a typecheck proves
+nothing, because the whole point is that the first machine can be thrown away afterwards.</p>
 <h2 id="coli-demo"><code>coli demo</code><a class="headerlink" href="#coli-demo" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code>coli<span class="w"> </span>demo
 </code></pre></div>

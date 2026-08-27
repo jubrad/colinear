@@ -594,6 +594,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-worktree-that-went-missing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A worktree that went missing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#manual-dispatch-a-worktree-no-agent" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1330,6 +1341,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-worktree-that-went-missing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A worktree that went missing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#manual-dispatch-a-worktree-no-agent" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1382,7 +1404,7 @@
 <h1 id="how-dispatch-works">How dispatch works<a class="headerlink" href="#how-dispatch-works" title="Permanent link">&para;</a></h1>
 <p>Dispatching (<code>enter</code>, or <code>c</code> for the custom modal) immediately self-assigns the issue and moves it to In Progress. Issues with unresolved <strong>blocking relations</strong> park as ⛓ blocked in the Queued column and start automatically when their blockers complete — rechecked every minute and whenever a colinear task finishes; <code>f</code> force-starts one, converting its blockers into merge-order dependencies that hold the PR in draft instead. Then per issue:</p>
 <ol>
-<li><strong>Worktree</strong> off <code>&lt;remote&gt;/&lt;defaultBranch&gt;</code> under the repo's <code>worktreeRoot</code>. If the task has a pinned or open PR, the worktree checks out <strong>that PR's branch</strong> instead, and an existing worktree already holding the branch is reused.</li>
+<li><strong>Worktree</strong> off <code>&lt;remote&gt;/&lt;defaultBranch&gt;</code> under the repo's <code>worktreeRoot</code>. If the task has a pinned or open PR, the worktree checks out <strong>that PR's branch</strong> instead, and an existing worktree already holding the branch is reused. A checkout that has been <strong>deleted</strong> since — by you, by <code>rm -rf</code>, by a disk cleanup — is <a href="#a-worktree-that-went-missing">rebuilt</a>.</li>
 <li><strong>Triage pass</strong> (read-only): picks the <strong>repo</strong> the work belongs in (from the allowlist descriptions), a JSON verdict <code>do</code> / <code>too_big</code> / <code>needs_info</code>, and a <strong>verification tier</strong> — <code>local-light</code> (lints + unit tests), <code>ci</code> (agent confirms the CI config covers the change, then pushes the draft PR early and lets GitHub carry the heavy suites), or <code>needs-env</code> (contended local envs: verify what's possible, list the rest in the PR body). <code>too_big</code> / <code>needs_info</code> land in <strong>Needs Input</strong> for you to decide. For <code>too_big</code> the agent also returns a <strong>split plan</strong> — single-repo sub-issues with dependencies; entering the task lands in plan review: <code>space</code> to drop items, <code>A</code> to create them as sub-issues (with <code>blocks</code> relations), <code>D</code> to create <strong>and</strong> dispatch (later, <code>u</code> on the parent card dispatches its sub-issues via a picker). <code>c</code> posts the breakdown to the tracker as a comment instead; <code>r</code> requeues once you've acted. <code>D</code> at dispatch time (or the modal's triage field) skips triage entirely; re-dispatch keeps a successful triage plan unless you ask for a redo.</li>
 <li><strong>Work pass</strong>: every session opens with a full task-context block (issue + description, parent, repo/remotes, all PRs with pin markers, triage plan, your instructions, merge-order dependencies). Existing PRs are <strong>adopted</strong> — the agent reviews their diff and pushes to their branch, never duplicates. A subtask checklist file drives the card's progress bar; lints and tests per the verification tier; subagent diff review; push to the repo's <code>pushRemote</code> (your fork, if configured); draft PR against <code>prBase</code> of the upstream via <code>gh pr create --draft</code>. Agents may stack PRs (chained by base branch, rendered as a stack). <strong>Agents never mark PRs ready</strong> — that's your <code>d</code>.</li>
 <li><strong>Checks</strong> from the repo config, then PR polling: state, CI rollup, review decision, mergeability. Matching prefers open/merged PRs over closed duplicates, and <code>m</code> can pin the canonical PR (number, <code>#123</code>, or URL); a failed task that gains a live PR un-fails itself. With <code>ciAutofix</code>, red checks dispatch a fix session that pulls the failing logs and pushes a fix.</li>
@@ -1402,6 +1424,31 @@ never be resurrected by its label. An issue assigned to someone else is never ta
 self-assigns, and that would be theft. Three per sweep across all teams, so bulk-labelling lands as
 a trickle.</p>
 <p>Removing the label stops future dispatch and cancels nothing already running.</p>
+<h2 id="a-worktree-that-went-missing">A worktree that went missing<a class="headerlink" href="#a-worktree-that-went-missing" title="Permanent link">&para;</a></h2>
+<p>Delete a worktree with anything other than <code>git worktree remove</code> and git keeps its <strong>registration</strong>:
+<code>git worktree list</code> still names the path and the branch, and adds <code>prunable</code> at the end. Nothing
+acts on that unless something prunes.</p>
+<p>That stale entry used to be what colinear found when it asked where a branch was checked out, so the
+next <code>r</code> started an agent in a directory that no longer existed — and a deliberate <code>git worktree
+add</code> at the same path is refused outright while the registration stands:</p>
+<div class="highlight"><pre><span></span><code>fatal: '…' is a missing but already registered worktree;
+use 'add -f' to override, or 'prune' or 'remove' to clear
+</code></pre></div>
+<p>The lookup now clears what it finds and cuts the checkout again from the branch, which is untouched
+by any of it. <strong>Every commit comes back. Anything uncommitted does not</strong> — it only ever existed in
+that directory — so the card says so rather than carrying on as if nothing happened:</p>
+<div class="highlight"><pre><span></span><code>the worktree was gone — recreated it from justin/clo-213-… at 4f1c9ab.
+Committed work is back; anything uncommitted was not.
+</code></pre></div>
+<p>The conversation survives too. Claude Code files transcripts against the working <em>directory path</em>,
+not the directory, so once the checkout is back at the same path <code>r</code> resumes the same session — the
+agent picks up where it left off, and the line above is its warning that some of what it remembers
+doing is no longer on disk.</p>
+<p>Until you press <code>r</code>, the other doors say the same thing rather than misbehaving: <code>s</code> and <code>S</code> refuse
+with "its worktree is gone", and <a href="../views/diff/"><code>:diff</code></a> says so instead of reporting an empty
+diff — which would have read as "this branch changed nothing".</p>
+<p>A <code>git worktree lock</code>ed checkout is left alone even when its directory is missing, because prune
+leaves it alone and colinear should not second-guess a lock.</p>
 <h2 id="manual-dispatch-a-worktree-no-agent">Manual dispatch — a worktree, no agent<a class="headerlink" href="#manual-dispatch-a-worktree-no-agent" title="Permanent link">&para;</a></h2>
 <p>The custom modal's <strong>start</strong> field has a second setting: <code>manual — worktree only</code>. The issue is
 assigned and moved to In Progress and the worktree is cut off <code>&lt;remote&gt;/&lt;defaultBranch&gt;</code> exactly as

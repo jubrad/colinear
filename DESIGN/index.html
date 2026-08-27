@@ -1945,6 +1945,15 @@ soon as something is yielded, long before the agent acts on it, so a pushed mess
 <code>inFlight</code>, clears it on each <code>result</code>, and hands anything still open back to the task when the
 session ends. The bias is towards repeating a message rather than losing one.</p>
 <p>Sessions are Claude Code sessions keyed by worktree cwd (<code>~/.claude/projects/&lt;encoded-cwd&gt;/&lt;session-id&gt;.jsonl</code>). colinear stores only the session id + worktree; interactive attach (<code>claude --resume</code>) and headless resume share the same transcript.</p>
+<p><strong>A stored worktree path is a claim, not a fact.</strong> A checkout can be removed by anything — you, an
+agent, a disk sweep, a recycled host — and git keeps the <em>registration</em> when it goes: the porcelain
+still names the path and the branch and marks it <code>prunable</code>. Reading that list without pruning
+answers "where is this branch?" with a directory that is not there, which is how a resume once
+started an agent in nothing. <code>core/worktrees.ts</code> owns the lookup: prune first, skip <code>prunable</code> and
+<code>locked</code>, check the directory anyway, and report what was cleared. Anything that takes <code>task.worktree</code>
+on faith gets the same treatment — <code>existsSync</code> before spawning into it, and a message rather than a
+mystery. The recovery is real but partial, and saying which half is missing is part of the fix:
+commits and the transcript come back, uncommitted work does not.</p>
 <h2 id="pr-review">PR review<a class="headerlink" href="#pr-review" title="Permanent link">&para;</a></h2>
 <p>A second entity beside tasks, with the same CDC contract (<code>review-*</code> deltas, keyed
 <code>owner/repo#number</code>). <code>gh</code> search finds PRs awaiting my review every 5 minutes; <code>r</code> checks the
