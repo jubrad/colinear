@@ -87,6 +87,23 @@ src/core/
                      checkouts of stale reviews, and directories no task claims (repo
                      re-routes leave those). Refuses to classify anything as an orphan
                      when no tasks loaded — empty state is indistinguishable from live work
+  backup.ts          `coli backup` / `coli restore`: one archive per machine. Worktrees are
+                     recorded as (git bundle of un-upstreamed commits, patch of the dirty
+                     tree, tar of untracked) rather than copied — a copied worktree is inert
+                     (.git is a pointer file) and git's own ignore rules drop target/ and
+                     friends for free. Restore rewrites every absolute path when home moves:
+                     config, state, plans, the *encoding* of transcript directory names, and
+                     the transcripts' own contents (every record carries the cwd it happened
+                     in, plus the files tools touched) — by extension, never by sniffing
+  backup.check.ts    the round trip as a gate: a whole fake installation moved between two
+                     home directories, asserting on what came out (bin/check runs it)
+  worktrees.ts       what git thinks is checked out vs what is there. A worktree removed by
+                     anything but `git worktree remove` stays *registered* (`prunable` in
+                     the porcelain), and that stale entry was what the branch lookup
+                     answered with — so a resume started an agent in a deleted directory.
+                     The lookup prunes, skips prunable/locked, and reports what was lost
+  worktrees.check.ts clobber a checkout and prove it comes back: branch, HEAD and committed
+                     work restored, uncommitted honestly not (bin/check runs it)
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
                      read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
                      approve() creates Linear sub-issues; snapshot/restore for persistence

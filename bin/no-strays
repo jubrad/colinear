@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Nothing in this repository that has no business being in a source tree.
+#
+#   bin/no-strays
+#
+# This exists because of an actual incident: a probe wrote its output to
+# "${SOME_DIR}/tmp/thing.tar.gz" with the variable unset, so the file landed at
+# ./undefined/tmp/thing.tar.gz inside the checkout; a `git add -A` swept it up,
+# and a 19MB archive of a real colinear installation — session transcripts and
+# git bundles of unpushed work — was pushed to a public repository.
+#
+# Two layers stop that now. .gitignore keeps the usual shapes out of `add -A`
+# in the first place; this script is the one that still fails if something gets
+# past it (`git add -f`, a pattern nobody thought of, a rename). It only looks
+# at *tracked* files, because untracked ones are not the thing that ships.
+#
+# bin/lint runs it, so it runs before every commit and in CI.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+
+# The largest thing legitimately in here is a ~130KB screenshot. A limit of
+# 512KB leaves room for another one without leaving room for a backup.
+max_bytes=$((512 * 1024))
+fail=0
+
+note() {
+  printf '  %s\n' "$1"
+  fail=1
+}
+
+while IFS= read -r -d '' file; do
+  # a path segment that is literally the string an unset variable expands to:
+  # the exact shape of the incident above, and it never means anything good
+  case "/$file/" in
+    */undefined/* | */null/* | */NaN/*)
+      note "unexpanded variable in a path: $file"
+      continue
+      ;;
+  esac
+  case "$file" in
+    *'$'* | *'{'*)
+      note "unexpanded variable in a path: $file"
+      continue
+      ;;
+  esac
+  # archives and databases: colinear writes all of these, none belong in git
+  case "$file" in
+    *.tar | *.tar.gz | *.tgz | *.zip | *.bundle | *.db | *.sqlite | *.sqlite3 | *.jsonl)
+      note "archive or dump committed: $file"
+      continue
+      ;;
+  esac
+  size=$(wc -c <"$file" | tr -d ' ')
+  if [ "$size" -gt "$max_bytes" ]; then
+    note "$((size / 1024))KB is over the ${max_bytes_kb:-512}KB limit: $file"
+  fi
+done < <(git ls-files -z)
+
+if [ "$fail" -ne 0 ]; then
+  cat >&2 <<'EOF'
+
+Those are tracked, which means they are one push from being public.
+
+If a file is genuinely meant to be here, raise the limit or add the pattern in
+bin/no-strays deliberately. If it is not — and a backup archive, a database or
+anything under undefined/ never is — remove it from the index before
+committing:
+
+  git rm --cached <file>
+
+and if it has already been committed, rewrite the commit rather than adding a
+second one on top: the blob stays reachable either way.
+EOF
+  exit 1
+fi
+
+echo 'no strays'

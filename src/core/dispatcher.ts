@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { providerFor } from './provider.js';
+import { recoveryNote, worktreeForBranch } from './worktrees.js';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -903,7 +904,7 @@ export class Dispatcher {
       // would be the one thing in it that touches your machine
       let { worktree, branch } = isDemo(this.cfg)
         ? demoWorktree(issue)
-        : await this.ensureWorktree(issue, taskRepo, knownPr?.headRefName);
+        : await this.ensureWorktree(issue, taskRepo, knownPr?.headRefName, (line) => store.addActivity(id, line));
       store.update(id, { worktree, branch });
 
       let plan: string | undefined;
@@ -952,7 +953,7 @@ export class Dispatcher {
           taskRepo = chosen;
           ({ worktree, branch } = isDemo(this.cfg)
             ? demoWorktree(issue)
-            : await this.ensureWorktree(issue, chosen));
+            : await this.ensureWorktree(issue, chosen, undefined, (line) => store.addActivity(id, line)));
           store.update(id, {
             worktree,
             branch,
@@ -1210,7 +1211,7 @@ export class Dispatcher {
       store.addActivity(id, 'creating worktree');
       const { worktree, branch } = isDemo(this.cfg)
         ? demoWorktree(task.issue)
-        : await this.ensureWorktree(task.issue, repo);
+        : await this.ensureWorktree(task.issue, repo, undefined, (line) => store.addActivity(id, line));
       store.update(id, { status: 'working', worktree, branch, startedAt: Date.now() });
       store.addActivity(id, `worktree ready at ${worktree} — r starts the agent`);
     } catch (err) {
@@ -1224,13 +1225,23 @@ export class Dispatcher {
     repoCfg: { path: string; defaultBranch: string; remote?: string; pushRemote?: string; worktreeRoot: string },
     /** adopt an existing PR: check out its head branch instead of a fresh one */
     branchOverride?: string,
+    /** somewhere to say what had to be repaired on the way */
+    note: (line: string) => void = () => {},
   ): Promise<{ worktree: string; branch: string }> {
     const { path: repo, defaultBranch, worktreeRoot } = repoCfg;
     const remote = repoCfg.remote ?? 'origin';
     const branch = branchOverride ?? providerFor(this.cfg).branchFor(issue);
     // git allows one checkout per branch: if some worktree (old path scheme,
-    // manual checkout, attach shell) already has it, reuse that worktree
-    const existing = await this.worktreeForBranch(repo, branch);
+    // manual checkout, attach shell) already has it, reuse that worktree.
+    // A checkout that has been deleted out from under us is *still listed* —
+    // and was still returned here, which is how a resume ended up starting an
+    // agent in a directory that no longer existed. The lookup clears those.
+    const found = await worktreeForBranch(repo, branch);
+    for (const gone of found.cleared) {
+      if (gone !== found.lost?.path) note(`cleared a stale worktree registration for ${gone}`);
+    }
+    if (found.lost) note(recoveryNote(branch, found.lost.head));
+    const existing = found.path;
     if (existing && existing !== repo) {
       await this.excludeSubtasksFile(existing);
       return { worktree: existing, branch };
@@ -1275,17 +1286,6 @@ export class Dispatcher {
     return { worktree, branch };
   }
 
-  /** Path of the worktree that has `branch` checked out, if any. */
-  private async worktreeForBranch(repo: string, branch: string): Promise<string | undefined> {
-    const { stdout } = await exec('git', ['-C', repo, 'worktree', 'list', '--porcelain']).catch(() => ({ stdout: '' }));
-    for (const block of stdout.split('\n\n')) {
-      if (block.includes(`\nbranch refs/heads/${branch}`)) {
-        return block.match(/^worktree (.+)$/m)?.[1];
-      }
-    }
-    return undefined;
-  }
-
   /** Keep the subtask scratch file out of git via the per-worktree exclude file. */
   /**
    * Keep colinear's own scratch files out of git, per worktree. Both of them:
@@ -1295,7 +1295,13 @@ export class Dispatcher {
    */
   private async excludeSubtasksFile(worktree: string) {
     try {
-      const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', '--absolute-git-dir']);
+      // the COMMON git dir, not this worktree's. `info/exclude` is only ever
+      // read from the shared one — writing it under
+      // `.git/worktrees/<name>/info/` looks right, is what
+      // `--absolute-git-dir` hands you in a linked worktree, and is silently
+      // ignored, which left both scratch files showing up in every agent's
+      // `git status` (and one `git add -A` away from being committed).
+      const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', '--path-format=absolute', '--git-common-dir']);
       const excludePath = join(stdout.trim(), 'info', 'exclude');
       mkdirSync(dirname(excludePath), { recursive: true });
       const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : '';

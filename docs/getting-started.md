@@ -15,9 +15,15 @@ macOS is the tested platform. Node 20 or newer.
 
 ```bash
 git clone https://github.com/jubrad/colinear && cd colinear
-npm install
-npm link          # puts `coli` (and `colinear`) on PATH, building dist first
+npm install       # installs dependencies, then builds dist
+npm link          # puts `coli` (and `colinear`) on PATH
 ```
+
+`dist/` is not in the repository, and the `coli` on your PATH is a symlink straight into it, so the
+build has to happen before the link is worth anything. That is what the `prepare` script is for: npm
+runs it on `npm install` and again on `npm link`, so neither step can leave you with a `coli` that
+points at a file which was never built. If you skip `npm install` — a `git pull` onto an existing
+clone, say — run `npm run build` yourself; the linked `coli` runs `dist`, not `src`.
 
 ## Configure
 
