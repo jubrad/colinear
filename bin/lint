@@ -14,6 +14,10 @@ echo '── typecheck'
 npx tsc --noEmit
 
 echo
+echo '── no strays'
+bin/no-strays
+
+echo
 # --no-site: the registry checks, without needing a python toolchain to build
 # the site. The docs workflow does the full build, where a broken internal
 # link fails mkdocs --strict.

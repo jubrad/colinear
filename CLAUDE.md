@@ -39,6 +39,7 @@ Screenshots (`docs/images/`) are captured from `coli demo` in a real pty — [tt
 - Trust `npx tsc --noEmit`, not editor diagnostics (chronically stale in this repo).
 - Always `npm run build` after changes so `coli` picks them up; typecheck + build before committing; push to origin main after committing.
 - Runtime debugging: `~/.local/state/colinear/colinear.log` (includes diverted stderr — React warnings land there).
+- **Never `git add -A` without reading what it staged, and never interpolate a variable into an output path without a fallback.** An unset `${DIR}` expands to nothing, so `${DIR}/tmp/x.tar.gz` writes `./undefined/tmp/x.tar.gz` *inside the checkout* — that is how a 19MB archive of a real installation (transcripts, git bundles of unpushed work) reached a public repo. `.gitignore` now covers the usual shapes and `bin/no-strays` (run by `bin/lint`) fails on tracked archives, databases, anything over 512KB, and any path containing `undefined`/`null`/`$`. Write scratch files to an absolute temp dir, never a relative one.
 - Never set `ANTHROPIC_API_KEY` — agents bill the Claude subscription via the logged-in CLI.
 - Edits go in a `Popup` over the view they came from (ui/Popup.tsx: it must render *last*, and it needs an explicit height); full screen is only for whole surfaces like the config editor and the review split. See DESIGN.md.
 - Rendering invariants (see DESIGN.md "Rendering gotchas"): root renders rows-1 with overflow hidden; stable identities from useTasks; DEC-2026 frame wrapping; no ambiguous-width glyphs in chrome.
