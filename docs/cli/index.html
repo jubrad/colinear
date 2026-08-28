@@ -673,6 +673,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#it-is-encrypted-and-that-is-not-optional-by-accident" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        It is encrypted, and that is not optional by accident
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#why-worktrees-are-recorded-rather-than-copied" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1425,6 +1436,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#it-is-encrypted-and-that-is-not-optional-by-accident" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        It is encrypted, and that is not optional by accident
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#why-worktrees-are-recorded-rather-than-copied" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1568,7 +1590,7 @@
 </tr>
 <tr>
 <td><code>coli backup [--out FILE]</code></td>
-<td>one archive holding conversations, work in progress, state and config — <a href="#coli-backup-and-coli-restore">below</a></td>
+<td>one encrypted archive holding conversations, work in progress, state and config — <a href="#coli-backup-and-coli-restore">below</a></td>
 </tr>
 <tr>
 <td><code>coli restore FILE</code></td>
@@ -1592,10 +1614,10 @@ written into the file.</p>
 <h2 id="coli-backup-and-coli-restore"><code>coli backup</code> and <code>coli restore</code><a class="headerlink" href="#coli-backup-and-coli-restore" title="Permanent link">&para;</a></h2>
 <p>A new computer. One archive, and everything colinear knows how to do for you carries over.</p>
 <div class="highlight"><pre><span></span><code>coli<span class="w"> </span>daemon<span class="w"> </span>stop<span class="w">                 </span><span class="c1"># its state file is written every few seconds</span>
-coli<span class="w"> </span>backup<span class="w">                      </span><span class="c1"># → coli-backup-&lt;host&gt;-&lt;date&gt;.tar.gz</span>
+coli<span class="w"> </span>backup<span class="w">                      </span><span class="c1"># asks for a passphrase → coli-backup-&lt;host&gt;-&lt;date&gt;.tar.gz.enc</span>
 <span class="c1"># … on the other machine, same colinear version, same OS …</span>
-coli<span class="w"> </span>restore<span class="w"> </span>coli-backup-…tar.gz<span class="w"> </span>--dry-run
-coli<span class="w"> </span>restore<span class="w"> </span>coli-backup-…tar.gz
+coli<span class="w"> </span>restore<span class="w"> </span>coli-backup-….tar.gz.enc<span class="w"> </span>--dry-run
+coli<span class="w"> </span>restore<span class="w"> </span>coli-backup-….tar.gz.enc
 </code></pre></div>
 <h3 id="what-is-in-it">What is in it<a class="headerlink" href="#what-is-in-it" title="Permanent link">&para;</a></h3>
 <p>Four things, in order of how hard they are to get back:</p>
@@ -1610,6 +1632,28 @@ coli<span class="w"> </span>restore<span class="w"> </span>coli-backup-…tar.gz
 <p>Not the repositories. A monorepo clone dwarfs all of the above and is one command to recreate; the
 manifest records each repo's remote URL, so restore either tells you the exact <code>git clone</code> to run
 or runs it for you with <code>--clone</code>.</p>
+<h3 id="it-is-encrypted-and-that-is-not-optional-by-accident">It is encrypted, and that is not optional by accident<a class="headerlink" href="#it-is-encrypted-and-that-is-not-optional-by-accident" title="Permanent link">&para;</a></h3>
+<p>This archive is the most concentrated secret colinear can produce: every context's config, tracker
+API key included, the transcript of every conversation an agent has had, and git bundles of commits
+nobody has pushed. It is also, by design, a file you carry somewhere else. So it is encrypted by
+default, and the plaintext path is the one you have to ask for.</p>
+<p><code>coli backup</code> asks for a passphrase and confirms it. The archive is encrypted with a fresh random
+256-bit key; the passphrase only wraps <em>that</em> key, through scrypt, and the wrapped key rides in the
+archive's header. So the bulk cipher gets real entropy rather than whatever you typed, and one file
+is all you move.</p>
+<p><strong>The passphrase is stored nowhere</strong> — not in the archive, not on the machine that wrote it. Lose it
+and the backup is gone, for you and for everyone else. Put it in your password manager when you make
+the backup, not later.</p>
+<p>For anything without a terminal — a scheduled backup, CI — the passphrase comes from
+<code>--passphrase-file FILE</code> (first line) or <code>COLINEAR_BACKUP_PASSPHRASE</code>. Both work on <code>coli restore</code>
+too, and restore prompts when it has a terminal and the archive needs one.</p>
+<div class="highlight"><pre><span></span><code>coli<span class="w"> </span>backup<span class="w"> </span>--passphrase-file<span class="w"> </span>~/.config/colinear/backup.key<span class="w">   </span><span class="c1"># unattended</span>
+coli<span class="w"> </span>backup<span class="w"> </span>--no-encrypt<span class="w">                                      </span><span class="c1"># warns, then writes it in the clear</span>
+</code></pre></div>
+<p>An encrypted archive is authenticated as well as encrypted: a truncated or edited one fails with
+<code>archive failed its integrity check</code> rather than unpacking into something subtly wrong, and a
+passphrase that does not fit says <code>wrong passphrase</code> instead. <code>coli restore --list</code> needs the
+passphrase for the same reason everything else does — the manifest is inside.</p>
 <h3 id="why-worktrees-are-recorded-rather-than-copied">Why worktrees are recorded rather than copied<a class="headerlink" href="#why-worktrees-are-recorded-rather-than-copied" title="Permanent link">&para;</a></h3>
 <p>A worktree is not a self-contained directory — its <code>.git</code> is a <em>file</em> pointing into the parent
 repository, so a copied one is inert on the far side. Recording (bundle, patch, untracked) instead

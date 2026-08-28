@@ -526,6 +526,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Credentials">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backups
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1449,6 +1466,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Credentials">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#backups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backups
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1626,6 +1660,17 @@ matters.</p>
 </tbody>
 </table>
 <p><code>coli init</code> prefers the environment variable and won't write a key it found there into the file. If you do put it in the config, that file is plain JSON in your home directory — protect it accordingly.</p>
+<h3 id="backups">Backups<a class="headerlink" href="#backups" title="Permanent link">&para;</a></h3>
+<p><code>coli backup</code> collects all of the above into one file: every context's config with its API key, every
+conversation an agent has had, and git bundles of unpushed commits. That file exists to be carried
+somewhere else, which is exactly what makes it the riskiest artefact colinear writes.</p>
+<p>So it is <strong>encrypted by default</strong> with AES-256-GCM under a fresh random key, and that key is wrapped
+with scrypt over a passphrase you supply. Only the wrapped key travels, in the archive header; the
+passphrase is never written anywhere, so a lost passphrase is a lost backup. <code>--no-encrypt</code> exists
+and says loudly what it is doing.</p>
+<p>The archive is authenticated, so tampering is detected rather than silently restored, and the
+plaintext tar is built in a temporary directory that is removed before the command returns — it
+never exists at the path you are writing to.</p>
 <h2 id="what-leaves-your-machine">What leaves your machine<a class="headerlink" href="#what-leaves-your-machine" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>To Anthropic</strong>: issue titles, descriptions, your instructions and guidance, repo contents the agent reads, and diffs — the same as running <code>claude</code> yourself in that repo.</li>
