@@ -383,6 +383,12 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
   two-question set with descriptions survives the round trip.
 - **An empty `<Text>` has no height**, so blank lines vanish and markdown paragraphs run
   together — render `' '` for them.
+- **Under height pressure yoga pays by squeezing a `<Text>` to nothing.** Text nodes take the
+  default `flexShrink: 1`, so in a fixed-height box whose children overflow, the *label* is what
+  disappears while the oversized content stays. The transposed board lost the status name off
+  every row that didn't fit and kept the cards. Anything inside a height-constrained box that
+  must survive needs `flexShrink={0}` — which is also why windowing beats clipping: Ink overflows
+  rather than clips, so content that doesn't fit has to not be rendered at all.
 - **Edits are popups; whole surfaces are full screen.** Anything that edits a thing — the task
   form, custom dispatch, the answer form, the sub-issue picker, messaging an agent — floats over
   the view it was opened from via `Popup`, because the context you are editing against is worth

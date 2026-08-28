@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { STATE_DIR, log } from './log.js';
 import { store } from './store.js';
-import type { Config, ProjectPlan, Review, Task, TaskStatus } from './types.js';
+import type { Config, ProjectPlan, Review, Task, TaskStatus, UiState } from './types.js';
 
 const STATE_FILE = join(STATE_DIR, 'state.json');
 const LIVE_STATUSES: TaskStatus[] = ['queued', 'triage', 'working', 'checks', 'needs_input'];
@@ -10,11 +10,6 @@ const LIVE_STATUSES: TaskStatus[] = ['queued', 'triage', 'working', 'checks', 'n
 type PersistedTask = Omit<Task, 'question'>;
 type PersistedReview = Omit<Review, 'question'>;
 type PersistedPlan = Omit<ProjectPlan, 'question'>;
-
-export interface UiState {
-  /** last picker team: 'mine', '*', or a team key */
-  team?: string;
-}
 
 interface PersistedState {
   version: number;

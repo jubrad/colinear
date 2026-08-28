@@ -71,6 +71,25 @@ export interface WorkflowState {
   position: number;
 }
 
+/**
+ * Board layout: statuses down the screen as columns (the default), or across
+ * it as rows with the cards flowing sideways. Rows trade a card's neighbours
+ * for its siblings — a wide terminal fits more of a busy status that way.
+ */
+export type BoardLayout = 'columns' | 'rows';
+
+/**
+ * Operator preferences that outlive a run. The daemon owns the file, so a
+ * view sets these through the connection rather than writing them locally —
+ * a TUI-side write goes to a copy nothing serializes.
+ */
+export interface UiState {
+  /** last picker team: 'mine', '*', or a team key */
+  team?: string;
+  /** how :board arranges its statuses */
+  boardLayout?: BoardLayout;
+}
+
 export type TaskStatus =
   | 'queued'
   | 'triage'

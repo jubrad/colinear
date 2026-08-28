@@ -354,6 +354,8 @@ async function runTui(): Promise<void> {
         onChannels={conn.onChannels}
         onChannelHistory={conn.onChannelHistory}
         onNotify={conn.onNotify}
+        ui={conn.ui}
+        setUi={conn.setUi}
       />,
       { patchConsole: true },
     );

@@ -7,7 +7,7 @@ import { isDemo, seedDemoBoard, seedDemoIssues } from './core/demo.js';
 import { Dispatcher } from './core/dispatcher.js';
 import { STATE_DIR, log } from './core/log.js';
 import { onNotifyForward } from './core/notify.js';
-import { loadState, startPersistence } from './core/persist.js';
+import { getUiState, loadState, setUiState, startPersistence } from './core/persist.js';
 import { startPrPolling } from './core/prs.js';
 import { Reviewer } from './core/reviewer.js';
 import { PlanManager } from './core/projectplan.js';
@@ -152,6 +152,11 @@ export async function runDaemon(): Promise<void> {
         break;
       case 'pollPrs':
         if (!isDemo(cfg)) void dispatcher.pollPrs();
+        break;
+      // no broadcast: this is one operator's preference, and the 10s
+      // persistence heartbeat is what puts it on disk
+      case 'setUi':
+        setUiState(cmd.patch);
         break;
       case 'setViewer':
         dispatcher.setViewer(cmd.viewer);
@@ -419,7 +424,7 @@ export async function runDaemon(): Promise<void> {
     clients.add(socket);
     socket.setNoDelay(true);
     socket.write(
-      encode({ t: 'hello', protocol: PROTOCOL_VERSION, pid: process.pid, cfg, snapshot: store.snapshot() }),
+      encode({ t: 'hello', protocol: PROTOCOL_VERSION, pid: process.pid, cfg, snapshot: store.snapshot(), ui: getUiState() }),
     );
     const decode = createDecoder<ClientMsg>((msg) => {
       if (msg.t === 'cmd') run(msg.cmd, (out) => socket.write(encode(out)));

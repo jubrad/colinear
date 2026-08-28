@@ -69,7 +69,8 @@ src/core/
                      head/title, ranked OPEN > MERGED > CLOSED; stack chaining by baseRef; status
                      transitions (incl. un-failing error tasks that gain a live PR); CI babysitter
   statesync.ts       Linear state moves (dispatch→started, first PR→In Review), per-team state cache
-  persist.ts         state.json v2: tasks (minus live question fn) + planner snapshots + UI prefs;
+  persist.ts         state.json v3: tasks (minus live question fn) + planner snapshots + UI prefs
+                     the daemon owns; a view sets one over the socket (setUi), never locally;
                      debounced on store change + 10s heartbeat + flush on exit; atomic tmp+rename;
                      live statuses restore as `interrupted`
   guidance.ts        guidanceFor(scope): the general block plus whatever is scoped to this
@@ -127,6 +128,9 @@ src/views/           registry.ts maps names/aliases → components + hotkey help
                      taskLens.ts is the other half of that: status words, CI text, the fuzzy
                      matcher and the sort comparator, so a query or a sort key means the same
                      thing in both views rather than being reimplemented per view.
+                     BoardView draws one grid two ways — statuses as columns, or `t` to transpose
+                     them into full-width rows — off the same cursor; windowColumn windows cards
+                     down a column, windowLane windows cards across a row.
                      ChannelView tails a coordination channel (experimental)
 src/doctor.ts        npm run doctor — env sanity CLI
 ```

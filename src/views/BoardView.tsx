@@ -3,7 +3,7 @@ import { CommandBar, type Candidate } from '../ui/CommandBar.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
-import { questionSummary, type Task, type TaskStatus } from '../core/types.js';
+import { questionSummary, type BoardLayout, type Task, type TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
 import { blink, formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
@@ -28,6 +28,17 @@ const COLUMNS: BoardColumn[] = [
 ];
 
 const ACTIVE_STATUSES: TaskStatus[] = ['triage', 'working', 'checks'];
+
+/**
+ * Narrowest a card may be in the rows layout. A lane divides the width into
+ * whole cards of one size — ragged widths would make the horizontal window
+ * depend on which cards happen to be on screen — so this sets how many fit,
+ * and the remainder is shared back out.
+ */
+const LANE_CARD_MIN = 26;
+
+/** Fixed rows the task detail pane gets under either layout. */
+const DETAIL_ROWS = 15;
 
 /**
  * What a task's PR is waiting on, in the order it wants your attention:
@@ -83,6 +94,8 @@ export function BoardView(_props: { param?: string }) {
   const [bar, setBar] = useState<'fuzzy' | 'sort' | null>(null);
   const [sortKey, setSortKey] = useState<string>(BOARD_SORT);
   const actions = useTaskActions();
+  const layout: BoardLayout = ctx.ui.boardLayout ?? 'columns';
+  const rows = layout === 'rows';
 
   // grid[col] = tasks in that board column, in render order
   const grid = useMemo(() => {
@@ -133,11 +146,21 @@ export function BoardView(_props: { param?: string }) {
 
   useInput(
     (input, key) => {
-      // ijkl: i/k walk cards in a column, j/l jump columns (arrows too)
-      if (key.leftArrow || input === 'j') moveCol(-1);
-      if (key.rightArrow || input === 'l') moveCol(1);
-      if (key.upArrow || input === 'i') moveRow(-1);
-      if (key.downArrow || input === 'k') moveRow(1);
+      // ijkl keeps its directions in both layouts; what a direction traverses
+      // is whatever the layout put on that axis. Transposed, sideways walks
+      // the cards in a status and up/down changes status.
+      const across = (dir: 1 | -1) => (rows ? moveRow(dir) : moveCol(dir));
+      const down = (dir: 1 | -1) => (rows ? moveCol(dir) : moveRow(dir));
+      if (key.leftArrow || input === 'j') across(-1);
+      if (key.rightArrow || input === 'l') across(1);
+      if (key.upArrow || input === 'i') down(-1);
+      if (key.downArrow || input === 'k') down(1);
+      if (input === 't') {
+        // persisted through the daemon: the layout you chose is still there
+        // after a restart, and `R` doesn't lose it either
+        ctx.setUi({ boardLayout: rows ? 'columns' : 'rows' });
+        return;
+      }
       if (input === '/') {
         setBar('fuzzy');
         return;
@@ -174,12 +197,35 @@ export function BoardView(_props: { param?: string }) {
   const avail = ctx.size.columns - 6;
   const colWidth = Math.max(16, Math.floor((avail - (COLUMNS.length - 1)) / COLUMNS.length));
 
-  // vertical budget for cards: view inner height (app.tsx sizes the view pane
-  // to rows-6-cmd, minus its own border) less the detail pane and the column
-  // header line. Columns window their cards to this instead of flex-squeezing.
+  // vertical budget: view inner height (app.tsx sizes the view pane to
+  // rows-6-cmd, minus its own border) less the detail pane and the filter/sort
+  // lines. Both layouts window to this instead of flex-squeezing.
   const filtering = Boolean(query) || sortKey !== BOARD_SORT;
   const viewInner = Math.max(8, ctx.size.rows - 6 - (ctx.cmdOpen ? 4 : 0)) - 2;
-  const cardBudget = Math.max(4, viewInner - (selected ? 15 : 0) - 1 - (filtering ? 1 : 0) - (bar ? 1 : 0));
+  const chrome = (selected ? DETAIL_ROWS : 0) + (filtering ? 1 : 0) + (bar ? 1 : 0);
+  // columns reserve one line for the shared column-header row; a lane carries
+  // its own header inside the height it reports
+  const cardBudget = Math.max(4, viewInner - chrome - 1);
+  const laneBudget = Math.max(4, viewInner - chrome);
+
+  // Rows geometry. Cards are one width per lane so the horizontal window is
+  // plain index arithmetic, and a lane is as tall as the tallest card it is
+  // actually showing — an empty status costs its header line and nothing more.
+  const perLane = Math.max(1, Math.floor((avail + 1) / (LANE_CARD_MIN + 1)));
+  const laneCardW = Math.floor((avail - (perLane - 1)) / perLane);
+  const laneWindows = grid.map((lane, i) =>
+    windowLane(lane.length, perLane, i === pos.col ? Math.min(pos.row, Math.max(0, lane.length - 1)) : 0),
+  );
+  const laneHeights = grid.map((lane, i) => {
+    if (!lane.length) return 1;
+    const [from, to] = laneWindows[i];
+    return 1 + Math.max(...lane.slice(from, to).map(cardHeight));
+  });
+  // whole lanes only: a lane's height is whatever its tallest card needs, and
+  // Ink overflows rather than clips (see DESIGN.md), so half a lane would
+  // paint over the pane below it
+  const [laneStart, laneEnd] = windowColumn(laneHeights, laneBudget, pos.col);
+
 
   const shown = grid.reduce((n, col) => n + col.length, 0);
 
@@ -221,6 +267,70 @@ export function BoardView(_props: { param?: string }) {
         />
       )}
       {/* overflow clip keeps tall columns from pushing card headers off-screen */}
+      {rows ? (
+        <Box flexDirection="column" flexGrow={1} overflow="hidden">
+          {laneStart > 0 && (
+            <Text dimColor wrap="truncate">
+              ▲ {laneStart} more above
+            </Text>
+          )}
+          {COLUMNS.slice(laneStart, laneEnd).map((col, i) => {
+            const colIdx = laneStart + i;
+            const laneTasks = grid[colIdx];
+            const color = STATUS_COLORS[col.statuses[0]];
+            const [from, to] = laneWindows[colIdx];
+            // a status with nothing in it is one dim line: it still says the
+            // stage exists (and that it is empty) without spending the height
+            if (!laneTasks.length) {
+              return (
+                <Box key={col.title} flexShrink={0}>
+                  <Text dimColor wrap="truncate">
+                    {col.title}(0)
+                  </Text>
+                </Box>
+              );
+            }
+            return (
+              <Box key={col.title} flexDirection="column" flexShrink={0}>
+                {/* flexShrink=0 on every line in here: under any height
+                    pressure yoga pays for it by squeezing a Text to nothing,
+                    and the first thing to go was the status name itself */}
+                <Box flexShrink={0}>
+                  <Text bold color={color} wrap="truncate">
+                    {col.title}({laneTasks.length})
+                    {prCounts(laneTasks)}
+                    {laneTasks.length > perLane ? (
+                      <Text dimColor>
+                        {' '}
+                        · {from + 1}-{to} of {laneTasks.length}, j/l scrolls
+                      </Text>
+                    ) : null}
+                  </Text>
+                </Box>
+                <Box gap={1} flexShrink={0} overflow="hidden">
+                  {laneTasks.slice(from, to).map((task) => (
+                    // fixed width, own column direction: the card stretches to
+                    // the lane's card width instead of hugging its own text
+                    <Box key={task.issue.id} width={laneCardW} flexDirection="column" flexShrink={0}>
+                      <Card
+                        task={task}
+                        selected={task.issue.id === selected?.issue.id}
+                        color={color}
+                        now={ctx.now}
+                      />
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            );
+          })}
+          {laneEnd < COLUMNS.length && (
+            <Text dimColor wrap="truncate">
+              ▼ {COLUMNS.length - laneEnd} more below — i/k to scroll
+            </Text>
+          )}
+        </Box>
+      ) : (
       <Box gap={1} flexGrow={1} overflow="hidden">
         {COLUMNS.map((col, colIdx) => {
           const colTasks = grid[colIdx];
@@ -263,10 +373,11 @@ export function BoardView(_props: { param?: string }) {
           );
         })}
       </Box>
+      )}
       {selected && (
         // fixed-height pane: however tall the task detail gets, it clips here
         // instead of flex-squeezing the board columns (and their headers) away
-        <Box height={15} flexShrink={0} flexDirection="column" overflow="hidden">
+        <Box height={DETAIL_ROWS} flexShrink={0} flexDirection="column" overflow="hidden">
           <DetailPane task={selected} />
         </Box>
       )}
@@ -482,6 +593,17 @@ function windowColumn(heights: number[], budget: number, selIdx: number): [numbe
 }
 
 /**
+ * Cards to show in one lane of the rows layout: every card is the same width,
+ * so this is index arithmetic rather than a height walk. Scrolls the minimum
+ * that keeps `selIdx` on screen, which leaves an unvisited lane at its start.
+ */
+function windowLane(count: number, fit: number, selIdx: number): [number, number] {
+  if (count <= fit) return [0, count];
+  const start = Math.max(0, Math.min(selIdx - fit + 1, count - fit));
+  return [start, start + fit];
+}
+
+/**
  * Counts per PR state for a column header, coloured — approved / changes /
  * draft / awaiting / closed, in the order they want your attention.
  */
@@ -511,9 +633,13 @@ function progressBar(done: number, total: number, width = 8): string {
   return '▰'.repeat(filled) + '▱'.repeat(width - filled);
 }
 
+// Movement is labelled by direction, not by what it traverses: `t` swaps the
+// axes, and a static key grid can't say "column" in one layout and "card" in
+// the other.
 export const boardKeys: Array<[string, string]> = [
-  ['j/l ←→', 'column'],
-  ['i/k ↑↓', 'card'],
+  ['j/l ←→', 'across'],
+  ['i/k ↑↓', 'down'],
+  ['t', 'transpose'],
   ['/', 'search'],
   [',', 'sort'],
   ...TASK_ACTION_KEYS,
