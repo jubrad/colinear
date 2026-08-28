@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
-import { anchorKey, layoutMargin, parseDiff, toVisualRows, type DiffLine, type VisualRow } from '../core/diff.js';
+import { anchorKey, expandTabs, layoutMargin, parseDiff, toVisualRows, type DiffLine, type VisualRow } from '../core/diff.js';
 import type { ChatTurn, Review, ReviewFinding, Severity } from '../core/types.js';
 import { spinner } from './format.js';
 import { TextArea } from './TextArea.js';
@@ -658,7 +658,9 @@ function Chat(props: { turns: ChatTurn[]; rows: number; busy: boolean }) {
 /** Word wrap for the annotation pane; the comment is prose and must stay readable. */
 function wrapText(text: string, width: number): string[] {
   const out: string[] = [];
-  for (const paragraph of text.split('\n')) {
+  // an agent's comment quotes code, so it carries tabs too — and a tab here
+  // overflows this pane the same way it overflowed the diff's
+  for (const paragraph of expandTabs(text).split('\n')) {
     if (!paragraph.trim()) {
       out.push('');
       continue;

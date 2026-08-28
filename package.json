@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "check": "tsx src/core/store.check.ts",
     "check:backup": "tsx src/core/backup.check.ts",
-    "check:worktrees": "tsx src/core/worktrees.check.ts"
+    "check:worktrees": "tsx src/core/worktrees.check.ts",
+    "check:diff": "tsx src/core/diff.check.ts"
   },
   "engines": {
     "node": ">=20"

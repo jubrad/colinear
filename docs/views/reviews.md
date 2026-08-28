@@ -85,6 +85,11 @@ condition's tail live. A wrapped line keeps its line number on the first row onl
 follows: a line that takes three rows pushes the next annotation down by three, so the two stay
 aligned.
 
+**Tabs are drawn as four spaces.** A tab is one character to the layout and up to eight columns to
+the terminal, and on a tab-indented source (Go, Make) that gap wrapped rows at the wrong column,
+cut the deepest-nested lines shortest, and pushed the code over the annotation pane's border. Four
+rather than eight keeps a nested Go function inside a pane it shares with the margin.
+
 Each block opens with **what it is** — `blocking ·`, `nit ·`, `note ·` — in the severity's colour,
 so two findings on adjacent lines read as two findings rather than one run-on. Continuation rows are
 dimmed, which is the other half of the same signal.

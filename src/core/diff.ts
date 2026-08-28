@@ -21,6 +21,35 @@ export interface DiffLine {
   oldLine?: number;
 }
 
+/**
+ * Columns a tab is drawn as.
+ *
+ * Four rather than eight because the diff shares the width with the
+ * annotation pane, and eight pushes tab-indented sources (Go, Make) off the
+ * pane at the nesting depth where the interesting code lives.
+ */
+const TAB_WIDTH = 4;
+
+/**
+ * Tabs → spaces, on the tab stop.
+ *
+ * A tab is one character to `String.length` and to Ink's width measurement,
+ * and up to eight columns to the terminal that finally draws it. Those three
+ * disagreeing is what broke a Go diff: rows were wrapped at the wrong place,
+ * truncated early in proportion to their indent, and still drawn wider than
+ * the pane they were laid out in — so the code overflowed onto the annotation
+ * pane's border and the frame came apart. Expanding here makes one character
+ * one column for everything downstream.
+ */
+export function expandTabs(text: string): string {
+  if (!text.includes('\t')) return text;
+  let out = '';
+  for (const ch of text) {
+    out += ch === '\t' ? ' '.repeat(TAB_WIDTH - (out.length % TAB_WIDTH)) : ch;
+  }
+  return out;
+}
+
 const FILE_HEADER = /^diff --git a\/(.+?) b\/(.+)$/;
 const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/;
 
@@ -57,35 +86,35 @@ export function parseDiff(text: string): DiffLine[] {
       oldLine = Number.parseInt(hunk[1], 10);
       newLine = Number.parseInt(hunk[3], 10);
       inHunk = true;
-      out.push({ kind: 'hunk', text: raw, file });
+      out.push({ kind: 'hunk', text: expandTabs(raw), file });
       continue;
     }
     if (!inHunk) {
       // index/mode/similarity lines, and the +++/--- pair
-      if (raw.trim()) out.push({ kind: 'meta', text: raw, file });
+      if (raw.trim()) out.push({ kind: 'meta', text: expandTabs(raw), file });
       continue;
     }
     // "\ No newline at end of file" belongs to the line before it and moves
     // neither counter
     if (raw.startsWith('\\')) {
-      out.push({ kind: 'meta', text: raw, file });
+      out.push({ kind: 'meta', text: expandTabs(raw), file });
       continue;
     }
     const marker = raw[0];
     const body = raw.slice(1);
     if (marker === '+') {
-      out.push({ kind: 'add', text: body, file, newLine });
+      out.push({ kind: 'add', text: expandTabs(body), file, newLine });
       newLine++;
     } else if (marker === '-') {
-      out.push({ kind: 'del', text: body, file, oldLine });
+      out.push({ kind: 'del', text: expandTabs(body), file, oldLine });
       oldLine++;
     } else if (marker === ' ' || raw === '') {
       // a truly empty line in the diff body is an unchanged empty line
-      out.push({ kind: 'context', text: body, file, newLine, oldLine });
+      out.push({ kind: 'context', text: expandTabs(body), file, newLine, oldLine });
       newLine++;
       oldLine++;
     } else {
-      out.push({ kind: 'meta', text: raw, file });
+      out.push({ kind: 'meta', text: expandTabs(raw), file });
     }
   }
   return out;
