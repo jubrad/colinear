@@ -2086,6 +2086,12 @@ every live worktree looks dead.</p>
   was laid out in — taking the review view's frame apart. <code>core/diff.ts</code> expands tabs at parse
   time so a character is a column downstream; <code>diff.check.ts</code> measures in painted columns, because
   an assertion in code units repeats the bug rather than catching it.</li>
+<li><strong>Under height pressure yoga pays by squeezing a <code>&lt;Text&gt;</code> to nothing.</strong> Text nodes take the
+  default <code>flexShrink: 1</code>, so in a fixed-height box whose children overflow, the <em>label</em> is what
+  disappears while the oversized content stays. The transposed board lost the status name off
+  every row that didn't fit and kept the cards. Anything inside a height-constrained box that
+  must survive needs <code>flexShrink={0}</code> — which is also why windowing beats clipping: Ink overflows
+  rather than clips, so content that doesn't fit has to not be rendered at all.</li>
 <li><strong>Edits are popups; whole surfaces are full screen.</strong> Anything that edits a thing — the task
   form, custom dispatch, the answer form, the sub-issue picker, messaging an agent — floats over
   the view it was opened from via <code>Popup</code>, because the context you are editing against is worth
