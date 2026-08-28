@@ -1,0 +1,2268 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A k9s-style terminal UI that runs Claude Code agents against your issue tracker.">
+      
+      
+      
+        <link rel="canonical" href="https://jubrad.github.io/colinear/DESIGN/">
+      
+      
+        <link rel="prev" href="../docs/views/help/">
+      
+      
+        <link rel="next" href="../COORDINATION/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Architecture - colinear</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CJetBrains+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"JetBrains Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+   <link href="../assets/stylesheets/glightbox.min.css" rel="stylesheet"/><style>
+    html.glightbox-open { overflow: initial; height: 100%; }
+    .gslide-title { margin-top: 0px; user-select: text; }
+    .gslide-desc { color: #666; user-select: text; }
+    .gslide-image img { background: white; }
+    .gscrollbar-fixer { padding-right: 15px; }
+    .gdesc-inner { font-size: 0.75rem; }
+    body[data-md-color-scheme="slate"] .gdesc-inner { background: var(--md-default-bg-color);}
+    body[data-md-color-scheme="slate"] .gslide-title { color: var(--md-default-fg-color);}
+    body[data-md-color-scheme="slate"] .gslide-desc { color: var(--md-default-fg-color);}</style> <script src="../assets/javascripts/glightbox.min.js"></script></head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#colinear-design-notes" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="colinear" class="md-header__button md-logo" aria-label="colinear" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            colinear
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Architecture
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="black" data-md-color-accent="deep-orange"  aria-label="Dark"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Dark" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="deep-orange"  aria-label="Light"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Light" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/jubrad/colinear" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jubrad/colinear
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="colinear" class="md-nav__button md-logo" aria-label="colinear" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    colinear
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/jubrad/colinear" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    jubrad/colinear
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Start here
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Start here
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Demo mode
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/security/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Security & blast radius
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docs index
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/dispatch/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How dispatch works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/remote/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Remote daemon
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/docker/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Docker
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Views
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Views
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/issues/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :issues
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/board/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :board
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/tasks/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :tasks
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/task/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :task
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/reviews/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :reviews
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/projects/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :projects
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/plan/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :plan
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/costs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :costs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/gc/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :gc
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/logs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :logs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/chan/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :chan
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../docs/views/help/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :help
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Internals
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Internals
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-is" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it is
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How it works">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-mirror-follows-a-log-not-a-feed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The mirror follows a log, not a feed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clocks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-task-state-machine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The task state machine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experiments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experiments
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contexts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contexts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lifecycle-detours" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle detours
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sessions-and-messages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sessions and messages
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pr-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR review
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-plans" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project plans
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#issue-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue providers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#retention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Retention
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Disk
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prompts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rendering-gotchas-hard-won-do-not-relearn-these" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendering gotchas (hard-won — do not relearn these)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State &amp; files
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-hacks-debt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known hacks / debt
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../COORDINATION/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Coordination channels
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-it-is" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it is
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-it-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How it works
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How it works">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-mirror-follows-a-log-not-a-feed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The mirror follows a log, not a feed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#clocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Clocks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-task-state-machine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The task state machine
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#experiments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Experiments
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contexts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contexts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lifecycle-detours" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle detours
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sessions-and-messages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sessions and messages
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pr-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR review
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-plans" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project plans
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#issue-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue providers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#retention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Retention
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#disk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Disk
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prompts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prompts
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rendering-gotchas-hard-won-do-not-relearn-these" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendering gotchas (hard-won — do not relearn these)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#state-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State &amp; files
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-hacks-debt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known hacks / debt
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="colinear-design-notes">colinear — design notes<a class="headerlink" href="#colinear-design-notes" title="Permanent link">&para;</a></h1>
+<h2 id="what-it-is">What it is<a class="headerlink" href="#what-it-is" title="Permanent link">&para;</a></h2>
+<p>A k9s-style Ink TUI that dispatches Claude Code agents (via <code>@anthropic-ai/claude-agent-sdk</code>) against Linear issues. One git worktree per issue, kanban board of agent progress, draft-PR-only output, human-in-the-loop for questions/escalations/promotion. Runs on Claude subscription auth: the SDK uses the logged-in <code>claude</code> CLI when <code>ANTHROPIC_API_KEY</code> is unset — never set that env var here.</p>
+<p>Stack: TypeScript (strict, NodeNext ESM — all internal imports use <code>.js</code> suffixes), React 18 + Ink 5, no test framework. <code>npm run dev</code> = tsx; <code>npm run build</code> = tsc → <code>dist/</code> (<code>coli</code>/<code>colinear</code> bins via <code>npm link</code> run dist, so <strong>rebuild after changes</strong>).</p>
+<h2 id="how-it-works">How it works<a class="headerlink" href="#how-it-works" title="Permanent link">&para;</a></h2>
+<p>Two processes, one authoritative store, and a mirror that is never allowed to lie. (File-by-file map: <a href="https://github.com/jubrad/colinear/blob/main/CODEMAP.md">CODEMAP.md</a>.)</p>
+<pre class="mermaid-src"><code>flowchart LR
+  subgraph tui["TUI process — coli --tui"]
+    views["views (Ink)"] &lt;--&gt; mirror[("store mirror")]
+  end
+  subgraph daemon["daemon process — coli daemon"]
+    store[("store")] --&gt; disp["dispatcher"]
+    disp --&gt; sessions["agent sessions&lt;br/&gt;(one worktree each)"]
+    store --&gt; disk[("~/.local/state/colinear")]
+    disp &lt;--&gt; tracker["tracker + gh"]
+  end
+  mirror -- "commands, changes" --&gt; store
+  store -- "snapshot, then deltas" --&gt; mirror</code></pre>
+<p>The <strong>daemon</strong> owns everything stateful: the dispatcher, the store, persistence, PR polling and the
+tracker sweeps. Agents therefore outlive the terminal — close it, <code>q</code>, or <code>R</code> onto a new build and
+the work keeps running. <code>coli daemon stop</code> is the only thing that interrupts an agent.</p>
+<p>The <strong>TUI</strong> is a client. It hydrates a mirror of the store and follows changes. <code>coli</code> starts both,
+the daemon only if one isn't already listening on the context's socket.</p>
+<p>The split is deliberately invisible to views:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Reads</strong></td>
+<td>the mirror is a <code>Store</code> with the same API — <code>useTasks()</code> and <code>store.get()</code> don't know</td>
+</tr>
+<tr>
+<td><strong>Writes</strong></td>
+<td><code>store.update()</code> on a mirror <strong>forwards</strong> and applies nothing locally; the authoritative delta comes back</td>
+</tr>
+<tr>
+<td><strong>Callbacks</strong></td>
+<td><code>question.answer</code> can't cross a socket, so the mirror synthesizes one that sends <code>{answer, id, text}</code>; the real closure lives in the daemon</td>
+</tr>
+<tr>
+<td><strong>Decisions</strong></td>
+<td>anything that depends on what re-polling finds (<code>applyEdits</code>, promotion gates) is a dispatcher method, not view logic</td>
+</tr>
+</tbody>
+</table>
+<p>The rule that keeps it honest: <strong>a mirror never mutates itself.</strong> One local write that isn't
+echoed by the daemon and the two copies disagree forever, silently.</p>
+<h3 id="the-mirror-follows-a-log-not-a-feed">The mirror follows a log, not a feed<a class="headerlink" href="#the-mirror-follows-a-log-not-a-feed" title="Permanent link">&para;</a></h3>
+<p>State reaches the client by change data capture. Every mutation stamps a delta with the version it
+produced, so the client can tell "I have everything" from "I missed something" — a distinction a
+plain event feed can't make.</p>
+<pre class="mermaid-src"><code>sequenceDiagram
+  participant V as view
+  participant M as mirror
+  participant D as daemon store
+  V-&gt;&gt;M: store.update(id, patch)
+  M-&gt;&gt;D: change
+  D-&gt;&gt;D: apply · version++ · append to log
+  D--&gt;&gt;M: delta { version: n }
+  alt n == mirror.version + 1
+    M-&gt;&gt;M: apply
+  else gap
+    M-&gt;&gt;D: since(mirror.version)
+    D--&gt;&gt;M: the tail, or a fresh snapshot if it&lt;br/&gt;fell off the 1000-delta log
+  end</code></pre>
+<p><code>npm run check</code> (<code>bin/check</code>) replays a recorded delta stream into a fresh mirror and asserts it
+matches the daemon's store field for field. That replay is the only test in the repo, and it exists
+because divergence here is invisible until someone acts on a stale card.</p>
+<h3 id="clocks">Clocks<a class="headerlink" href="#clocks" title="Permanent link">&para;</a></h3>
+<p>Nothing polls on render. Every recurring read lives in the daemon on a fixed timer:</p>
+<table>
+<thead>
+<tr>
+<th>every</th>
+<th>what runs</th>
+<th>why that number</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2s</td>
+<td>the running task's subtask checklist file</td>
+<td>it drives a progress bar; the agent rewrites it mid-turn</td>
+</tr>
+<tr>
+<td>60s</td>
+<td>PR state, CI rollup, review decision, mergeability</td>
+<td>GitHub's own numbers move on this order; faster mostly buys rate limits</td>
+</tr>
+<tr>
+<td>60s</td>
+<td>blocked recheck, retention sweep, closed-issue sweep, sub-issue rollup</td>
+<td>one tick, four jobs — see <code>recheckBlocked()</code></td>
+</tr>
+<tr>
+<td>5m</td>
+<td><code>gh</code> search for PRs awaiting your review</td>
+<td>a review request is not urgent, and the search is expensive</td>
+</tr>
+</tbody>
+</table>
+<p>Two retries also sit on clocks: a session that dies before starting is requeued once after <strong>5s</strong>,
+and a rate-limited session after <strong>30s</strong>. Both are one-shot — a second failure parks the task rather
+than looping.</p>
+<p>The blocked recheck is also <strong>event-driven</strong>: it runs whenever a task completes or a PR merges, so a
+dependency clearing doesn't wait out the minute.</p>
+<h3 id="the-task-state-machine">The task state machine<a class="headerlink" href="#the-task-state-machine" title="Permanent link">&para;</a></h3>
+<pre class="mermaid-src"><code>stateDiagram-v2
+  [*] --&gt; queued: dispatch
+  queued --&gt; blocked: tracker says blocked
+  blocked --&gt; queued: blockers done · f forces
+  queued --&gt; triage: slot free
+  triage --&gt; working: verdict do
+  triage --&gt; needs_input: too_big · needs_info
+  queued --&gt; working: manual r · skip triage
+  working --&gt; needs_input: agent asks
+  needs_input --&gt; working: you answer · r
+  working --&gt; checks: agent done
+  checks --&gt; pr_open: draft PR
+  checks --&gt; error: checks failed
+  pr_open --&gt; done: merged
+  working --&gt; error: session failed
+  error --&gt; queued: r · a live PR appears
+  working --&gt; interrupted: cancel · quit
+  interrupted --&gt; queued: r
+  done --&gt; [*]: retention, after 30d</code></pre>
+<p>Concurrency is the whole scheduler: <code>pump()</code> starts tasks while <code>running &lt; concurrency</code> and refills
+as each finishes. There is no priority queue — the board's ordering is a view concern.</p>
+<p>Three states sit outside that flow:</p>
+<ul>
+<li><strong><code>tracking</code></strong> — a parent whose work happens in its sub-issues. It never runs a work session; the
+  60s sweep rolls its children up, and <code>M</code> or <code>r</code> starts a <em>coordinator</em> session instead (no
+  worktree, no checks, no PR).</li>
+<li><strong>Manual dispatch</strong> — <code>awaitingStart</code>. The worktree exists and the card sits in Working with
+  nothing running, waiting for you to lay a skeleton down. <code>r</code> hands that same worktree to an agent.</li>
+<li><strong>Maintenance</strong> (<code>fixci</code>, <code>rebase</code>) — runs against an already-open PR. The task keeps its status
+  and shows a blinking dot rather than moving back to Working: the feature isn't being rewritten.</li>
+</ul>
+<h2 id="experiments">Experiments<a class="headerlink" href="#experiments" title="Permanent link">&para;</a></h2>
+<p>Features that work but aren't settled sit behind two flags: <code>experimental</code> (master) and
+<code>experiments.&lt;name&gt;</code>. <code>experimentOn(cfg, name)</code> is the only way to ask; both must be true.
+Two switches rather than one because the master is how you turn everything off at once
+after a bad session, without losing which features you'd chosen. A feature named while the
+master is off, or a name that isn't an experiment, is logged — an experiment that silently
+doesn't run wastes an afternoon.</p>
+<p><code>EXPERIMENTS</code> in types.ts is the registry (name → one-line description); adding a feature
+means adding a key there, gating it with <code>experimentOn</code>, and documenting it in README's
+experiments table. Experimental views stay registered when disabled and explain how to turn
+themselves on — a <code>:chan</code> that says "unknown view" teaches nothing.</p>
+<p>Live experiment: <strong>coordination channels</strong> (COORDINATION.md). Worth knowing structurally:
+the agent tools are an in-process MCP server built per session with the channel and username
+closed over, so identity can't be spoofed by prompt; the message log lives in the state dir
+and is written by the daemon, which is why the TUI polls it and sends operator posts back
+over the socket instead of appending itself.</p>
+<h2 id="contexts">Contexts<a class="headerlink" href="#contexts" title="Permanent link">&para;</a></h2>
+<p>A context is a config file plus a state directory, and because the socket lives in that directory
+it is also a whole separate daemon — two contexts can run at once and neither sees the other's
+tasks. <code>--context work</code> / <code>-c work</code> / <code>COLINEAR_CONTEXT=work</code> select one; the default context keeps
+the historical paths exactly.</p>
+<p>Two constraints shaped the implementation:</p>
+<ul>
+<li><strong>Resolution has to happen before any path is derived.</strong> <code>STATE_DIR</code> and <code>SOCKET_PATH</code> are
+  module-level constants, and ESM evaluates imports before the importing module's body — so
+  parsing argv in index.tsx would be too late. <code>core/context.ts</code> is a leaf module that resolves at
+  its own evaluation time and everything path-shaped imports it.</li>
+<li><strong>Children must inherit it.</strong> Rather than thread a flag through the supervisor's TUI spawn and
+  the client's detached daemon spawn, resolution sets <code>COLINEAR_CONTEXT</code> in <code>process.env</code> when the
+  context isn't default. Every spawn site inherits the environment and stays unaware contexts exist.</li>
+</ul>
+<p>Config layering is one shallow merge of the context file over the base config (<code>{...base, ...ctx}</code>),
+so shared settings are written once and top-level keys replace wholesale — a context that sets
+<code>repos</code> gets exactly those. A named context with no file is a hard error rather than a fallback to
+the default: dispatching agents into the wrong workspace is not a recoverable mistake. So is a
+config file that exists and doesn't parse, which used to fall through to built-in defaults and run
+against <code>~/work/cloud</code> with none of your settings.</p>
+<p>Constraint on the UI side: every view sizes its panes against a <strong>four-row header</strong>
+(<code>ctx.size.rows - 12</code> and friends), so the context indicator rides on the existing Repo row rather
+than taking a fifth.</p>
+<h2 id="lifecycle-detours">Lifecycle detours<a class="headerlink" href="#lifecycle-detours" title="Permanent link">&para;</a></h2>
+<p>The diagram above is the shape. These are the parts that surprise people:
+- <code>blocked</code> (Linear blockers open; rechecked every 60s + on merges/completions). Linear has one
+  kind of "blocks"; colinear has two. A blocker starts as <code>start</code> (parks the task); <code>f</code> converts
+  it to <code>merge</code>, which dispatches the work in parallel but keeps it on the task — the agent's
+  prompt says what it is building ahead of, and <code>d</code> refuses to promote the PR until the blocker
+  lands. Deployment is outside what colinear can see, so <code>D</code> overrides.
+- <code>needs_input</code> (agent AskUserQuestion, or too_big/needs_info triage verdicts — split-plan review lives here)
+- <code>interrupted</code> (restart/suspend/attach; <code>r</code> resumes the SDK session by id)
+- <code>error</code> (failures; auto-unfails if a live PR turns up), <code>escalated</code> (legacy; verdicts now park as needs_input)
+- new sub-issues: the tracking sweep dispatches ones nobody has started when <code>autoDispatchSubs</code>
+  is on for that parent (or globally). <code>autoDispatchable()</code> is the whole rule and is pure —
+  the Linear state, not the absence of a task, is what makes a sub-issue eligible, so a task
+  dropped by retention long after it finished can't be resurrected. Capped per sweep
+- <code>coordinate</code> mode: the coordinator's tools can message and cancel its <em>own</em> sub-issues and
+  propose new ones; creating them stays behind the operator's <code>A</code>, the same review UI a too_big
+  split uses
+- maintenance modes leave the repo's checks to the prompt rather than re-running them here, which
+  would flip the card to <code>checks</code> for no new signal
+- fixci mode: red PR rollup → resume session with failing logs, one attempt per red, re-arms on green
+- rebase mode: PR conflicts with its base → session that rebases and force-with-leases, same
+  one-attempt-per-conflict shape. <code>mergeable: UNKNOWN</code> means GitHub is still computing and never
+  triggers one. The prompt confines it to the rebase: resolve, test, push, no scope changes,
+  AskUserQuestion when a conflict needs a human decision</p>
+<h2 id="sessions-and-messages">Sessions and messages<a class="headerlink" href="#sessions-and-messages" title="Permanent link">&para;</a></h2>
+<p>Work sessions are <strong>streaming-input</strong> conversations (<code>SessionInbox</code>): the prompt is an async
+iterable that yields the opening prompt and then whatever the operator sends with <code>M</code>. The catch
+is termination — a streaming session waits for more input instead of ending, so <code>runSession</code>
+closes the stream when a <code>result</code> arrives with nothing pending. Miss that and every task hangs
+forever. Triage keeps a plain string prompt: it is short, structured-output, and nobody needs to
+message it. Messages for a task with no live session are stored on <code>task.inbox</code> and rendered into
+the next session's opening prompt — and, unless the operator said otherwise, <code>Dispatcher.wake()</code>
+queues the task so that session happens now. Waking deliberately skips <code>blocked</code> (a message is
+not a reason to jump a dependency), <code>tracking</code> and already-queued tasks, and it pushes onto the
+queue like <code>resume()</code> rather than going through <code>enqueue()</code>, so no Linear state moves.</p>
+<p>Delivery is best-effort in one specific way worth knowing: the SDK pulls from the input stream as
+soon as something is yielded, long before the agent acts on it, so a pushed message is only
+<em>certainly</em> delivered once a turn completes behind it. <code>SessionInbox</code> tracks that window as
+<code>inFlight</code>, clears it on each <code>result</code>, and hands anything still open back to the task when the
+session ends. The bias is towards repeating a message rather than losing one.</p>
+<p>Sessions are Claude Code sessions keyed by worktree cwd (<code>~/.claude/projects/&lt;encoded-cwd&gt;/&lt;session-id&gt;.jsonl</code>). colinear stores only the session id + worktree; interactive attach (<code>claude --resume</code>) and headless resume share the same transcript.</p>
+<p><strong>A stored worktree path is a claim, not a fact.</strong> A checkout can be removed by anything — you, an
+agent, a disk sweep, a recycled host — and git keeps the <em>registration</em> when it goes: the porcelain
+still names the path and the branch and marks it <code>prunable</code>. Reading that list without pruning
+answers "where is this branch?" with a directory that is not there, which is how a resume once
+started an agent in nothing. <code>core/worktrees.ts</code> owns the lookup: prune first, skip <code>prunable</code> and
+<code>locked</code>, check the directory anyway, and report what was cleared. Anything that takes <code>task.worktree</code>
+on faith gets the same treatment — <code>existsSync</code> before spawning into it, and a message rather than a
+mystery. The recovery is real but partial, and saying which half is missing is part of the fix:
+commits and the transcript come back, uncommitted work does not.</p>
+<h2 id="pr-review">PR review<a class="headerlink" href="#pr-review" title="Permanent link">&para;</a></h2>
+<p>A second entity beside tasks, with the same CDC contract (<code>review-*</code> deltas, keyed
+<code>owner/repo#number</code>). <code>gh</code> search finds PRs awaiting my review every 5 minutes; <code>r</code> checks the
+PR's head out in <code>&lt;repo&gt;-worktrees/review-&lt;n&gt;</code> and runs one session.</p>
+<p><strong>The document is the artifact.</strong> The agent writes <code>.colinear-review.md</code> (git-excluded) —
+prose for the operator, ending in a <code>findings fence holding a JSON array. Findings are
+parsed from that fence, so a chat turn that changes the agent's mind can't leave prose and
+findings disagreeing; structured output would have needed a second pass to keep them in sync.
+The closing fence is found by parsing, not by regex: the block ends at the first</code> where the
+JSON is valid, because a finding whose comment carries a fenced code suggestion puts a ``` in
+the middle of a string — a non-greedy match ended there once, and a full review posted empty.
+The daemon watches the file, so it fills in as it's written and picks up edits made anywhere.</p>
+<p><strong>Posting is deterministic — no session.</strong> The findings are already structured, so colinear
+clears any pending review of ours (GitHub allows one per user per PR, and a leftover blocks
+every new one), then calls <code>gh api</code> itself. An agent posting could finish happily with the
+<code>gh</code> call inside it having failed; this can't. Approve and request-changes are the same call
+with a different event, so a verdict carries the written review.</p>
+<p>What reaches GitHub is deliberately small, because the document is written for the operator
+and none of it belongs on someone else's PR:</p>
+<ul>
+<li><strong>inline comments</strong> — one per finding with a <code>file</code> and a <code>line</code></li>
+<li><strong>the body</strong> — the lead finding (no file/line/severity, one sentence), a count by severity,
+  an <code>## Other</code> section for findings with no line, and the operator's <code>n</code> note</li>
+<li><code>prSignoff</code> / <code>prSignoffScope</code> append an attribution to all of that, or just the body</li>
+</ul>
+<p>Findings survive missing fields: no <code>line</code> or no <code>file</code> means the body rather than the bin;
+only a missing <code>comment</code> drops one. A line outside the diff makes GitHub reject the whole
+review, so the post retries once with everything in the body.</p>
+<h2 id="project-plans">Project plans<a class="headerlink" href="#project-plans" title="Permanent link">&para;</a></h2>
+<p>A third entity beside tasks and reviews, same CDC contract (<code>plan-*</code> deltas, keyed by project id).
+It is the review-document pattern with the storage <strong>inverted</strong>: there, colinear owns the file and
+GitHub gets a deliberate posting; here the <strong>tracker owns the design</strong> — a project document named
+<code>Design</code>, falling back to the project's description — and the file under <code>plans/</code> is a draft
+workspace. Reopening always pulls the tracker's copy fresh, because someone else may have edited it.</p>
+<p><strong>Nothing starts on open.</strong> The view pulls the doc and waits. Planning is a conversation, and the
+first move is the operator's — the agent leading with a finished design makes the operator a
+reviewer of its ideas, which is the opposite of the point. Two ways in, one conversation:</p>
+<ul>
+<li><code>c</code> cuts a worktree, mints a session id (<code>claude --session-id</code>) and hands the terminal to a real
+  interactive session, primed with the project, its issues and the published design.</li>
+<li>the chat box runs the same session headlessly, a turn at a time.</li>
+</ul>
+<p>The id is minted rather than discovered, which is what lets those two be the same conversation.
+Once a plan has a worktree <strong>every</strong> session for it runs there: Claude Code files transcripts per
+directory, so a resume from anywhere else silently finds nothing.</p>
+<p><strong>The fence is scaffolding, not content.</strong> The draft is prose ending in one <code>``plan fence
+(milestones, issues,</code>blockedBy` by sibling title) parsed by the same parse-don't-regex rule the
+review doc uses. Publishing strips it: machine JSON does not belong in a document teammates read.
+The fence dissolves into tracker objects at approval instead.</p>
+<p><strong>Two gates, two decisions.</strong> <code>U</code> publishes the prose; <code>A</code>/<code>D</code> approve the fence. Both refuse
+rather than guess:</p>
+<ul>
+<li>Publish compares the tracker's <code>updatedAt</code> against the revision the draft was cut from and
+  refuses when it moved — overwriting a teammate blind is how a shared doc loses work.</li>
+<li>Approval is <strong>reconciliation</strong>: milestones first (by name), then issues missing from the project
+  (by title), skipping what exists and <em>listing</em> what the plan no longer mentions without
+  cancelling it. Cancellation stays a per-item operator keypress. <code>D</code> dispatches wave 1 — issues
+  with no in-plan blockers — and the blocked-recheck sweep pulls later waves as those land.</li>
+</ul>
+<p><strong>Outside edits are noticed, never absorbed.</strong> The review poll also compares each planned project's
+mirrored <code>docUpdatedAt</code>. A change must survive one quiet sweep (Linear saves continuously while
+someone types) before it raises an activity line, a toast, and — coordination on — a deterministic
+notice to the project channel as the identity <code>colinear</code>. The announced revision lands in a
+separate <code>docSeenAt</code>: noticing an edit must not disarm the publish guard. No agent is woken; live
+sessions finish on the brief they started with and read the channel at their pre-PR checkpoint.</p>
+<p>Plans never leave the store on their own — retention drops finished tasks and settled reviews, but
+a plan is a conversation the operator can return to, so only they remove one. <code>:gc</code> spares a live
+plan's worktree for the same reason and offers it once the plan is gone.</p>
+<h2 id="issue-providers">Issue providers<a class="headerlink" href="#issue-providers" title="Permanent link">&para;</a></h2>
+<p>Everything above <code>core/provider.ts</code> is tracker-agnostic; everything below it is one adapter.
+<code>providerFor(cfg)</code> returns the instance for a config (cached per config object, so a
+<code>reloadConfig</code> that mutates in place keeps working), and nothing outside <code>providers/</code> imports a
+tracker's client.</p>
+<p>Features ask <code>capabilities</code> rather than assuming: <code>workflowStates</code> gates stateSync, <code>blockers</code>
+gates the blocked column and <code>f</code>, <code>subIssues</code> gates tracking parents and <code>u</code>, <code>priority</code> gates the
+PRI column, <code>projects</code> gates <code>:projects</code>, <code>createProjects</code> gates its <code>n</code>, <code>comments</code> gates escalation, and <code>branchNames</code> decides
+whether the provider supplies a branch or <code>safeBranch()</code> derives one. A missing capability turns a
+feature off where the operator can see it (<code>:config</code> lists them), which is the difference between
+a tracker that isn't supported and one that is supported partially.</p>
+<p>The types are the contract: <code>Issue</code>, <code>Scope</code> (team/project/repo), <code>Project</code>, <code>StateType</code>
+(<code>backlog | unstarted | started | completed | canceled | triage</code>). Providers map their own
+vocabulary into <code>StateType</code> — anything unrecognized becomes undefined rather than a state nobody
+handles.</p>
+<h2 id="retention">Retention<a class="headerlink" href="#retention" title="Permanent link">&para;</a></h2>
+<p>Nothing left the store until <code>retentionDays</code> (default 30): done and cancelled tasks and settled
+reviews are dropped by a sweep on the 60s tick, which is also the window the header's token and
+cost figures cover — a total over "everything colinear has ever seen" answers no question anyone
+has. Anything live, questioning, erroring or PR-open is never touched, however old.</p>
+<p>That needed the store's first delete: <code>delete</code> / <code>review-delete</code> deltas, so a mirror drops the row
+instead of keeping a ghost the daemon has forgotten.</p>
+<h2 id="disk">Disk<a class="headerlink" href="#disk" title="Permanent link">&para;</a></h2>
+<p>A worktree is a full checkout: materialize is ~30G each, and one accumulates per task and
+per PR reviewed. Nothing reclaimed them until <code>coli gc</code> / <code>:gc</code>, which is why 249G had piled
+up by the time this was written.</p>
+<p>Three sources: finished tasks (kept for a window — a worktree is exactly what you want the
+day a task completes), review checkouts (released when the review goes stale, meaning the PR
+merged, closed, or someone else took it — <em>not</em> when it's posted, since the author may push
+again), and orphans (repo re-routes and removed tasks leave directories no task claims).</p>
+<p>Removal reports per worktree as it goes (a 60G tree is not instant) and only counts one as reclaimed once the directory is actually gone. The daemon removes them so the store's pointers get cleared in the same step; <code>coli gc</code> reads
+state.json directly so it also works with the daemon down. Both refuse to report orphans when
+the task list is empty — that state is indistinguishable from "state failed to load", where
+every live worktree looks dead.</p>
+<h2 id="prompts">Prompts<a class="headerlink" href="#prompts" title="Permanent link">&para;</a></h2>
+<p>All agent-facing text lives at the bottom of dispatcher.ts. <code>taskContext()</code> renders the shared context block (issue+description+parent, repo/remotes/branch, PRs with pin markers, triage verdict/plan, operator instructions) and heads every work/resume/fixci prompt. Invariants encoded in prompts: draft PRs only (<code>gh pr ready</code> forbidden — human presses <code>d</code>), adopt existing PRs (never duplicate), subtask checklist file <code>.colinear-subtasks.md</code> (git-excluded per worktree, polled every 2s onto the card), verification tiers, fork-workflow rules.</p>
+<h2 id="testing-strategy">Testing strategy<a class="headerlink" href="#testing-strategy" title="Permanent link">&para;</a></h2>
+<p>No unit tests (deliberate for now — UI-heavy, fast-moving). The verification loop is:</p>
+<ol>
+<li><code>npx tsc --noEmit</code> — must be clean before every commit. <strong>Ignore editor/LSP diagnostics in this repo; they are chronically stale — trust tsc.</strong></li>
+<li><code>npm run build</code> — refreshes dist so the linked <code>coli</code> binary picks up changes.</li>
+<li><code>npm run check</code> — CDC replay: mirror must match the source store exactly.</li>
+<li>Smoke boot: <code>LINEAR_API_KEY=lin_api_dummy script -q /dev/null timeout 5 npm run dev &gt;/dev/null 2&gt;&amp;1</code> → it rendered if you see board chrome. Ignore the exit code: macOS <code>script</code> doesn't propagate its child's status, so it is not evidence of anything. Note this now <em>starts a daemon</em> against your real config and state — <code>coli daemon stop</code> afterwards, and don't enqueue fake issues into a daemon holding live state.</li>
+<li>Real verification is dogfooding against the live Linear workspace; <code>~/.local/state/colinear/colinear.log</code> catches runtime errors and diverted stderr (React warnings land there — check it when behavior is weird).</li>
+</ol>
+<p>If adding tests someday: core/ is mostly pure-ish and dependency-injectable (store is a singleton — the main obstacle); prs.ts matching and dispatcher redispatch/adoption logic are the highest-value targets.</p>
+<h2 id="rendering-gotchas-hard-won-do-not-relearn-these">Rendering gotchas (hard-won — do not relearn these)<a class="headerlink" href="#rendering-gotchas-hard-won-do-not-relearn-these" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>A pane that overflows by one row loses its title.</strong> Ink paints the overflow over the first
+  line rather than clipping the last, so a fixed-height pane must slice its content to
+  <code>height - borders - header rows</code>. Both panes of the review modal hit this the moment an
+  error line appeared above the doc.</li>
+<li><strong>A question is a set, not a string.</strong> <code>PendingQuestion</code> holds every question the agent asked
+  (1–4) with per-option descriptions, and <code>answer</code> takes an array in the same order. The wire
+  format carries the set minus the callback, which the mirror rebuilds; <code>npm run check</code> asserts a
+  two-question set with descriptions survives the round trip.</li>
+<li><strong>An empty <code>&lt;Text&gt;</code> has no height</strong>, so blank lines vanish and markdown paragraphs run
+  together — render <code>' '</code> for them.</li>
+<li><strong>A tab is one character to Ink and eight columns to the terminal.</strong> Nothing in the layout
+  measures what the terminal will actually paint, so a tab-indented source (Go, Make) wrapped at
+  the wrong column, truncated early in proportion to its indent, and still overflowed the pane it
+  was laid out in — taking the review view's frame apart. <code>core/diff.ts</code> expands tabs at parse
+  time so a character is a column downstream; <code>diff.check.ts</code> measures in painted columns, because
+  an assertion in code units repeats the bug rather than catching it.</li>
+<li><strong>Edits are popups; whole surfaces are full screen.</strong> Anything that edits a thing — the task
+  form, custom dispatch, the answer form, the sub-issue picker, messaging an agent — floats over
+  the view it was opened from via <code>Popup</code>, because the context you are editing against is worth
+  keeping on screen. Full screen is for surfaces rather than edits: <code>:config</code>'s <code>$EDITOR</code> handoff,
+  the PR review doc + discussion split. A one-line y/n confirmation (<code>:gc</code>, review posting) is
+  neither — it stays inline at the foot of its view.</li>
+<li><strong>Modals are popups, and two things make that work.</strong> Ink supports <code>position="absolute"</code>, so
+  <code>Popup</code> (ui/Popup.tsx) floats a dialog over the view instead of displacing it — but Ink only
+  writes cells that hold characters, so an absolute bordered box is <strong>transparent</strong>: the board
+  shows through every gap between its own words. Hence the backdrop, an explicit block of spaces
+  at the same coordinates drawn first. And <strong>absolute boxes paint in tree order</strong>: a popup
+  rendered before its siblings is silently overdrawn by them, so it goes last in the view.
+  Height is passed in rather than measured (yoga lays out after we'd need it); overshooting just
+  makes the dialog roomier, undershooting clips it, so callers round up.</li>
+<li>
+<p><strong>A view's budget is <code>rows - 8</code> by <code>columns - 6</code></strong> (<code>- 4</code> more rows while the command bar is
+  open): the app pane is <code>rows - 4 - 2 - cmd</code> and its border costs 2; the width goes to the
+  root's padding, the frame's border and its padding. <code>useViewSize()</code> (ui/context.ts) is the
+  one place those numbers live — <strong>use it rather than measuring off <code>ctx.size</code> yourself.</strong>
+  Overshooting does <em>not</em> clip politely: boxes laid out past the bottom are written <strong>over</strong> the
+  ones above them, so a terminal row ends up holding two lines and one of them looks like it
+  simply vanished. The annotated diff asked for <code>rows - 6</code> for months and dropped roughly a
+  third of its rows on a 44-row terminal, with the tail of the overwritten line still showing
+  past the end of the shorter one. Anything with a fixed-height companion — TasksView's 15-row
+  detail pane — has to subtract it <em>and</em> the table's own header and count rows, and drop the
+  companion when what's left is unreadable.</p>
+</li>
+<li>
+<p><strong>Ink full-clears every frame when output height ≥ terminal rows (equality included).</strong> Root box renders <code>rows - 1</code> lines, <code>overflow="hidden"</code>, fixed heights on panes. Violate this and the app "vibrates".</p>
+</li>
+<li><strong>Identity stability is load-bearing.</strong> useTasks memoizes per store.version; BoardView's cursor-clamp effect returns the same object when unchanged. A fresh-array-every-render regression once caused an infinite render loop that looked like terminal flicker (React "Maximum update depth" — found via the stderr diversion).</li>
+<li>Frames are wrapped in DEC 2026 synchronized-output guards (index.tsx) so supporting terminals paint atomically; stderr is diverted to the log while the TUI owns the screen; the clock stops when nothing is timing. All three exist to kill flicker — keep them.</li>
+<li>Avoid ambiguous-width glyphs (⎈ ？ etc.) in always-visible chrome: terminals render them 2 cells, Ink counts 1, lines wrap, height overflows.</li>
+<li><strong>An empty needle used to fuzzy-match everything.</strong> <code>fuzzyMatch(x, '')</code> returned true on the first
+  character (<code>i === needle.length</code> is <code>0 === 0</code>), so a bare <code>:plan</code> resolved to whatever project came
+  back first — and started a planner agent against it. Empty now means no match; callers that mean
+  "no filter" special-case it themselves.</li>
+<li>Key input: views gate their useInput with <code>isActive</code> (modals/bars/cmdOpen); AppCtx.setCapture disables global keys while text inputs own the keyboard; setEscHandler lets a view consume esc (clear filters) before the stack pops.</li>
+</ul>
+<h2 id="state-files">State &amp; files<a class="headerlink" href="#state-files" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>what</th>
+<th>where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>config</td>
+<td><code>~/.config/colinear/config.json</code></td>
+</tr>
+<tr>
+<td>contexts</td>
+<td><code>~/.config/colinear/contexts/&lt;name&gt;.json</code> (layered over the config above)</td>
+</tr>
+<tr>
+<td>custom views</td>
+<td><code>~/.config/colinear/views/*.json</code></td>
+</tr>
+<tr>
+<td>task/review/plan/UI state</td>
+<td><code>~/.local/state/colinear/state.json</code> (pruned by <code>retentionDays</code>; plans only leave when the operator removes them)</td>
+</tr>
+<tr>
+<td>plan drafts</td>
+<td><code>~/.local/state/colinear/plans/&lt;project&gt;.md</code> (workspace only — the tracker's document is the source of truth)</td>
+</tr>
+<tr>
+<td>debug log + diverted stderr</td>
+<td><code>~/.local/state/colinear/colinear.log</code></td>
+</tr>
+<tr>
+<td>coordination channels (experimental)</td>
+<td><code>~/.local/state/colinear/channels/*.jsonl</code> + <code>cursors.json</code></td>
+</tr>
+<tr>
+<td>socket + pidfile</td>
+<td><code>~/.local/state/colinear/coli.sock</code>, <code>coli.pid</code></td>
+</tr>
+<tr>
+<td>attach scripts</td>
+<td><code>~/.local/state/colinear/attach-*.sh</code></td>
+</tr>
+<tr>
+<td>worktrees</td>
+<td><code>&lt;repo&gt;-worktrees/&lt;ISSUE-KEY&gt;</code> (per repo config)</td>
+</tr>
+<tr>
+<td>session transcripts</td>
+<td><code>~/.claude/projects/&lt;encoded-worktree&gt;/&lt;session&gt;.jsonl</code> (Claude Code's, not ours)</td>
+</tr>
+</tbody>
+</table>
+<p>Every <code>~/.local/state/colinear/</code> path above moves under <code>contexts/&lt;name&gt;/</code> in a non-default context;
+<code>COLINEAR_STATE_DIR</code> overrides the lot (tests set it so they can't touch a live daemon's socket).</p>
+<h2 id="known-hacks-debt">Known hacks / debt<a class="headerlink" href="#known-hacks-debt" title="Permanent link">&para;</a></h2>
+<ul>
+<li>AskUserQuestion answers ride back on a <code>behavior: "deny"</code> message (agent told it's not an error). SDK's <code>defer</code> mechanism is the cleaner replacement.</li>
+<li>store is a module singleton; version-counter subscription, not granular. In client mode the
+  singleton <em>is</em> the mirror — which is what keeps views ignorant of the split, but it also means
+  nothing stops daemon-only code from being imported into the client and silently mutating a mirror.</li>
+<li>Snapshots are whole-store; fine at this scale (activity is capped at 200 lines/task) but a diffed
+  snapshot is the obvious next move if boards get big.</li>
+<li>Every session registers in <code>core/sessions.ts</code> from inside <code>runSession</code>, which is what <code>:agents</code>
+  reads. It is a plain in-memory registry rather than a CDC entity: the client asks for the list
+  while the view is open instead of following deltas, because it is a "what is happening now"
+  question and nothing persists it across a daemon restart.</li>
+<li><code>escalated</code> status is vestigial (verdicts now park as needs_input) but kept for old persisted state.</li>
+<li>Interactive attach + headless resume share one session id; concurrent writers are prevented by suspend-first, not enforced.</li>
+<li>No pagination UI past the 500-issue cap; silently truncates.</li>
+<li>Commit style: imperative subject, body explains why, <code>Co-Authored-By: Claude &lt;model&gt; &lt;noreply@anthropic.com&gt;</code>; typecheck+build before committing; push to origin main after committing.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.top", "content.code.copy", "search.suggest"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../docs/js/mermaid.js"></script>
+      
+    
+  <script id="init-glightbox">const lightbox = GLightbox({"touchNavigation": true, "loop": false, "zoomable": true, "draggable": true, "openEffect": "zoom", "closeEffect": "zoom", "slideEffect": "slide"});
+document$.subscribe(() => { lightbox.reload() });
+</script></body>
+</html>
