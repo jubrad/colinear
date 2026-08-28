@@ -2080,6 +2080,12 @@ every live worktree looks dead.</p>
   two-question set with descriptions survives the round trip.</li>
 <li><strong>An empty <code>&lt;Text&gt;</code> has no height</strong>, so blank lines vanish and markdown paragraphs run
   together — render <code>' '</code> for them.</li>
+<li><strong>A tab is one character to Ink and eight columns to the terminal.</strong> Nothing in the layout
+  measures what the terminal will actually paint, so a tab-indented source (Go, Make) wrapped at
+  the wrong column, truncated early in proportion to its indent, and still overflowed the pane it
+  was laid out in — taking the review view's frame apart. <code>core/diff.ts</code> expands tabs at parse
+  time so a character is a column downstream; <code>diff.check.ts</code> measures in painted columns, because
+  an assertion in code units repeats the bug rather than catching it.</li>
 <li><strong>Under height pressure yoga pays by squeezing a <code>&lt;Text&gt;</code> to nothing.</strong> Text nodes take the
   default <code>flexShrink: 1</code>, so in a fixed-height box whose children overflow, the <em>label</em> is what
   disappears while the oversized content stays. The transposed board lost the status name off
