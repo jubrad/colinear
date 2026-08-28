@@ -35,4 +35,9 @@ echo '── worktree recovery'
 npm run check:worktrees
 
 echo
+echo '── diff layout'
+# a tab-indented diff, measured in the columns a terminal actually paints
+npm run check:diff
+
+echo
 echo 'ok'

@@ -383,6 +383,12 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
   two-question set with descriptions survives the round trip.
 - **An empty `<Text>` has no height**, so blank lines vanish and markdown paragraphs run
   together — render `' '` for them.
+- **A tab is one character to Ink and eight columns to the terminal.** Nothing in the layout
+  measures what the terminal will actually paint, so a tab-indented source (Go, Make) wrapped at
+  the wrong column, truncated early in proportion to its indent, and still overflowed the pane it
+  was laid out in — taking the review view's frame apart. `core/diff.ts` expands tabs at parse
+  time so a character is a column downstream; `diff.check.ts` measures in painted columns, because
+  an assertion in code units repeats the bug rather than catching it.
 - **Under height pressure yoga pays by squeezing a `<Text>` to nothing.** Text nodes take the
   default `flexShrink: 1`, so in a fixed-height box whose children overflow, the *label* is what
   disappears while the oversized content stays. The transposed board lost the status name off

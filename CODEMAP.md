@@ -105,6 +105,11 @@ src/core/
                      The lookup prunes, skips prunable/locked, and reports what was lost
   worktrees.check.ts clobber a checkout and prove it comes back: branch, HEAD and committed
                      work restored, uncommitted honestly not (bin/check runs it)
+  diff.ts            unified diff → flat rows that know their file and new-side line number;
+                     expands tabs at parse time (one character, one column) and wraps long
+                     lines into visual rows; layoutMargin aligns annotations beside them
+  diff.check.ts      a tab-indented diff measured in the columns a terminal actually paints:
+                     every row fits its pane at every width (bin/check runs it)
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
                      read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
                      approve() creates Linear sub-issues; snapshot/restore for persistence
