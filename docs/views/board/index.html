@@ -820,6 +820,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#transposing-the-board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transposing the board
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1296,6 +1307,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#transposing-the-board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transposing the board
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1335,11 +1357,15 @@ rewritten. Green is a rebase, amber a CI fix, and a <code>revise</code> dot mean
 <tbody>
 <tr>
 <td><code>j</code> <code>l</code> / ← →</td>
-<td>move between columns</td>
+<td>sideways — between columns, or between cards when <a href="#transposing-the-board">transposed</a></td>
 </tr>
 <tr>
 <td><code>i</code> <code>k</code> / ↑ ↓</td>
-<td>move between cards</td>
+<td>up and down — between cards, or between statuses when transposed</td>
+</tr>
+<tr>
+<td><code>t</code></td>
+<td><a href="#transposing-the-board">transpose</a>: statuses become rows, cards run sideways</td>
 </tr>
 <tr>
 <td><code>/</code></td>
@@ -1392,6 +1418,18 @@ rewritten. Green is a rebase, amber a CI fix, and a <code>revise</code> dot mean
 </tbody>
 </table>
 <p>The board and <a href="../tasks/"><code>:tasks</code></a> do the same things with the same keys; only movement differs.</p>
+<h2 id="transposing-the-board">Transposing the board<a class="headerlink" href="#transposing-the-board" title="Permanent link">&para;</a></h2>
+<p><code>t</code> turns the board on its side: each status becomes a full-width row and its cards run sideways.
+The seven narrow columns become one wide lane per status, so a crowded status shows six cards at
+once on a wide terminal instead of two — and a status with nothing in it collapses to a single grey
+line rather than holding a column open.</p>
+<p>The keys keep their directions. Sideways always moves the cursor sideways, so <code>j</code>/<code>l</code> walk the cards
+in a status and <code>i</code>/<code>k</code> change status; empty statuses are skipped either way.</p>
+<p>Only whole rows are drawn — a row is as tall as its tallest card, and Ink overflows rather than
+clips, so half a row would paint over the detail pane. Expect two or three statuses on screen at a
+time, with <code>▲</code>/<code>▼</code> counts for the rest. A row with more cards than fit says so in its header
+(<code>PR Open(9) 2-1-1 · 1-6 of 9, j/l scrolls</code>) and scrolls as you walk into them.</p>
+<p>The choice is remembered: the daemon stores it, so it survives <code>R</code>, a restart, and a reconnect.</p>
 
 
 
