@@ -18,6 +18,7 @@ import { pipeline } from 'node:stream/promises';
 import { createGzip, createGunzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { CONFIG_DIR, DEFAULT_CONTEXT, contextConfigPath, listContexts, stateDirFor } from './context.js';
+import { decryptBackup, encryptBackup, isEncryptedBackup } from './backupcrypt.js';
 import { transcriptDir } from './transcripts.js';
 import type { Config } from './types.js';
 
@@ -112,6 +113,12 @@ export interface Manifest {
 export interface BackupOptions {
   out?: string;
   version: string;
+  /**
+   * Encrypt with this passphrase. Absent means an unencrypted archive, which
+   * the CLI only allows when asked for outright — a backup carries every
+   * context's API key and every conversation an agent has had.
+   */
+  passphrase?: string;
   /** skip the worktree capture entirely — state and conversations only */
   noWorktrees?: boolean;
   /** untracked files larger than this are named in the manifest, not carried */
@@ -122,6 +129,8 @@ export interface BackupOptions {
 export interface RestoreOptions {
   archive: string;
   version: string;
+  /** required for an encrypted archive; ignored for a plain one */
+  passphrase?: string;
   dryRun?: boolean;
   /** clone any repository whose path is missing, from its recorded remote */
   clone?: boolean;
@@ -130,10 +139,15 @@ export interface RestoreOptions {
 
 const MB = 1024 * 1024;
 
-/** `coli-backup-<host>-<yyyy-mm-dd-hhmm>.tar.gz` in the working directory. */
-export function defaultBackupName(now = new Date()): string {
+/**
+ * `coli-backup-<host>-<yyyy-mm-dd-hhmm>.tar.gz` in the working directory,
+ * `.tar.gz.enc` when it is encrypted — which is the default. The suffix is
+ * not decoration: an encrypted archive is not a tarball, and `tar -tzf` on
+ * one should fail with something better than a parse error.
+ */
+export function defaultBackupName(now = new Date(), encrypted = true): string {
   const stamp = now.toISOString().slice(0, 16).replace(/[:T]/g, '-');
-  return `coli-backup-${hostSlug()}-${stamp}.tar.gz`;
+  return `coli-backup-${hostSlug()}-${stamp}.tar.gz${encrypted ? '.enc' : ''}`;
 }
 
 function hostSlug(): string {
@@ -147,7 +161,7 @@ function hostSlug(): string {
 
 export async function createBackup(cfg: Config, opts: BackupOptions): Promise<{ path: string; manifest: Manifest }> {
   const say = opts.onProgress ?? (() => {});
-  const out = opts.out ?? join(process.cwd(), defaultBackupName());
+  const out = opts.out ?? join(process.cwd(), defaultBackupName(new Date(), Boolean(opts.passphrase)));
   const staging = mkdtempSync(join(tmpdir(), 'coli-backup-'));
   const maxBytes = (opts.maxFileMb ?? 64) * MB;
 
@@ -222,8 +236,22 @@ export async function createBackup(cfg: Config, opts: BackupOptions): Promise<{ 
     writeFileSync(join(staging, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
     mkdirSync(dirname(out), { recursive: true });
-    await tarCreate(staging, out);
-    say(`wrote ${out} (${formatBytes(statSync(out).size)})`);
+    if (opts.passphrase) {
+      // its own directory, not `staging`: tar would otherwise archive the
+      // plaintext into itself, and the plaintext must not outlive this call
+      const work = mkdtempSync(join(tmpdir(), 'coli-backup-plain-'));
+      try {
+        const plain = join(work, 'archive.tar.gz');
+        await tarCreate(staging, plain);
+        await encryptBackup(plain, out, opts.passphrase);
+      } finally {
+        rmSync(work, { recursive: true, force: true });
+      }
+      say(`encrypted ${out} (${formatBytes(statSync(out).size)})`);
+    } else {
+      await tarCreate(staging, out);
+      say(`wrote ${out} (${formatBytes(statSync(out).size)}, NOT encrypted)`);
+    }
     return { path: out, manifest };
   } finally {
     rmSync(staging, { recursive: true, force: true });
@@ -337,7 +365,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<RestorePlanIt
   const staging = mkdtempSync(join(tmpdir(), 'coli-restore-'));
   const done: RestorePlanItem[] = [];
   try {
-    await tarExtract(opts.archive, staging);
+    await tarExtract(opts.archive, staging, opts.passphrase);
     const manifest = JSON.parse(readFileSync(join(staging, 'manifest.json'), 'utf8')) as Manifest;
 
     if (manifest.format !== BACKUP_FORMAT) {
@@ -546,11 +574,32 @@ async function tarCreate(from: string, out: string): Promise<void> {
   rmSync(tmp, { force: true });
 }
 
-async function tarExtract(archive: string, into: string): Promise<void> {
+async function tarExtract(archive: string, into: string, passphrase?: string): Promise<void> {
   const tmp = join(into, '.archive.tar');
-  await pipeline(createReadStream(archive), createGunzip(), createWriteStream(tmp));
+  await pipeline(createReadStream(await plaintextArchive(archive, into, passphrase)), createGunzip(), createWriteStream(tmp));
   await exec('tar', ['-xf', tmp, '-C', into], { maxBuffer: 32 * MB });
   rmSync(tmp, { force: true });
+}
+
+/**
+ * The path of a readable `.tar.gz` for this archive — itself when it is one,
+ * a decrypted copy inside `work` when it is not.
+ *
+ * Both readers go through here, so `--list` and a real restore agree about
+ * what a passphrase is for, and neither can be taught to read an encrypted
+ * archive without the other.
+ */
+async function plaintextArchive(archive: string, work: string, passphrase?: string): Promise<string> {
+  if (!isEncryptedBackup(archive)) return archive;
+  if (!passphrase) {
+    throw new Error(
+      `${basename(archive)} is encrypted — restore it with the passphrase it was made with ` +
+        '(--passphrase-file FILE, or COLINEAR_BACKUP_PASSPHRASE).',
+    );
+  }
+  const plain = join(work, '.archive.decrypted.tar.gz');
+  await decryptBackup(archive, plain, passphrase);
+  return plain;
 }
 
 /** tar a named list of files, given relative to `cwd`, without compressing. */
@@ -677,11 +726,12 @@ export function formatBytes(bytes: number): string {
 }
 
 /** Read a manifest without unpacking the rest — `coli restore --list`. */
-export async function readManifest(archive: string): Promise<Manifest> {
+export async function readManifest(archive: string, passphrase?: string): Promise<Manifest> {
   const staging = mkdtempSync(join(tmpdir(), 'coli-manifest-'));
   try {
     const tmp = join(staging, 'a.tar');
-    await pipeline(createReadStream(archive), createGunzip(), createWriteStream(tmp));
+    const source = await plaintextArchive(archive, staging, passphrase);
+    await pipeline(createReadStream(source), createGunzip(), createWriteStream(tmp));
     await exec('tar', ['-xf', tmp, '-C', staging, './manifest.json'], { maxBuffer: 8 * MB });
     return JSON.parse(readFileSync(join(staging, 'manifest.json'), 'utf8')) as Manifest;
   } finally {

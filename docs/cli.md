@@ -14,7 +14,7 @@ Agents therefore outlive the UI. Close the terminal, quit with `q`, or hit `R` t
 | `coli daemon socket` | print this context's socket path — what an ssh forward has to target ([remote](remote.md)) |
 | `coli gc [--yes] [--older-than N]` | reclaim worktree disk; prints what it would remove and stops there without `--yes`. Works with the daemon down |
 | `coli contexts` | list contexts: config path, state dir, and which have a daemon running |
-| `coli backup [--out FILE]` | one archive holding conversations, work in progress, state and config — [below](#coli-backup-and-coli-restore) |
+| `coli backup [--out FILE]` | one encrypted archive holding conversations, work in progress, state and config — [below](#coli-backup-and-coli-restore) |
 | `coli restore FILE` | put it back on another machine (`--dry-run`, `--list`, `--clone`) |
 | `npm run doctor` | env sanity: `claude` CLI, `gh` auth, Linear key, repos |
 
@@ -39,10 +39,10 @@ A new computer. One archive, and everything colinear knows how to do for you car
 
 ```bash
 coli daemon stop                 # its state file is written every few seconds
-coli backup                      # → coli-backup-<host>-<date>.tar.gz
+coli backup                      # asks for a passphrase → coli-backup-<host>-<date>.tar.gz.enc
 # … on the other machine, same colinear version, same OS …
-coli restore coli-backup-…tar.gz --dry-run
-coli restore coli-backup-…tar.gz
+coli restore coli-backup-….tar.gz.enc --dry-run
+coli restore coli-backup-….tar.gz.enc
 ```
 
 ### What is in it
@@ -59,6 +59,36 @@ Four things, in order of how hard they are to get back:
 Not the repositories. A monorepo clone dwarfs all of the above and is one command to recreate; the
 manifest records each repo's remote URL, so restore either tells you the exact `git clone` to run
 or runs it for you with `--clone`.
+
+### It is encrypted, and that is not optional by accident
+
+This archive is the most concentrated secret colinear can produce: every context's config, tracker
+API key included, the transcript of every conversation an agent has had, and git bundles of commits
+nobody has pushed. It is also, by design, a file you carry somewhere else. So it is encrypted by
+default, and the plaintext path is the one you have to ask for.
+
+`coli backup` asks for a passphrase and confirms it. The archive is encrypted with a fresh random
+256-bit key; the passphrase only wraps *that* key, through scrypt, and the wrapped key rides in the
+archive's header. So the bulk cipher gets real entropy rather than whatever you typed, and one file
+is all you move.
+
+**The passphrase is stored nowhere** — not in the archive, not on the machine that wrote it. Lose it
+and the backup is gone, for you and for everyone else. Put it in your password manager when you make
+the backup, not later.
+
+For anything without a terminal — a scheduled backup, CI — the passphrase comes from
+`--passphrase-file FILE` (first line) or `COLINEAR_BACKUP_PASSPHRASE`. Both work on `coli restore`
+too, and restore prompts when it has a terminal and the archive needs one.
+
+```bash
+coli backup --passphrase-file ~/.config/colinear/backup.key   # unattended
+coli backup --no-encrypt                                      # warns, then writes it in the clear
+```
+
+An encrypted archive is authenticated as well as encrypted: a truncated or edited one fails with
+`archive failed its integrity check` rather than unpacking into something subtly wrong, and a
+passphrase that does not fit says `wrong passphrase` instead. `coli restore --list` needs the
+passphrase for the same reason everything else does — the manifest is inside.
 
 ### Why worktrees are recorded rather than copied
 

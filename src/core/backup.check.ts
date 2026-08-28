@@ -30,7 +30,10 @@ function check(name: string, ok: boolean, detail = ''): void {
   if (!ok) failures.push(`${name}${detail ? ` — ${detail}` : ''}`);
 }
 
-function run(cmd: string, args: string[], opts: { cwd?: string; home?: string } = {}): string {
+/** The passphrase every backup in this check is made with, unless said otherwise. */
+const PASS = 'correct horse battery staple';
+
+function run(cmd: string, args: string[], opts: { cwd?: string; home?: string; pass?: string } = {}): string {
   return execFileSync(cmd, args, {
     cwd: opts.cwd,
     encoding: 'utf8',
@@ -39,7 +42,15 @@ function run(cmd: string, args: string[], opts: { cwd?: string; home?: string } 
     // that prints twenty lines of someone else's progress is a gate nobody
     // reads. A failure still carries its stderr on the thrown error.
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: opts.home ? { ...process.env, HOME: opts.home, COLINEAR_STATE_DIR: '' } : process.env,
+    env: opts.home
+      ? {
+          ...process.env,
+          HOME: opts.home,
+          COLINEAR_STATE_DIR: '',
+          // the non-interactive path, which is what a scheduled backup uses
+          COLINEAR_BACKUP_PASSPHRASE: opts.pass ?? PASS,
+        }
+      : process.env,
   });
 }
 
@@ -143,9 +154,20 @@ try {
   writeFileSync(join(stateDir, 'plans', 'p1.md'), `# a plan\n\nthe work is in ${worktree}\n`);
 
   // ── back it up ─────────────────────────────────────────────────────────
-  const archive = join(root, 'backup.tar.gz');
+  const archive = join(root, 'backup.tar.gz.enc');
   const out = run('npx', ['tsx', CLI, 'backup', '--out', archive], { home: oldHome });
   check('the backup ran', existsSync(archive), out.slice(-400));
+
+  // ── it is encrypted, because nobody asked for it not to be ─────────────
+  const head = existsSync(archive) ? readFileSync(archive).subarray(0, 9).toString('utf8') : '';
+  check('the default archive is encrypted', head === 'COLIBAK1\n', JSON.stringify(head));
+  check('and is not a tarball any more', fails(() => run('tar', ['-tzf', archive])));
+  check('the operator is told the passphrase is not recoverable', /password manager/.test(out), out.slice(-300));
+  check(
+    'no plaintext archive is left behind',
+    !readdirSync(root).some((f) => f.endsWith('.tar.gz') && f !== 'backup-plain.tar.gz'),
+    readdirSync(root).join(', '),
+  );
 
   const size = existsSync(archive) ? readFileSync(archive).length : 0;
   // the build directory alone is 2M before compression; anything near that
@@ -237,11 +259,38 @@ try {
 
   // the version guard is the whole basis of "restore from the same version",
   // so it gets checked rather than assumed
+  // ── the ways it must refuse ────────────────────────────────────────────
+  check(
+    'a wrong passphrase is refused as such',
+    refused(archive, newHome, /wrong passphrase/, 'not the passphrase'),
+  );
+  check(
+    'and with no passphrase at all it says what is needed',
+    refused(archive, newHome, /encrypted/, ''),
+  );
+
+  // one byte, in the body rather than the header: the tag has to catch it
+  const tampered = join(root, 'tampered.tar.gz.enc');
+  const bytes = readFileSync(archive);
+  bytes[bytes.length - 200] ^= 0xff;
+  writeFileSync(tampered, bytes);
+  check(
+    'a modified archive fails its integrity check',
+    refused(tampered, newHome, /integrity check/),
+    'GCM should not let an edited body through',
+  );
+
+  // ── --no-encrypt, for the operator who asks for it outright ────────────
+  const plainArchive = join(root, 'backup-plain.tar.gz');
+  const plainOut = run('npx', ['tsx', CLI, 'backup', '--out', plainArchive, '--no-encrypt'], { home: oldHome });
+  check('--no-encrypt warns before it does it', /WARNING/.test(plainOut), plainOut.slice(0, 300));
+  check('and writes a real tarball', !fails(() => run('tar', ['-tzf', plainArchive])));
+
   const doctored = join(root, 'from-the-future.tar.gz');
-  retagArchive(archive, doctored, (m) => ({ ...m, colinear: '99.0.0' }));
+  retagArchive(plainArchive, doctored, (m) => ({ ...m, colinear: '99.0.0' }));
   check('a different colinear version is refused', refused(doctored, newHome, /same version/));
   const alien = join(root, 'from-another-os.tar.gz');
-  retagArchive(archive, alien, (m) => ({ ...m, platform: 'sunos' }));
+  retagArchive(plainArchive, alien, (m) => ({ ...m, platform: 'sunos' }));
   check('a different OS is refused', refused(alien, newHome, /same OS/));
 
   // restoring twice must not destroy what is already there
@@ -270,12 +319,22 @@ function retagArchive(from: string, to: string, edit: (m: Record<string, unknown
 }
 
 /** Did restore refuse this archive, for the reason it should have? */
-function refused(archive: string, home: string, why: RegExp): boolean {
+function refused(archive: string, home: string, why: RegExp, pass?: string): boolean {
   try {
-    run('npx', ['tsx', CLI, 'restore', archive], { home });
+    run('npx', ['tsx', CLI, 'restore', archive], { home, pass });
     return false; // it went ahead, which is the bug
   } catch (err) {
     return why.test(String((err as { stderr?: string }).stderr ?? err));
+  }
+}
+
+/** Did this command exit non-zero? */
+function fails(fn: () => unknown): boolean {
+  try {
+    fn();
+    return false;
+  } catch {
+    return true;
   }
 }
 
@@ -284,4 +343,6 @@ if (failures.length) {
   for (const f of failures) console.error(`  ✖ ${f}`);
   process.exit(1);
 }
-console.log('ok — backed up one machine and restored it onto another with a different home');
+console.log(
+  'ok — backed up one machine, encrypted, and restored it onto another with a different home',
+);

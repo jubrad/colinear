@@ -29,6 +29,7 @@ import {
   readManifest,
   restoreBackup,
 } from './core/backup.js';
+import { isEncryptedBackup } from './core/backupcrypt.js';
 import { findReclaimable, findSettled, formatSize, removeWorktree } from './core/gc.js';
 import { loadState } from './core/persist.js';
 import { log } from './core/log.js';
@@ -486,10 +487,21 @@ async function backupCommand(args: string[]): Promise<void> {
     );
     process.exit(1);
   }
-  console.log(`backing up to ${out ?? join(process.cwd(), defaultBackupName())}\n`);
+  // encrypted unless asked otherwise: this archive holds every context's API
+  // key, every conversation, and commits nobody has pushed
+  const encrypt = !args.includes('--no-encrypt');
+  if (!encrypt) {
+    console.log(
+      'WARNING: --no-encrypt. This archive will hold your tracker API keys, every\n' +
+        'conversation an agent has had, and unpushed commits, in the clear.\n',
+    );
+  }
+  const passphrase = encrypt ? await backupPassphrase(args, { confirm: true }) : undefined;
+  console.log(`backing up to ${out ?? join(process.cwd(), defaultBackupName(new Date(), encrypt))}\n`);
   const { path, manifest } = await createBackup(cfg, {
     out,
     version: VERSION,
+    passphrase,
     noWorktrees: args.includes('--no-worktrees'),
     maxFileMb: maxFile ? Number.parseFloat(maxFile) : undefined,
     onProgress: (line) => console.log(`  ${line}`),
@@ -507,6 +519,13 @@ async function backupCommand(args: string[]): Promise<void> {
       `${manifest.contexts.length} context(s) · ${formatBytes(statSync(path).size)}`,
   );
   console.log(`\nrestore on the other machine with:\n  coli restore ${basename(path)}`);
+  if (encrypt) {
+    console.log(
+      '\nThat archive is encrypted, and the passphrase is not stored anywhere — not in\n' +
+        'the file, not on this machine. Put it in your password manager now: without it\n' +
+        'this backup cannot be restored by you or anyone else.',
+    );
+  }
 }
 
 /**
@@ -520,11 +539,21 @@ async function backupCommand(args: string[]): Promise<void> {
 async function restoreCommand(args: string[]): Promise<void> {
   const archive = args.find((a) => !a.startsWith('--'));
   if (!archive || !existsSync(archive)) {
-    console.error(`usage: coli restore <archive.tar.gz> [--dry-run] [--clone] [--list]`);
+    console.error(
+      'usage: coli restore <archive.tar.gz[.enc]> [--dry-run] [--clone] [--list]\n' +
+        '       an encrypted archive takes --passphrase-file FILE or COLINEAR_BACKUP_PASSPHRASE',
+    );
     process.exit(1);
   }
+  // asked for lazily on both paths: a plain archive needs no passphrase, and
+  // prompting for one before looking would be a lie about what is required
+  const passphraseFor = async () =>
+    isEncryptedBackup(archive)
+      ? await backupPassphrase(args, { subject: `${basename(archive)} is encrypted` })
+      : undefined;
+
   if (args.includes('--list')) {
-    const m = await readManifest(archive);
+    const m = await readManifest(archive, await passphraseFor());
     console.log(`colinear ${m.colinear} · ${m.platform} · ${m.host} · ${m.createdAt}`);
     console.log(`home ${m.home}`);
     for (const c of m.contexts) console.log(`  context ${c.name}`);
@@ -546,6 +575,7 @@ async function restoreCommand(args: string[]): Promise<void> {
   const plan = await restoreBackup({
     archive,
     version: VERSION,
+    passphrase: await passphraseFor(),
     dryRun,
     clone: args.includes('--clone'),
     onProgress: (line) => console.log(`  ${line}`),
@@ -572,6 +602,71 @@ function flagValue(args: string[], flag: string): string | undefined {
 }
 
 /**
+ * Where a backup passphrase may come from, in order: a file, the environment,
+ * or the operator. The first two exist so a scheduled backup and the check
+ * harness can run without a terminal; the prompt is what an operator gets.
+ */
+async function backupPassphrase(
+  args: string[],
+  opts: { confirm?: boolean; subject?: string } = {},
+): Promise<string> {
+  const file = flagValue(args, '--passphrase-file');
+  if (file) {
+    const text = readFileSync(file, 'utf8').split('\n')[0].trim();
+    if (!text) throw new Error(`${file} is empty — a passphrase file holds it on the first line`);
+    return text;
+  }
+  const fromEnv = process.env.COLINEAR_BACKUP_PASSPHRASE;
+  if (fromEnv) return fromEnv;
+  if (!process.stdin.isTTY) {
+    // the advice has to match the side it is given on: nothing about
+    // --no-encrypt helps someone holding an archive that already is
+    throw new Error(
+      `${opts.subject ?? 'a passphrase is needed'}, and there is no terminal to ask on.\n` +
+        'Pass --passphrase-file FILE, or set COLINEAR_BACKUP_PASSPHRASE.' +
+        (opts.confirm ? '\n`coli backup --no-encrypt` writes it in the clear instead.' : ''),
+    );
+  }
+  const first = await promptSecret('passphrase: ');
+  if (!first) throw new Error('an empty passphrase encrypts nothing — aborted');
+  if (opts.confirm) {
+    const again = await promptSecret('again: ');
+    if (again !== first) throw new Error('the two passphrases differ — aborted');
+  }
+  return first;
+}
+
+/** Read a line without echoing it. Raw mode, so nothing lands in scrollback. */
+async function promptSecret(prompt: string): Promise<string> {
+  const stdin = process.stdin;
+  const wasRaw = Boolean(stdin.isRaw);
+  // raw mode first, then the prompt: between printing and muting, the tty is
+  // still echoing, and anything typed into that window lands in scrollback
+  stdin.setRawMode(true);
+  stdin.resume();
+  process.stdout.write(prompt);
+  return await new Promise<string>((resolve) => {
+    let value = '';
+    const done = () => {
+      stdin.off('data', onData);
+      stdin.setRawMode(wasRaw);
+      stdin.pause();
+      process.stdout.write('\n');
+    };
+    const onData = (buf: Buffer) => {
+      for (const ch of buf.toString('utf8')) {
+        if (ch === '\r' || ch === '\n') return (done(), resolve(value));
+        // ctrl-c has to be handled here: raw mode means no signal is sent
+        if (ch === '\u0003') return (done(), process.exit(130));
+        if (ch === '\u007f' || ch === '\b') value = value.slice(0, -1);
+        else if (ch >= ' ') value += ch;
+      }
+    };
+    stdin.on('data', onData);
+  });
+}
+
+/**
  * The context selector is resolved in core/context.ts (it has to be, so paths
  * derive from it) and travels to children in the environment — strip it here
  * so it can sit anywhere on the command line without becoming the command.
@@ -586,6 +681,23 @@ function stripContextFlags(args: string[]): string[] {
   return out;
 }
 
+/**
+ * Run a command whose failures are the operator's, not the program's.
+ *
+ * A wrong passphrase, an archive from another colinear, a home that has no
+ * config — none of those are crashes, and a stack trace is not an error
+ * message. Backup and restore fail this way more than they fail any other,
+ * so they say what went wrong and exit 1.
+ */
+async function cleanly(run: () => Promise<void>): Promise<void> {
+  try {
+    await run();
+  } catch (err) {
+    console.error(err instanceof Error && err.message ? err.message : String(err));
+    process.exit(1);
+  }
+}
+
 const argv = stripContextFlags(process.argv.slice(2));
 const [command, sub] = argv;
 if (command === 'daemon') await daemonCommand(sub);
@@ -593,8 +705,8 @@ else if (command === 'gc') await gcCommand(argv.slice(1));
 else if (command === 'contexts') contextsCommand();
 else if (command === 'init') await runInit({ yes: argv.includes('--yes') || argv.includes('-y') });
 else if (command === 'issue') await issueCommand(argv.slice(1));
-else if (command === 'backup') await backupCommand(argv.slice(1));
-else if (command === 'restore') await restoreCommand(argv.slice(1));
+else if (command === 'backup') await cleanly(() => backupCommand(argv.slice(1)));
+else if (command === 'restore') await cleanly(() => restoreCommand(argv.slice(1)));
 else if (command === 'demo') demoCommand();
 else if (command === '--tui') await runTui();
 else supervise();

@@ -84,6 +84,21 @@ matters.
 
 `coli init` prefers the environment variable and won't write a key it found there into the file. If you do put it in the config, that file is plain JSON in your home directory — protect it accordingly.
 
+### Backups
+
+`coli backup` collects all of the above into one file: every context's config with its API key, every
+conversation an agent has had, and git bundles of unpushed commits. That file exists to be carried
+somewhere else, which is exactly what makes it the riskiest artefact colinear writes.
+
+So it is **encrypted by default** with AES-256-GCM under a fresh random key, and that key is wrapped
+with scrypt over a passphrase you supply. Only the wrapped key travels, in the archive header; the
+passphrase is never written anywhere, so a lost passphrase is a lost backup. `--no-encrypt` exists
+and says loudly what it is doing.
+
+The archive is authenticated, so tampering is detected rather than silently restored, and the
+plaintext tar is built in a temporary directory that is removed before the command returns — it
+never exists at the path you are writing to.
+
 ## What leaves your machine
 
 - **To Anthropic**: issue titles, descriptions, your instructions and guidance, repo contents the agent reads, and diffs — the same as running `claude` yourself in that repo.
