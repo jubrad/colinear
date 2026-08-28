@@ -61,10 +61,9 @@ export function useTaskActions(): TaskActions {
     if (input === 'x') {
       if (ctx.dispatcher.cancel(selected.issue.id)) ctx.toast(`cancelling ${selected.issue.identifier}`, 'info');
     }
-    if (input === 'r' && !selected.question) {
-      ctx.dispatcher.resume(selected.issue.id);
-      ctx.toast(`requeued ${selected.issue.identifier}`, 'ok');
-    }
+    // no toast here: the dispatcher decides whether there was anything to
+    // resume and reports it — a local one claimed a requeue on every card
+    if (input === 'r') ctx.dispatcher.resume(selected.issue.id);
     // F from anywhere in a family — the parent, or any child that knows its
     // parent — opens the family view scoped to it
     if (input === 'F') {

@@ -154,10 +154,7 @@ export function TaskView(props: { param?: string }) {
       if (input === 'P' && planned.length) setPlanMode(true);
       if (input === 's') attachSession(task, ctx);
       if (input === 'S') attachShell(task, ctx);
-      if (input === 'r') {
-        ctx.dispatcher.resume(task.issue.id);
-        ctx.toast(`requeued ${task.issue.identifier}`, 'ok');
-      }
+      if (input === 'r') ctx.dispatcher.resume(task.issue.id);
       if (input === 'o' && task.prs[0]) execFile('open', [task.prs[0].url], () => {});
       if (input === 'O') execFile('open', [task.issue.url], () => {});
       if ((input === 'd' || input === 'D') && task.prs[0]?.isDraft) {

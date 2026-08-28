@@ -18,7 +18,7 @@ import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
 import { guidanceFor } from './guidance.js';
 import { store } from './store.js';
-import { questionSummary, type Config, type Issue, type PrInfo, type RepoConfig, type Subtask, type Task, type TaskEdits, type TriageVerdict, type Verification } from './types.js';
+import { questionSummary, type Config, type Issue, type PrInfo, type RepoConfig, type Subtask, type Task, type TaskEdits, type TaskStatus, type TriageVerdict, type Verification } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -26,6 +26,24 @@ const SUBTASKS_FILE = '.colinear-subtasks.md';
 
 /** how many new sub-issues one tracking sweep will start (the rest wait a tick) */
 const AUTO_DISPATCH_BATCH = 5;
+
+/** the statuses `r` can restart: work that stopped with nobody driving it */
+const RESUMABLE: TaskStatus[] = ['interrupted', 'error', 'escalated', 'needs_input', 'blocked'];
+
+/**
+ * Why `r` has nothing to do on everything else. A silent no-op was
+ * indistinguishable from a broken key, and the board is mostly cards in these
+ * states — say which one it is instead.
+ */
+const NOT_RESUMABLE: Partial<Record<TaskStatus, string>> = {
+  queued: 'already queued',
+  triage: 'its agent is live — x stops it first',
+  working: 'its agent is live — x stops it first',
+  checks: 'its checks are running — x stops it first',
+  pr_open: 'its PR is open — nothing stopped to resume',
+  done: 'done — nothing to resume',
+  cancelled: 'cancelled — m re-dispatches it',
+};
 
 /**
  * Sub-issues a tracking parent should start on its own: ones colinear has no
@@ -375,28 +393,44 @@ export class Dispatcher {
   /**
    * Resume an interrupted/errored task. With a saved session id the SDK
    * continues the original transcript; otherwise the work pass restarts.
+   *
+   * Every branch says what it did. `r` reaches the daemon fire-and-forget, so
+   * a view that toasted on its own reported a requeue it had no way to know
+   * about — and on a card that was never stopped (a PR open, an agent already
+   * live) that toast was simply false, which reads as the key being broken.
    */
   resume(id: string) {
     const task = store.get(id);
+    if (!task) return;
+    const ident = task.issue.identifier;
     // a tracking parent has no work of its own to resume; running it means
     // coordinating the family (experimental — otherwise r stays a no-op)
-    if (task?.status === 'tracking') {
-      if (!this.wake(id)) this.toast(`${task.issue.identifier}: coordination is off`, 'info');
+    if (task.status === 'tracking') {
+      if (!this.wake(id)) this.toast(`${ident}: coordination is off`, 'info');
       return;
     }
     // a manually dispatched task sits in Working with no agent: r is how you
     // hand it over once your skeleton is in place
-    if (task?.awaitingStart) {
+    if (task.awaitingStart) {
       store.update(id, { awaitingStart: undefined, status: 'queued' });
       store.addActivity(id, 'starting the agent on the prepared worktree');
+      this.toast(`${ident}: starting the agent on the prepared worktree`, 'ok');
       this.queue.push(id);
       this.pump();
       return;
     }
-    if (!task || !['interrupted', 'error', 'escalated', 'needs_input', 'blocked'].includes(task.status)) return;
-    if (task.question) return; // a live agent is waiting on an answer, not a restart
+    if (task.question) {
+      // a live agent is waiting on an answer, not a restart
+      this.toast(`${ident} is waiting on an answer — a`, 'info');
+      return;
+    }
+    if (!RESUMABLE.includes(task.status)) {
+      this.toast(`${ident}: ${NOT_RESUMABLE[task.status] ?? 'nothing to resume'}`, 'info');
+      return;
+    }
     store.update(id, { status: 'queued', error: undefined, endedAt: undefined, blockedBy: undefined });
     store.addActivity(id, task.sessionId ? 'resuming session' : 'restarting');
+    this.toast(`${ident}: ${task.sessionId ? 'resuming its session' : 'restarting'}`, 'ok');
     this.queue.push(id);
     this.pump();
   }

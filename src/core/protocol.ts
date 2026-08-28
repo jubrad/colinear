@@ -15,8 +15,13 @@ import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
  */
 export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.sock');
 
-/** Bumped when the wire format changes; a mismatched client refuses to attach. */
-export const PROTOCOL_VERSION = 14;
+/**
+ * Bumped when the wire format changes, or when the two halves stop agreeing
+ * about who says what: `r`'s feedback now comes from the dispatcher, so a new
+ * TUI on an old daemon would report nothing at all and an old TUI on a new one
+ * would report a requeue twice. A mismatched client refuses to attach.
+ */
+export const PROTOCOL_VERSION = 15;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
