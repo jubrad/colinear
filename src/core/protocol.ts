@@ -4,7 +4,7 @@ import type { Change, Delta, Snapshot } from './delta.js';
 import { STATE_DIR } from './log.js';
 import type { AgentSession } from './sessions.js';
 import type { ProjectBrief } from './newproject.js';
-import type { Config, Issue, RepoConfig, TaskEdits } from './types.js';
+import type { Config, Issue, RepoConfig, TaskEdits, UiState } from './types.js';
 
 /**
  * Normally the socket sits with the rest of the state. COLINEAR_SOCKET moves
@@ -36,6 +36,8 @@ export type Command =
   | { name: 'pollPrs' }
   | { name: 'applyEdits'; id: string; edits: TaskEdits }
   | { name: 'setViewer'; viewer: { id: string; displayName: string } }
+  /** operator preference that outlives the run — the daemon owns the file */
+  | { name: 'setUi'; patch: Partial<UiState> }
   | { name: 'reloadConfig' }
   | { name: 'startReview'; id: string }
   | { name: 'cancelReview'; id: string }
@@ -94,7 +96,7 @@ export type ServerMsg =
   | { t: 'gc'; items: Array<{ path: string; kilobytes: number; label: string; reason: string; ageDays: number }> }
   /** one per worktree as it goes, so the UI can show progress rather than hang */
   | { t: 'gcProgress'; done: number; total: number; path: string; ok: boolean; finished: boolean }
-  | { t: 'hello'; protocol: number; pid: number; cfg: Config; snapshot: Snapshot }
+  | { t: 'hello'; protocol: number; pid: number; cfg: Config; snapshot: Snapshot; ui: UiState }
   | { t: 'delta'; delta: Delta }
   | { t: 'snapshot'; snapshot: Snapshot }
   | { t: 'toast'; text: string; kind: 'info' | 'ok' | 'err' }

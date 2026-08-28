@@ -19,7 +19,7 @@ import { store } from './core/store.js';
 import { openTunnel } from './core/tunnel.js';
 import type { AgentSession } from './core/sessions.js';
 import type { ProjectBrief } from './core/newproject.js';
-import type { Config, Issue, RepoConfig, TaskEdits } from './core/types.js';
+import type { Config, Issue, RepoConfig, TaskEdits, UiState } from './core/types.js';
 
 /**
  * What the views call. The daemon implements it for real; the client just
@@ -132,6 +132,10 @@ export interface Connection {
   /** something worth surfacing on whichever machine has a screen */
   onNotify(fn: (n: { title: string; body: string; url?: string }) => void): () => void;
   dispatcher: DispatcherApi;
+  /** operator preferences as the daemon has them, at connect time */
+  ui: UiState;
+  /** persist one — the daemon owns the file; nothing here writes it locally */
+  setUi(patch: Partial<UiState>): void;
   daemonPid: number;
   close(): void;
 }
@@ -275,6 +279,8 @@ export async function connectToDaemon(): Promise<Connection> {
         ready = true;
         resolve({
           cfg: msg.cfg,
+          ui: msg.ui,
+          setUi: (patch) => command({ name: 'setUi', patch }),
           daemonPid: msg.pid,
           close: () => {
             socket?.destroy();

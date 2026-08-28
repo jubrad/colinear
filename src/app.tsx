@@ -7,7 +7,7 @@ import { CONTEXT, DEFAULT_CONTEXT } from './core/context.js';
 import { useReviews, useTasks } from './core/hooks.js';
 import { notify } from './core/notify.js';
 import { store } from './core/store.js';
-import type { Config, Scope } from './core/types.js';
+import type { Config, Scope, UiState } from './core/types.js';
 import { CommandBar } from './ui/CommandBar.js';
 import { AppContext, type AppCtx, type ToastKind } from './ui/context.js';
 import { Crumbs } from './ui/Crumbs.js';
@@ -78,6 +78,9 @@ export function App(props: {
   onChannels?: AppCtx['onChannels'];
   onChannelHistory?: AppCtx['onChannelHistory'];
   onNotify?: (fn: (n: { title: string; body: string; url?: string }) => void) => () => void;
+  /** persisted operator preferences, and the way back to the daemon that owns them */
+  ui?: UiState;
+  setUi?: (patch: Partial<UiState>) => void;
 }) {
   const { cfg, dispatcher, onToast, onGc, onGcProgress, onPlanChatReady, onAgents, onReviewDiff, onTaskDiff, onCreating, onLogTail, onChannels, onChannelHistory, onNotify } = props;
   const { exit } = useApp();
@@ -88,6 +91,17 @@ export function App(props: {
   // writes zero frames (matters for unfocused panes)
   const anyTicking = tasks.some((t) => t.startedAt && !t.endedAt);
   const now = useClock(cfg.tickMs, anyTicking);
+
+  // the daemon owns the file; this is the local mirror so a preference
+  // repaints immediately instead of after a reconnect
+  const [ui, setUiLocal] = useState<UiState>(props.ui ?? {});
+  const setUi = useCallback(
+    (patch: Partial<UiState>) => {
+      setUiLocal((u) => ({ ...u, ...patch }));
+      props.setUi?.(patch);
+    },
+    [props.setUi],
+  );
 
   const keyCounter = useRef(1);
   // land on the board when a previous run's tasks were restored
@@ -189,8 +203,10 @@ export function App(props: {
       setEscHandler: (fn) => {
         escHandlerRef.current = fn;
       },
+      ui,
+      setUi,
     }),
-    [cfg, dispatcher, onGc, onGcProgress, onPlanChatReady, onAgents, onReviewDiff, onTaskDiff, onCreating, onLogTail, onChannels, onChannelHistory, viewer, teams, size, now, navigate, back, exit, cmdOpen],
+    [cfg, dispatcher, onGc, onGcProgress, onPlanChatReady, onAgents, onReviewDiff, onTaskDiff, onCreating, onLogTail, onChannels, onChannelHistory, viewer, teams, size, now, navigate, back, exit, cmdOpen, ui, setUi],
   );
 
   useInput(

@@ -18,8 +18,9 @@ rewritten. Green is a rebase, amber a CI fix, and a `revise` dot means it is wor
 
 | key | what |
 |---|---|
-| `j` `l` / ← → | move between columns |
-| `i` `k` / ↑ ↓ | move between cards |
+| `j` `l` / ← → | sideways — between columns, or between cards when [transposed](#transposing-the-board) |
+| `i` `k` / ↑ ↓ | up and down — between cards, or between statuses when transposed |
+| `t` | [transpose](#transposing-the-board): statuses become rows, cards run sideways |
 | `/` | search — id, title, repo, status, PR state, CI. `/conflict`, `/needs`, `/failing` |
 | `,` | sort within columns |
 | `enter` | [task detail](task.md) |
@@ -34,3 +35,20 @@ rewritten. Green is a rebase, amber a CI fix, and a `revise` dot means it is wor
 | `o` open the PR · `O` open the issue · `n` back to issues |
 
 The board and [`:tasks`](tasks.md) do the same things with the same keys; only movement differs.
+
+## Transposing the board
+
+`t` turns the board on its side: each status becomes a full-width row and its cards run sideways.
+The seven narrow columns become one wide lane per status, so a crowded status shows six cards at
+once on a wide terminal instead of two — and a status with nothing in it collapses to a single grey
+line rather than holding a column open.
+
+The keys keep their directions. Sideways always moves the cursor sideways, so `j`/`l` walk the cards
+in a status and `i`/`k` change status; empty statuses are skipped either way.
+
+Only whole rows are drawn — a row is as tall as its tallest card, and Ink overflows rather than
+clips, so half a row would paint over the detail pane. Expect two or three statuses on screen at a
+time, with `▲`/`▼` counts for the rest. A row with more cards than fit says so in its header
+(`PR Open(9) 2-1-1 · 1-6 of 9, j/l scrolls`) and scrolls as you walk into them.
+
+The choice is remembered: the daemon stores it, so it survives `R`, a restart, and a reconnect.

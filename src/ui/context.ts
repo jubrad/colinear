@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react';
 import type { DispatcherApi, GcItem, GcProgress, PlanChatReady } from '../client.js';
 import type { AgentSession } from '../core/sessions.js';
 import type { ChannelMessage } from '../core/channel.js';
-import type { Config, Scope } from '../core/types.js';
+import type { Config, Scope, UiState } from '../core/types.js';
 
 export type ToastKind = 'info' | 'ok' | 'err';
 
@@ -36,6 +36,9 @@ export interface AppCtx {
   setCapture: (on: boolean) => void;
   /** view claims esc (e.g. clear filters); return true to consume, else app pops the view */
   setEscHandler: (fn: (() => boolean) | null) => void;
+  /** operator preferences that outlive the run (the daemon persists them) */
+  ui: UiState;
+  setUi: (patch: Partial<UiState>) => void;
 }
 
 export const AppContext = createContext<AppCtx>(null as unknown as AppCtx);
