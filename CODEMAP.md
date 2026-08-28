@@ -96,6 +96,10 @@ src/core/
                      config, state, plans, the *encoding* of transcript directory names, and
                      the transcripts' own contents (every record carries the cwd it happened
                      in, plus the files tools touched) — by extension, never by sniffing
+  backupcrypt.ts     the archive's encryption: a random AES-256-GCM key for the body, wrapped
+                     by scrypt over the operator's passphrase and carried in the header, so one
+                     file moves and one secret is remembered; authenticated, so a tampered
+                     archive fails instead of restoring
   backup.check.ts    the round trip as a gate: a whole fake installation moved between two
                      home directories, asserting on what came out (bin/check runs it)
   worktrees.ts       what git thinks is checked out vs what is there. A worktree removed by
