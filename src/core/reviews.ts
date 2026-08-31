@@ -217,6 +217,9 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
   // nothing and nobody has touched.
   const posted = new Set(['commented', 'approved', 'changes_requested']);
   const invested = (r: Review) =>
+    // adopted first: the operator asked for this one by name, and it was never
+    // in the search whose absence this loop is reading
+    Boolean(r.adopted) ||
     posted.has(r.status) ||
     r.status === 'ready' ||
     Boolean(r.sessionId) ||
@@ -343,6 +346,102 @@ function announceNewCommits(id: string, headSha?: string): void {
       ? `the author pushed since your review (${headSha.slice(0, 8)}) — r re-reviews`
       : `the author pushed since this was written (${headSha.slice(0, 8)}) — r refreshes it`,
   );
+}
+
+/**
+ * `owner/repo#123`, `owner/repo/pull/123`, or the URL you copied out of the
+ * browser. Returns undefined rather than throwing: this parses whatever the
+ * operator typed into a command bar, and "that isn't a pull request" is an
+ * answer, not an exception.
+ */
+export function parsePrSpec(spec: string): { repository: string; number: number } | undefined {
+  const text = spec.trim().replace(/^https?:\/\/[^/]+\//, '');
+  const m = /^([\w.-]+\/[\w.-]+)(?:#|\/pull\/|\/)(\d+)\/?$/.exec(text);
+  if (!m) return undefined;
+  const number = Number.parseInt(m[2], 10);
+  return Number.isSafeInteger(number) && number > 0 ? { repository: m[1], number } : undefined;
+}
+
+/**
+ * Put a pull request on the review list because the operator asked for it.
+ *
+ * The list is filled by `review-requested:<you>`, which by construction never
+ * contains your own pull requests — you cannot request a review from yourself.
+ * That default is right: the list is a queue of what other people are waiting
+ * on. But reading your own work with the same tools is worth having, so this
+ * is the door: name a PR and it joins the list, marked as adopted so the
+ * reconcile knows the search's silence about it means nothing.
+ */
+export async function adoptReview(cfg: Config, spec: string): Promise<Review> {
+  const parsed = parsePrSpec(spec);
+  if (!parsed) {
+    throw new Error(`${spec}: not a pull request — try owner/repo#123, or paste its URL`);
+  }
+  const { repository, number } = parsed;
+  const id = reviewId(repository, number);
+  const existing = store.getReview(id);
+
+  const { stdout } = await exec(
+    'gh',
+    [
+      'pr', 'view', String(number),
+      '--repo', repository,
+      '--json', 'title,url,isDraft,updatedAt,additions,deletions,changedFiles,headRefName,baseRefName,headRefOid,author,state',
+    ],
+    { maxBuffer: 10 * 1024 * 1024 },
+  ).catch((err: unknown) => {
+    throw new Error(`${repository}#${number}: ${String((err as { stderr?: string })?.stderr ?? err).slice(0, 200)}`);
+  });
+  const pr = JSON.parse(stdout) as {
+    title: string; url: string; isDraft: boolean; updatedAt: string;
+    additions: number; deletions: number; changedFiles: number;
+    headRefName: string; baseRefName: string; headRefOid: string;
+    author: { login?: string } | null; state: string;
+  };
+
+  const meta = {
+    title: pr.title,
+    url: pr.url,
+    author: pr.author?.login ?? 'unknown',
+    isDraft: pr.isDraft,
+    updatedAt: pr.updatedAt,
+    additions: pr.additions,
+    deletions: pr.deletions,
+    changedFiles: pr.changedFiles,
+    headRefName: pr.headRefName,
+    baseRefName: pr.baseRefName,
+    headSha: pr.headRefOid,
+    adopted: true,
+  };
+
+  if (existing) {
+    // already known — adopting it only pins it to the list and refreshes what
+    // the search would have refreshed. Nothing the operator owns is touched.
+    store.updateReview(id, meta);
+    store.addReviewActivity(id, 'adopted — it stays on the list until the PR settles');
+    return store.getReview(id)!;
+  }
+
+  const repo = await repoForSlug(cfg, repository);
+  const review: Review = {
+    id,
+    number,
+    repository,
+    status: pr.state === 'OPEN' ? 'pending' : 'stale',
+    activity: [],
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    costUsd: 0,
+    ...(repo ? { repo: { name: repo.name, path: repo.path, worktreeRoot: repo.worktreeRoot } } : {}),
+    ...meta,
+  } as Review;
+  store.upsertReview(review);
+  store.addReviewActivity(
+    id,
+    pr.state === 'OPEN'
+      ? 'adopted — r runs a pre-review'
+      : `adopted, but the PR is ${pr.state.toLowerCase()}`,
+  );
+  return review;
 }
 
 /** Fields the search endpoint doesn't return; needed before checking out. */

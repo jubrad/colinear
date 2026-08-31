@@ -13,7 +13,7 @@ import { Reviewer } from './core/reviewer.js';
 import { PlanManager } from './core/projectplan.js';
 import { providerFor } from './core/provider.js';
 import type { Project, Severity } from './core/types.js';
-import { pollReviewRequests, startReviewPolling } from './core/reviews.js';
+import { adoptReview, pollReviewRequests, startReviewPolling } from './core/reviews.js';
 import {
   createDecoder,
   encode,
@@ -167,6 +167,13 @@ export async function runDaemon(): Promise<void> {
         break;
       case 'change':
         store.applyChange(cmd.change);
+        break;
+      case 'adoptReview':
+        void adoptReview(cfg, cmd.spec)
+          .then((r) => broadcast({ t: 'toast', text: `${r.repository}#${r.number} added to reviews`, kind: 'ok' }))
+          .catch((err: unknown) =>
+            broadcast({ t: 'toast', text: String((err as Error)?.message ?? err).slice(0, 160), kind: 'err' }),
+          );
         break;
       case 'startReview':
         void reviewer.start(cmd.id);

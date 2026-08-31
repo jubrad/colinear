@@ -32,6 +32,30 @@ applies is more urgent than one not yet started — and sorts to the top under `
 
 The push is also written to the review's activity, once, on the poll that finds it.
 
+## Adding a pull request yourself
+
+The list is filled by one search — pull requests asking for **your** review — which by construction
+never contains your own: you cannot request a review from yourself. That is the right default, since
+the list is a queue of what other people are waiting on.
+
+When you do want to read your own work with the same tools, name it:
+
+```
+:reviews jubrad/colinear#104
+:reviews https://github.com/jubrad/colinear/pull/104
+```
+
+Anything that names a pull request works — `owner/repo#123`, `owner/repo/pull/123`, or the URL you
+copied out of the browser. An unknown one is fetched and joins the list; a known one is just
+selected, as before. Adopted rows carry a `+` in the flag column and **stay** until the PR merges or
+closes: they were never in the search, so its silence about them means nothing, and the reconcile
+that stales a request nobody is waiting on leaves them alone.
+
+Everything else is the same — `r` pre-reviews it, `enter` reads it against the diff, findings and
+annotations behave identically. The one difference is at the end: **GitHub will not let you approve
+or request changes on your own pull request**, so `A` and `X` say so rather than posting into a 422.
+`p` still posts the comments, which is the part worth having on your own PR.
+
 ## Assisted pre-review
 
 `r` checks the PR out in a worktree and runs one agent over the diff in context. Progress streams

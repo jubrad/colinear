@@ -551,6 +551,16 @@ export class Reviewer {
     const review = store.getReview(id);
     if (!review) return;
     const event: ReviewEvent = verdict === 'approve' ? 'APPROVE' : 'REQUEST_CHANGES';
+    // GitHub refuses a verdict on your own pull request. Saying so here beats
+    // a 422 from the far side, and points at the half that does work: the
+    // comments post fine, which is the point of reading your own PR this way.
+    const login = await viewerLogin().catch(() => undefined);
+    if (login && review.author === login) {
+      const what = verdict === 'approve' ? 'approve' : 'request changes on';
+      store.updateReview(id, { error: `GitHub will not let you ${what} your own PR — p posts the comments` });
+      this.toast(`${review.repository}#${review.number} is yours — GitHub refuses that; p posts the comments`, 'err');
+      return;
+    }
     // with a review written, the verdict carries it; without one it's a bare
     // approval, which GitHub still wants a body for on request-changes
     if (review.doc || review.summary) return this.post(id, event);

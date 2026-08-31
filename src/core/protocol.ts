@@ -40,6 +40,8 @@ export type Command =
   | { name: 'setUi'; patch: Partial<UiState> }
   | { name: 'reloadConfig' }
   | { name: 'startReview'; id: string }
+  /** put a pull request on the review list by name — `:reviews owner/repo#123` */
+  | { name: 'adoptReview'; spec: string }
   | { name: 'cancelReview'; id: string }
   | { name: 'suspendReview'; id: string }
   | { name: 'reviewChat'; id: string; text: string }
