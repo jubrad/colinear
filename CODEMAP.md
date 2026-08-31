@@ -34,6 +34,8 @@ src/core/
   delta.ts           wire format: Change/Delta/Snapshot, WireTask (question minus its callback), and
                      encodePatch — cleared fields travel separately because JSON drops undefined
   protocol.ts        socket path, PROTOCOL_VERSION, Command/ClientMsg/ServerMsg, NDJSON codec
+                     (a command the daemon has no case for is reported, not swallowed —
+                     an additive command needs no version bump, but it must not go quiet)
   store.check.ts     `npm run check`: replays a realistic mutation sequence into a mirror and asserts
                      they agree (cleared fields, activity cap, answer callback, gap → re-snapshot)
   hooks.ts           useTasks(): memoized per store.version — identity stability is load-bearing (see gotchas)
