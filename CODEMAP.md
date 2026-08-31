@@ -118,6 +118,8 @@ src/core/
                      lines into visual rows; layoutMargin aligns annotations beside them
   diff.check.ts      a tab-indented diff measured in the columns a terminal actually paints:
                      every row fits its pane at every width (bin/check runs it)
+                     clearBrokenSubmodules undoes the wreckage `submodule.recurse` leaves in
+                     a linked worktree, which otherwise wedges a review permanently
   reviewer.check.ts  an info finding reaches no review body, over every caller shape and
                      every event — the guarantee that has escaped twice — and only a stale
                      anchor is read as one (bin/check runs it)

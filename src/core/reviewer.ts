@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, watch, type FSWatcher, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, type FSWatcher, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession, type SessionCallbacks } from './agent.js';
@@ -752,13 +752,22 @@ export class Reviewer {
 
     if (existsSync(worktree)) {
       store.addReviewActivity(id, `reusing worktree ${worktree}`);
-      await exec('git', ['-C', worktree, 'checkout', '-B', `review/${review.number}`, source]);
+      const cleared = clearBrokenSubmodules(worktree);
+      for (const path of cleared) {
+        store.addReviewActivity(id, `cleared a half-initialised submodule at ${path}`);
+      }
+      // --force because a review checkout is scratch: it tracks the pull
+      // request and holds nothing of the operator's. Without it, a run that
+      // died partway through updating the tree leaves modifications that
+      // refuse every later checkout, and the review is wedged for good.
+      await exec('git', [...NO_SUBMODULES, '-C', worktree, 'checkout', '--force', '-B', `review/${review.number}`, source]);
       await this.recordSha(id, worktree);
       return worktree;
     }
     store.addReviewActivity(id, `creating worktree ${worktree}…`);
     mkdirSync(repo.worktreeRoot, { recursive: true });
     await exec('git', [
+      ...NO_SUBMODULES,
       '-C', repo.path,
       'worktree', 'add',
       '-B', `review/${review.number}`,
@@ -898,6 +907,54 @@ export class Reviewer {
  * permission problem, it is a review whose anchors have gone stale — nearly
  * always because the author pushed after it was written.
  */
+/**
+ * Never let git recurse into submodules on colinear's behalf.
+ *
+ * `submodule.recurse = true` is a perfectly reasonable thing to have in your
+ * own git config, and it is not ours to change — but it turns every checkout
+ * colinear runs into one that also tries to set up submodules, and git's
+ * support for that inside a *linked worktree* is incomplete. What it leaves
+ * behind is described on clearBrokenSubmodules below.
+ *
+ * Passed as `-c` rather than written into the repo's config: this is about
+ * what colinear's own commands do, not about the operator's repository.
+ */
+const NO_SUBMODULES = ['-c', 'submodule.recurse=false'];
+
+/**
+ * Put half-initialised submodules in a review checkout back to uninitialised.
+ *
+ * With submodule recursion on, a checkout in a linked worktree writes a `.git`
+ * pointer into the submodule directory and a stub gitdir holding nothing but a
+ * `config`, then gives up. Every later git command in that worktree — not just
+ * checkout, but `status` and `diff` too — then dies with `not a git
+ * repository`, and the review can never be refreshed again.
+ *
+ * Uninitialised is what a fresh worktree has anyway: colinear reads the pull
+ * request's own diff and never wants submodule contents. So a pointer whose
+ * gitdir is not a repository is removed rather than repaired.
+ */
+export function clearBrokenSubmodules(worktree: string): string[] {
+  const modules = join(worktree, '.gitmodules');
+  if (!existsSync(modules)) return [];
+  const cleared: string[] = [];
+  const text = readFileSync(modules, 'utf8');
+  for (const m of text.matchAll(/^\s*path\s*=\s*(.+?)\s*$/gm)) {
+    const path = m[1];
+    const pointer = join(worktree, path, '.git');
+    if (!existsSync(pointer) || statSync(pointer).isDirectory()) continue;
+    const target = readFileSync(pointer, 'utf8').replace(/^gitdir:\s*/, '').trim();
+    if (!target) continue;
+    const gitdir = target.startsWith('/') ? target : join(worktree, path, target);
+    // a real submodule checkout has a HEAD; the stub has only a config
+    if (existsSync(join(gitdir, 'HEAD'))) continue;
+    rmSync(pointer, { force: true });
+    rmSync(gitdir, { recursive: true, force: true });
+    cleared.push(path);
+  }
+  return cleared;
+}
+
 const STALE_ANCHOR = /must be part of the diff|not part of the diff|pull_request_review_thread\.(line|start_line|path)/i;
 
 export function staleAnchors(err: unknown): boolean {
