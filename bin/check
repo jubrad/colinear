@@ -40,4 +40,9 @@ echo '── diff layout'
 npm run check:diff
 
 echo
+echo '── review posting'
+# an info finding must reach no review body, by any path
+npm run check:review
+
+echo
 echo 'ok'

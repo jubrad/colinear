@@ -371,19 +371,18 @@ export class Reviewer {
       try {
         posted = await submitReview(review, event, body, anchored, this.cfg.prSignoff, this.cfg.prSignoffScope);
       } catch (err) {
-        // a comment on a line outside the diff rejects the whole review, so
-        // fall back to one that says everything in the body instead
-        log(`review ${id}: inline comments rejected (${String(err).slice(0, 200)})`);
-        store.addReviewActivity(id, 'inline comments rejected — posting findings in the body');
-        await deletePendingReviews(review).catch(() => 0);
-        posted = await submitReview(
-          review,
-          event,
-          reviewBody(review, review.findings ?? [], event, false),
-          [],
-          this.cfg.prSignoff,
-          this.cfg.prSignoffScope,
-        );
+        // Anchors that no longer match the diff are a fixable review, not a
+        // failed post. This used to fall back to putting every finding in the
+        // body, which posted a shape nobody chose — and, once, annotations
+        // that are never meant to leave colinear. Nothing goes up; the agent
+        // that wrote the anchors is asked to correct them.
+        if (staleAnchors(err)) {
+          log(`review ${id}: anchors rejected (${String(err).slice(0, 200)})`);
+          await deletePendingReviews(review).catch(() => 0);
+          await this.reanchor(id, err);
+          return;
+        }
+        throw err;
       }
 
       store.updateReview(id, {
@@ -400,6 +399,92 @@ export class Reviewer {
       store.updateReview(id, { status: 'ready', error: `post failed: ${message}` });
       store.addReviewActivity(id, `post failed: ${message}`);
       this.toast(`post failed for ${review.repository}#${review.number} — p retries`, 'err');
+    }
+  }
+
+  /**
+   * The anchors have gone stale: hand the review back to the agent that wrote
+   * them, rather than posting something nobody chose.
+   *
+   * The checkout is refreshed first. Re-anchoring against the diff the agent
+   * remembers would reproduce the same rejection, and the branch having moved
+   * is the usual reason the anchors stopped matching in the first place.
+   *
+   * Nothing reaches GitHub on this path — not the review, not a comment. The
+   * operator posts again once the document is fixed.
+   */
+  private async reanchor(id: string, err: unknown) {
+    const review = store.getReview(id);
+    if (!review) return;
+    const detail = String((err as { stderr?: string })?.stderr ?? err)
+      .replace(/\s+/g, ' ')
+      .slice(0, 200);
+    store.addReviewActivity(id, `post refused: anchors no longer match the diff (${detail})`);
+
+    const anchored = (review.findings ?? []).filter((f) => f.severity !== 'info' && f.file && f.line);
+    const note = (text: string) =>
+      store.updateReview(id, {
+        chat: [...(store.getReview(id)?.chat ?? []), { role: 'note' as const, text, at: Date.now() }],
+      });
+
+    if (!review.sessionId || !review.worktree || this.aborts.has(id)) {
+      // no session to ask, or it is already busy — say what is wrong and stop
+      store.updateReview(id, {
+        status: 'ready',
+        error: 'anchors no longer match the diff — re-anchor the findings and post again',
+      });
+      note('GitHub refused the inline comments: their lines are not in the diff any more. Fix the anchors and post again.');
+      this.toast(`${review.repository}#${review.number}: anchors are stale — nothing was posted`, 'err');
+      return;
+    }
+
+    store.updateReview(id, {
+      status: 'ready',
+      error: 'anchors no longer match the diff — asking the agent to re-anchor',
+      chatting: true,
+    });
+    note(
+      `GitHub refused the inline comments — ${anchored.length} anchored finding(s) name lines that are ` +
+        'not in the diff any more. Nothing was posted. Asking you to re-anchor them.',
+    );
+    this.toast(`${review.repository}#${review.number}: anchors are stale — the agent is fixing them`, 'info');
+
+    const controller = new AbortController();
+    this.aborts.set(id, controller);
+    try {
+      // fetch and reset to the PR's current head, and record the sha the
+      // corrected document will describe
+      const worktree = await this.checkout(review, id, review.headRefName, review.baseRefName).catch(() => review.worktree!);
+      const since = review.reviewedSha;
+      const moved = since
+        ? (await exec('git', ['-C', worktree, 'log', '--oneline', `${since}..HEAD`], { maxBuffer: 4 * 1024 * 1024 }).catch(
+            () => ({ stdout: '' }),
+          )).stdout.trim()
+        : '';
+      const result = await runSession({
+        permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
+        agent: { kind: 'review', label: `${review.repository}#${review.number}`, origin: 're-anchoring a rejected review' },
+        prompt: reanchorPrompt(review, anchored, moved, detail),
+        cwd: worktree,
+        resume: review.sessionId,
+        model: this.cfg.model,
+        abortController: controller,
+        callbacks: this.callbacks(id),
+      });
+      const reply = result.isError
+        ? `(the session failed: ${result.errors.join('; ').slice(0, 200)})`
+        : result.text.trim() || '(no reply)';
+      const current = store.getReview(id);
+      store.updateReview(id, {
+        chat: [...(current?.chat ?? []), { role: 'agent', text: reply, at: Date.now() }],
+        costUsd: (current?.costUsd ?? 0) + result.costUsd,
+      });
+      this.absorbDoc(id);
+      store.updateReview(id, { error: 'anchors were re-checked — read them, then p posts again' });
+      this.toast(`${review.repository}#${review.number}: anchors re-checked — p posts again`, 'ok');
+    } finally {
+      this.aborts.delete(id);
+      store.updateReview(id, { chatting: false });
     }
   }
 
@@ -796,6 +881,20 @@ export class Reviewer {
   }
 }
 
+/**
+ * GitHub refuses an entire review when any one comment names a line it cannot
+ * anchor to, and says which field it choked on. That is worth telling apart
+ * from every other way a post can fail: it is not a network problem or a
+ * permission problem, it is a review whose anchors have gone stale — nearly
+ * always because the author pushed after it was written.
+ */
+const STALE_ANCHOR = /must be part of the diff|not part of the diff|pull_request_review_thread\.(line|start_line|path)/i;
+
+export function staleAnchors(err: unknown): boolean {
+  const e = err as { stderr?: string; stdout?: string } | undefined;
+  return STALE_ANCHOR.test(`${String(err)} ${e?.stderr ?? ''} ${e?.stdout ?? ''}`);
+}
+
 /** How a severity reads in the count line. */
 const SEVERITY_LABEL: Record<Severity, [string, string]> = {
   blocking: ['must fix', 'must fix'],
@@ -825,9 +924,17 @@ export function reviewBody(
   event: ReviewEvent,
   hasInlineComments: boolean,
 ): string {
-  // info findings never reach GitHub, so they never reach the body either —
-  // filtered here rather than relying on the severity list below to omit them
-  const findings = (review.findings ?? []).filter((f) => f.severity !== 'info');
+  // Info findings never reach GitHub, so they never reach the body either.
+  //
+  // Both lists are filtered here rather than at the call sites. The caller's
+  // list used to be trusted, and the one path that passed an unfiltered one —
+  // the fallback taken when GitHub rejects the inline comments — published
+  // three annotations onto a real PR as part of an approval. A guarantee this
+  // absolute belongs in the function that renders the body, where no caller
+  // can get it wrong.
+  const postable = (f: ReviewFinding) => f.severity !== 'info';
+  const findings = (review.findings ?? []).filter(postable);
+  const unanchoredPostable = unanchored.filter(postable);
   const lead = leadFinding(findings);
   const rest = findings.filter((f) => f !== lead);
   const parts: string[] = [];
@@ -847,7 +954,7 @@ export function reviewBody(
     parts.push(`## Summary\n\n${lines.join('\n')}`);
   }
 
-  const other = unanchored.filter((f) => f !== lead);
+  const other = unanchoredPostable.filter((f) => f !== lead);
   if (other.length) {
     parts.push(
       `## Other\n\n${other
@@ -986,6 +1093,44 @@ Severity means:
 - "praise": worth calling out as good. Optional, at most a couple.
 
 Report what you actually found. An empty findings list is a fine answer for a clean PR — do not invent problems to look thorough, and do not soften a real one. Keep your chat reply short; the document is the deliverable.${guidanceFor(cfg.guidance, 'review')}`;
+}
+
+/**
+ * What the agent is told when its anchors stopped matching.
+ *
+ * Deterministic context, not an instruction to go and look: the commits that
+ * landed and the findings that were rejected are read here and handed over,
+ * because an agent asked to "check what changed" can report having read a
+ * diff it never fetched.
+ */
+function reanchorPrompt(
+  review: Review,
+  anchored: ReviewFinding[],
+  moved: string,
+  detail: string,
+): string {
+  const list = anchored
+    .map((f) => `- \`${f.file}:${f.line}\`${f.startLine ? ` (block from ${f.startLine})` : ''} — **${f.severity}** — ${f.comment.split('\n')[0].slice(0, 120)}`)
+    .join('\n');
+  const since = moved
+    ? `The branch has moved since you wrote this. Commits that landed:\n\n${moved}\n`
+    : 'The branch may have moved, or an anchor may name a line the diff never touched.\n';
+  return `Your review could not be posted. GitHub refused the whole thing because at least one inline comment names a line that is not part of the pull request's diff:
+
+    ${detail}
+
+${since}
+Your checkout has been updated to the pull request's current head. Re-anchor the findings block in \`${REVIEW_FILE}\` against the diff **as it is now** — \`git diff ${review.baseRefName}...HEAD\` is the diff that will be posted against.
+
+The anchored findings are:
+
+${list}
+
+For each one: if the code it is about is still in the diff, correct \`line\` (and \`start_line\`) to where it is now. If that code is no longer part of the diff, either move the finding to the nearest line the diff **does** touch and adjust the comment so it still reads correctly there, or drop \`file\` and \`line\` from it entirely, which posts it in the review body instead. A finding that no longer applies at all should be removed.
+
+Do not guess an anchor. A line the diff does not touch is exactly what was rejected, and one bad anchor rejects every comment in the review.
+
+Keep the prose and the findings block in agreement, and reply with one short paragraph saying what you changed. Never post anything to GitHub yourself — colinear posts from the document when the operator asks.`;
 }
 
 function chatPrompt(text: string, review: Review): string {

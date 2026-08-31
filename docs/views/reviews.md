@@ -78,7 +78,9 @@ Two kinds share the margin, told apart by their bar:
 They live in one list, so an annotation is editable exactly like a comment — and promoting one to a
 real severity is how "I had to explain this to myself" becomes "the author should know this". An
 `info` finding is filtered out of the inline comments, out of the body, and out of the severity
-counts; a review holding nothing but annotations has nothing to post, and says so.
+counts; a review holding nothing but annotations has nothing to post, and says so. That filtering
+happens where the body is rendered rather than at each call site, so no posting path — including
+the fallback taken when GitHub rejects a review's inline comments — can leak one.
 
 Long code lines **wrap** rather than being cut — the end of a line is where a call's arguments and a
 condition's tail live. A wrapped line keeps its line number on the first row only, and the margin
@@ -209,6 +211,23 @@ What actually gets sent is deliberately small:
 - `prSignoff` appends attribution to all of that, or to the body alone
 
 The document's prose is written for you, to decide what to send. It never leaves your machine.
+
+### When the anchors have gone stale
+
+GitHub rejects a review **entirely** if any one comment names a line that is not part of the diff,
+and the ordinary way to get there is the author pushing after the review was written. Colinear used
+to fall back to putting every finding in the body — which posted a shape nobody chose, and once put
+annotations onto a real pull request.
+
+Now nothing is posted. The rejection is recognised as what it is, any pending review is cleared, and
+the review goes back to the agent that wrote the anchors: the checkout is fetched forward to the
+PR's current head, and the agent is handed the commits that landed and the exact findings that were
+rejected, to re-anchor them against the diff as it is now. A finding whose code has left the diff
+can move to a line the diff does touch, or lose its anchor and ride in the body instead.
+
+You get a note in the chat, and `p` posts again once you have read what changed. Nothing reaches
+GitHub on that path — not the review, not a comment. Every other kind of failure (auth, a closed PR,
+the network) still just fails and says so, because re-anchoring cannot help with any of them.
 
 ## Keys
 
