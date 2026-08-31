@@ -114,6 +114,8 @@ src/core/
                      lines into visual rows; layoutMargin aligns annotations beside them
   diff.check.ts      a tab-indented diff measured in the columns a terminal actually paints:
                      every row fits its pane at every width (bin/check runs it)
+  reviewer.check.ts  an info finding reaches no review body, over every caller shape and
+                     every event — the guarantee that has escaped twice (bin/check runs it)
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
                      read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
                      approve() creates Linear sub-issues; snapshot/restore for persistence

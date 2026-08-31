@@ -78,7 +78,9 @@ Two kinds share the margin, told apart by their bar:
 They live in one list, so an annotation is editable exactly like a comment — and promoting one to a
 real severity is how "I had to explain this to myself" becomes "the author should know this". An
 `info` finding is filtered out of the inline comments, out of the body, and out of the severity
-counts; a review holding nothing but annotations has nothing to post, and says so.
+counts; a review holding nothing but annotations has nothing to post, and says so. That filtering
+happens where the body is rendered rather than at each call site, so no posting path — including
+the fallback taken when GitHub rejects a review's inline comments — can leak one.
 
 Long code lines **wrap** rather than being cut — the end of a line is where a call's arguments and a
 condition's tail live. A wrapped line keeps its line number on the first row only, and the margin

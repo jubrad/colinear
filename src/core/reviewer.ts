@@ -368,6 +368,8 @@ export class Reviewer {
       if (cleared) store.addReviewActivity(id, `cleared ${cleared} leftover pending review(s)`);
 
       let posted;
+      // what actually reached the PR, which the fallback below changes
+      let inline = anchored.length;
       try {
         posted = await submitReview(review, event, body, anchored, this.cfg.prSignoff, this.cfg.prSignoffScope);
       } catch (err) {
@@ -376,21 +378,26 @@ export class Reviewer {
         log(`review ${id}: inline comments rejected (${String(err).slice(0, 200)})`);
         store.addReviewActivity(id, 'inline comments rejected — posting findings in the body');
         await deletePendingReviews(review).catch(() => 0);
+        // `postable`, not every finding: the anchored ones have to move into
+        // the body since they could not be attached, but an `info` annotation
+        // is not review feedback and does not become any more postable because
+        // GitHub refused the inline comments
         posted = await submitReview(
           review,
           event,
-          reviewBody(review, review.findings ?? [], event, false),
+          reviewBody(review, postable, event, false),
           [],
           this.cfg.prSignoff,
           this.cfg.prSignoffScope,
         );
+        inline = 0; // nothing was attached to a line in the end
       }
 
       store.updateReview(id, {
         status: event === 'APPROVE' ? 'approved' : event === 'REQUEST_CHANGES' ? 'changes_requested' : 'commented',
         // the commit the author is now holding feedback on: round two diffs
         // from here, not from wherever the branch has drifted to
-        posted: { at: Date.now(), event, url: posted.url, comments: anchored.length, sha: review.reviewedSha },
+        posted: { at: Date.now(), event, url: posted.url, comments: inline, sha: review.reviewedSha },
         error: undefined,
       });
       store.addReviewActivity(id, `posted ${event.toLowerCase()} review: ${posted.url}`);
@@ -825,9 +832,17 @@ export function reviewBody(
   event: ReviewEvent,
   hasInlineComments: boolean,
 ): string {
-  // info findings never reach GitHub, so they never reach the body either —
-  // filtered here rather than relying on the severity list below to omit them
-  const findings = (review.findings ?? []).filter((f) => f.severity !== 'info');
+  // Info findings never reach GitHub, so they never reach the body either.
+  //
+  // Both lists are filtered here rather than at the call sites. The caller's
+  // list used to be trusted, and the one path that passed an unfiltered one —
+  // the fallback taken when GitHub rejects the inline comments — published
+  // three annotations onto a real PR as part of an approval. A guarantee this
+  // absolute belongs in the function that renders the body, where no caller
+  // can get it wrong.
+  const postable = (f: ReviewFinding) => f.severity !== 'info';
+  const findings = (review.findings ?? []).filter(postable);
+  const unanchoredPostable = unanchored.filter(postable);
   const lead = leadFinding(findings);
   const rest = findings.filter((f) => f !== lead);
   const parts: string[] = [];
@@ -847,7 +862,7 @@ export function reviewBody(
     parts.push(`## Summary\n\n${lines.join('\n')}`);
   }
 
-  const other = unanchored.filter((f) => f !== lead);
+  const other = unanchoredPostable.filter((f) => f !== lead);
   if (other.length) {
     parts.push(
       `## Other\n\n${other
