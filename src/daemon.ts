@@ -416,6 +416,21 @@ export async function runDaemon(): Promise<void> {
           });
         })();
         break;
+      default: {
+        // A command this daemon has never heard of means the frontend is newer
+        // than the backend — `npm run build` and `R` reload the TUI, but the
+        // daemon keeps running whatever it started with. Without this the
+        // switch swallowed it and the key looked broken: the operator asked
+        // for something and got silence, which is the worst answer available.
+        const unknown = (cmd as { name?: string }).name ?? 'unnamed';
+        log(`daemon: unknown command ${unknown} — frontend is newer than this daemon`);
+        reply({
+          t: 'toast',
+          text: `this daemon does not know "${unknown}" — it is older than the UI. coli daemon stop && coli`,
+          kind: 'err',
+        });
+        break;
+      }
     }
   };
 
