@@ -212,6 +212,23 @@ What actually gets sent is deliberately small:
 
 The document's prose is written for you, to decide what to send. It never leaves your machine.
 
+### When the anchors have gone stale
+
+GitHub rejects a review **entirely** if any one comment names a line that is not part of the diff,
+and the ordinary way to get there is the author pushing after the review was written. Colinear used
+to fall back to putting every finding in the body — which posted a shape nobody chose, and once put
+annotations onto a real pull request.
+
+Now nothing is posted. The rejection is recognised as what it is, any pending review is cleared, and
+the review goes back to the agent that wrote the anchors: the checkout is fetched forward to the
+PR's current head, and the agent is handed the commits that landed and the exact findings that were
+rejected, to re-anchor them against the diff as it is now. A finding whose code has left the diff
+can move to a line the diff does touch, or lose its anchor and ride in the body instead.
+
+You get a note in the chat, and `p` posts again once you have read what changed. Nothing reaches
+GitHub on that path — not the review, not a comment. Every other kind of failure (auth, a closed PR,
+the network) still just fails and says so, because re-anchoring cannot help with any of them.
+
 ## Keys
 
 | key | what |

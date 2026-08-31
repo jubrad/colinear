@@ -1,4 +1,4 @@
-import { leadFinding, reviewBody } from './reviewer.js';
+import { leadFinding, reviewBody, staleAnchors } from './reviewer.js';
 import type { Review, ReviewFinding } from './types.js';
 
 /**
@@ -15,6 +15,10 @@ import type { Review, ReviewFinding } from './types.js';
  * as part of an approval. So this checks the guarantee at the renderer, over
  * every caller shape that exists and one that should not, because that is the
  * level the guarantee has to hold at.
+ *
+ * That fallback is gone — a rejected anchor is now handed back to the agent
+ * that wrote it — so the second half of this file checks the detector that
+ * decides which failures are anchors and which are everything else.
  */
 
 const failures: string[] = [];
@@ -93,9 +97,45 @@ check(
 
 check('the lead is the finding with no file, line or severity', leadFinding(findings) === lead);
 
+/**
+ * The other half: a rejected post is only handed back to the agent when it was
+ * rejected for anchors. Read too broadly it would swallow a real failure —
+ * auth, a closed PR — into a re-anchor that cannot help; read too narrowly it
+ * falls through to a plain failure and the operator re-posts into the same
+ * rejection.
+ *
+ * These are the shapes `gh api` actually hands back, wrapped as execFile
+ * rejects them: the message carries the command, and the body arrives on
+ * stderr.
+ */
+const rejected = (stderr: string) =>
+  Object.assign(new Error('Command failed: gh api --method POST /repos/o/r/pulls/1/reviews'), { stderr });
+
+const ANCHOR_ERRORS: Array<[string, string]> = [
+  ['a line outside the diff', '{"message":"Unprocessable Entity","errors":[{"resource":"PullRequestReviewComment","field":"pull_request_review_thread.line","code":"invalid","message":"pull_request_review_thread.line must be part of the diff"}]}'],
+  ['a block whose start is outside it', 'pull_request_review_thread.start_line must be part of the diff'],
+  ['a file the diff does not touch', 'pull_request_review_thread.path is not part of the diff'],
+];
+for (const [what, stderr] of ANCHOR_ERRORS) {
+  check(`${what} is recognised as a stale anchor`, staleAnchors(rejected(stderr)), stderr.slice(0, 120));
+}
+
+const OTHER_ERRORS: Array<[string, string]> = [
+  ['a permission failure', '{"message":"Resource not accessible by integration","status":"403"}'],
+  ['a closed pull request', '{"message":"Unprocessable Entity","errors":[{"resource":"PullRequestReview","code":"custom","message":"Can not approve your own pull request"}]}'],
+  ['a network failure', 'error connecting to api.github.com'],
+  ['a missing gh', 'spawn gh ENOENT'],
+];
+for (const [what, stderr] of OTHER_ERRORS) {
+  check(`${what} is not mistaken for one`, !staleAnchors(rejected(stderr)), stderr.slice(0, 120));
+}
+check('and neither is nothing at all', !staleAnchors(new Error('Command failed: gh api')));
+
 if (failures.length) {
   console.error(`review posting: ${failures.length} failure(s)`);
   for (const f of failures) console.error(`  ✖ ${f}`);
   process.exit(1);
 }
-console.log('ok — an info finding reaches no review body, by any path, for any event');
+console.log(
+  'ok — no info finding reaches a review body, and only a stale anchor is treated as one',
+);
