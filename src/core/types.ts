@@ -451,6 +451,15 @@ export interface Review {
    * submitting fulfils the request, and the PR leaves the search while the
    * record stays. It is the difference between "waiting on you" and "done".
    */
+  /**
+   * Pulled in by the operator rather than by a review request — `:reviews
+   * owner/repo#123`. Your own pull requests never reach the list on their own,
+   * because the search that fills it asks for PRs requesting *your* review and
+   * you cannot request one from yourself. An adopted review is exempt from
+   * absence-staling for the same reason: it was never in that search to begin
+   * with, so leaving it means nothing.
+   */
+  adopted?: boolean;
   requested?: boolean;
   /**
    * Who it was asked of. GitHub's `review-requested:<you>` search returns both

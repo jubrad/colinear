@@ -44,6 +44,8 @@ export interface DispatcherApi {
   reloadConfig(): void;
   /** PR review flow — see Reviewer; nothing reaches GitHub until asked */
   startReview(id: string): void;
+  /** put a PR on the review list by owner/repo#n or URL */
+  adoptReview(spec: string): void;
   cancelReview(id: string): void;
   suspendReview(id: string): void;
   reviewChat(id: string, text: string): void;
@@ -351,6 +353,7 @@ export async function connectToDaemon(): Promise<Connection> {
             setViewer: (viewer) => command({ name: 'setViewer', viewer }),
             reloadConfig: () => command({ name: 'reloadConfig' }),
             startReview: (id) => command({ name: 'startReview', id }),
+            adoptReview: (spec) => command({ name: 'adoptReview', spec }),
             cancelReview: (id) => command({ name: 'cancelReview', id }),
             suspendReview: (id) => command({ name: 'suspendReview', id }),
             reviewChat: (id, text) => command({ name: 'reviewChat', id, text }),

@@ -61,7 +61,9 @@ src/core/
   reviews.ts         the GitHub side of PR review: one GraphQL search for PRs awaiting me
                      (diff stats + branches included, archived repos excluded), repo matching
                      by git remote (a repo's colinear name rarely equals its GitHub slug),
-                     deletePendingReviews + submitReview (deterministic posting)
+                     deletePendingReviews + submitReview (deterministic posting);
+                     adoptReview/parsePrSpec put a PR on the list by name, for your own,
+                     which the review-requested search can never return
   reviewer.ts        assisted review: worktree on the PR head, one session that writes
                      .colinear-review.md, chat turns that resume it, doc watch, and the
                      deterministic post/approve/request-changes path

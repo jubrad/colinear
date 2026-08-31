@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
 import { attachTo, rememberView, setPendingAction } from '../core/attach.js';
 import { useReviews } from '../core/hooks.js';
+import { parsePrSpec } from '../core/reviews.js';
 import { store } from '../core/store.js';
 import type { Review } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
@@ -38,6 +39,11 @@ export function freshness(r: Review): { glyph: string; color: string; why: strin
     return r.requestedVia === 'team'
       ? { glyph: '○', color: theme.dim, why: 'requested from a team you are on — anyone on it can take this' }
       : { glyph: '●', color: theme.key, why: 'your review is requested' };
+  }
+  // nobody asked for this one — you put it here. Worth saying, because it is
+  // the row that will not leave the list on its own
+  if (r.adopted && r.status !== 'stale') {
+    return { glyph: '+', color: theme.accent, why: 'you added this one — it stays until the PR settles' };
   }
   return undefined;
 }
@@ -170,7 +176,13 @@ export function ReviewsView(props: { param?: string }) {
     const wantsDoc = props.param.startsWith('doc:');
     const id = wantsDoc ? props.param.slice(4) : props.param;
     const idx = rows.findIndex((r) => r.id === id);
-    if (idx === -1) return;
+    if (idx === -1) {
+      // a PR we don't hold: adopt it, if what was typed names one. Your own
+      // pull requests never arrive on their own — the list is filled by a
+      // search for review requests, and you cannot request one from yourself
+      if (!wantsDoc && parsePrSpec(id)) ctx.dispatcher.adoptReview(id);
+      return;
+    }
     setCursor(idx);
     if (wantsDoc) {
       // coming back from $EDITOR on the document: return to the document

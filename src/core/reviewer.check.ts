@@ -1,4 +1,5 @@
 import { leadFinding, reviewBody, staleAnchors } from './reviewer.js';
+import { parsePrSpec } from './reviews.js';
 import type { Review, ReviewFinding } from './types.js';
 
 /**
@@ -131,11 +132,44 @@ for (const [what, stderr] of OTHER_ERRORS) {
 }
 check('and neither is nothing at all', !staleAnchors(new Error('Command failed: gh api')));
 
+/**
+ * What the operator types to pull a pull request onto the review list. It is
+ * whatever was in the command bar, so the parser has to take the three forms
+ * a PR is written in and reject the rest without throwing — including the
+ * plain review id, which is the form `:reviews <id>` already used to select a
+ * row and must keep meaning that.
+ */
+const SPECS: Array<[string, string | undefined, number | undefined]> = [
+  ['MaterializeInc/materialize#38556', 'MaterializeInc/materialize', 38556],
+  ['jubrad/colinear#104', 'jubrad/colinear', 104],
+  ['jubrad/colinear/pull/104', 'jubrad/colinear', 104],
+  ['https://github.com/jubrad/colinear/pull/104', 'jubrad/colinear', 104],
+  ['https://github.com/jubrad/colinear/pull/104/', 'jubrad/colinear', 104],
+  ['  jubrad/colinear#104  ', 'jubrad/colinear', 104],
+  ['jubrad/coli.near#7', 'jubrad/coli.near', 7],
+  // not pull requests
+  ['jubrad/colinear', undefined, undefined],
+  ['#104', undefined, undefined],
+  ['104', undefined, undefined],
+  ['jubrad/colinear#0', undefined, undefined],
+  ['jubrad/colinear#abc', undefined, undefined],
+  ['', undefined, undefined],
+  ['doc:jubrad/colinear#104', undefined, undefined],
+];
+for (const [spec, repository, number] of SPECS) {
+  const got = parsePrSpec(spec);
+  check(
+    repository ? `${spec.trim() || '(empty)'} parses` : `${spec.trim() || '(empty)'} is not a pull request`,
+    repository ? got?.repository === repository && got?.number === number : got === undefined,
+    JSON.stringify(got),
+  );
+}
+
 if (failures.length) {
   console.error(`review posting: ${failures.length} failure(s)`);
   for (const f of failures) console.error(`  ✖ ${f}`);
   process.exit(1);
 }
 console.log(
-  'ok — no info finding reaches a review body, and only a stale anchor is treated as one',
+  'ok — no info finding reaches a review body, only a stale anchor is read as one,\n     and a PR spec parses in every form the operator writes it',
 );
