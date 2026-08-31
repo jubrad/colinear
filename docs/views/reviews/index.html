@@ -974,6 +974,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Posting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-the-anchors-have-gone-stale" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When the anchors have gone stale
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1449,6 +1466,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Posting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-the-anchors-have-gone-stale" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When the anchors have gone stale
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1558,7 +1592,9 @@ rather than on a file header.</p>
 <p>They live in one list, so an annotation is editable exactly like a comment — and promoting one to a
 real severity is how "I had to explain this to myself" becomes "the author should know this". An
 <code>info</code> finding is filtered out of the inline comments, out of the body, and out of the severity
-counts; a review holding nothing but annotations has nothing to post, and says so.</p>
+counts; a review holding nothing but annotations has nothing to post, and says so. That filtering
+happens where the body is rendered rather than at each call site, so no posting path — including
+the fallback taken when GitHub rejects a review's inline comments — can leak one.</p>
 <p>Long code lines <strong>wrap</strong> rather than being cut — the end of a line is where a call's arguments and a
 condition's tail live. A wrapped line keeps its line number on the first row only, and the margin
 follows: a line that takes three rows pushes the next annotation down by three, so the two stay
@@ -1660,6 +1696,19 @@ says why.</p>
 <li><code>prSignoff</code> appends attribution to all of that, or to the body alone</li>
 </ul>
 <p>The document's prose is written for you, to decide what to send. It never leaves your machine.</p>
+<h3 id="when-the-anchors-have-gone-stale">When the anchors have gone stale<a class="headerlink" href="#when-the-anchors-have-gone-stale" title="Permanent link">&para;</a></h3>
+<p>GitHub rejects a review <strong>entirely</strong> if any one comment names a line that is not part of the diff,
+and the ordinary way to get there is the author pushing after the review was written. Colinear used
+to fall back to putting every finding in the body — which posted a shape nobody chose, and once put
+annotations onto a real pull request.</p>
+<p>Now nothing is posted. The rejection is recognised as what it is, any pending review is cleared, and
+the review goes back to the agent that wrote the anchors: the checkout is fetched forward to the
+PR's current head, and the agent is handed the commits that landed and the exact findings that were
+rejected, to re-anchor them against the diff as it is now. A finding whose code has left the diff
+can move to a line the diff does touch, or lose its anchor and ride in the body instead.</p>
+<p>You get a note in the chat, and <code>p</code> posts again once you have read what changed. Nothing reaches
+GitHub on that path — not the review, not a comment. Every other kind of failure (auth, a closed PR,
+the network) still just fails and says so, because re-anchoring cannot help with any of them.</p>
 <h2 id="keys">Keys<a class="headerlink" href="#keys" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
