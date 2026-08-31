@@ -905,6 +905,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#adding-a-pull-request-yourself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a pull request yourself
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#assisted-pre-review" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1397,6 +1408,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#adding-a-pull-request-yourself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a pull request yourself
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#assisted-pre-review" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1554,6 +1576,23 @@ posting, the one the document was written against). It outranks <code>●</code>
 applies is more urgent than one not yet started — and sorts to the top under <code>needs me</code>. Pressing
 <code>r</code> on it starts <a href="#round-two">round two</a> rather than a fresh review.</p>
 <p>The push is also written to the review's activity, once, on the poll that finds it.</p>
+<h2 id="adding-a-pull-request-yourself">Adding a pull request yourself<a class="headerlink" href="#adding-a-pull-request-yourself" title="Permanent link">&para;</a></h2>
+<p>The list is filled by one search — pull requests asking for <strong>your</strong> review — which by construction
+never contains your own: you cannot request a review from yourself. That is the right default, since
+the list is a queue of what other people are waiting on.</p>
+<p>When you do want to read your own work with the same tools, name it:</p>
+<div class="highlight"><pre><span></span><code>:reviews jubrad/colinear#104
+:reviews https://github.com/jubrad/colinear/pull/104
+</code></pre></div>
+<p>Anything that names a pull request works — <code>owner/repo#123</code>, <code>owner/repo/pull/123</code>, or the URL you
+copied out of the browser. An unknown one is fetched and joins the list; a known one is just
+selected, as before. Adopted rows carry a <code>+</code> in the flag column and <strong>stay</strong> until the PR merges or
+closes: they were never in the search, so its silence about them means nothing, and the reconcile
+that stales a request nobody is waiting on leaves them alone.</p>
+<p>Everything else is the same — <code>r</code> pre-reviews it, <code>enter</code> reads it against the diff, findings and
+annotations behave identically. The one difference is at the end: <strong>GitHub will not let you approve
+or request changes on your own pull request</strong>, so <code>A</code> and <code>X</code> say so rather than posting into a 422.
+<code>p</code> still posts the comments, which is the part worth having on your own PR.</p>
 <h2 id="assisted-pre-review">Assisted pre-review<a class="headerlink" href="#assisted-pre-review" title="Permanent link">&para;</a></h2>
 <p><code>r</code> checks the PR out in a worktree and runs one agent over the diff in context. Progress streams
 onto the card. <strong>Nothing is posted.</strong></p>
