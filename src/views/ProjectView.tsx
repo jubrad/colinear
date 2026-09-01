@@ -6,6 +6,7 @@ import { store } from '../core/store.js';
 import type { Issue, Project } from '../core/types.js';
 import { fuzzyMatch } from '../ui/CommandBar.js';
 import { openUrl } from '../core/open.js';
+import { attachSession, attachShell } from '../core/attach.js';
 import { projectChannel } from '../core/channel.js';
 import { experimentOn } from '../core/config.js';
 import { useColinear } from '../ui/context.js';
@@ -123,7 +124,25 @@ export function ProjectView(props: { param?: string }) {
           ctx.navigate('chan', projectChannel(project.name).replace(/^#/, ''));
         }
       }
-      if (key.return && current && store.get(current.id)) ctx.navigate('task', current.identifier);
+      // The task verbs that make sense on an issue colinear is already running.
+      // Not the whole set from taskActions: this view's keys are about issues
+      // (d dispatches, c customises, o opens the browser, r refreshes) and half
+      // of that set would collide with them.
+      if (current && (input === 's' || input === 'S' || key.return)) {
+        const task = store.get(current.id);
+        if (!task) {
+          // "In Progress" is the tracker's opinion; a session needs colinear to
+          // be the one running it. Silence here read as the key being broken.
+          ctx.toast(
+            `${current.identifier} is not dispatched — d dispatches it, D skips triage`,
+            'info',
+          );
+          return;
+        }
+        if (input === 's') attachSession(task, ctx);
+        else if (input === 'S') attachShell(task, ctx);
+        else ctx.navigate('task', current.identifier);
+      }
     },
     { isActive: !asking && !ctx.cmdOpen },
   );
@@ -242,5 +261,6 @@ export const projectKeys: Array<[string, string]> = [
   ['p', 'plan chat'],
   ['M', 'project channel'],
   ['enter', 'task detail'],
+  ['s', 'attach claude · S shell'],
   ['r', 'refresh'],
 ];
