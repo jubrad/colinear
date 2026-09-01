@@ -198,6 +198,22 @@ chat beside it (`tab` switches, `j/k` scrolls, `e` edits it in `$EDITOR`). Your 
 reviewing session, so the PR is still in context; when the agent needs a decision it asks in the
 same pane.
 
+### The checkout is disposable
+
+A review worktree tracks the pull request and holds nothing of yours, so colinear resets it forcibly
+rather than asking. That matters after a run that died partway through updating it: without the
+reset, the leftover modifications refuse every later checkout and the review can never be refreshed
+again.
+
+Colinear also runs its own git commands with `submodule.recurse` off. If you have that on — a
+reasonable thing to want, and not colinear's to change — a checkout inside a *linked* worktree tries
+to set the submodules up there too, and git's support for that is incomplete: it leaves a `.git`
+pointer and a stub gitdir with nothing in it, after which every git command in that worktree,
+`status` and `diff` included, fails with `not a git repository`. A review that has already been
+wedged that way is repaired on the next `r`: a submodule pointing at a gitdir that is not a
+repository is put back to uninitialised, which is what a fresh worktree has anyway. Colinear reads
+the pull request's own diff and never wants submodule contents.
+
 ## Round two
 
 Press `r` again on a review you have already posted and it does something different: instead of

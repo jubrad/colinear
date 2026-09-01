@@ -1,4 +1,8 @@
-import { leadFinding, reviewBody, staleAnchors } from './reviewer.js';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { clearBrokenSubmodules, leadFinding, reviewBody, staleAnchors } from './reviewer.js';
 import { parsePrSpec } from './reviews.js';
 import type { Review, ReviewFinding } from './types.js';
 
@@ -165,11 +169,97 @@ for (const [spec, repository, number] of SPECS) {
   );
 }
 
+/**
+ * A review checkout must survive a half-initialised submodule.
+ *
+ * With `submodule.recurse = true` in the operator's own git config, a checkout
+ * inside a linked worktree writes a `.git` pointer into the submodule and a
+ * stub gitdir holding only a `config`, then gives up — and every later git
+ * command in that worktree, `status` and `diff` included, dies with `not a git
+ * repository`. The review is then wedged permanently, which is exactly how
+ * this was found. None of that is visible to a typechecker, so it is built.
+ */
+{
+  const root = mkdtempSync(join(tmpdir(), 'coli-submodule-check-'));
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  try {
+    const sub = join(root, 'sub');
+    const main = join(root, 'main');
+    for (const [dir, file] of [[sub, 'sub.txt'], [main, 'main.txt']] as const) {
+      mkdirSync(dir, { recursive: true });
+      execFileSync('git', ['init', '-q', '-b', 'main', dir], { stdio: 'ignore' });
+      git(dir, 'config', 'user.email', 'check@example.invalid');
+      git(dir, 'config', 'user.name', 'check');
+      writeFileSync(join(dir, file), 'one\n');
+      git(dir, 'add', '-A');
+      git(dir, 'commit', '-qm', 'first');
+    }
+    git(main, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', sub, 'vendor/sub');
+    git(main, 'commit', '-qm', 'add the submodule');
+
+    // a linked worktree, as a review gets — and then the wreckage git leaves
+    // when it half-initialises the submodule inside one
+    const wt = join(root, 'wt');
+    git(main, 'worktree', 'add', '-q', '-B', 'review/1', wt, 'main');
+    const stub = join(main, '.git', 'worktrees', 'wt', 'modules', 'vendor', 'sub');
+    mkdirSync(stub, { recursive: true });
+    writeFileSync(join(stub, 'config'), '[core]\n\tworktree = ../../\n');
+    mkdirSync(join(wt, 'vendor', 'sub'), { recursive: true });
+    writeFileSync(join(wt, 'vendor', 'sub', '.git'), `gitdir: ${stub}\n`);
+
+    const wedged = (() => {
+      try {
+        git(wt, 'status', '--porcelain');
+        return false;
+      } catch {
+        return true;
+      }
+    })();
+    check('a stub submodule gitdir wedges the whole worktree', wedged, 'the fixture did not reproduce the bug');
+
+    const cleared = clearBrokenSubmodules(wt);
+    check('the broken submodule is found and cleared', cleared.includes('vendor/sub'), JSON.stringify(cleared));
+    check('the dangling pointer is gone', !existsSync(join(wt, 'vendor', 'sub', '.git')));
+    check('and so is the stub gitdir', !existsSync(stub));
+    check(
+      'git works in the worktree again',
+      (() => {
+        try {
+          git(wt, 'status', '--porcelain');
+          return true;
+        } catch (err) {
+          return String(err).slice(0, 120) as unknown as boolean;
+        }
+      })() === true,
+    );
+
+    // a healthy submodule is none of its business
+    const healthy = join(root, 'healthy');
+    git(main, '-c', 'protocol.file.allow=always', 'worktree', 'add', '-q', '-B', 'review/2', healthy, 'main');
+    mkdirSync(join(healthy, 'vendor', 'sub'), { recursive: true });
+    const realdir = join(healthy, 'vendor', 'sub', '.realgit');
+    mkdirSync(realdir, { recursive: true });
+    writeFileSync(join(realdir, 'HEAD'), 'ref: refs/heads/main\n');
+    writeFileSync(join(healthy, 'vendor', 'sub', '.git'), `gitdir: ${realdir}\n`);
+    check(
+      'an initialised submodule is left alone',
+      clearBrokenSubmodules(healthy).length === 0 && existsSync(join(healthy, 'vendor', 'sub', '.git')),
+    );
+
+    check('a worktree with no submodules is a no-op', clearBrokenSubmodules(join(root, 'main')).length === 0);
+  } catch (err) {
+    check('the submodule fixture built', false, String(err).slice(0, 200));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 if (failures.length) {
   console.error(`review posting: ${failures.length} failure(s)`);
   for (const f of failures) console.error(`  ✖ ${f}`);
   process.exit(1);
 }
 console.log(
-  'ok — no info finding reaches a review body, only a stale anchor is read as one,\n     and a PR spec parses in every form the operator writes it',
+  'ok — no info finding reaches a review body, only a stale anchor is read as one,\n     a PR spec parses in every form the operator writes it, and a half-initialised\n     submodule cannot wedge a review checkout',
 );
