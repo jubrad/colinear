@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { attachTo, rememberView, setPendingAction } from '../core/attach.js';
 import { useReviews } from '../core/hooks.js';
 import { parsePrSpec } from '../core/reviews.js';
@@ -169,6 +169,9 @@ export function ReviewsView(props: { param?: string }) {
     ctx.dispatcher.pollReviews();
   }, []);
 
+  /** the last param acted on, so a not-found one is handled once and not per poll */
+  const handled = useRef<string | undefined>(undefined);
+
   // :reviews <id> selects that PR; "doc:<id>" reopens its document, which is
   // how we land back where we were after $EDITOR or an attached session
   useEffect(() => {
@@ -177,10 +180,22 @@ export function ReviewsView(props: { param?: string }) {
     const id = wantsDoc ? props.param.slice(4) : props.param;
     const idx = rows.findIndex((r) => r.id === id);
     if (idx === -1) {
+      // Once per thing typed, not once per list change: this effect re-runs
+      // whenever the list grows, and adopting or complaining again each time
+      // would fire on every poll.
+      if (wantsDoc || handled.current === props.param) return;
+      handled.current = props.param;
       // a PR we don't hold: adopt it, if what was typed names one. Your own
       // pull requests never arrive on their own — the list is filled by a
       // search for review requests, and you cannot request one from yourself
-      if (!wantsDoc && parsePrSpec(id)) ctx.dispatcher.adoptReview(id);
+      if (parsePrSpec(id)) {
+        ctx.dispatcher.adoptReview(id);
+        return;
+      }
+      // and if it names nothing at all, say so. Silence here read as the
+      // command being broken, when the answer was that `13317` and
+      // `cloud#13317` are not pull requests — the owner is not optional
+      ctx.toast(`${id}: not on the list, and not a pull request — try owner/repo#123`, 'err');
       return;
     }
     setCursor(idx);

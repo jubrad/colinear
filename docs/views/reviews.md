@@ -46,7 +46,8 @@ When you do want to read your own work with the same tools, name it:
 ```
 
 Anything that names a pull request works — `owner/repo#123`, `owner/repo/pull/123`, or the URL you
-copied out of the browser. An unknown one is fetched and joins the list; a known one is just
+copied out of the browser. **The owner is not optional**: `13317` and `cloud#13317` name no
+repository, and colinear says so rather than doing nothing. An unknown one is fetched and joins the list; a known one is just
 selected, as before. Adopted rows carry a `+` in the flag column and **stay** until the PR merges or
 closes: they were never in the search, so its silence about them means nothing, and the reconcile
 that stales a request nobody is waiting on leaves them alone.
