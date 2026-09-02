@@ -61,6 +61,8 @@ interface DemoTask {
   tokens: [number, number];
   cost: number;
   maintenance?: Task['maintenance'];
+  /** a self-review already read against the branch, for `v` → :diff */
+  findings?: Task['findings'];
 }
 
 const BOARD: DemoTask[] = [
@@ -114,6 +116,22 @@ const BOARD: DemoTask[] = [
     minutes: 28,
     tokens: [61_000, 7_100],
     cost: 2.42,
+    // anchored into demoDiff() so `v` opens a diff with its margin filled in —
+    // an annotation beside the line it is about is the whole point of the view
+    findings: [
+      {
+        file: 'src/digest/limiter.ts',
+        line: 34,
+        severity: 'consider',
+        comment: 'This resets the window on read, so a caller that polls faster than the window never sees a limit.',
+      },
+      {
+        file: 'src/digest/queue.ts',
+        line: 88,
+        severity: 'info',
+        comment: 'Dropping here is deliberate: the digest is regenerated next window, so a skipped one is not lost work.',
+      },
+    ],
   },
   {
     key: 'CAD-18',
@@ -218,6 +236,82 @@ const REVIEWS: Array<Partial<Review> & { id: string; number: number }> = [
   },
 ];
 
+/**
+ * The diff behind the demo's reviewed pull request.
+ *
+ * Without one the annotated view sits on "loading the diff…" for ever, because
+ * the real one is read out of a git worktree and the demo has no repository —
+ * which left the flagship view of this whole tool impossible to demo or
+ * screenshot.
+ *
+ * The hunk headers are numbered so the seeded findings land where they belong:
+ * `limiter.ts:34` is the line the window resets on, `queue.ts:88` the line that
+ * drops the job. An annotation sitting beside the line it is about is the point
+ * of the view, so a fabricated diff that does not line up would be worse than
+ * none.
+ */
+export function demoDiff(): string {
+  return `diff --git a/src/digest/limiter.ts b/src/digest/limiter.ts
+index 5f2a1c4..9b3d7e8 100644
+--- a/src/digest/limiter.ts
++++ b/src/digest/limiter.ts
+@@ -26,8 +26,14 @@ export class WorkspaceLimiter {
+   private readonly windows = new Map<string, Window>();
+ 
+   /** Tokens left for this workspace in the current window. */
+   remaining(workspace: string, now = Date.now()): number {
+     const w = this.windows.get(workspace);
+     if (!w) return this.limit;
++
++    // a new window starts the first time it is asked for after it lapses
++    if (now - w.startedAt >= WINDOW_MS) {
++      w.startedAt = now;
++      w.used = 0;
++    }
+     return Math.max(0, this.limit - w.used);
+   }
+diff --git a/src/digest/queue.ts b/src/digest/queue.ts
+index 2c81a90..7ad4f11 100644
+--- a/src/digest/queue.ts
++++ b/src/digest/queue.ts
+@@ -80,7 +80,11 @@ export async function enqueueDigest(job: DigestJob) {
+   const limiter = limiterFor(job.workspace);
+   if (limiter.remaining(job.workspace) > 0) {
+     limiter.take(job.workspace);
+     return queue.push(job);
+   }
++
++  // over the limit: this window's digest is dropped on the floor
++  metrics.increment('digest.dropped', { workspace: job.workspace });
++  log.warn('digest skipped — workspace over its rate limit', { workspace: job.workspace });
+   return undefined;
+ }
+diff --git a/src/digest/config.ts b/src/digest/config.ts
+index 1a0b3c5..4e9f2d1 100644
+--- a/src/digest/config.ts
++++ b/src/digest/config.ts
+@@ -12,6 +12,8 @@ export const defaults = {
+   digestHour: 9,
+   timezone: 'UTC',
++  /** requests per workspace per window */
++  digestRateLimit: 20,
+ };
+diff --git a/test/digest/limiter.test.ts b/test/digest/limiter.test.ts
+index 0000000..8c2e5b7 100644
+--- a/test/digest/limiter.test.ts
++++ b/test/digest/limiter.test.ts
+@@ -1,0 +1,9 @@
++import { WorkspaceLimiter } from '../../src/digest/limiter';
++
++test('a workspace over its limit is refused until the window lapses', () => {
++  const limiter = new WorkspaceLimiter(2);
++  limiter.take('acme');
++  limiter.take('acme');
++  expect(limiter.remaining('acme')).toBe(0);
++});
+`;
+}
+
 /** True when this context is a fabrication rather than a workspace. */
 export const isDemo = (cfg: Config): boolean => cfg.demo === true;
 
@@ -263,6 +357,7 @@ export function seedDemoBoard(cfg?: Config): void {
       startedAt: item.minutes ? started : undefined,
       endedAt: item.status === 'done' ? started + item.minutes * 60_000 : undefined,
       checks: [],
+      ...(item.findings ? { findings: item.findings } : {}),
       prs: item.pr
         ? [
             {
