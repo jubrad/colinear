@@ -164,6 +164,28 @@ goes straight to an annotation, which is the common case while reading unfamilia
 so what you post and what the agent sees never diverge — a later chat turn reads your wording, and
 `p` posts it.
 
+### The keys, in one place
+
+The flow above spread across a few pages; this is the whole of it. Everything except `p` and `tab`
+acts on the line under the cursor, or on the marked block when there is one.
+
+| key | what |
+|---|---|
+| `j`/`k` arrows | move a line · `space`/`pageup` a page · `g`/`G` top and bottom |
+| `n` `N` | the next and previous line something is anchored to |
+| `enter` | read the current finding in full, scrolling inside it |
+| `v` | mark a block — move to grow it, `v` or `esc` to drop it |
+| `e` | write a finding, choosing the kind first |
+| `i` | write an annotation directly, skipping the picker |
+| `a` | ask an agent what the marked lines do — the answer lands as an annotation |
+| `d` | drop the finding here, block and all |
+| `ctrl+d` | save what you are writing · an empty comment removes it |
+| `p` post · `A` approve · `X` request changes — the same as from the list |
+| `tab` | talk to the reviewing agent · `esc` back to the diff, then out |
+
+The task-side view, [`:diff`](diff.md), has the same keys against your own agent's branch — the one
+difference being where `p` sends them.
+
 ### Commenting on a block
 
 A comment is often about a *passage*, not a line: the loop rather than its first statement. **`v`
