@@ -12,9 +12,23 @@ name: pages
 #
 # No loop: this workflow reads gh-pages and pushes nothing.
 
+# Not `push: branches: [gh-pages]`, which cannot fire, for two independent
+# reasons — either would be enough on its own:
+#
+#   - the push is made by `docs` with the default GITHUB_TOKEN, and GitHub
+#     deliberately starts no workflow run from a GITHUB_TOKEN event, to stop
+#     workflows triggering each other in a loop;
+#   - a `push` workflow is resolved from the *pushed branch's* own tree, and
+#     gh-pages holds a built site and no `.github/` at all.
+#
+# It was written that way and never ran once: every deployment this site has
+# ever had was a human pressing the button. `workflow_run` is the documented
+# answer to exactly this — it is not suppressed by GITHUB_TOKEN, and it
+# resolves from the default branch, where this file lives.
 on:
-  push:
-    branches: [gh-pages]
+  workflow_run:
+    workflows: [docs]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -29,6 +43,11 @@ concurrency:
 jobs:
   deploy:
     name: deploy the site
+    # a docs run that failed pushed nothing worth publishing. Dispatch is always
+    # honoured: it is the way to republish without touching the branch.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
