@@ -418,8 +418,11 @@ export function AnnotatedDiff(props: {
 
       <Box height={paneHeight}>
         <Box flexDirection="column" width={diffWidth} borderStyle="single" borderColor={focus === 'diff' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
-          {!diff && <Text dimColor>loading the diff…</Text>}
-          {diff && !lines.length && <Text dimColor>no diff — has the branch been fetched?</Text>}
+          {/* undefined is "not arrived yet"; empty is an answer, and reading
+              the two as one left the pane loading for ever on a diff that came
+              back with nothing in it */}
+          {diff === undefined && <Text dimColor>loading the diff…</Text>}
+          {diff !== undefined && !lines.length && <Text dimColor>no diff — has the branch been fetched?</Text>}
           {lines.slice(scroll, scroll + paneHeight - 2).map((row, i) => (
             <DiffRow
               key={`${scroll + i}-${row.text.slice(0, 12)}`}

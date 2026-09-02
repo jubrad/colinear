@@ -8,6 +8,8 @@ two panes, same margin, same `.colinear-review.md` behind it — a finding writt
 in every sense. What differs is where it goes: **`p` hands the list to the agent that wrote the
 code** instead of posting it to an author.
 
+![The same view against a task's own branch: a `consider` finding beside the line it is about, and a footer whose keys end in R review and p hand back](../images/task-diff.png)
+
 | key | what |
 |---|---|
 | `R` | have a **fresh** agent review the branch and write the findings |

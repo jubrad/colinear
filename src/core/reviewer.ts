@@ -16,7 +16,7 @@ import {
   viewerLogin,
   type ReviewEvent,
 } from './reviews.js';
-import { isDemo } from './demo.js';
+import { demoDiff, isDemo } from './demo.js';
 import { explainPrompt } from './selfreview.js';
 import { store } from './store.js';
 import { extractFencedJson, hasFenceOpening } from './fence.js';
@@ -813,6 +813,9 @@ export class Reviewer {
    */
   async diff(id: string): Promise<string> {
     const review = store.getReview(id);
+    // demo mode has no repository to read a diff out of, and an empty one
+    // leaves the annotated view loading for ever
+    if (isDemo(this.cfg)) return demoDiff();
     if (!review?.worktree) return '';
     const remote = review.repo ? await this.remoteFor(review.repo.path, review.repository) : 'origin';
     // three dots: what this branch added since it left the base, which is the

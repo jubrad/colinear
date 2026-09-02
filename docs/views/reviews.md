@@ -68,6 +68,8 @@ outside colinear.
 
 ## Reading it against the code
 
+![The annotated diff: a blocking finding sitting in the right pane beside the line it is about, the line marked in the gutter, with the PR-wide comment and the agent chat below](../images/annotated-diff.png)
+
 `enter` opens the **annotated diff**: the PR's diff on the left, and beside each line what the agent
 had to say about it. Chat sits along the bottom.
 

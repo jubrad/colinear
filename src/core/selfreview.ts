@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { runSession } from './agent.js';
-import { isDemo } from './demo.js';
+import { demoDiff, isDemo } from './demo.js';
 import { guidanceFor } from './guidance.js';
 import { log } from './log.js';
 import { parseDoc, upsertFinding, REVIEW_FILE } from './reviewer.js';
@@ -36,6 +36,8 @@ export const docPath = (task: Task): string | undefined =>
  * before anyone has fetched anything.
  */
 export async function taskDiff(cfg: Config, task: Task): Promise<string> {
+  // same reason as the review side: no repository, so nothing to read
+  if (isDemo(cfg)) return demoDiff();
   if (!task.worktree) return '';
   // both git calls below swallow their errors, so a missing checkout would
   // read as "this branch changed nothing" — which is the one wrong answer
