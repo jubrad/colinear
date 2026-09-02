@@ -939,6 +939,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#the-keys-in-one-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The keys, in one place
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#commenting-on-a-block" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1453,6 +1464,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#the-keys-in-one-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The keys, in one place
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#commenting-on-a-block" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1700,6 +1722,65 @@ or "stays in colinear — never posted" — because that is the difference that 
 <p><code>ctrl+d</code> saves, an empty comment removes it, and <code>d</code> drops one outright. <strong><code>i</code> skips the picker</strong> and
 goes straight to an annotation, which is the common case while reading unfamiliar code. Every edit rewrites the <code>``findings fence in the review document,
 so what you post and what the agent sees never diverge — a later chat turn reads your wording, and</code>p` posts it.</p>
+<h3 id="the-keys-in-one-place">The keys, in one place<a class="headerlink" href="#the-keys-in-one-place" title="Permanent link">&para;</a></h3>
+<p>The flow above spread across a few pages; this is the whole of it. Everything except <code>p</code> and <code>tab</code>
+acts on the line under the cursor, or on the marked block when there is one.</p>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>what</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>j</code>/<code>k</code> arrows</td>
+<td>move a line · <code>space</code>/<code>pageup</code> a page · <code>g</code>/<code>G</code> top and bottom</td>
+</tr>
+<tr>
+<td><code>n</code> <code>N</code></td>
+<td>the next and previous line something is anchored to</td>
+</tr>
+<tr>
+<td><code>enter</code></td>
+<td>read the current finding in full, scrolling inside it</td>
+</tr>
+<tr>
+<td><code>v</code></td>
+<td>mark a block — move to grow it, <code>v</code> or <code>esc</code> to drop it</td>
+</tr>
+<tr>
+<td><code>e</code></td>
+<td>write a finding, choosing the kind first</td>
+</tr>
+<tr>
+<td><code>i</code></td>
+<td>write an annotation directly, skipping the picker</td>
+</tr>
+<tr>
+<td><code>a</code></td>
+<td>ask an agent what the marked lines do — the answer lands as an annotation</td>
+</tr>
+<tr>
+<td><code>d</code></td>
+<td>drop the finding here, block and all</td>
+</tr>
+<tr>
+<td><code>ctrl+d</code></td>
+<td>save what you are writing · an empty comment removes it</td>
+</tr>
+<tr>
+<td><code>p</code> post · <code>A</code> approve · <code>X</code> request changes — the same as from the list</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tab</code></td>
+<td>talk to the reviewing agent · <code>esc</code> back to the diff, then out</td>
+</tr>
+</tbody>
+</table>
+<p>The task-side view, <a href="../diff/"><code>:diff</code></a>, has the same keys against your own agent's branch — the one
+difference being where <code>p</code> sends them.</p>
 <h3 id="commenting-on-a-block">Commenting on a block<a class="headerlink" href="#commenting-on-a-block" title="Permanent link">&para;</a></h3>
 <p>A comment is often about a <em>passage</em>, not a line: the loop rather than its first statement. <strong><code>v</code>
 marks a block</strong> — press it, move, and the range grows with the cursor; <code>▏</code> runs down the gutter
