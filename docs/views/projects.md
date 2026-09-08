@@ -63,7 +63,13 @@ Needs a provider with the `createProjects` capability.
 | `p` | open the [planning chat](plan.md) for this project |
 | `M` | the project's [coordination channel](chan.md) — one message to every agent working an issue in it (experimental) |
 | `enter` | task detail, for issues already dispatched |
+| `s` | attach `claude` in its worktree · `S` a plain shell |
 | `o` open in the tracker · `r` refresh |
+
+`enter`, `s` and `S` need colinear to be the one running the issue. **In Progress** is the tracker's
+opinion, and an issue can be started by a person, or by someone else entirely, with no task and no
+session behind it — so on an issue colinear has not dispatched, those keys say that and point at `d`
+rather than doing nothing.
 
 Both views need a provider with the `projects` capability; one without says so rather than showing an
 empty table.
