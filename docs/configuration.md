@@ -53,7 +53,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `repos` | one repo (see below) | the allowlist — agents only ever touch these, and only through worktrees. First entry is the default. [Details](#repos) |
 | `team` | your assigned issues | Linear team key (`"CLOUD"`) to browse, or `"all"` for every team. `--team CLOUD` / `--team all` override it for one run, and the last team picked with `t` is remembered |
 | `concurrency` | `3` | agent sessions running at once. Above ~5 you start hitting subscription rate limits |
-| `model` | Claude Code's default | model for agents (`"opus"`, `"sonnet"`, `"fable"`, `"haiku"`). Overridable per dispatch (`c`) and per task (`m`) |
+| `model` | Claude Code's default | model for agents (`"opus"`, `"sonnet"`, `"fable"`, `"haiku"`). The names are resolved by the Claude Code bundled with the agent SDK, so an alias means whatever that build considers current — `"fable"` is Fable 5.1 as of SDK 0.3.266 — and an exact id such as `"claude-fable-5-1"` pins it. Overridable per dispatch (`c`) and per task (`m`) |
 | `guidance` | none | standing house rules injected into agent prompts, globally or per prompt. [Details](#guidance) |
 | `prSignoff` | none | markdown appended to what colinear posts on a PR, so the author knows what wrote it. String or list of lines. An empty comment never becomes a signoff-only comment |
 | `prSignoffScope` | `"all"` | `"all"` signs the review body and every inline comment; `"body"` signs only the body, so a review with six findings carries one attribution instead of seven |
