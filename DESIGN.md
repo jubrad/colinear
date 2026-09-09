@@ -256,13 +256,17 @@ What reaches GitHub is deliberately small, because the document is written for t
 and none of it belongs on someone else's PR:
 
 - **inline comments** — one per finding with a `file` and a `line`
-- **the body** — the lead finding (no file/line/severity, one sentence), a count by severity,
-  an `## Other` section for findings with no line, and the operator's `n` note
+- **the body** — one line, the shape a reviewer types by hand: the lead finding's verdict (no
+  file/line/severity, a few words) with the count by severity folded in (`Looks good — 1 nit.`),
+  then each finding with no line as a paragraph, then the operator's `n` note. The document's
+  prose never goes up — it did once, as the fallback when nothing was anchored, and what was
+  posted was the "What this changes" paragraph: the PR described back to its author
 - `prSignoff` / `prSignoffScope` append an attribution to all of that, or just the body
 
 Findings survive missing fields: no `line` or no `file` means the body rather than the bin;
 only a missing `comment` drops one. A line outside the diff makes GitHub reject the whole
-review, so the post retries once with everything in the body.
+review; nothing is posted, and the findings go back to the agent to re-anchor against the
+current head (docs/views/reviews.md, "When the anchors have gone stale").
 
 ## Project plans
 
