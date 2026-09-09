@@ -360,7 +360,7 @@ export class Reviewer {
       this.toast(`${review.repository}#${review.number}: post refused — no findings parsed (enter to inspect, e to edit)`, 'err');
       return;
     }
-    const body = reviewBody(review, loose, event, anchored.length > 0);
+    const body = reviewBody(review, loose, event);
 
     store.updateReview(id, { status: 'posting', error: undefined });
     try {
@@ -965,17 +965,17 @@ export function staleAnchors(err: unknown): boolean {
   return STALE_ANCHOR.test(`${String(err)} ${e?.stderr ?? ''} ${e?.stdout ?? ''}`);
 }
 
-/** How a severity reads in the count line. */
+/** How a severity reads in the count. */
 const SEVERITY_LABEL: Record<Severity, [string, string]> = {
-  blocking: ['must fix', 'must fix'],
+  blocking: ['blocker', 'blockers'],
   consider: ['consideration', 'considerations'],
   nit: ['nit', 'nits'],
   praise: ['praise', 'praise'],
-  // never reaches a count line: an info finding is not posted
+  // never reaches a count: an info finding is not posted
   info: ['note', 'notes'],
 };
 
-/** The lead: no file, no line, no severity — one sentence opening the review. */
+/** The lead: no file, no line, no severity — the verdict that opens the review. */
 export function leadFinding(findings: ReviewFinding[]): ReviewFinding | undefined {
   const first = findings[0];
   return first && !first.file && !first.line && !first.severity ? first : undefined;
@@ -984,16 +984,17 @@ export function leadFinding(findings: ReviewFinding[]): ReviewFinding | undefine
 /**
  * The review body, kept deliberately small. The document is written for the
  * operator — an overview, and where the agent's own judgement is weakest —
- * and none of that belongs on someone else's PR. The body is the lead
- * sentence, a count of what was raised, and whatever couldn't be anchored to
- * a line; the inline comments are the review.
+ * and none of that belongs on someone else's PR. The body opens with one
+ * line, the shape a reviewer types by hand: the lead's verdict with the count
+ * of what was raised folded in ("Looks good — 1 nit."). Then whatever
+ * couldn't be anchored to a line, then the operator's note. The inline
+ * comments are the review.
+ *
+ * The document's prose never reaches here. It used to, as the fallback when
+ * nothing was anchored, and what went up was the "What this changes"
+ * paragraph — the pull request described back to the person who wrote it.
  */
-export function reviewBody(
-  review: Review,
-  unanchored: ReviewFinding[],
-  event: ReviewEvent,
-  hasInlineComments: boolean,
-): string {
+export function reviewBody(review: Review, unanchored: ReviewFinding[], event: ReviewEvent): string {
   // Info findings never reach GitHub, so they never reach the body either.
   //
   // Both lists are filtered here rather than at the call sites. The caller's
@@ -1009,31 +1010,26 @@ export function reviewBody(
   const rest = findings.filter((f) => f !== lead);
   const parts: string[] = [];
 
-  if (lead) parts.push(lead.comment.trim());
-  else if (!hasInlineComments && review.summary?.trim()) parts.push(review.summary.trim());
-
   const counts = new Map<Severity, number>();
   for (const f of rest) if (f.severity) counts.set(f.severity, (counts.get(f.severity) ?? 0) + 1);
-  if (counts.size) {
-    const lines = (['blocking', 'consider', 'nit', 'praise'] as Severity[])
-      .filter((sev) => counts.get(sev))
-      .map((sev) => {
-        const n = counts.get(sev)!;
-        return `${n} ${SEVERITY_LABEL[sev][n === 1 ? 0 : 1]}`;
-      });
-    parts.push(`## Summary\n\n${lines.join('\n')}`);
-  }
+  const tally = (['blocking', 'consider', 'nit', 'praise'] as Severity[])
+    .filter((sev) => counts.get(sev))
+    .map((sev) => {
+      const n = counts.get(sev)!;
+      return `${n} ${SEVERITY_LABEL[sev][n === 1 ? 0 : 1]}`;
+    })
+    .join(', ');
+  // the verdict and the count share one line, so the verdict's own full stop
+  // moves to the end of it
+  const verdict = lead?.comment.trim().replace(/\.+$/, '') ?? '';
+  const opening = [verdict, tally].filter(Boolean).join(' — ');
+  if (opening) parts.push(`${opening}.`);
 
-  const other = unanchoredPostable.filter((f) => f !== lead);
-  if (other.length) {
-    parts.push(
-      `## Other\n\n${other
-        .map((f) => {
-          const where = f.file ? `\`${f.file}${f.line ? `:${f.line}` : ''}\` — ` : '';
-          return `**${f.severity ?? 'note'}** — ${where}${f.comment.trim()}`;
-        })
-        .join('\n\n')}`,
-    );
+  // a finding with no line to hang on rides in the body as its own paragraph
+  for (const f of unanchoredPostable) {
+    if (f === lead) continue;
+    const where = f.file ? `\`${f.file}${f.line ? `:${f.line}` : ''}\` — ` : '';
+    parts.push(`**${f.severity ?? 'note'}** — ${where}${f.comment.trim()}`);
   }
 
   if (review.note?.trim()) parts.push(review.note.trim());
@@ -1085,7 +1081,7 @@ Go through your existing findings one at a time and decide, honestly, which of t
 - **still standing** — not addressed, or the answer doesn't hold. Keep it, and if they pushed back, engage with what they actually said rather than restating the original comment.
 - **new** — the new commits introduced something. Add it.
 
-Then rewrite the document with the same three sections and a closing \`findings\` block, exactly as before — it is fully replaced each round, so it must contain everything you still want posted, not just the changes. The first entry is still the lead: one sentence, and for a second round it should say where things now stand.
+Then rewrite the document with the same three sections and a closing \`findings\` block, exactly as before — it is fully replaced each round, so it must contain everything you still want posted, not just the changes. The first entry is still the lead: a verdict in a few words, and for a second round it says where things now stand — \`All addressed, looks good.\`, \`One still open.\` — never what the PR does.
 
 Only what is in the findings array reaches GitHub. Keep your chat reply short.${guidanceFor(cfg.guidance, 'review')}`;
 }
@@ -1129,11 +1125,11 @@ Write prose as prose — paragraphs, not bullet fragments — and use fenced cod
 
 End the file with a \`findings\` block: a JSON **array**, one object per finding. This is what actually reaches GitHub — colinear posts each entry as an inline comment on that file and line, so write \`comment\` as the complete review comment you want the author to read, in markdown. The prose above is context for the operator; the array is the review.
 
-**The first entry is the lead**: no \`file\`, no \`line\`, no \`severity\` — one sentence that opens the posted review. Say what the PR does and whether it looks sound; the author reads this first and it is the only thing they see if they read nothing else. One sentence, not a paragraph.
+**The first entry is the lead**: no \`file\`, no \`line\`, no \`severity\` — the verdict that opens the posted review, in a few words: \`Looks good.\`, \`Solid, but one thing to fix before this merges.\`, \`Not ready.\` It is the one line a human reviewer types at the top of a review, and it says only whether the change is ready. It does not describe the PR — the author wrote it, and their own description read back to them is noise — and it does not say what you checked or how; that belongs to the operator, in the prose above. Don't count or list what you found either: colinear folds the count into your line itself (\`Looks good — 1 nit.\`).
 
 \`\`\`findings
 [
-  {"comment": "Solid change; the precedence rule between scoped and global values is the one thing worth a second look."},
+  {"comment": "Solid; the precedence rule is the one thing worth a second look."},
   {"file": "src/x.rs", "line": 42, "severity": "blocking", "comment": "Full comment to the author, in markdown.\\n\\nParagraphs are fine."},
   {"file": "src/x.rs", "line": 38, "severity": "info", "comment": "Scoped values win over global ones here; the precedence is set in config::merge and nothing else depends on the order, so this is safe to read on its own."}
 ]
@@ -1154,7 +1150,7 @@ And it is not the place for criticism: anything you would say to the author gets
 
 Rules for the rest of the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches — omit both only when the point isn't about any particular place, and it will be posted in the review body instead; \`severity\` is one of blocking, consider, nit, praise, or info (never posted). Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
 
-colinear assembles the posted body itself: your lead sentence, then a count of what you raised (\"2 considerations, 1 nit\"), then anything that had no line to attach to. Don't write those parts yourself.
+colinear assembles the posted body itself: your lead with the count of what you raised folded in (\"Solid — 2 considerations, 1 nit.\"), then anything that had no line to attach to. Don't write those parts yourself.
 
 Severity means:
 - "blocking": a bug, a security or data-loss risk, or a contract change that would break callers. Something you would hold the PR for.

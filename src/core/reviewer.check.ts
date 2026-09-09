@@ -65,7 +65,7 @@ const shapes: Array<[string, ReviewFinding[]]> = [
 
 for (const [what, unanchored] of shapes) {
   for (const event of ['APPROVE', 'COMMENT', 'REQUEST_CHANGES'] as const) {
-    const body = reviewBody(review, unanchored, event, false);
+    const body = reviewBody(review, unanchored, event);
     check(
       `no annotation reaches an ${event.toLowerCase()} body when ${what}`,
       !body.includes(INFO_ONE) && !body.includes(INFO_TWO),
@@ -80,22 +80,43 @@ for (const [what, unanchored] of shapes) {
 }
 
 // the other half of the bargain: filtering must not swallow real feedback
-const fallback = reviewBody(review, findings.filter((f) => f.severity !== 'info'), 'APPROVE', false);
+const fallback = reviewBody(review, findings.filter((f) => f.severity !== 'info'), 'APPROVE');
 check('the fallback still carries an anchored finding into the body', fallback.includes(BLOCKING), fallback);
 check('and still carries an unanchorable one', fallback.includes(LOOSE), fallback);
-check('and still counts what it raised', /1 must fix/.test(fallback), fallback);
-check('the lead sentence opens the body', fallback.startsWith('Overall this looks right.'), fallback.slice(0, 80));
+check(
+  'the body opens with the verdict and the count on one line',
+  fallback.split('\n')[0] === 'Overall this looks right — 1 blocker, 1 consideration.',
+  fallback.split('\n')[0],
+);
+check('and carries no headings', !/^#/m.test(fallback), fallback);
+
+// without a lead the line is the count alone — "1 nit." is what a reviewer types
+const unled = { ...review, findings: findings.slice(1) } as unknown as Review;
+check(
+  'a review with no lead opens with the count',
+  reviewBody(unled, loose, 'COMMENT').split('\n')[0] === '1 blocker, 1 consideration.',
+  reviewBody(unled, loose, 'COMMENT').split('\n')[0],
+);
+
+// the document's prose is the operator's. It was once the fallback body, and
+// what went up was the PR described back to its author.
+const proseOnly = { ...review, findings: [] } as unknown as Review;
+check('a review with no findings posts none of the document', reviewBody(proseOnly, [], 'APPROVE') === '', reviewBody(proseOnly, [], 'APPROVE'));
+check(
+  'and a request for changes still gets the body GitHub insists on',
+  reviewBody(proseOnly, [], 'REQUEST_CHANGES') === 'Requesting changes — see comments.',
+);
+check('the summary never reaches a body', !reviewBody(review, loose, 'APPROVE').includes(review.summary!), reviewBody(review, loose, 'APPROVE'));
 
 // a review whose only findings are annotations has nothing to say to the author
 const annotationsOnly = {
   ...review,
   findings: [lead, findings[2], findings[3]],
 } as unknown as Review;
-const quiet = reviewBody(annotationsOnly, [findings[2], findings[3]], 'APPROVE', false);
-check('an annotations-only review posts no findings section', !quiet.includes('## Other'), quiet);
-check('and no summary count', !quiet.includes('## Summary'), quiet);
+const quiet = reviewBody(annotationsOnly, [findings[2], findings[3]], 'APPROVE');
+check('an annotations-only review counts nothing', !/\d+ (blocker|consideration|nit|praise)/.test(quiet), quiet);
 check(
-  'and still says the one thing meant for the author',
+  'and says only the one thing meant for the author',
   quiet.trim() === 'Overall this looks right.',
   JSON.stringify(quiet),
 );
@@ -261,5 +282,5 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(
-  'ok — no info finding reaches a review body, only a stale anchor is read as one,\n     a PR spec parses in every form the operator writes it, and a half-initialised\n     submodule cannot wedge a review checkout',
+  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, a PR spec parses in every form\n     the operator writes it, and a half-initialised submodule cannot wedge a review checkout',
 );

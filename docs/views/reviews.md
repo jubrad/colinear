@@ -270,9 +270,12 @@ says why.
 What actually gets sent is deliberately small:
 
 - **inline comments** — one per finding with a file and a line
-- **the body** — the lead finding (no file, no line, one sentence), a count by severity
-  (`1 must fix / 3 considerations / 1 nit`), an `## Other` section for findings with no line, and
-  your note
+- **the body** — one line, the shape you would type yourself: the lead finding's verdict (no file,
+  no line, a few words on whether it is ready) with the count by severity folded in — `Looks good —
+  1 nit.`, `Solid, but one thing to fix — 1 blocker, 2 considerations.` — then each finding with no
+  line as its own paragraph, and your note. The agent is told the lead never describes the PR or
+  narrates what it checked: the author wrote the change, and the checking is for you, in the
+  document
 - `prSignoff` appends attribution to all of that, or to the body alone
 
 The document's prose is written for you, to decide what to send. It never leaves your machine.
