@@ -1975,13 +1975,17 @@ with a different event, so a verdict carries the written review.</p>
 and none of it belongs on someone else's PR:</p>
 <ul>
 <li><strong>inline comments</strong> — one per finding with a <code>file</code> and a <code>line</code></li>
-<li><strong>the body</strong> — the lead finding (no file/line/severity, one sentence), a count by severity,
-  an <code>## Other</code> section for findings with no line, and the operator's <code>n</code> note</li>
+<li><strong>the body</strong> — one line, the shape a reviewer types by hand: the lead finding's verdict (no
+  file/line/severity, a few words) with the count by severity folded in (<code>Looks good — 1 nit.</code>),
+  then each finding with no line as a paragraph, then the operator's <code>n</code> note. The document's
+  prose never goes up — it did once, as the fallback when nothing was anchored, and what was
+  posted was the "What this changes" paragraph: the PR described back to its author</li>
 <li><code>prSignoff</code> / <code>prSignoffScope</code> append an attribution to all of that, or just the body</li>
 </ul>
 <p>Findings survive missing fields: no <code>line</code> or no <code>file</code> means the body rather than the bin;
 only a missing <code>comment</code> drops one. A line outside the diff makes GitHub reject the whole
-review, so the post retries once with everything in the body.</p>
+review; nothing is posted, and the findings go back to the agent to re-anchor against the
+current head (docs/views/reviews.md, "When the anchors have gone stale").</p>
 <h2 id="project-plans">Project plans<a class="headerlink" href="#project-plans" title="Permanent link">&para;</a></h2>
 <p>A third entity beside tasks and reviews, same CDC contract (<code>plan-*</code> deltas, keyed by project id).
 It is the review-document pattern with the storage <strong>inverted</strong>: there, colinear owns the file and
