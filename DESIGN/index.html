@@ -1939,6 +1939,22 @@ the next session's opening prompt — and, unless the operator said otherwise, <
 queues the task so that session happens now. Waking deliberately skips <code>blocked</code> (a message is
 not a reason to jump a dependency), <code>tracking</code> and already-queued tasks, and it pushes onto the
 queue like <code>resume()</code> rather than going through <code>enqueue()</code>, so no Linear state moves.</p>
+<p><strong>Model fallback lives in <code>runSession</code></strong>, so it covers reviews and self-reviews as well as work
+and triage — a spent allowance stops all of them equally. Two different failures, two remedies:</p>
+<ul>
+<li><strong>Overloaded</strong> (429/529) — passes. The agent SDK's own <code>fallbackModel</code> handles it, and the
+  dispatcher's 30s retry catches what reaches it. Demoting would be wrong; the model is fine.</li>
+<li><strong>Out of allowance</strong> — doesn't pass. Claude Code returns an error <em>result</em>
+  (<code>You've hit your monthly spend limit. Switch to another model to continue.</code>) and the SDK's
+  <code>fallbackModel</code> does <strong>not</strong> rescue it, verified against a genuinely exhausted one: the error
+  is identical with and without a fallback configured. So <code>runSession</code> catches it and re-runs on
+  the next model in the chain itself.</li>
+</ul>
+<p><code>outOfAllowance</code> checks the overload wording first, because "rate limit reached" would otherwise
+satisfy the allowance pattern and demote a task that only needed to wait. <code>fallbackFor</code> drops the
+primary out of the chain: the SDK <em>throws</em> on a fallback equal to the model, so an operator whose
+fallback matched the model they pinned would get every session failing rather than no fallback.
+<code>bin/check</code> covers both (<code>src/core/agent.check.ts</code>).</p>
 <p>Delivery is best-effort in one specific way worth knowing: the SDK pulls from the input stream as
 soon as something is yielded, long before the agent acts on it, so a pushed message is only
 <em>certainly</em> delivered once a turn completes behind it. <code>SessionInbox</code> tracks that window as

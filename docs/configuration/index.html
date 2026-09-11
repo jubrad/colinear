@@ -1647,7 +1647,7 @@
 <tr>
 <td><code>fallbackModel</code></td>
 <td><code>"default"</code></td>
-<td>what a session demotes to when its model is overloaded or out of allowance. <code>"default"</code> is Claude Code's own alias for the model it would otherwise have picked, which is the useful answer when <code>model</code> pins an expensive one. Takes a comma-separated list, tried in order; <code>""</code> turns it off. The primary is retried at the start of every turn, so a passing overload doesn't strand the session on the cheaper model, and a fallback naming the model the session is already on is dropped rather than passed on — the agent SDK refuses that pairing outright</td>
+<td>what a session demotes to when its model is overloaded or out of allowance. <code>"default"</code> is Claude Code's own alias for the model it would otherwise have picked, which is the useful answer when <code>model</code> pins an expensive one. Takes a comma-separated list, tried in order; <code>""</code> turns it off. It covers two different failures. An <strong>overloaded</strong> model is handled by the agent SDK, which retries your primary at the start of every turn so a passing spike doesn't strand the session on the cheaper model. A <strong>spent allowance</strong> is handled by colinear itself, because the SDK's fallback does not cover it: Claude Code answers <code>You've hit your monthly spend limit. Switch to another model to continue.</code> and the session is re-run on the next model in the list, with a line on the card saying so. A fallback naming the model the session is already on is dropped rather than passed on, since the SDK refuses that pairing outright</td>
 </tr>
 <tr>
 <td><code>guidance</code></td>
