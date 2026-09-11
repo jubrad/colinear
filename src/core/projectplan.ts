@@ -293,6 +293,7 @@ export class PlanManager {
         // fail the turn outright, so start a conversation instead of losing one
         resume: plan.sessionId && sessionExists(cwd, plan.sessionId) ? plan.sessionId : undefined,
         model: this.cfg.model,
+        fallbackModel: this.cfg.fallbackModel,
         abortController: controller,
         callbacks: this.callbacks(id),
         ...this.sessionExtras(id, plan.projectName),

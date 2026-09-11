@@ -174,6 +174,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     checks: repos[0].checks,
     concurrency: raw.concurrency ?? 3,
     model: raw.model,
+    fallbackModel: normalizeFallback(raw.fallbackModel),
     guidance: normalizeGuidance(raw.guidance),
     prSignoff: joinLines(raw.prSignoff),
     prSignoffScope: raw.prSignoffScope === 'body' ? 'body' : 'all',
@@ -295,6 +296,22 @@ function autoDispatchLabels(raw: unknown): Record<string, string[]> | undefined 
 const PERMISSION_MODES = ['auto', 'acceptEdits', 'default', 'plan', 'dontAsk', 'bypassPermissions'];
 
 /** A typo here would silently widen what agents may do, so it fails loudly. */
+/**
+ * The model a session demotes to. Unset means `"default"`, which is Claude
+ * Code's own alias for the model it would have chosen — the answer that makes
+ * a pinned expensive model degrade to something that still works. An empty
+ * string is the operator saying no, so it turns the fallback off rather than
+ * falling back to the default.
+ */
+function normalizeFallback(raw: unknown): string | undefined {
+  if (raw === undefined || raw === null) return 'default';
+  if (typeof raw !== 'string') {
+    log(`config: fallbackModel must be a string — ignoring ${JSON.stringify(raw)}`);
+    return 'default';
+  }
+  return raw.trim() || undefined;
+}
+
 function permissionMode(raw: string | undefined, fallback: string): string {
   if (!raw) return fallback;
   if (!PERMISSION_MODES.includes(raw)) {

@@ -284,6 +284,7 @@ export class Reviewer {
         // what it said and why, which is the whole point of not starting over
         resume: roundTwo ? review.sessionId : undefined,
         model: this.cfg.model,
+        fallbackModel: this.cfg.fallbackModel,
         abortController: controller,
         callbacks: this.callbacks(id),
       });
@@ -468,6 +469,7 @@ export class Reviewer {
         cwd: worktree,
         resume: review.sessionId,
         model: this.cfg.model,
+        fallbackModel: this.cfg.fallbackModel,
         abortController: controller,
         callbacks: this.callbacks(id),
       });
@@ -526,6 +528,7 @@ export class Reviewer {
         cwd: review.worktree,
         resume: review.sessionId,
         model: this.cfg.model,
+        fallbackModel: this.cfg.fallbackModel,
         abortController: controller,
         callbacks: this.callbacks(id),
       });
@@ -882,6 +885,7 @@ export class Reviewer {
         prompt: explainPrompt(this.cfg, at, where),
         cwd: review.worktree,
         model: this.cfg.model,
+        fallbackModel: this.cfg.fallbackModel,
         callbacks: this.callbacks(id),
       });
     } catch (err) {

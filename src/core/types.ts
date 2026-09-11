@@ -570,6 +570,14 @@ export interface Config {
   checks: CheckConfig[];
   model?: string;
   /**
+   * What a session demotes to when its model is overloaded or out of
+   * allowance. Defaults to `"default"` — the model Claude Code would have
+   * picked anyway, which is the useful answer when the operator has pinned an
+   * expensive one. A comma-separated list is tried in order; an empty string
+   * turns the fallback off.
+   */
+  fallbackModel?: string;
+  /**
    * Operator's standing guidance. `general` reaches every agent; the rest add
    * to it for one kind of work. House rules that outlive any one issue —
    * code style, what a good PR looks like. Per-task `instructions` outrank it.

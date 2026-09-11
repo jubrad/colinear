@@ -45,4 +45,9 @@ echo '── review posting'
 npm run check:review
 
 echo
+echo '── fallback model'
+# a session must never fall back to the model it is already running
+npm run check:agent
+
+echo
 echo 'ok'

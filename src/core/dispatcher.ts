@@ -819,8 +819,12 @@ export class Dispatcher {
   }
 
   /** demo mode swaps the agent for a script; everything else is unchanged */
-  private session: typeof runSession = (opts) =>
-    isDemo(this.cfg) ? demoSession(opts) : runSession(opts);
+  private session: typeof runSession = (opts) => {
+    // the operator's fallback model is attached here rather than at each call
+    // site, so a new kind of dispatcher session cannot be added without one
+    const withFallback = { fallbackModel: this.cfg.fallbackModel, ...opts };
+    return isDemo(this.cfg) ? demoSession(withFallback) : runSession(withFallback);
+  };
 
   private checks(...args: Parameters<typeof runChecks>) {
     return isDemo(this.cfg) ? demoChecks() : runChecks(...args);

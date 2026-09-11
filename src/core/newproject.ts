@@ -78,6 +78,7 @@ Produce:
     },
     outputSchema: PROJECT_SCHEMA,
     model: cfg.model,
+    fallbackModel: cfg.fallbackModel,
     maxTurns: 12,
   });
   if (result.isError) throw new Error(result.errors.join('; ') || 'draft session failed');

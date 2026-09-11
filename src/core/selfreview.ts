@@ -93,6 +93,7 @@ export async function reviewTask(cfg: Config, task: Task): Promise<void> {
       prompt: selfReviewPrompt(cfg, task),
       cwd: task.worktree,
       model: cfg.model,
+      fallbackModel: cfg.fallbackModel,
       callbacks: {
         onActivity: (line) => store.addActivity(id, line),
         onSessionId: () => {},
@@ -144,6 +145,7 @@ export async function explainLines(
       prompt: explainPrompt(cfg, at, where),
       cwd: task.worktree,
       model: cfg.model,
+      fallbackModel: cfg.fallbackModel,
       callbacks: {
         onActivity: (line) => store.addActivity(id, line),
         onSessionId: () => {},

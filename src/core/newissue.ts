@@ -38,6 +38,7 @@ Produce:
     callbacks: { onActivity, onSessionId: () => {}, onQuestion: (q) => q.answer(q.questions.map(() => 'use your best judgment')) },
     outputSchema: ISSUE_SCHEMA,
     model: cfg.model,
+    fallbackModel: cfg.fallbackModel,
     maxTurns: 12,
   });
   if (result.isError) throw new Error(result.errors.join('; ') || 'draft session failed');
