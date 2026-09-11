@@ -215,12 +215,40 @@ interface AskUserQuestionInput {
   }>;
 }
 
+/**
+ * What a session may actually demote to, given the model it runs on.
+ *
+ * The agent SDK does not treat a fallback equal to the primary as a no-op: it
+ * throws `Fallback model cannot be the same as the main model`, before the
+ * session starts. So an operator whose `fallbackModel` happened to match the
+ * model they pinned — or a single task switched onto the fallback with `m` —
+ * would not get a demotion, they would get every dispatch failing outright.
+ * The primary is filtered out of the list here, in the one function that
+ * builds the query, rather than at each call site.
+ *
+ * With no explicit model the session already runs on the default one, so
+ * `"default"` names the primary just as surely as an id would, and passing it
+ * would be a flag that can never fire.
+ */
+export function fallbackFor(model?: string, fallback?: string): string | undefined {
+  if (!fallback) return undefined;
+  const primary = model?.trim();
+  const isPrimary = new Set(primary ? [primary] : ['default']);
+  const rest = fallback
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name && !isPrimary.has(name));
+  return rest.length ? rest.join(',') : undefined;
+}
+
 export async function runSession(opts: {
   prompt: string;
   cwd: string;
   callbacks: SessionCallbacks;
   outputSchema?: Record<string, unknown>;
   model?: string;
+  /** what to demote to if `model` is overloaded or out of allowance */
+  fallbackModel?: string;
   maxTurns?: number;
   /** session id to resume (continues its transcript) */
   resume?: string;
@@ -246,7 +274,7 @@ export async function runSession(opts: {
   };
 }): Promise<SessionResult> {
   const {
-    prompt, cwd, callbacks, outputSchema, model, maxTurns, resume, abortController,
+    prompt, cwd, callbacks, outputSchema, model, fallbackModel, maxTurns, resume, abortController,
     channels: membership, inbox, coordinator, permissions,
   } = opts;
   const mcp = colinearServer({ channels: membership, coordinator });
@@ -256,6 +284,9 @@ export async function runSession(opts: {
     options: {
       cwd,
       model,
+      // the primary is retried at the start of each user turn, so an overload
+      // or a spent allowance demotes the session without pinning it down there
+      fallbackModel: fallbackFor(model, fallbackModel),
       maxTurns,
       resume,
       abortController,

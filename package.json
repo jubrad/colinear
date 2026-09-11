@@ -17,7 +17,8 @@
     "check:backup": "tsx src/core/backup.check.ts",
     "check:worktrees": "tsx src/core/worktrees.check.ts",
     "check:diff": "tsx src/core/diff.check.ts",
-    "check:review": "tsx src/core/reviewer.check.ts"
+    "check:review": "tsx src/core/reviewer.check.ts",
+    "check:agent": "tsx src/core/agent.check.ts"
   },
   "engines": {
     "node": ">=20"
