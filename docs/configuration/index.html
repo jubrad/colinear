@@ -1645,6 +1645,11 @@
 <td>model for agents (<code>"opus"</code>, <code>"sonnet"</code>, <code>"fable"</code>, <code>"haiku"</code>). The names are resolved by the Claude Code bundled with the agent SDK, so an alias means whatever that build considers current — <code>"fable"</code> is Fable 5.1 as of SDK 0.3.266 — and an exact id such as <code>"claude-fable-5-1"</code> pins it. Overridable per dispatch (<code>c</code>) and per task (<code>m</code>)</td>
 </tr>
 <tr>
+<td><code>fallbackModel</code></td>
+<td><code>"default"</code></td>
+<td>what a session demotes to when its model is overloaded or out of allowance. <code>"default"</code> is Claude Code's own alias for the model it would otherwise have picked, which is the useful answer when <code>model</code> pins an expensive one. Takes a comma-separated list, tried in order; <code>""</code> turns it off. The primary is retried at the start of every turn, so a passing overload doesn't strand the session on the cheaper model, and a fallback naming the model the session is already on is dropped rather than passed on — the agent SDK refuses that pairing outright</td>
+</tr>
+<tr>
 <td><code>guidance</code></td>
 <td>none</td>
 <td>standing house rules injected into agent prompts, globally or per prompt. <a href="#guidance">Details</a></td>
