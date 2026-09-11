@@ -241,7 +241,7 @@ export function fallbackFor(model?: string, fallback?: string): string | undefin
   return rest.length ? rest.join(',') : undefined;
 }
 
-export async function runSession(opts: {
+export interface RunSessionOpts {
   prompt: string;
   cwd: string;
   callbacks: SessionCallbacks;
@@ -272,7 +272,58 @@ export async function runSession(opts: {
     /** the registry id, as soon as there is one — for a caller that wants to point at it */
     onRegistered?: (id: string) => void;
   };
-}): Promise<SessionResult> {
+}
+
+/**
+ * A spent allowance, which is not the same thing as an overloaded model.
+ *
+ * The agent SDK's own `fallbackModel` does not cover this: it is documented
+ * for a model that is overloaded or unavailable, and a monthly limit is
+ * neither. Verified against a genuinely exhausted allowance — with and
+ * without a fallback configured, Claude Code returns the identical error
+ * result and never switches:
+ *
+ *     You've hit your monthly spend limit. Switch to another model to continue.
+ *
+ * So colinear has to do the switching. Waiting is not the remedy the way it
+ * is for a 429, which is why this is kept apart from the dispatcher's
+ * rate-limit retry: the allowance comes back next month, not in 30 seconds.
+ */
+export function outOfAllowance(err: unknown): boolean {
+  const text = String(err);
+  // An overload is the other thing entirely: it passes, so the remedy is to
+  // wait (the dispatcher's 30s retry), not to spend the rest of the task on a
+  // weaker model. Checked first because "rate limit reached" would otherwise
+  // satisfy the allowance pattern below.
+  if (/rate.?limit|overloaded|\b529\b/i.test(text)) return false;
+  return /(spend|usage|quota) limit|limit reached|switch to another model/i.test(text);
+}
+
+/**
+ * Run a session, demoting through the fallback chain if the model it is on
+ * has nothing left in the allowance.
+ *
+ * This lives here rather than in the dispatcher because the dispatcher is not
+ * the only thing that starts sessions — a pre-review, a review chat turn, an
+ * annotated-diff explain and a self-review all come through here too, and a
+ * limit that stops work stops all of them equally.
+ */
+export async function runSession(opts: RunSessionOpts): Promise<SessionResult> {
+  const chain = (fallbackFor(opts.model, opts.fallbackModel) ?? '').split(',').filter(Boolean);
+  let model = opts.model;
+  for (let i = 0; ; i++) {
+    try {
+      return await runOne({ ...opts, model });
+    } catch (err) {
+      const next = chain[i];
+      if (!next || !outOfAllowance(err)) throw err;
+      opts.callbacks.onActivity(`${model ?? 'the default model'} is out of allowance — switching to ${next}`);
+      model = next;
+    }
+  }
+}
+
+async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
   const {
     prompt, cwd, callbacks, outputSchema, model, fallbackModel, maxTurns, resume, abortController,
     channels: membership, inbox, coordinator, permissions,

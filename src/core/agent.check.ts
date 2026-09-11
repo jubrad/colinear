@@ -1,4 +1,4 @@
-import { fallbackFor } from './agent.js';
+import { fallbackFor, outOfAllowance } from './agent.js';
 
 /**
  * A fallback model that equals the primary is not a harmless no-op.
@@ -73,11 +73,52 @@ for (const model of [...MODELS, undefined]) {
   }
 }
 
+/**
+ * Which failures are a spent allowance, and which are an overload.
+ *
+ * They want opposite remedies — demote the session, or wait and retry the same
+ * model — and the wording overlaps enough that one pattern catches both if it
+ * is written carelessly: "rate limit reached" satisfies "limit reached". The
+ * first string below is the one Claude Code actually returns, captured from a
+ * genuinely exhausted allowance; the SDK's own `fallbackModel` does not rescue
+ * it, which is why colinear has to recognise it at all.
+ */
+const SPENT: string[] = [
+  "Error: Claude Code returned an error result: You've hit your monthly spend limit. Switch to another model to continue.",
+  'Claude AI usage limit reached|1757308800',
+  'You have hit your 5-hour limit reached for this model',
+  'quota limit exceeded for this model',
+];
+for (const text of SPENT) {
+  check(`recognised as a spent allowance: ${text.slice(0, 44)}`, outOfAllowance(new Error(text)), text.slice(0, 90));
+}
+
+const TRANSIENT: string[] = [
+  'API Error: 429 rate_limit_error',
+  '429 {"type":"error","error":{"type":"rate_limit_error"}}',
+  'Overloaded',
+  '529 overloaded_error',
+  'rate limit reached, retry after 30s',
+];
+for (const text of TRANSIENT) {
+  check(`an overload is not a spent allowance: ${text.slice(0, 40)}`, !outOfAllowance(new Error(text)), text.slice(0, 90));
+}
+
+const UNRELATED: string[] = [
+  'No conversation found',
+  'spawn claude ENOENT',
+  'Fallback model cannot be the same as the main model.',
+  'error connecting to api.anthropic.com',
+];
+for (const text of UNRELATED) {
+  check(`an ordinary failure is not a spent allowance: ${text.slice(0, 36)}`, !outOfAllowance(new Error(text)), text);
+}
+
 if (failures.length) {
   console.error(`fallback model: ${failures.length} failure(s)`);
   for (const f of failures) console.error(`  ✖ ${f}`);
   process.exit(1);
 }
 console.log(
-  'ok — a session never falls back to the model it is already running, which the\n     agent SDK rejects outright, and an unset model has nothing to demote to',
+  'ok — a session never falls back to the model it is already running, which the\n     agent SDK rejects outright; an unset model has nothing to demote to; and a\n     spent allowance is told apart from an overload, which wants the opposite remedy',
 );

@@ -213,6 +213,23 @@ queues the task so that session happens now. Waking deliberately skips `blocked`
 not a reason to jump a dependency), `tracking` and already-queued tasks, and it pushes onto the
 queue like `resume()` rather than going through `enqueue()`, so no Linear state moves.
 
+**Model fallback lives in `runSession`**, so it covers reviews and self-reviews as well as work
+and triage — a spent allowance stops all of them equally. Two different failures, two remedies:
+
+- **Overloaded** (429/529) — passes. The agent SDK's own `fallbackModel` handles it, and the
+  dispatcher's 30s retry catches what reaches it. Demoting would be wrong; the model is fine.
+- **Out of allowance** — doesn't pass. Claude Code returns an error *result*
+  (`You've hit your monthly spend limit. Switch to another model to continue.`) and the SDK's
+  `fallbackModel` does **not** rescue it, verified against a genuinely exhausted one: the error
+  is identical with and without a fallback configured. So `runSession` catches it and re-runs on
+  the next model in the chain itself.
+
+`outOfAllowance` checks the overload wording first, because "rate limit reached" would otherwise
+satisfy the allowance pattern and demote a task that only needed to wait. `fallbackFor` drops the
+primary out of the chain: the SDK *throws* on a fallback equal to the model, so an operator whose
+fallback matched the model they pinned would get every session failing rather than no fallback.
+`bin/check` covers both (`src/core/agent.check.ts`).
+
 Delivery is best-effort in one specific way worth knowing: the SDK pulls from the input stream as
 soon as something is yielded, long before the agent acts on it, so a pushed message is only
 *certainly* delivered once a turn completes behind it. `SessionInbox` tracks that window as
