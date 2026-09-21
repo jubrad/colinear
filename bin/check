@@ -50,4 +50,9 @@ echo '── fallback model'
 npm run check:agent
 
 echo
+echo '── scoped models'
+# a model per kind of session, and no scope that falls back to itself
+npm run check:models
+
+echo
 echo 'ok'

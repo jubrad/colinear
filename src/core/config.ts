@@ -15,6 +15,7 @@ import {
   type Config,
   type ExperimentName,
   type Guidance,
+  type ModelChoice,
   type GuidanceScope,
   type RepoConfig,
 } from './types.js';
@@ -51,7 +52,7 @@ export function ensureConfigFile(cfg: Config): string {
     })),
     concurrency: cfg.concurrency,
     ...(cfg.team ? { team: cfg.team } : {}),
-    ...(cfg.model ? { model: cfg.model } : {}),
+    ...modelSeed(cfg.model),
     notifications: cfg.notifications,
     stateSync: cfg.stateSync,
     ciAutofix: cfg.ciAutofix,
@@ -60,6 +61,14 @@ export function ensureConfigFile(cfg: Config): string {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(seed, null, 2)}\n`);
   return path;
+}
+
+/** Seed `model` the way it was most likely written: a bare string when only `general` is set. */
+function modelSeed(model: ModelChoice): { model?: string | ModelChoice } {
+  const keys = Object.keys(model);
+  if (!keys.length) return {};
+  if (keys.length === 1 && model.general) return { model: model.general };
+  return { model };
 }
 
 interface RawRepo {
@@ -173,8 +182,8 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     worktreeRoot: repos[0].worktreeRoot,
     checks: repos[0].checks,
     concurrency: raw.concurrency ?? 3,
-    model: raw.model,
-    fallbackModel: normalizeFallback(raw.fallbackModel),
+    model: normalizeModel(raw.model, undefined),
+    fallbackModel: normalizeModel(raw.fallbackModel, 'default'),
     guidance: normalizeGuidance(raw.guidance),
     prSignoff: joinLines(raw.prSignoff),
     prSignoffScope: raw.prSignoffScope === 'body' ? 'body' : 'all',
@@ -296,20 +305,52 @@ function autoDispatchLabels(raw: unknown): Record<string, string[]> | undefined 
 const PERMISSION_MODES = ['auto', 'acceptEdits', 'default', 'plan', 'dontAsk', 'bypassPermissions'];
 
 /** A typo here would silently widen what agents may do, so it fails loudly. */
+/** Every scope a model can be named for; the key set `normalizeModel` accepts. */
+const MODEL_SCOPES = [
+  'general', 'triage', 'work', 'maintenance', 'coordinator', 'review', 'plan',
+  'draft-issue', 'draft-project',
+] as const;
+
 /**
- * The model a session demotes to. Unset means `"default"`, which is Claude
- * Code's own alias for the model it would have chosen — the answer that makes
- * a pinned expensive model degrade to something that still works. An empty
- * string is the operator saying no, so it turns the fallback off rather than
- * falling back to the default.
+ * `model` and `fallbackModel`, which take the same two shapes: a bare string
+ * meaning "for everything", or a map naming a model per kind of session.
+ *
+ * `fallback` is what an *absent* key resolves to, which differs between the
+ * two. An unset `model` means Claude Code picks, so there is nothing to say.
+ * An unset `fallbackModel` means `"default"`, which is Claude Code's own alias
+ * for the model it would have chosen anyway — the answer that lets a pinned
+ * expensive model degrade to something that still works. An empty string is
+ * the operator saying no, and turns that scope off rather than reinstating the
+ * default.
  */
-function normalizeFallback(raw: unknown): string | undefined {
-  if (raw === undefined || raw === null) return 'default';
-  if (typeof raw !== 'string') {
-    log(`config: fallbackModel must be a string — ignoring ${JSON.stringify(raw)}`);
-    return 'default';
+export function normalizeModel(raw: unknown, fallback: string | undefined): ModelChoice {
+  const seed: ModelChoice = fallback ? { general: fallback } : {};
+  if (raw === undefined || raw === null) return seed;
+  if (typeof raw === 'string') {
+    const text = raw.trim();
+    return text ? { general: text } : {};
   }
-  return raw.trim() || undefined;
+  if (typeof raw !== 'object') {
+    log(`config: a model must be a string or a map of scopes — ignoring ${JSON.stringify(raw)}`);
+    return seed;
+  }
+  const out: ModelChoice = { ...seed };
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!(MODEL_SCOPES as readonly string[]).includes(key)) {
+      log(`config: unknown model scope "${key}" — known: ${MODEL_SCOPES.join(', ')}`);
+      continue;
+    }
+    if (typeof value !== 'string') {
+      log(`config: model scope "${key}" must be a string — ignoring ${JSON.stringify(value)}`);
+      continue;
+    }
+    // An empty string is "off for this scope", and is KEPT as an empty string
+    // rather than deleted. Deleting the key would let the scope inherit
+    // `general` on the next line of `modelFor`, so switching a scope off would
+    // quietly switch it back on to whatever the general answer was.
+    out[key as keyof ModelChoice] = value.trim();
+  }
+  return out;
 }
 
 function permissionMode(raw: string | undefined, fallback: string): string {

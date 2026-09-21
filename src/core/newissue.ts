@@ -1,3 +1,4 @@
+import { modelsFor } from './models.js';
 import { runSession } from './agent.js';
 import { providerFor } from './provider.js';
 import type { Config } from './types.js';
@@ -37,8 +38,7 @@ Produce:
     cwd: cfg.repos[0].path,
     callbacks: { onActivity, onSessionId: () => {}, onQuestion: (q) => q.answer(q.questions.map(() => 'use your best judgment')) },
     outputSchema: ISSUE_SCHEMA,
-    model: cfg.model,
-    fallbackModel: cfg.fallbackModel,
+    ...modelsFor(cfg, 'draft-issue'),
     maxTurns: 12,
   });
   if (result.isError) throw new Error(result.errors.join('; ') || 'draft session failed');
