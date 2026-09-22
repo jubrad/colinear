@@ -55,4 +55,9 @@ echo '── scoped models'
 npm run check:models
 
 echo
+echo '── spend'
+# a run nobody priced must not be counted as a run that cost nothing
+npm run check:spend
+
+echo
 echo 'ok'

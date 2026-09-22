@@ -302,7 +302,8 @@ export class Reviewer {
         return;
       }
 
-      store.updateReview(id, { status: 'ready', costUsd: review.costUsd + result.costUsd, endedAt: Date.now() });
+      if (result.spend) store.addReviewSpend(id, result.spend);
+      store.updateReview(id, { status: 'ready', endedAt: Date.now() });
       if (!this.absorbDoc(id)) {
         // no doc written: keep the reply rather than losing the work
         store.updateReview(id, { doc: result.text, summary: result.text.slice(0, 2000), findings: [] });
@@ -478,8 +479,8 @@ export class Reviewer {
       const current = store.getReview(id);
       store.updateReview(id, {
         chat: [...(current?.chat ?? []), { role: 'agent', text: reply, at: Date.now() }],
-        costUsd: (current?.costUsd ?? 0) + result.costUsd,
       });
+      if (result.spend) store.addReviewSpend(id, result.spend);
       this.absorbDoc(id);
       store.updateReview(id, { error: 'anchors were re-checked — read them, then p posts again' });
       this.toast(`${review.repository}#${review.number}: anchors re-checked — p posts again`, 'ok');
@@ -536,8 +537,8 @@ export class Reviewer {
       const current = store.getReview(id);
       store.updateReview(id, {
         chat: [...(current?.chat ?? []), { role: 'agent', text: reply, at: Date.now() }],
-        costUsd: (current?.costUsd ?? 0) + result.costUsd,
       });
+      if (result.spend) store.addReviewSpend(id, result.spend);
       // the turn may have rewritten the doc; findings ride along inside it
       this.absorbDoc(id);
     } finally {
@@ -873,7 +874,7 @@ export class Reviewer {
     const where = at.startLine === at.endLine ? `line ${at.endLine}` : `lines ${at.startLine}\u2013${at.endLine}`;
     store.addReviewActivity(id, `asked what ${at.file} ${where} does`);
     try {
-      await runSession({
+      const explained = await runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         agent: {
           kind: 'review',
@@ -885,6 +886,7 @@ export class Reviewer {
         ...modelsFor(this.cfg, 'review'),
         callbacks: this.callbacks(id),
       });
+      if (explained.spend) store.addReviewSpend(id, explained.spend);
     } catch (err) {
       store.addReviewActivity(id, `explain failed: ${String(err).slice(0, 120)}`);
     } finally {

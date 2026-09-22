@@ -305,8 +305,8 @@ export class PlanManager {
       store.updatePlan(id, {
         chat: [...(current?.chat ?? []), { role: 'agent', text: reply, at: Date.now() }],
         chatting: false,
-        costUsd: (current?.costUsd ?? 0) + result.costUsd,
       });
+      if (result.spend) store.addPlanSpend(id, result.spend);
       this.absorbDraft(id);
       const after = store.getPlan(id);
       const count = after?.issues?.length ?? 0;

@@ -40,6 +40,35 @@ store.update('A', { inbox: undefined });
 // the clear-a-field case: JSON drops undefined, so this is the one that breaks
 // naive serialization
 store.update('A', { status: 'done', error: undefined, endedAt: 2 });
+
+// The session ledger: an array that grows one entry at a time, and a total the
+// same call advances. Both ride the ordinary `update` delta rather than a kind
+// of their own, so this is what proves an appended array survives the wire —
+// and that the mirror's total still matches the ledger it was derived from.
+store.addSpend('A', {
+  kind: 'triage',
+  model: 'fable',
+  startedAt: 10,
+  endedAt: 11,
+  tokens: { input: 5, output: 6, cacheRead: 0, cacheWrite: 0 },
+  costUsd: 0.25,
+});
+store.addSpend('A', {
+  kind: 'work',
+  model: 'opus',
+  startedAt: 12,
+  endedAt: 13,
+  tokens: { input: 7, output: 8, cacheRead: 1, cacheWrite: 2 },
+  costUsd: 0.75,
+});
+// a runtime that reports no price: the entry carries no costUsd at all, which
+// must survive as absent rather than arriving as 0
+store.addSpend('A', {
+  kind: 'review',
+  startedAt: 14,
+  endedAt: 15,
+  tokens: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+});
 store.update('B', { prs: [{ number: 1, title: 't', url: 'u', state: 'OPEN', isDraft: true, checksStatus: 'passing', headRefName: 'h', baseRefName: 'b' }] });
 store.update('B', {
   // a two-question ask with option descriptions: the whole set has to survive
@@ -129,6 +158,16 @@ if (left !== right) {
 }
 if (store.get('A')?.error !== undefined) throw new Error('source kept a cleared field');
 if (mirror.get('A')?.error !== undefined) throw new Error('mirror kept a cleared field');
+{
+  const ledger = mirror.get('A')?.spend ?? [];
+  if (ledger.length !== 3) throw new Error(`mirror lost ledger entries (${ledger.length})`);
+  if (ledger[2].costUsd !== undefined) throw new Error('an unpriced session arrived priced');
+  if (!('costUsd' in ledger[0])) throw new Error('a priced session arrived unpriced');
+  const summed = ledger.reduce((n, s) => n + (s.costUsd ?? 0), 0);
+  if (Math.abs((mirror.get('A')?.costUsd ?? 0) - summed) > 1e-9) {
+    throw new Error(`mirror total ${mirror.get('A')?.costUsd} does not match its ledger ${summed}`);
+  }
+}
 if (mirror.get('B')?.activity.length !== 200) throw new Error('mirror activity cap drifted');
 if (mirror.getPlan('proj-1')?.status !== 'published') throw new Error('mirror lost the plan status');
 if (mirror.getPlan('proj-1')?.error !== undefined) throw new Error('mirror kept a cleared plan field');
