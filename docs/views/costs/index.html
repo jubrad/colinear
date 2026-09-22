@@ -927,6 +927,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :costs
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -943,6 +961,47 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#which-model-ran-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which model ran it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runs-with-no-price" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runs with no price
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -1231,6 +1290,36 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#which-model-ran-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which model ran it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runs-with-no-price" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runs with no price
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -1274,6 +1363,18 @@
 agree about what still exists.</p>
 <p><strong>The figures are what the work would cost on the API.</strong> Subscription runs aren't billed per token —
 treat them as a relative measure of how expensive an agent's approach was, not an invoice.</p>
+<h2 id="which-model-ran-it">Which model ran it<a class="headerlink" href="#which-model-ran-it" title="Permanent link">&para;</a></h2>
+<p>Each row names the models that actually ran it, which is no longer one answer: models are chosen
+per kind of session, so a task's triage can run on a different model from its work, and a session
+that runs out of allowance finishes on whatever it demoted to. The row lists what actually ran,
+in the order it ran, not what the config asked for.</p>
+<p>That comes from a per-session ledger kept on each task and review. A row's total is the sum of its
+ledger, written in the same change so the two cannot drift apart.</p>
+<h2 id="runs-with-no-price">Runs with no price<a class="headerlink" href="#runs-with-no-price" title="Permanent link">&para;</a></h2>
+<p>A run whose runtime reports no price shows <code>--</code> rather than <code>$0.00</code>, and the header says how many
+sessions are unpriced. The distinction is load-bearing: counting an unpriced run as free would
+leave the total looking authoritative while being too small. Tokens are always reported, so they
+are the measure that works everywhere.</p>
 
 
 
