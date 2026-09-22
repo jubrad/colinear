@@ -1,3 +1,4 @@
+import { modelsFor } from './models.js';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -92,8 +93,7 @@ export async function reviewTask(cfg: Config, task: Task): Promise<void> {
       agent: { kind: 'review', label: task.issue.identifier, origin: 'you asked for a self-review' },
       prompt: selfReviewPrompt(cfg, task),
       cwd: task.worktree,
-      model: cfg.model,
-      fallbackModel: cfg.fallbackModel,
+      ...modelsFor(cfg, 'review'),
       callbacks: {
         onActivity: (line) => store.addActivity(id, line),
         onSessionId: () => {},
@@ -144,8 +144,7 @@ export async function explainLines(
       agent: { kind: 'review', label: task.issue.identifier, origin: `you asked about ${at.file}:${at.endLine}` },
       prompt: explainPrompt(cfg, at, where),
       cwd: task.worktree,
-      model: cfg.model,
-      fallbackModel: cfg.fallbackModel,
+      ...modelsFor(cfg, 'review'),
       callbacks: {
         onActivity: (line) => store.addActivity(id, line),
         onSessionId: () => {},

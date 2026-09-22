@@ -1,3 +1,4 @@
+import { modelsFor } from './models.js';
 import { execFile } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, type FSWatcher, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -283,8 +284,7 @@ export class Reviewer {
         // round two resumes the conversation that wrote the document: it knows
         // what it said and why, which is the whole point of not starting over
         resume: roundTwo ? review.sessionId : undefined,
-        model: this.cfg.model,
-        fallbackModel: this.cfg.fallbackModel,
+        ...modelsFor(this.cfg, 'review'),
         abortController: controller,
         callbacks: this.callbacks(id),
       });
@@ -468,8 +468,7 @@ export class Reviewer {
         prompt: reanchorPrompt(review, anchored, moved, detail),
         cwd: worktree,
         resume: review.sessionId,
-        model: this.cfg.model,
-        fallbackModel: this.cfg.fallbackModel,
+        ...modelsFor(this.cfg, 'review'),
         abortController: controller,
         callbacks: this.callbacks(id),
       });
@@ -527,8 +526,7 @@ export class Reviewer {
         prompt: chatPrompt(text, review),
         cwd: review.worktree,
         resume: review.sessionId,
-        model: this.cfg.model,
-        fallbackModel: this.cfg.fallbackModel,
+        ...modelsFor(this.cfg, 'review'),
         abortController: controller,
         callbacks: this.callbacks(id),
       });
@@ -884,8 +882,7 @@ export class Reviewer {
         },
         prompt: explainPrompt(this.cfg, at, where),
         cwd: review.worktree,
-        model: this.cfg.model,
-        fallbackModel: this.cfg.fallbackModel,
+        ...modelsFor(this.cfg, 'review'),
         callbacks: this.callbacks(id),
       });
     } catch (err) {

@@ -1,3 +1,5 @@
+import type { AgentKind } from './sessions.js';
+
 /**
  * An issue, as colinear needs it — the shape every provider maps into.
  *
@@ -524,6 +526,26 @@ export type GuidanceScope = 'triage' | 'work' | 'review' | 'plan';
 
 export type Guidance = { general?: string } & Partial<Record<GuidanceScope, string>>;
 
+/**
+ * Which kind of session a model choice applies to.
+ *
+ * The same eight kinds a session already announces to `:agents`, plus
+ * `general` for "everything I haven't named". Keying on `AgentKind` rather
+ * than on `GuidanceScope` costs nothing and means the scope is the value the
+ * session is already carrying, instead of a second vocabulary to map onto.
+ */
+export type ModelScope = AgentKind | 'general';
+
+/**
+ * Which model runs which kind of work.
+ *
+ * A bare string is `{ general: it }`, so `"model": "fable"` keeps meaning what
+ * it always did. The map exists because the kinds genuinely want different
+ * answers: a review is short and wants the sharpest model available, a
+ * maintenance pass is mechanical, and drafting an issue is neither.
+ */
+export type ModelChoice = Partial<Record<ModelScope, string>>;
+
 export interface CheckConfig {
   name: string;
   cmd: string;
@@ -568,15 +590,17 @@ export interface Config {
   worktreeRoot: string;
   concurrency: number;
   checks: CheckConfig[];
-  model?: string;
+  /** which model runs which kind of session; a bare string sets `general` */
+  model: ModelChoice;
   /**
    * What a session demotes to when its model is overloaded or out of
    * allowance. Defaults to `"default"` — the model Claude Code would have
    * picked anyway, which is the useful answer when the operator has pinned an
    * expensive one. A comma-separated list is tried in order; an empty string
-   * turns the fallback off.
+   * turns the fallback off. Scoped the same way as `model`, so a role given
+   * its own model can be given its own way down as well.
    */
-  fallbackModel?: string;
+  fallbackModel: ModelChoice;
   /**
    * Operator's standing guidance. `general` reaches every agent; the rest add
    * to it for one kind of work. House rules that outlive any one issue —

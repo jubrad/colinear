@@ -213,6 +213,16 @@ queues the task so that session happens now. Waking deliberately skips `blocked`
 not a reason to jump a dependency), `tracking` and already-queued tasks, and it pushes onto the
 queue like `resume()` rather than going through `enqueue()`, so no Linear state moves.
 
+**Which model runs a session is a property of what kind of session it is.** `AgentKind` already
+tags all eight — triage, work, maintenance, coordinator, review, plan, draft-issue, draft-project —
+and every session announces one to `:agents`, so that tag is the routing key and no call site needed
+new plumbing to carry it. `model` and `fallbackModel` take the `guidance` shape: a bare string is
+`{ general: it }`, a map names a kind. `modelsFor(cfg, kind, override)` resolves the pair together
+because `fallbackFor` has to compare them, and a per-task `m`/`c` override outranks the kind. A kind
+named with an empty string is off, and is stored as an empty string rather than deleted — deleting
+it would let the kind inherit `general` again, so switching one off would switch it back on
+(`src/core/models.check.ts`).
+
 **Model fallback lives in `runSession`**, so it covers reviews and self-reviews as well as work
 and triage — a spent allowance stops all of them equally. Two different failures, two remedies:
 

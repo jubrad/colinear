@@ -13,6 +13,7 @@ import { REVIEW_FILE } from './reviewer.js';
 import { isSettledReview, isSettledTask, settledAt } from './gc.js';
 import { experimentOn } from './config.js';
 import { log } from './log.js';
+import { modelFor, modelsFor } from './models.js';
 import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
@@ -213,7 +214,7 @@ export class Dispatcher {
         prompt: coordinatorPrompt(task, coordChannels?.scopes.map((c) => c.id) ?? [], messages),
         cwd: coordinatorCwd(task),
         callbacks: this.callbacks(id),
-        model: store.get(id)?.model ?? this.cfg.model,
+        ...modelsFor(this.cfg, 'coordinator', store.get(id)?.model),
         maxTurns: 30,
         abortController: controller,
         permissions: this.permissions(),
@@ -820,9 +821,10 @@ export class Dispatcher {
 
   /** demo mode swaps the agent for a script; everything else is unchanged */
   private session: typeof runSession = (opts) => {
-    // the operator's fallback model is attached here rather than at each call
-    // site, so a new kind of dispatcher session cannot be added without one
-    const withFallback = { fallbackModel: this.cfg.fallbackModel, ...opts };
+    // the fallback for this kind of session is attached here rather than at
+    // each call site, so a new kind of dispatcher session cannot be added
+    // without one. An explicit value in `opts` still wins.
+    const withFallback = { fallbackModel: modelFor(this.cfg.fallbackModel, opts.agent?.kind ?? 'general'), ...opts };
     return isDemo(this.cfg) ? demoSession(withFallback) : runSession(withFallback);
   };
 
@@ -966,7 +968,7 @@ export class Dispatcher {
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: triageSchema(this.cfg.repos.map((r) => r.name)),
-          model: store.get(id)?.model ?? this.cfg.model,
+          ...modelsFor(this.cfg, 'triage', store.get(id)?.model),
           maxTurns: 40,
           abortController: controller,
           permissions: this.permissions(),
@@ -1024,11 +1026,14 @@ export class Dispatcher {
       // the mailbox keeps this session open between turns, so `M` can reach it
       const inbox = new SessionInbox();
       this.inboxes.set(id, inbox);
+      // maintenance is a different animal from development: it runs against an
+      // open PR, which is what the board's blinking dot says too — and it is
+      // the kind of work an operator most often wants on a cheaper model, so
+      // the same distinction picks the model
+      const workScope = mode === 'fixci' || mode === 'rebase' || mode === 'revise' ? 'maintenance' : 'work';
       const work = await this.session({
         agent: {
-          // maintenance is a different animal from development: it runs
-          // against an open PR, which is what the board's blinking dot says too
-          kind: mode === 'fixci' || mode === 'rebase' || mode === 'revise' ? 'maintenance' : 'work',
+          kind: workScope,
           label: task.issue.identifier,
           origin:
             mode === 'fixci'
@@ -1055,7 +1060,7 @@ export class Dispatcher {
                 : workPrompt(ctx, issue, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, current.verdict?.verification, task.skipTriage, knownPr),
         cwd: worktree,
         callbacks: this.callbacks(id),
-        model: store.get(id)?.model ?? this.cfg.model,
+        ...modelsFor(this.cfg, workScope, store.get(id)?.model),
         resume: resumeSession,
         abortController: controller,
         permissions: this.permissions(),

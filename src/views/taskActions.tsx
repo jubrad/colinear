@@ -1,3 +1,4 @@
+import { modelFor } from '../core/models.js';
 import { Box, Text, useInput, type Key } from 'ink';
 import { providerFor } from '../core/provider.js';
 import { TextArea } from '../ui/TextArea.js';
@@ -235,7 +236,7 @@ export function useTaskActions(): TaskActions {
           defaults={{
             autoRebase: ctx.cfg.autoRebase,
             autoDispatchSubs: ctx.cfg.autoDispatchSubs,
-            model: ctx.cfg.model,
+            model: modelFor(ctx.cfg.model, 'work'),
           }}
           width={ctx.size.columns}
           onCancel={() => setRepoModal(undefined)}

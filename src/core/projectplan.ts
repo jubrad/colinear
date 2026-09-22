@@ -1,3 +1,4 @@
+import { modelsFor } from './models.js';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
@@ -292,8 +293,7 @@ export class PlanManager {
         // same rule as `c`: a stored id that has no transcript here would
         // fail the turn outright, so start a conversation instead of losing one
         resume: plan.sessionId && sessionExists(cwd, plan.sessionId) ? plan.sessionId : undefined,
-        model: this.cfg.model,
-        fallbackModel: this.cfg.fallbackModel,
+        ...modelsFor(this.cfg, 'plan'),
         abortController: controller,
         callbacks: this.callbacks(id),
         ...this.sessionExtras(id, plan.projectName),

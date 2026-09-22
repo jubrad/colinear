@@ -1,3 +1,4 @@
+import { modelsFor } from './models.js';
 import { runSession } from './agent.js';
 import { isDemo } from './demo.js';
 import { providerFor } from './provider.js';
@@ -77,8 +78,7 @@ Produce:
       onQuestion: (q) => q.answer(q.questions.map(() => 'use your best judgment')),
     },
     outputSchema: PROJECT_SCHEMA,
-    model: cfg.model,
-    fallbackModel: cfg.fallbackModel,
+    ...modelsFor(cfg, 'draft-project'),
     maxTurns: 12,
   });
   if (result.isError) throw new Error(result.errors.join('; ') || 'draft session failed');
