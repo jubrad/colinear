@@ -222,7 +222,7 @@ export class Dispatcher {
         inbox,
         coordinator: this.coordinatorTools(id),
       });
-      store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + result.costUsd });
+      if (result.spend) store.addSpend(id, result.spend);
       if (result.isError) {
         store.addActivity(id, `coordinator failed: ${result.errors.join('; ').slice(0, 120)}`);
       } else if (result.text.trim()) {
@@ -974,7 +974,7 @@ export class Dispatcher {
           permissions: this.permissions(),
           channels: triageChannels,
         });
-        store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + triage.costUsd });
+        if (triage.spend) store.addSpend(id, triage.spend);
         if (triage.isError) throw new Error(`triage failed: ${triage.errors.join('; ')}`);
 
         const verdict = triage.structured as TriageVerdict;
@@ -1070,7 +1070,7 @@ export class Dispatcher {
       this.inboxes.delete(id);
       inbox.close();
       this.requeueUndelivered(id, inbox);
-      store.update(id, { costUsd: (store.get(id)?.costUsd ?? 0) + work.costUsd });
+      if (work.spend) store.addSpend(id, work.spend);
       // PR polling is off in demo mode, so the PR a real agent would have
       // opened has to come from somewhere
       if (isDemo(this.cfg) && !work.isError && !store.get(id)?.prs.length) {

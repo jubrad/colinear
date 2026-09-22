@@ -281,6 +281,8 @@ export interface Task {
    * agent gets them pushed straight into its conversation instead.
    */
   inbox?: string[];
+  /** what each session on this task spent, and what ran it */
+  spend?: SessionSpend[];
   /** superseded session pointers — recovery when a new session clobbers a good one */
   sessionHistory?: Array<{ sessionId: string; worktree?: string; at: number }>;
 }
@@ -356,6 +358,8 @@ export interface ProjectPlan {
   error?: string;
   tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
   costUsd: number;
+  /** what each session spent, and what ran it */
+  spend?: SessionSpend[];
   startedAt?: number;
   endedAt?: number;
 }
@@ -488,6 +492,8 @@ export interface Review {
   endedAt?: number;
   tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
   costUsd: number;
+  /** what each session spent, and what ran it */
+  spend?: SessionSpend[];
   error?: string;
   question?: PendingQuestion;
 }
@@ -545,6 +551,43 @@ export type ModelScope = AgentKind | 'general';
  * maintenance pass is mechanical, and drafting an issue is neither.
  */
 export type ModelChoice = Partial<Record<ModelScope, string>>;
+
+/**
+ * What one agent session spent, and what ran it.
+ *
+ * A row's `costUsd` is an accumulator: a task adds to it from its coordinator,
+ * triage and work sessions in turn. That was a complete answer while one model
+ * ran everything, and stopped being one when models became per kind — triage
+ * can now run on a different model from the work it triages, so no single
+ * field on the task can say what ran it.
+ *
+ * So the ledger is per session rather than per row. It is written by the
+ * session itself, which is the only thing that knows the answer: a session
+ * that started on a model with no allowance left finishes on the one it
+ * demoted to, and nothing upstream of `runSession` sees that happen.
+ *
+ * `costUsd` is optional because not every runtime prices a run. A missing
+ * price means "this runtime doesn't say", which is not zero, and the views
+ * have to keep the two apart or a total silently understates what was spent.
+ */
+export interface SessionSpend {
+  kind: AgentKind;
+  /** what colinear asked for; unset = whatever the runtime defaults to */
+  model?: string;
+  /**
+   * The models that actually answered, from the runtime's own per-model
+   * accounting rather than from what was requested. The two differ more often
+   * than they look: a session demoted off a spent allowance, a runtime's own
+   * internal fallback for an overloaded model, and a subagent are all cases
+   * where the answer came from somewhere the caller never named.
+   */
+  ran?: string[];
+  startedAt: number;
+  endedAt: number;
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  /** absent when the runtime reports no price — never write 0 to mean that */
+  costUsd?: number;
+}
 
 export interface CheckConfig {
   name: string;

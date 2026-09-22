@@ -107,6 +107,7 @@ export async function reviewTask(cfg: Config, task: Task): Promise<void> {
       id,
       count ? `self-review: ${count} finding${count === 1 ? '' : 's'}` : 'self-review found nothing to raise',
     );
+    if (result.spend) store.addSpend(id, result.spend);
     if (result.isError) store.addActivity(id, `self-review failed: ${result.errors.join('; ').slice(0, 120)}`);
   } catch (err) {
     store.update(id, { reviewing: false });
@@ -139,7 +140,7 @@ export async function explainLines(
   const where = at.startLine === at.endLine ? `line ${at.endLine}` : `lines ${at.startLine}–${at.endLine}`;
   store.addActivity(id, `asked what ${at.file} ${where} does`);
   try {
-    await runSession({
+    const explained = await runSession({
       permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
       agent: { kind: 'review', label: task.issue.identifier, origin: `you asked about ${at.file}:${at.endLine}` },
       prompt: explainPrompt(cfg, at, where),
@@ -151,6 +152,7 @@ export async function explainLines(
         onQuestion: (q) => q.answer(q.questions.map(() => 'use your best judgment')),
       },
     });
+    if (explained.spend) store.addSpend(id, explained.spend);
   } catch (err) {
     store.addActivity(id, `explain failed: ${String(err).slice(0, 120)}`);
   } finally {

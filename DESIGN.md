@@ -223,6 +223,24 @@ named with an empty string is off, and is stored as an empty string rather than 
 it would let the kind inherit `general` again, so switching one off would switch it back on
 (`src/core/models.check.ts`).
 
+**What a session spent is recorded per session, not per row.** A task's `costUsd` is an
+accumulator — coordinator, triage and work sessions each add to it — which was a complete answer
+only while one model ran everything. `SessionSpend` (kind, model, tokens, cost, timing) is appended
+to `task.spend` / `review.spend` / `plan.spend` by `store.addSpend` and friends, which advance the
+running total in the *same* change so a row's total stays the sum of its ledger. The entry is built
+inside `runSession`, the only place that knows which model actually answered. It records both what
+was asked for and what ran: `ran` comes from the SDK result's `modelUsage`, which is keyed by model
+and covers every call the query made. The two differ routinely — asking for `sonnet` and measuring
+it reports `claude-sonnet-5` *and* `claude-haiku-4-5`, and a session that demotes off a spent
+allowance finishes somewhere its caller never named — so attribution reads `ran` and falls back to
+the request only when the runtime reported nothing. The ledger rides the
+ordinary `update` delta rather than a delta kind of its own (`store.check.ts` replays it, including
+an entry with no price at all). `costUsd` on an entry is optional and absent means "this runtime
+priced nothing", which `core/spend.ts` keeps distinct from zero all the way to the view — summing
+an unpriced run as free would leave a total that reads as authoritative and is quietly too small
+(`spend.check.ts`). Recording it also closed two leaks: self-review and both explain passes spent
+money and recorded none of it.
+
 **Model fallback lives in `runSession`**, so it covers reviews and self-reviews as well as work
 and triage — a spent allowance stops all of them equally. Two different failures, two remedies:
 

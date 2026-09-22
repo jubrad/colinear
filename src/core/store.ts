@@ -8,7 +8,7 @@ import {
   type WireReview,
   type WireTask,
 } from './delta.js';
-import type { ProjectPlan, Review, Task, TaskStatus } from './types.js';
+import type { ProjectPlan, Review, SessionSpend, Task, TaskStatus } from './types.js';
 
 type Listener = () => void;
 
@@ -82,6 +82,26 @@ class Store {
     this.emit({ kind: 'activity', id, line });
   }
 
+  /**
+   * Record what one session spent on this task: the ledger line and the
+   * running total, in a single change so the two can never drift apart.
+   *
+   * A row's total used to be advanced on its own at each call site. That was
+   * fine while the total was the whole answer; now that a task's sessions can
+   * run on different models, the total is a summary OF the ledger and must
+   * stay derivable from it. `costUsd` absent on the entry means the runtime
+   * priced nothing, which adds nothing rather than adding zero.
+   *
+   * Daemon-side, like every other write: a mirror forwards the change.
+   */
+  addSpend(id: string, entry: SessionSpend) {
+    const task = this.tasks.get(id);
+    this.update(id, {
+      spend: [...(task?.spend ?? []), entry],
+      costUsd: (task?.costUsd ?? 0) + (entry.costUsd ?? 0),
+    });
+  }
+
   list(): Task[] {
     return [...this.tasks.values()];
   }
@@ -104,6 +124,15 @@ class Store {
     if (!review) return;
     Object.assign(review, patch);
     this.emit({ kind: 'review-update', id, patch: wire, clear });
+  }
+
+  /** A review session's spend; see `addSpend`. */
+  addReviewSpend(id: string, entry: SessionSpend) {
+    const review = this.reviews.get(id);
+    this.updateReview(id, {
+      spend: [...(review?.spend ?? []), entry],
+      costUsd: (review?.costUsd ?? 0) + (entry.costUsd ?? 0),
+    });
   }
 
   addReviewActivity(id: string, line: string) {
@@ -149,6 +178,15 @@ class Store {
     if (!plan) return;
     Object.assign(plan, patch);
     this.emit({ kind: 'plan-update', id, patch: wire, clear });
+  }
+
+  /** A plan session's spend; see `addSpend`. */
+  addPlanSpend(id: string, entry: SessionSpend) {
+    const plan = this.plans.get(id);
+    this.updatePlan(id, {
+      spend: [...(plan?.spend ?? []), entry],
+      costUsd: (plan?.costUsd ?? 0) + (entry.costUsd ?? 0),
+    });
   }
 
   addPlanActivity(id: string, line: string) {

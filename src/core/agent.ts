@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { channels, formatMessages } from './channel.js';
 import type { CoordinatorTools } from './coordinator.js';
 import { endSession, startSession, updateSession, type AgentKind } from './sessions.js';
+import type { SessionSpend } from './types.js';
 import type { SessionChannels } from './channel.js';
 import type { AskedQuestion, PendingQuestion, PlannedSubtask } from './types.js';
 
@@ -204,6 +205,15 @@ export interface SessionResult {
   errors: string[];
   /** assistant messages seen — 0 on a spawn that died before doing anything */
   assistantTurns: number;
+  /**
+   * The ledger entry for this run: what it spent and what ran it.
+   *
+   * Reported from here because this is the only place that knows. The model
+   * the caller asked for is not necessarily the one that answered — a session
+   * whose model has no allowance left finishes on whatever it demoted to, and
+   * that switch happens below every caller.
+   */
+  spend?: SessionSpend;
 }
 
 interface AskUserQuestionInput {
@@ -418,6 +428,8 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
     },
   });
 
+  const startedAt = Date.now();
+  let observed: string[] | undefined;
   const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const result: SessionResult = { text: '', costUsd: 0, isError: false, errors: [], assistantTurns: 0 };
   const registered = opts.agent ? startSession({ ...opts.agent, cwd, model }) : undefined;
@@ -475,6 +487,12 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
           result.isError = true;
           result.errors = msg.errors;
         }
+        // Which models actually answered. `modelUsage` is keyed by model and
+        // is the SDK's own account of every call the query made, so it catches
+        // what the requested model cannot: the SDK's internal fallback for an
+        // overloaded model, and any subagent.
+        const ran = Object.keys(msg.modelUsage ?? {});
+        if (ran.length) observed = ran;
         // a turn finished, so anything in flight landed in the conversation
         inbox?.markDelivered();
         // A streaming session doesn't end on its own: it waits for more input.
@@ -500,6 +518,17 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
       costUsd: result.costUsd,
       tokens: totals,
     });
+  }
+  if (opts.agent) {
+    result.spend = {
+      kind: opts.agent.kind,
+      model,
+      ...(observed ? { ran: observed } : {}),
+      startedAt,
+      endedAt: Date.now(),
+      tokens: { ...totals },
+      costUsd: result.costUsd,
+    };
   }
   return result;
   } catch (err) {
