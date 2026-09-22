@@ -1332,6 +1332,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#agent-runtimes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent runtimes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#issue-providers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1610,6 +1621,17 @@
     <span class="md-ellipsis">
       
         Project plans
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#agent-runtimes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent runtimes
       
     </span>
   </a>
@@ -2078,6 +2100,28 @@ sessions finish on the brief they started with and read the channel at their pre
 <p>Plans never leave the store on their own — retention drops finished tasks and settled reviews, but
 a plan is a conversation the operator can return to, so only they remove one. <code>:gc</code> spares a live
 plan's worktree for the same reason and offers it once the plan is gone.</p>
+<h2 id="agent-runtimes">Agent runtimes<a class="headerlink" href="#agent-runtimes" title="Permanent link">&para;</a></h2>
+<p>Everything above <code>core/agent.ts</code> is runtime-agnostic; everything below it is one adapter.
+<code>agentFor(cfg)</code> returns the instance for a config (cached per config object, so a <code>reloadConfig</code>
+that mutates in place keeps working, and a changed <code>agent</code> re-resolves), and <strong>nothing outside
+<code>agents/</code> imports an agent SDK</strong>. That is the same arrangement <code>core/provider.ts</code> has with
+trackers, for the same reason.</p>
+<p><code>AgentCapabilities</code> is asked rather than assumed: <code>questions</code>, <code>messaging</code>, <code>attach</code>, <code>denyRules</code>,
+<code>cost</code>, <code>structuredOutput</code>, <code>resume</code>, <code>sharedSessionId</code>. These are not cosmetic. A runtime that
+cannot stop and ask does not park a task in <code>needs_input</code> — it guesses — so <code>questions: false</code> is a
+statement about what the work will be like, not about which key is greyed out. <code>:config</code> lists what
+the configured runtime cannot do, next to the same line for the tracker.</p>
+<p><code>SessionInbox</code> is shared: it yields plain strings and the adapter puts its own message envelope
+around them, because the queueing, the in-flight bookkeeping and the re-queue on a dead session are
+the same problem whatever reads the stream. The model pickers read <code>backend.models</code>, so a different
+runtime offers its own models rather than Claude's four aliases.</p>
+<p>What has <em>not</em> moved yet, and is the rest of this work: the transcript layout
+(<code>~/.claude/projects/&lt;encoded cwd&gt;/&lt;id&gt;.jsonl</code>), <code>claude --resume</code> in <code>attach.ts</code> and <code>index.tsx</code>,
+and <code>doctor</code>'s probe for the <code>claude</code> binary. Those shell out rather than import the SDK, so the
+doctrine above holds, but a second runtime needs them behind the seam too.</p>
+<p><code>agent.check.ts</code> registers a fake runtime and drives a session through it. An interface nothing has
+ever been substituted through is a shape rather than a seam — demo mode proved only that the
+<em>type</em> fits, since it ignores cwd, model, resume, cancellation and the mailbox.</p>
 <h2 id="issue-providers">Issue providers<a class="headerlink" href="#issue-providers" title="Permanent link">&para;</a></h2>
 <p>Everything above <code>core/provider.ts</code> is tracker-agnostic; everything below it is one adapter.
 <code>providerFor(cfg)</code> returns the instance for a config (cached per config object, so a

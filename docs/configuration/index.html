@@ -1662,6 +1662,11 @@
 <td>agent sessions running at once. Above ~5 you start hitting subscription rate limits</td>
 </tr>
 <tr>
+<td><code>agent</code></td>
+<td><code>"claude"</code></td>
+<td>which agent runtime runs sessions. One runtime ships today; the key exists because everything above <code>core/agent.ts</code> is written against an interface rather than against Claude Code, and <code>:config</code> lists what the configured runtime cannot do</td>
+</tr>
+<tr>
 <td><code>model</code></td>
 <td>Claude Code's default</td>
 <td>model for agents (<code>"opus"</code>, <code>"sonnet"</code>, <code>"fable"</code>, <code>"haiku"</code>). The names are resolved by the Claude Code bundled with the agent SDK, so an alias means whatever that build considers current — <code>"fable"</code> is Fable 5.1 as of SDK 0.3.266 — and an exact id such as <code>"claude-fable-5-1"</code> pins it. Overridable per dispatch (<code>c</code>) and per task (<code>m</code>). Takes a map to run different work on different models. <a href="#models-per-kind-of-session">Details</a></td>
