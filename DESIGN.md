@@ -370,6 +370,34 @@ Plans never leave the store on their own — retention drops finished tasks and 
 a plan is a conversation the operator can return to, so only they remove one. `:gc` spares a live
 plan's worktree for the same reason and offers it once the plan is gone.
 
+## Agent runtimes
+
+Everything above `core/agent.ts` is runtime-agnostic; everything below it is one adapter.
+`agentFor(cfg)` returns the instance for a config (cached per config object, so a `reloadConfig`
+that mutates in place keeps working, and a changed `agent` re-resolves), and **nothing outside
+`agents/` imports an agent SDK**. That is the same arrangement `core/provider.ts` has with
+trackers, for the same reason.
+
+`AgentCapabilities` is asked rather than assumed: `questions`, `messaging`, `attach`, `denyRules`,
+`cost`, `structuredOutput`, `resume`, `sharedSessionId`. These are not cosmetic. A runtime that
+cannot stop and ask does not park a task in `needs_input` — it guesses — so `questions: false` is a
+statement about what the work will be like, not about which key is greyed out. `:config` lists what
+the configured runtime cannot do, next to the same line for the tracker.
+
+`SessionInbox` is shared: it yields plain strings and the adapter puts its own message envelope
+around them, because the queueing, the in-flight bookkeeping and the re-queue on a dead session are
+the same problem whatever reads the stream. The model pickers read `backend.models`, so a different
+runtime offers its own models rather than Claude's four aliases.
+
+What has *not* moved yet, and is the rest of this work: the transcript layout
+(`~/.claude/projects/<encoded cwd>/<id>.jsonl`), `claude --resume` in `attach.ts` and `index.tsx`,
+and `doctor`'s probe for the `claude` binary. Those shell out rather than import the SDK, so the
+doctrine above holds, but a second runtime needs them behind the seam too.
+
+`agent.check.ts` registers a fake runtime and drives a session through it. An interface nothing has
+ever been substituted through is a shape rather than a seam — demo mode proved only that the
+*type* fits, since it ignores cwd, model, resume, cancellation and the mailbox.
+
 ## Issue providers
 
 Everything above `core/provider.ts` is tracker-agnostic; everything below it is one adapter.

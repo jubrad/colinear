@@ -2,6 +2,7 @@ import { Box, Text, useInput } from 'ink';
 import { setPendingAction } from '../core/attach.js';
 import { configPath } from '../core/config.js';
 import { CONTEXT, DEFAULT_CONTEXT, listContexts } from '../core/context.js';
+import { agentFor } from '../core/agent.js';
 import { providerFor } from '../core/provider.js';
 import { useColinear } from '../ui/context.js';
 import { theme } from '../theme.js';
@@ -14,6 +15,12 @@ export function ConfigView(_props: { param?: string }) {
   const contexts = listContexts();
   const provider = providerFor(cfg);
   const off = Object.entries(provider.capabilities)
+    .filter(([, on]) => !on)
+    .map(([name]) => name);
+  // the runtime gets the same treatment as the tracker: what it cannot do is
+  // said here, where an operator looks when a key does nothing
+  const agent = agentFor(cfg);
+  const agentOff = Object.entries(agent.capabilities)
     .filter(([, on]) => !on)
     .map(([name]) => name);
 
@@ -53,6 +60,18 @@ export function ConfigView(_props: { param?: string }) {
         <Text dimColor>
           {' '}— scope: {provider.scopeLabel}
           {off.length ? ` · unsupported here: ${off.join(', ')}` : ' · all features supported'}
+        </Text>
+      </Text>
+      <Text>
+        <Text bold color={theme.header}>
+          runtime{'  '}
+        </Text>
+        <Text color={theme.selection} bold>
+          {agent.name}
+        </Text>
+        <Text dimColor>
+          {' '}— models: {agent.models.join(', ')}
+          {agentOff.length ? ` · unsupported here: ${agentOff.join(', ')}` : ' · all features supported'}
         </Text>
       </Text>
       {(CONTEXT !== DEFAULT_CONTEXT || contexts.length > 1) && (

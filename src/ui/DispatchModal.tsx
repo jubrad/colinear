@@ -4,13 +4,14 @@ import type { RepoConfig } from '../core/types.js';
 import { theme } from '../theme.js';
 import { TextArea } from './TextArea.js';
 
-const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
-  { label: 'default' },
-  { label: 'sonnet', value: 'sonnet' },
-  { label: 'opus', value: 'opus' },
-  { label: 'fable', value: 'fable' },
-  { label: 'haiku', value: 'haiku' },
-];
+/**
+ * The picker's options: whatever the runtime offers, with "default" first for
+ * "whatever the config says". The list is the runtime's rather than a constant
+ * here, so a different runtime offers its own models instead of Claude's.
+ */
+function modelOptions(models: string[]): Array<{ label: string; value?: string }> {
+  return [{ label: 'default' }, ...models.map((label) => ({ label, value: label }))];
+}
 
 export interface DispatchOptions {
   instructions?: string;
@@ -29,6 +30,8 @@ const START_OPTIONS = ['start now', 'manual — worktree only'];
 
 /** Custom-dispatch modal: model tier, target repo, how it starts, instructions. */
 export function DispatchModal(props: {
+  /** models the configured runtime offers */
+  models: string[];
   count: number;
   repos: RepoConfig[];
   /** inner width of the popup, so the instructions area can use all of it */
@@ -38,7 +41,8 @@ export function DispatchModal(props: {
   onSubmit: (opts: DispatchOptions) => void;
   onCancel: () => void;
 }) {
-  const { count, repos, width, instructionLines, onSubmit, onCancel } = props;
+  const { count, repos, width, instructionLines, models, onSubmit, onCancel } = props;
+  const modelChoices = modelOptions(models);
   const [instructions, setInstructions] = useState('');
   const [modelIdx, setModelIdx] = useState(0);
   const [repoIdx, setRepoIdx] = useState(0);
@@ -59,7 +63,7 @@ export function DispatchModal(props: {
   const submit = () =>
     onSubmit({
       instructions: instructions.trim() || undefined,
-      model: MODEL_OPTIONS[modelIdx].value,
+      model: modelChoices[modelIdx].value,
       repo: repos[repoIdx],
       skipTriage: triageIdx === 1,
       manual: startIdx === 1,
@@ -75,7 +79,7 @@ export function DispatchModal(props: {
       if (key.leftArrow || input === 'h') set((i) => (i + len - 1) % len);
       if (key.rightArrow || input === 'l') set((i) => (i + 1) % len);
     };
-    if (focus === 'model') cycle(MODEL_OPTIONS.length, setModelIdx);
+    if (focus === 'model') cycle(modelChoices.length, setModelIdx);
     if (focus === 'repo') cycle(repos.length, setRepoIdx);
     if (focus === 'triage') cycle(TRIAGE_OPTIONS.length, setTriageIdx);
     if (focus === 'start') cycle(START_OPTIONS.length, setStartIdx);
@@ -117,7 +121,7 @@ export function DispatchModal(props: {
       <Text bold color={theme.key}>
         custom dispatch — {count} issue{count > 1 ? 's' : ''}
       </Text>
-      {optionRow('model', 'model', MODEL_OPTIONS.map((m) => m.label), modelIdx)}
+      {optionRow('model', 'model', modelChoices.map((m) => m.label), modelIdx)}
       {repos.length > 1 && optionRow('repo', 'repo', repos.map((r) => r.name), repoIdx)}
       {optionRow('triage', 'triage', TRIAGE_OPTIONS, triageIdx)}
       {optionRow('start', 'start', START_OPTIONS, startIdx)}

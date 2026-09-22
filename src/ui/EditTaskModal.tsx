@@ -11,13 +11,14 @@ const REBASE_OPTIONS = ['config default', 'auto-rebase', 'leave it'];
 /** only meaningful on a parent tracking sub-issues */
 const SUBS_OPTIONS = ['config default', 'auto-dispatch', 'leave them'];
 
-const MODEL_OPTIONS: Array<{ label: string; value?: string }> = [
-  { label: 'default' },
-  { label: 'sonnet', value: 'sonnet' },
-  { label: 'opus', value: 'opus' },
-  { label: 'fable', value: 'fable' },
-  { label: 'haiku', value: 'haiku' },
-];
+/**
+ * The picker's options: whatever the runtime offers, with "default" first for
+ * "whatever the config says". The list is the runtime's rather than a constant
+ * here, so a different runtime offers its own models instead of Claude's.
+ */
+function modelOptions(models: string[]): Array<{ label: string; value?: string }> {
+  return [{ label: 'default' }, ...models.map((label) => ({ label, value: label }))];
+}
 
 type Field = 'repo' | 'pin' | 'instructions' | 'model' | 'triage' | 'rebase' | 'subs';
 
@@ -38,11 +39,14 @@ export function EditTaskModal(props: {
   repos: RepoConfig[];
   /** config values, so "config default" can say what it currently means */
   defaults?: { autoRebase?: boolean; autoDispatchSubs?: boolean; model?: string };
+  /** models the configured runtime offers */
+  models: string[];
   width?: number;
   onSubmit: (edits: TaskEdits) => void;
   onCancel: () => void;
 }) {
-  const { task, repos, defaults, width = 80, onSubmit, onCancel } = props;
+  const { task, repos, defaults, models, width = 80, onSubmit, onCancel } = props;
+  const modelChoices = modelOptions(models);
   const followsConfig = (on: boolean | undefined) => `config default (${on ? 'on' : 'off'})`;
   const hasTriage = task.verdict?.verdict === 'do';
   // with a plan: keep it, redo it, or drop it and go straight to work;
@@ -56,7 +60,7 @@ export function EditTaskModal(props: {
   const [pin, setPin] = useState(task.pinnedPr ? String(task.pinnedPr) : '');
   const [instructions, setInstructions] = useState(task.instructions ?? '');
   const [modelIdx, setModelIdx] = useState(() => {
-    const idx = MODEL_OPTIONS.findIndex((m) => m.value === task.model);
+    const idx = modelChoices.findIndex((m) => m.value === task.model);
     return idx === -1 ? 0 : idx;
   });
   const [triageIdx, setTriageIdx] = useState(!hasTriage && task.skipTriage ? 1 : 0);
@@ -79,7 +83,7 @@ export function EditTaskModal(props: {
       repo: repos[repoIdx],
       pinnedPr: pinMatch ? Number.parseInt(pinMatch[1], 10) : undefined,
       instructions: instructions.trim() || undefined,
-      model: MODEL_OPTIONS[modelIdx].value,
+      model: modelChoices[modelIdx].value,
       autoRebase: rebaseIdx === 0 ? undefined : rebaseIdx === 1,
       autoDispatchSubs: subsIdx === 0 ? undefined : subsIdx === 1,
       retriage: choice !== 'keep plan',
@@ -102,7 +106,7 @@ export function EditTaskModal(props: {
       if (key.return) submit(false);
     }
     if (focus === 'model') {
-      cycle(MODEL_OPTIONS.length, setModelIdx);
+      cycle(modelChoices.length, setModelIdx);
       if (key.return) submit(false);
     }
     if (focus === 'triage') {
@@ -171,7 +175,7 @@ export function EditTaskModal(props: {
       {optionRow(
         'model',
         'model',
-        MODEL_OPTIONS.map((m) => (m.value ? m.label : `default${defaults?.model ? ` (${defaults.model})` : ''}`)),
+        modelChoices.map((m) => (m.value ? m.label : `default${defaults?.model ? ` (${defaults.model})` : ''}`)),
         modelIdx,
       )}
       {optionRow('on requeue', 'triage', triageOptions, triageIdx)}

@@ -4,7 +4,7 @@ import { recoveryNote, worktreeForBranch } from './worktrees.js';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { runSession, SessionInbox, type SessionCallbacks } from './agent.js';
+import { agentFor, SessionInbox, type AgentBackend, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
 import { demoChecks, demoPullRequest, demoSession, demoWorktree, isDemo } from './demo.js';
 import { channels, projectChannel, type SessionChannels } from './channel.js';
@@ -820,12 +820,12 @@ export class Dispatcher {
   }
 
   /** demo mode swaps the agent for a script; everything else is unchanged */
-  private session: typeof runSession = (opts) => {
+  private session: AgentBackend['runSession'] = (opts) => {
     // the fallback for this kind of session is attached here rather than at
     // each call site, so a new kind of dispatcher session cannot be added
     // without one. An explicit value in `opts` still wins.
     const withFallback = { fallbackModel: modelFor(this.cfg.fallbackModel, opts.agent?.kind ?? 'general'), ...opts };
-    return isDemo(this.cfg) ? demoSession(withFallback) : runSession(withFallback);
+    return isDemo(this.cfg) ? demoSession(withFallback) : agentFor(this.cfg).runSession(withFallback);
   };
 
   private checks(...args: Parameters<typeof runChecks>) {
