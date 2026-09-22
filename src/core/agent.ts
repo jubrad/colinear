@@ -431,6 +431,14 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
   const startedAt = Date.now();
   let observed: string[] | undefined;
   const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  // What has already been handed to `onUsage`. That callback is incremental —
+  // every consumer adds what it is given — so reconciling it to an
+  // authoritative figure means sending the difference, which can be negative.
+  const reported = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  // One assistant message can arrive as several frames sharing a message id,
+  // one per content block, each carrying the same usage. Counting every frame
+  // counts the message twice; measured, that inflated cache traffic exactly 2x.
+  const counted = new Set<string>();
   const result: SessionResult = { text: '', costUsd: 0, isError: false, errors: [], assistantTurns: 0 };
   const registered = opts.agent ? startSession({ ...opts.agent, cwd, model }) : undefined;
   if (registered) opts.agent?.onRegistered?.(registered);
@@ -447,21 +455,22 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
       case 'assistant': {
         result.assistantTurns++;
         const usage = msg.message.usage;
-        if (usage && callbacks.onUsage) {
-          // mirror Claude Code's /cost split: cache traffic reported apart
-          // from real input, or 40 cached turns read as millions of tokens
-          callbacks.onUsage({
+        // A live figure, and a rough one: a frame's usage is partial and says
+        // nothing about auxiliary model calls. The `result` below reconciles
+        // it against the runtime's own accounting, so this exists to make the
+        // counter move during a turn rather than to be right.
+        if (usage && !counted.has(msg.message.id)) {
+          counted.add(msg.message.id);
+          const live = {
+            // mirror Claude Code's /cost split: cache traffic reported apart
+            // from real input, or 40 cached turns read as millions of tokens
             input: usage.input_tokens ?? 0,
             output: usage.output_tokens ?? 0,
             cacheRead: usage.cache_read_input_tokens ?? 0,
             cacheWrite: usage.cache_creation_input_tokens ?? 0,
-          });
-        }
-        if (usage) {
-          totals.input += usage.input_tokens ?? 0;
-          totals.output += usage.output_tokens ?? 0;
-          totals.cacheRead += usage.cache_read_input_tokens ?? 0;
-          totals.cacheWrite += usage.cache_creation_input_tokens ?? 0;
+          };
+          callbacks.onUsage?.(live);
+          for (const key of Object.keys(live) as Array<keyof typeof live>) reported[key] += live[key];
         }
         for (const block of msg.message.content) {
           const line =
@@ -487,12 +496,45 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
           result.isError = true;
           result.errors = msg.errors;
         }
-        // Which models actually answered. `modelUsage` is keyed by model and
-        // is the SDK's own account of every call the query made, so it catches
-        // what the requested model cannot: the SDK's internal fallback for an
-        // overloaded model, and any subagent.
-        const ran = Object.keys(msg.modelUsage ?? {});
-        if (ran.length) observed = ran;
+        // `modelUsage` is the SDK's own account of every call this query made,
+        // keyed by model, and is the authority on two things the assistant
+        // frames cannot answer: which models actually ran — catching the SDK's
+        // internal fallback for an overloaded model, and any subagent — and
+        // how many tokens they used.
+        //
+        // Measured on one ordinary session asking for sonnet, the frames said
+        // 8 input and 8 output tokens where the truth was 907 and 561, and
+        // reported exactly double the cache traffic. Summing frames was wrong
+        // three separate ways, so it is not summed any more.
+        //
+        // It is cumulative across the turns of a streaming session — each
+        // result carries the running total — so it is assigned, never added,
+        // the same way `total_cost_usd` is assigned above.
+        const perModel = Object.entries(msg.modelUsage ?? {});
+        if (perModel.length) {
+          observed = perModel.map(([name]) => name);
+          totals.input = 0;
+          totals.output = 0;
+          totals.cacheRead = 0;
+          totals.cacheWrite = 0;
+          for (const [, use] of perModel) {
+            totals.input += use.inputTokens ?? 0;
+            totals.output += use.outputTokens ?? 0;
+            totals.cacheRead += use.cacheReadInputTokens ?? 0;
+            totals.cacheWrite += use.cacheCreationInputTokens ?? 0;
+          }
+          if (callbacks.onUsage) {
+            // consumers add, so hand them the correction rather than the total
+            const delta = {
+              input: totals.input - reported.input,
+              output: totals.output - reported.output,
+              cacheRead: totals.cacheRead - reported.cacheRead,
+              cacheWrite: totals.cacheWrite - reported.cacheWrite,
+            };
+            if (Object.values(delta).some((n) => n !== 0)) callbacks.onUsage(delta);
+            for (const key of Object.keys(delta) as Array<keyof typeof delta>) reported[key] += delta[key];
+          }
+        }
         // a turn finished, so anything in flight landed in the conversation
         inbox?.markDelivered();
         // A streaming session doesn't end on its own: it waits for more input.

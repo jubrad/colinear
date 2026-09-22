@@ -235,7 +235,18 @@ it reports `claude-sonnet-5` *and* `claude-haiku-4-5`, and a session that demote
 allowance finishes somewhere its caller never named — so attribution reads `ran` and falls back to
 the request only when the runtime reported nothing. The ledger rides the
 ordinary `update` delta rather than a delta kind of its own (`store.check.ts` replays it, including
-an entry with no price at all). `costUsd` on an entry is optional and absent means "this runtime
+an entry with no price at all). **Tokens come from `modelUsage`, not from the assistant frames.** Summing `usage` off each
+assistant message was wrong three ways at once: one message arrives as several frames sharing a
+message id and each carries the same usage (exactly 2x on cache traffic), a frame's `output_tokens`
+is partial, and auxiliary model calls never appear as assistant messages at all. Measured on one
+ordinary session asking for sonnet, the frames reported 8 input and 8 output tokens where the truth
+was 907 and 561. `modelUsage` on the result is the runtime's own per-model account of every call
+the query made; it is cumulative across a streaming session's turns, so it is assigned rather than
+added, like `total_cost_usd`. The frames still drive a live counter during a turn, deduplicated by
+message id, and each result hands `onUsage` the *difference* between the authoritative figure and
+what has been reported so far — consumers add, so a correction can be negative.
+
+`costUsd` on an entry is optional and absent means "this runtime
 priced nothing", which `core/spend.ts` keeps distinct from zero all the way to the view — summing
 an unpriced run as free would leave a total that reads as authoritative and is quietly too small
 (`spend.check.ts`). Recording it also closed two leaks: self-review and both explain passes spent
