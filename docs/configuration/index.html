@@ -633,6 +633,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#models-per-kind-of-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Models per kind of session
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#guidance" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1429,6 +1440,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#models-per-kind-of-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Models per kind of session
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#guidance" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1642,12 +1664,12 @@
 <tr>
 <td><code>model</code></td>
 <td>Claude Code's default</td>
-<td>model for agents (<code>"opus"</code>, <code>"sonnet"</code>, <code>"fable"</code>, <code>"haiku"</code>). The names are resolved by the Claude Code bundled with the agent SDK, so an alias means whatever that build considers current — <code>"fable"</code> is Fable 5.1 as of SDK 0.3.266 — and an exact id such as <code>"claude-fable-5-1"</code> pins it. Overridable per dispatch (<code>c</code>) and per task (<code>m</code>)</td>
+<td>model for agents (<code>"opus"</code>, <code>"sonnet"</code>, <code>"fable"</code>, <code>"haiku"</code>). The names are resolved by the Claude Code bundled with the agent SDK, so an alias means whatever that build considers current — <code>"fable"</code> is Fable 5.1 as of SDK 0.3.266 — and an exact id such as <code>"claude-fable-5-1"</code> pins it. Overridable per dispatch (<code>c</code>) and per task (<code>m</code>). Takes a map to run different work on different models. <a href="#models-per-kind-of-session">Details</a></td>
 </tr>
 <tr>
 <td><code>fallbackModel</code></td>
 <td><code>"default"</code></td>
-<td>what a session demotes to when its model is overloaded or out of allowance. <code>"default"</code> is Claude Code's own alias for the model it would otherwise have picked, which is the useful answer when <code>model</code> pins an expensive one. Takes a comma-separated list, tried in order; <code>""</code> turns it off. It covers two different failures. An <strong>overloaded</strong> model is handled by the agent SDK, which retries your primary at the start of every turn so a passing spike doesn't strand the session on the cheaper model. A <strong>spent allowance</strong> is handled by colinear itself, because the SDK's fallback does not cover it: Claude Code answers <code>You've hit your monthly spend limit. Switch to another model to continue.</code> and the session is re-run on the next model in the list, with a line on the card saying so. A fallback naming the model the session is already on is dropped rather than passed on, since the SDK refuses that pairing outright</td>
+<td>what a session demotes to when its model is overloaded or out of allowance. <code>"default"</code> is Claude Code's own alias for the model it would otherwise have picked, which is the useful answer when <code>model</code> pins an expensive one. Takes a comma-separated list, tried in order; <code>""</code> turns it off. Scoped per kind of session the same way as <code>model</code>, above. It covers two different failures. An <strong>overloaded</strong> model is handled by the agent SDK, which retries your primary at the start of every turn so a passing spike doesn't strand the session on the cheaper model. A <strong>spent allowance</strong> is handled by colinear itself, because the SDK's fallback does not cover it: Claude Code answers <code>You've hit your monthly spend limit. Switch to another model to continue.</code> and the session is re-run on the next model in the list, with a line on the card saying so. A fallback naming the model the session is already on is dropped rather than passed on, since the SDK refuses that pairing outright</td>
 </tr>
 <tr>
 <td><code>guidance</code></td>
@@ -1812,6 +1834,26 @@
 </tbody>
 </table>
 <p><code>remote</code> / <code>pushRemote</code> are git remote names as they appear in <code>git remote -v</code> for that repo (<code>"mz"</code>, <code>"jubrad"</code>) — not <code>owner/repo</code> slugs. In fork mode agents skip stacked PRs, since those would require pushing to the upstream.</p>
+<h3 id="models-per-kind-of-session">Models per kind of session<a class="headerlink" href="#models-per-kind-of-session" title="Permanent link">&para;</a></h3>
+<p><code>model</code> and <code>fallbackModel</code> both take either a bare string, which applies to everything, or a map
+naming a model per kind of session. The kinds are the ones <code>:agents</code> already shows:</p>
+<p><code>triage</code>, <code>work</code>, <code>maintenance</code>, <code>coordinator</code>, <code>review</code>, <code>plan</code>, <code>draft-issue</code> and
+<code>draft-project</code>, plus <code>general</code> for everything you have not named.</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">"model"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nt">"general"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fable"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"review"</span><span class="p">:</span><span class="w"> </span><span class="s2">"opus"</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">"maintenance"</span><span class="p">:</span><span class="w"> </span><span class="s2">"haiku"</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>A kind you do not name inherits <code>general</code>. A kind you name with an empty string is switched off:
+for <code>model</code> that means Claude Code picks, and for <code>fallbackModel</code> it means that kind never demotes.
+Switching a kind off is genuinely off, not inherited back from <code>general</code>.</p>
+<p><code>"model": "fable"</code> still means what it always did, which is <code>{ "general": "fable" }</code>.</p>
+<p>Per-task and per-dispatch overrides (<code>m</code> and <code>c</code>) outrank all of it for that task's work session.
+The fallback is resolved for the same kind as the model it accompanies, so a kind given its own
+model can be given its own way down as well.</p>
 <h3 id="guidance">Guidance<a class="headerlink" href="#guidance" title="Permanent link">&para;</a></h3>
 <p>Standing house rules for agents — the things that are true of every PR you'd merge, so you don't retype them per issue. Either one block that reaches every agent:</p>
 <div class="highlight"><pre><span></span><code><span class="nt">"guidance"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"PRs should solve the problem at hand simply and clearly."</span><span class="p">]</span>

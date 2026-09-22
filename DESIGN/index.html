@@ -1939,6 +1939,15 @@ the next session's opening prompt — and, unless the operator said otherwise, <
 queues the task so that session happens now. Waking deliberately skips <code>blocked</code> (a message is
 not a reason to jump a dependency), <code>tracking</code> and already-queued tasks, and it pushes onto the
 queue like <code>resume()</code> rather than going through <code>enqueue()</code>, so no Linear state moves.</p>
+<p><strong>Which model runs a session is a property of what kind of session it is.</strong> <code>AgentKind</code> already
+tags all eight — triage, work, maintenance, coordinator, review, plan, draft-issue, draft-project —
+and every session announces one to <code>:agents</code>, so that tag is the routing key and no call site needed
+new plumbing to carry it. <code>model</code> and <code>fallbackModel</code> take the <code>guidance</code> shape: a bare string is
+<code>{ general: it }</code>, a map names a kind. <code>modelsFor(cfg, kind, override)</code> resolves the pair together
+because <code>fallbackFor</code> has to compare them, and a per-task <code>m</code>/<code>c</code> override outranks the kind. A kind
+named with an empty string is off, and is stored as an empty string rather than deleted — deleting
+it would let the kind inherit <code>general</code> again, so switching one off would switch it back on
+(<code>src/core/models.check.ts</code>).</p>
 <p><strong>Model fallback lives in <code>runSession</code></strong>, so it covers reviews and self-reviews as well as work
 and triage — a spent allowance stops all of them equally. Two different failures, two remedies:</p>
 <ul>
