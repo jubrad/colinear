@@ -633,6 +633,8 @@ export interface Config {
   worktreeRoot: string;
   concurrency: number;
   checks: CheckConfig[];
+  /** which agent runtime runs sessions; unset = claude */
+  agent?: string;
   /** which model runs which kind of session; a bare string sets `general` */
   model: ModelChoice;
   /**

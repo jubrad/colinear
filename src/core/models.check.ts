@@ -1,6 +1,6 @@
 import { normalizeModel } from './config.js';
 import { modelFor, modelsFor } from './models.js';
-import { fallbackFor } from './agent.js';
+import { fallbackFor } from './agents/claude.js';
 import type { Config, ModelScope } from './types.js';
 
 /**

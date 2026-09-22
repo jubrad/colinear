@@ -182,6 +182,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     worktreeRoot: repos[0].worktreeRoot,
     checks: repos[0].checks,
     concurrency: raw.concurrency ?? 3,
+    agent: raw.agent,
     model: normalizeModel(raw.model, undefined),
     fallbackModel: normalizeModel(raw.fallbackModel, 'default'),
     guidance: normalizeGuidance(raw.guidance),

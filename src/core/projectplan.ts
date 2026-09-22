@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { runSession, type SessionCallbacks } from './agent.js';
+import { agentFor, type SessionCallbacks } from './agent.js';
 import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { experimentOn } from './config.js';
 import type { CoordinatorTools } from './coordinator.js';
@@ -278,7 +278,7 @@ export class PlanManager {
         ? `${text}\n\n(Draft discipline still applies: notes as we converge, the full design — prose + \`\`\`plan fence — only once the direction is agreed or I ask you to write it up.)`
         : await this.discussionOpener(id, text);
       if (prompt === undefined) return; // opener could not resolve the project; noted in chat
-      const result = await runSession({
+      const result = await agentFor(this.cfg).runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         agent: {
           kind: 'plan',
