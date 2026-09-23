@@ -1669,7 +1669,7 @@
 <tr>
 <td><code>model</code></td>
 <td>Claude Code's default</td>
-<td>model for agents (<code>"opus"</code>, <code>"sonnet"</code>, <code>"fable"</code>, <code>"haiku"</code>). The names are resolved by the Claude Code bundled with the agent SDK, so an alias means whatever that build considers current — <code>"fable"</code> is Fable 5.1 as of SDK 0.3.266 — and an exact id such as <code>"claude-fable-5-1"</code> pins it. Overridable per dispatch (<code>c</code>) and per task (<code>m</code>). Takes a map to run different work on different models. <a href="#models-per-kind-of-session">Details</a></td>
+<td>model for agents (<code>"opus"</code>, <code>"sonnet"</code>, <code>"fable"</code>, <code>"haiku"</code>). The names are resolved by the Claude Code bundled with the agent SDK, so an alias means whatever that build considers current — <code>"opus"</code> is Opus 5.5 and <code>"fable"</code> is Fable 5.1 as of SDK 0.3.280 — and an exact id such as <code>"claude-opus-5"</code> pins one version. Note that an alias moves when the SDK is bumped: <code>"opus"</code> meant Opus 5 before 0.3.280. Overridable per dispatch (<code>c</code>) and per task (<code>m</code>). Takes a map to run different work on different models. <a href="#models-per-kind-of-session">Details</a></td>
 </tr>
 <tr>
 <td><code>fallbackModel</code></td>
