@@ -1,4 +1,5 @@
 import { claudeBackend } from './agents/claude.js';
+import { codexBackend } from './agents/codex.js';
 import type { AgentBackend } from './agents/shared.js';
 import type { Config } from './types.js';
 
@@ -27,7 +28,10 @@ export { SessionInbox } from './agents/shared.js';
  */
 type Factory = (cfg: Config) => AgentBackend;
 
-const registry = new Map<string, Factory>([['claude', claudeBackend]]);
+const registry = new Map<string, Factory>([
+  ['claude', claudeBackend],
+  ['codex', codexBackend],
+]);
 
 /** Register a runtime. Exported for the checks, which drive fakes through the seam. */
 export function registerAgent(name: string, factory: Factory): void {
