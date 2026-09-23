@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { agentFor } from './core/agent.js';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
@@ -385,18 +386,20 @@ async function runTui(): Promise<void> {
         await sleep(action.waitMs);
       }
       console.log(`attaching to ${action.identifier}${where(cfg)} — quit claude (/exit) to return to colinear\n`);
-      if (cfg.remote) {
-        // the transcript lives in ~/.claude/projects/<encoded-cwd> on the
-        // daemon's host, so resuming has to happen there too
-        runThere(
-          cfg.remote,
-          `cd ${shq(action.worktree)} && claude --resume ${shq(action.sessionId ?? '')} --permission-mode ${shq(cfg.attachPermissionMode)}`,
-        );
-      } else {
-        spawnSync('claude', ['--resume', action.sessionId ?? '', '--permission-mode', cfg.attachPermissionMode], {
-          cwd: action.worktree,
-          stdio: 'inherit',
+      {
+        const runtime = agentFor(cfg);
+        const argv = runtime.attachArgv({
+          sessionId: action.sessionId ?? '',
+          permissionMode: cfg.attachPermissionMode,
         });
+        if (!argv) {
+          console.log(`${runtime.name} cannot hand a session to a terminal — nothing to attach to.`);
+        } else if (cfg.remote) {
+          // the transcript lives on the daemon's host, so resuming happens there
+          runThere(cfg.remote, `cd ${shq(action.worktree)} && ${runtime.cli.command} ${argv.map(shq).join(' ')}`);
+        } else {
+          spawnSync(runtime.cli.command, argv, { cwd: action.worktree, stdio: 'inherit' });
+        }
       }
       // "background it": hand the conversation back to a headless agent
       if (store.get(action.issueId)?.status === 'interrupted') {
@@ -413,13 +416,19 @@ async function runTui(): Promise<void> {
         `${action.fresh ? 'opening' : 'resuming'} the design session for ${action.projectName}${where(cfg)}` +
           ` — quit claude (/exit) to return to colinear\n`,
       );
-      const args = action.fresh
-        ? ['--session-id', action.sessionId, '--permission-mode', cfg.attachPermissionMode, ...(action.primer ? [action.primer] : [])]
-        : ['--resume', action.sessionId, '--permission-mode', cfg.attachPermissionMode];
-      if (cfg.remote) {
-        runThere(cfg.remote, `cd ${shq(action.worktree)} && claude ${args.map(shq).join(' ')}`);
+      const planRuntime = agentFor(cfg);
+      const args = planRuntime.attachArgv({
+        sessionId: action.sessionId,
+        permissionMode: cfg.attachPermissionMode,
+        fresh: action.fresh,
+        primer: action.primer,
+      });
+      if (!args) {
+        console.log(`${planRuntime.name} cannot hand a session to a terminal — open the plan in colinear instead.`);
+      } else if (cfg.remote) {
+        runThere(cfg.remote, `cd ${shq(action.worktree)} && ${planRuntime.cli.command} ${args.map(shq).join(' ')}`);
       } else {
-        spawnSync('claude', args, { cwd: action.worktree, stdio: 'inherit' });
+        spawnSync(planRuntime.cli.command, args, { cwd: action.worktree, stdio: 'inherit' });
       }
     } else if (action.kind === 'edit-answers') {
       openEditor(cfg, action.path);

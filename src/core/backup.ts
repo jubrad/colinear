@@ -19,7 +19,13 @@ import { createGzip, createGunzip } from 'node:zlib';
 import { promisify } from 'node:util';
 import { CONFIG_DIR, DEFAULT_CONTEXT, contextConfigPath, listContexts, stateDirFor } from './context.js';
 import { decryptBackup, encryptBackup, isEncryptedBackup } from './backupcrypt.js';
-import { transcriptDir } from './transcripts.js';
+import { agentFor } from './agent.js';
+// Restore runs without a config — it is what you run *before* you have one —
+// so it cannot ask `agentFor` which runtime wrote the archive. The layout it
+// re-encodes into is Claude Code's, which is the only one an archive has ever
+// contained. A second runtime that files transcripts per directory needs the
+// manifest to record which one wrote it. Noted in DESIGN.md rather than hidden.
+import { transcriptDir } from './agents/claude.js';
 import type { Config } from './types.js';
 
 const exec = promisify(execFile);
@@ -224,8 +230,8 @@ export async function createBackup(cfg: Config, opts: BackupOptions): Promise<{ 
     // and the repositories themselves for anything run in place.
     const cwds = new Set<string>([...manifest.worktrees.map((w) => w.path), ...cfg.repos.map((r) => r.path)]);
     for (const cwd of cwds) {
-      const dir = transcriptDir(cwd);
-      if (!existsSync(dir)) continue;
+      const dir = agentFor(cfg).transcriptDir(cwd);
+      if (!dir || !existsSync(dir)) continue;
       const sessions = readdirSync(dir).filter((f) => f.endsWith('.jsonl')).length;
       if (!sessions) continue;
       copyTree(dir, join(staging, 'transcripts', basename(dir)));

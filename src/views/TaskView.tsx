@@ -1,3 +1,4 @@
+import { agentFor } from '../core/agent.js';
 import { Box, Text, useInput } from 'ink';
 import { providerFor } from '../core/provider.js';
 import { execFile } from 'node:child_process';
@@ -14,6 +15,9 @@ import { STATUS_COLORS, theme } from '../theme.js';
 /** k9s logs-style full-screen task detail; param = issue identifier. */
 export function TaskView(props: { param?: string }) {
   const ctx = useColinear();
+  // what the operator would type to reach a session themselves; a runtime that
+  // cannot be reached that way says so by returning nothing
+  const resume = (sessionId: string) => agentFor(ctx.cfg).resumeHint(sessionId);
   const tasks = useTasks();
   const task = useMemo(
     () => tasks.find((t) => t.issue.identifier.toLowerCase() === props.param?.toLowerCase()),
@@ -218,7 +222,9 @@ export function TaskView(props: { param?: string }) {
         <Text dimColor wrap="truncate">
           {task.worktree ? `worktree ${task.worktree}` : ''}
           {task.worktree && task.sessionId ? ' · ' : ''}
-          {task.sessionId ? `session ${task.sessionId} — claude --resume ${task.sessionId}` : ''}
+          {task.sessionId
+            ? `session ${task.sessionId}${resume(task.sessionId) ? ` — ${resume(task.sessionId)}` : ''}`
+            : ''}
         </Text>
       )}
       {task.instructions && (
@@ -231,7 +237,7 @@ export function TaskView(props: { param?: string }) {
           previous session{task.sessionHistory.length > 1 ? 's' : ''}:{' '}
           {task.sessionHistory
             .slice(-2)
-            .map((s) => `claude --resume ${s.sessionId}${s.worktree ? ` (in ${s.worktree})` : ''}`)
+            .map((s) => `${resume(s.sessionId) ?? s.sessionId}${s.worktree ? ` (in ${s.worktree})` : ''}`)
             .join(' · ')}
         </Text>
       ) : null}
