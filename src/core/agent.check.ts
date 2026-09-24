@@ -145,8 +145,8 @@ for (const text of UNRELATED) {
   };
   registerAgent('fake', () => fake);
 
-  const claudeCfg = { agent: undefined } as unknown as Config;
-  const fakeCfg = { agent: 'fake' } as unknown as Config;
+  const claudeCfg = { agent: {} } as unknown as Config;
+  const fakeCfg = { agent: { general: 'fake' } } as unknown as Config;
 
   check('an unset runtime is claude', agentFor(claudeCfg).name === 'claude', agentFor(claudeCfg).name);
   check('a named runtime is resolved', agentFor(fakeCfg).name === 'fake', agentFor(fakeCfg).name);
@@ -154,16 +154,29 @@ for (const text of UNRELATED) {
 
   // reloadConfig mutates the same object, so a changed runtime must re-resolve
   // rather than keep handing back the instance cached against that object
-  const mutating = { agent: 'fake' } as unknown as Config;
+  const mutating = { agent: { general: 'fake' } } as unknown as Config;
   check('the cache is keyed on the name, not just the object', agentFor(mutating).name === 'fake');
-  mutating.agent = undefined;
+  mutating.agent = {};
   check('so a config edited in place re-resolves', agentFor(mutating).name === 'claude', agentFor(mutating).name);
+
+  /**
+   * Two runtimes at once, which is the point of scoping it. A config can send
+   * reviews one way and work another, and both answers have to survive being
+   * asked repeatedly — a cache holding one instance per config would hand back
+   * whichever was asked for last.
+   */
+  const mixed = { agent: { general: 'claude', review: 'fake' } } as unknown as Config;
+  check('work runs on the general runtime', agentFor(mixed, 'work').name === 'claude', agentFor(mixed, 'work').name);
+  check('review runs on its own', agentFor(mixed, 'review').name === 'fake', agentFor(mixed, 'review').name);
+  check('and asking again does not swap them', agentFor(mixed, 'work').name === 'claude' && agentFor(mixed, 'review').name === 'fake');
+  check('each is still cached', agentFor(mixed, 'review') === agentFor(mixed, 'review'));
+  check('an unnamed kind inherits the general runtime', agentFor(mixed, 'triage').name === 'claude');
 
   check(
     'an unknown runtime says so, and says what it knows',
     (() => {
       try {
-        agentFor({ agent: 'nope' } as unknown as Config);
+        agentFor({ agent: { general: 'nope' } } as unknown as Config);
         return false;
       } catch (err) {
         return /unknown agent runtime "nope"/.test(String(err)) && /claude/.test(String(err));
@@ -198,7 +211,7 @@ for (const text of UNRELATED) {
  * not file per directory rather than a gap in the adapter.
  */
 {
-  const claude = agentFor({} as unknown as Config);
+  const claude = agentFor({ agent: {} } as unknown as Config);
   check('claude names the binary it needs', claude.cli.command === 'claude', claude.cli.command);
   check('and how to get it', /claude login/.test(claude.cli.install), claude.cli.install);
   check(
@@ -227,7 +240,7 @@ for (const text of UNRELATED) {
  * of these to true would be claiming something the runtime does not do.
  */
 {
-  const codex = agentFor({ agent: 'codex' } as unknown as Config);
+  const codex = agentFor({ agent: { general: 'codex' } } as unknown as Config);
   check('codex resolves through the seam', codex.name === 'codex', codex.name);
   // Codex CAN ask; `codex exec` just will not carry it. The adapter supplies
   // the mechanism, so the capability is true and the sentinel is what makes it

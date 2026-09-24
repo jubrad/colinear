@@ -303,6 +303,7 @@ async function runSession(opts: RunSessionOpts): Promise<SessionResult> {
     if (opts.agent) {
       result.spend = {
         kind: opts.agent.kind,
+        runtime: 'codex',
         model,
         ...(model ? { ran: [model] } : {}),
         startedAt,

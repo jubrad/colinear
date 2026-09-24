@@ -572,6 +572,13 @@ export type ModelChoice = Partial<Record<ModelScope, string>>;
  */
 export interface SessionSpend {
   kind: AgentKind;
+  /**
+   * Which runtime ran it. Absent on rows written before runtimes were scoped
+   * per kind, when there could only be one. It matters beyond bookkeeping:
+   * with triage on one runtime and work on another, `s` has to hand the
+   * terminal to whichever one owns that conversation.
+   */
+  runtime?: string;
   /** what colinear asked for; unset = whatever the runtime defaults to */
   model?: string;
   /**
@@ -633,8 +640,13 @@ export interface Config {
   worktreeRoot: string;
   concurrency: number;
   checks: CheckConfig[];
-  /** which agent runtime runs sessions; unset = claude */
-  agent?: string;
+  /**
+   * Which agent runtime runs which kind of session. Same shape as `model`: a
+   * bare string is `{ general: it }`, a map names a kind. Reviews on one
+   * runtime and work on another is the point — they differ in what they can
+   * do, not only in what they cost.
+   */
+  agent: ModelChoice;
   /** which model runs which kind of session; a bare string sets `general` */
   model: ModelChoice;
   /**

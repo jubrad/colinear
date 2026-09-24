@@ -373,9 +373,18 @@ plan's worktree for the same reason and offers it once the plan is gone.
 ## Agent runtimes
 
 Everything above `core/agent.ts` is runtime-agnostic; everything below it is one adapter.
-`agentFor(cfg)` returns the instance for a config (cached per config object, so a `reloadConfig`
-that mutates in place keeps working, and a changed `agent` re-resolves), and **nothing outside
-`agents/` imports an agent SDK**. That is the same arrangement `core/provider.ts` has with
+`agentFor(cfg, kind)` returns the instance for a kind of session, and **nothing outside `agents/`
+imports an agent SDK**. The runtime is scoped exactly as the model is — same `ModelChoice` shape,
+same `AgentKind` key, same normalizer — because the two answer the same question and the runtimes
+differ in what they can *do*, not only in what they cost. The cache is per config object and then
+per runtime name: one config resolving to two runtimes would otherwise thrash a single-instance
+cache every time a review followed a work session.
+
+**A conversation remembers its runtime.** `SessionSpend.runtime` is stamped by the adapter, and
+`s` resolves by that name (`agentNamed`) rather than by the config, because with triage on one
+runtime and work on another the config's answer is not necessarily the one that owns the session
+you are attaching to. Absent on rows written before this, which correctly falls back to the
+config. That is the same arrangement `core/provider.ts` has with
 trackers, for the same reason.
 
 `AgentCapabilities` is asked rather than assumed: `questions`, `messaging`, `attach`, `denyRules`,

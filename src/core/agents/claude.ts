@@ -506,6 +506,7 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
   if (opts.agent) {
     result.spend = {
       kind: opts.agent.kind,
+      runtime: 'claude',
       model,
       ...(observed ? { ran: observed } : {}),
       startedAt,

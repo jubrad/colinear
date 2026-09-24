@@ -58,7 +58,7 @@ async function draftWithAgent(
   onActivity: (line: string) => void,
   onAgent?: (id: string) => void,
 ): Promise<{ name: string; description: string; content: string }> {
-  const result = await agentFor(cfg).runSession({
+  const result = await agentFor(cfg, 'draft-project').runSession({
     permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
     agent: { kind: 'draft-project', label: brief.request.slice(0, 60), origin: 'you pressed n in :projects', onRegistered: onAgent },
     prompt: `Draft a project from this brief by the user:
