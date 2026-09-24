@@ -999,6 +999,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#when-the-branch-has-moved-under-you" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When the branch has moved under you
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#posting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1524,6 +1535,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#when-the-branch-has-moved-under-you" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When the branch has moved under you
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#posting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1839,6 +1861,14 @@ first two rather than keeping them alive to look thorough, and engaging with the
 third rather than restating the original comment. The document is rewritten whole each round, so
 what you see is what round two would post.</p>
 <p><code>p</code> then posts the revised review as a second one on the PR.</p>
+<h2 id="when-the-branch-has-moved-under-you">When the branch has moved under you<a class="headerlink" href="#when-the-branch-has-moved-under-you" title="Permanent link">&para;</a></h2>
+<p>The annotated diff is read out of the review's own checkout, pinned at the sha the agent read. That
+is deliberate: the margin's comments are anchored to those lines, and re-reading a newer diff
+underneath them would point every one of them somewhere else.</p>
+<p>So when the author pushes, the diff stays right about the review and stops being the whole pull
+request. It used to say nothing, which looked exactly like a diff that had been cut short. Now the
+header says which sha you are looking at, which one the branch is on, and that <code>r</code> re-reviews at
+the new head — which refetches <code>pull/&lt;n&gt;/head</code>, resets the checkout and reads it again.</p>
 <h2 id="posting">Posting<a class="headerlink" href="#posting" title="Permanent link">&para;</a></h2>
 <p><code>p</code> posts, <code>A</code> approves, <code>X</code> requests changes — the same review with a different event. Posting is
 <strong>deterministic, not agentic</strong>: the findings are already structured, so colinear clears any leftover
