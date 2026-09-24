@@ -1,3 +1,4 @@
+import { agentFor } from './core/agent.js';
 import { execFile } from 'node:child_process';
 import { providerFor } from './core/provider.js';
 import { existsSync } from 'node:fs';
@@ -34,11 +35,12 @@ const cfg = loadConfig({ requireKey: false });
 // context answers a question nobody asked
 console.log(`  · config: ${configPath()}${CONTEXT === DEFAULT_CONTEXT ? '' : ` (context ${CONTEXT})`}`);
 
+const runtime = agentFor(cfg);
 try {
-  const { stdout } = await exec('claude', ['--version']);
-  ok('claude CLI', stdout.trim());
+  const { stdout } = await exec(runtime.cli.command, runtime.cli.versionArgs);
+  ok(`${runtime.cli.command} CLI`, stdout.trim());
 } catch {
-  bad('claude CLI', 'not found on PATH — install Claude Code and run `claude login`');
+  bad(`${runtime.cli.command} CLI`, `not found on PATH — ${runtime.cli.install}`);
 }
 
 try {

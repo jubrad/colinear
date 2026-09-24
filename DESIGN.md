@@ -389,10 +389,24 @@ around them, because the queueing, the in-flight bookkeeping and the re-queue on
 the same problem whatever reads the stream. The model pickers read `backend.models`, so a different
 runtime offers its own models rather than Claude's four aliases.
 
-What has *not* moved yet, and is the rest of this work: the transcript layout
-(`~/.claude/projects/<encoded cwd>/<id>.jsonl`), `claude --resume` in `attach.ts` and `index.tsx`,
-and `doctor`'s probe for the `claude` binary. Those shell out rather than import the SDK, so the
-doctrine above holds, but a second runtime needs them behind the seam too.
+The lifecycle around a session is behind the seam too, not just the session: `cli` (what `doctor`
+probes), `sessionExists` and `transcriptDir` (which decide fresh-vs-resume, and what backup
+archives), `attachArgv` (what `s` hands a terminal, and what the plan chat starts under a minted
+id), and `resumeHint` (what the views tell you to type). `transcripts.ts` is gone; its knowledge of
+`~/.claude/projects/<encoded cwd>/<id>.jsonl` is Claude Code's business and lives in its adapter.
+
+**Capabilities gate rather than decorate.** `attachTo` refuses once, for every view's `s`, when
+`capabilities.attach` is false — a key that appears to work and opens a window onto a broken
+command is worse than one that says why. `attachArgv` returning undefined and `transcriptDir`
+returning undefined are real answers, not missing methods: a runtime that files no per-directory
+transcript has nothing for backup to archive. `messaging: false` needs no gate, because `M` already
+degrades correctly — the message lands on `task.inbox` and rides into the next session's opening
+prompt instead of reaching a live one.
+
+One thing is knowingly still Claude-shaped: **restore** re-encodes into Claude Code's transcript
+layout. Restore runs before you have a config, so it cannot ask `agentFor` which runtime wrote the
+archive; a second runtime that files transcripts per directory needs the manifest to record which
+one did. Capture already goes through the seam.
 
 `agent.check.ts` registers a fake runtime and drives a session through it. An interface nothing has
 ever been substituted through is a shape rather than a seam — demo mode proved only that the

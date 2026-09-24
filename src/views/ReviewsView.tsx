@@ -1,3 +1,4 @@
+import { agentFor } from '../core/agent.js';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
@@ -427,7 +428,7 @@ export function ReviewsView(props: { param?: string }) {
         )}
       </Box>
 
-      {selected && <Detail review={selected} now={ctx.now} />}
+      {selected && <Detail review={selected} now={ctx.now} resumeHint={(id) => agentFor(ctx.cfg).resumeHint(id)} />}
 
       {selected?.question && (
         <Box flexDirection="column" borderStyle="round" borderColor={theme.info} paddingX={1}>
@@ -477,7 +478,7 @@ export function ReviewsView(props: { param?: string }) {
   );
 }
 
-function Detail(props: { review: Review; now: number }) {
+function Detail(props: { review: Review; now: number; resumeHint: (id: string) => string | undefined }) {
   const { review, now } = props;
   const findings = review.findings ?? [];
   const blocking = findings.filter((f) => f.severity === 'blocking').length;
@@ -510,7 +511,8 @@ function Detail(props: { review: Review; now: number }) {
       )}
       {review.sessionId && (
         <Text dimColor wrap="truncate">
-          session {review.sessionId} — claude --resume {review.sessionId}
+          session {review.sessionId}
+          {props.resumeHint(review.sessionId) ? ` — ${props.resumeHint(review.sessionId)}` : ''}
         </Text>
       )}
       {review.error && (

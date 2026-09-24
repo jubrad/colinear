@@ -1,11 +1,13 @@
 import { execFile } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { agentFor } from './agent.js';
 import { STATE_DIR, log } from './log.js';
 import type { Config, Task } from './types.js';
 
 /**
- * Open a terminal running `claude --resume <session>` in the task's worktree.
+ * Open a terminal running the configured runtime's resume command in the
+ * task's worktree.
  * The transcript is shared, so an interactive session picks up exactly where
  * the headless agent stopped — and a later `r` (resume) hands the same
  * conversation back to colinear.
@@ -17,6 +19,14 @@ import type { Config, Task } from './types.js';
  */
 export function attachInTerminal(cfg: Config, target: Attachable, delayMs = 0): boolean {
   if (!target.sessionId || !target.worktree || process.platform !== 'darwin') return false;
+  // a runtime that cannot hand a session to a terminal says so here rather
+  // than opening a window onto a command that will not work
+  const runtime = agentFor(cfg);
+  const argv = runtime.attachArgv({
+    sessionId: target.sessionId,
+    permissionMode: cfg.attachPermissionMode,
+  });
+  if (!argv) return false;
 
   const scriptPath = join(STATE_DIR, `attach-${target.identifier.replace(/[^\w.-]/g, '-')}.sh`);
   try {
@@ -27,7 +37,7 @@ export function attachInTerminal(cfg: Config, target: Attachable, delayMs = 0): 
         '#!/bin/zsh',
         `cd ${JSON.stringify(target.worktree)} || exit 1`,
         // headless agents run auto-accept; the interactive session should too
-        `exec claude --resume ${target.sessionId} --permission-mode ${cfg.attachPermissionMode}`,
+        `exec ${runtime.cli.command} ${argv.map((a) => JSON.stringify(a)).join(' ')}`,
         '',
       ].join('\n'),
     );
@@ -167,7 +177,7 @@ export function attachSession(
 }
 
 /**
- * Hand the terminal to `claude --resume` on this session. A live agent is
+ * Hand the terminal to the runtime's resume command on this session. A live agent is
  * suspended first — one writer per transcript — and the caller decides what
  * suspending means for its own kind of work.
  */
@@ -180,6 +190,14 @@ export function attachTo(
 ): void {
   if (!target.sessionId || !target.worktree) {
     toast('no session to attach yet', 'err');
+    return;
+  }
+  // Gated here rather than at each view's `s`, so a runtime that cannot hand a
+  // session to a terminal says so once and says it everywhere. This is the
+  // difference between a feature that is off and a key that appears to work.
+  const runtime = agentFor(cfg);
+  if (!runtime.capabilities.attach) {
+    toast(`${runtime.name} sessions cannot be opened in a terminal — enter reads the transcript`, 'err');
     return;
   }
   // The stored path is a claim, not a fact — a checkout can be removed by

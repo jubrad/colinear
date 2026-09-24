@@ -1,3 +1,4 @@
+import { agentFor } from '../core/agent.js';
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
 import type { AgentSession } from '../core/sessions.js';
@@ -124,7 +125,7 @@ export function AgentsView(_props: { param?: string }) {
             {selected.cwd}
           </Text>
           <Text dimColor wrap="truncate">
-            claude --resume {selected.sessionId}
+            {agentFor(ctx.cfg).resumeHint(selected.sessionId) ?? `session ${selected.sessionId}`}
           </Text>
         </Box>
       )}

@@ -189,4 +189,38 @@ export interface AgentBackend {
   /** what the model pickers offer; the config takes any string besides */
   readonly models: string[];
   runSession(opts: RunSessionOpts): Promise<SessionResult>;
+
+  /** what must be on PATH for this runtime to work at all — `coli doctor` asks */
+  readonly cli: { command: string; versionArgs: string[]; install: string };
+
+  /**
+   * Can this conversation be resumed from this directory?
+   *
+   * Asked of the runtime rather than of a stored id, because the two disagree
+   * in ways that leave the operator stuck: an id minted for a session that
+   * never started, or one created somewhere else entirely.
+   */
+  sessionExists(cwd: string, sessionId: string): boolean;
+
+  /**
+   * Where this runtime files a session's transcript, if it files them per
+   * working directory. Undefined where it does not, which is a real answer
+   * rather than a gap: backup has nothing per-directory to archive then.
+   */
+  transcriptDir(cwd: string): string | undefined;
+
+  /**
+   * argv for handing a session to the operator's terminal, or undefined where
+   * `capabilities.attach` is false. `fresh` starts the named id rather than
+   * resuming it, which only a runtime with `sharedSessionId` can do.
+   */
+  attachArgv(opts: {
+    sessionId: string;
+    permissionMode: string;
+    fresh?: boolean;
+    primer?: string;
+  }): string[] | undefined;
+
+  /** the command an operator would type to reach this session themselves, for the views */
+  resumeHint(sessionId: string): string | undefined;
 }

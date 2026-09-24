@@ -15,7 +15,7 @@ import { STATE_DIR, log } from './log.js';
 import { notify } from './notify.js';
 import { providerFor } from './provider.js';
 import { store } from './store.js';
-import { sessionExists } from './transcripts.js';
+
 import type { ChatTurn, Config, Issue, PlanIssue, PlanMilestone, Project, ProjectPlan } from './types.js';
 
 const exec = promisify(execFile);
@@ -274,7 +274,7 @@ export class PlanManager {
       // discussion (and the plan tasks it may end in) needs: the project, its
       // issues, the published design, the repo. Later turns resume it.
       const cwd = plan.worktree ?? this.cfg.repos[0]?.path ?? process.cwd();
-      const prompt = plan.sessionId && sessionExists(cwd, plan.sessionId)
+      const prompt = plan.sessionId && agentFor(this.cfg).sessionExists(cwd, plan.sessionId)
         ? `${text}\n\n(Draft discipline still applies: notes as we converge, the full design — prose + \`\`\`plan fence — only once the direction is agreed or I ask you to write it up.)`
         : await this.discussionOpener(id, text);
       if (prompt === undefined) return; // opener could not resolve the project; noted in chat
@@ -292,7 +292,7 @@ export class PlanManager {
         cwd,
         // same rule as `c`: a stored id that has no transcript here would
         // fail the turn outright, so start a conversation instead of losing one
-        resume: plan.sessionId && sessionExists(cwd, plan.sessionId) ? plan.sessionId : undefined,
+        resume: plan.sessionId && agentFor(this.cfg).sessionExists(cwd, plan.sessionId) ? plan.sessionId : undefined,
         ...modelsFor(this.cfg, 'plan'),
         abortController: controller,
         callbacks: this.callbacks(id),
@@ -392,7 +392,7 @@ export class PlanManager {
       // doesn't exist" forever, so an unusable id is replaced rather than
       // retried — minting a new one also keeps --session-id from colliding
       // with a live conversation.
-      const resumable = plan.sessionId && sessionExists(worktree, plan.sessionId);
+      const resumable = plan.sessionId && agentFor(this.cfg).sessionExists(worktree, plan.sessionId);
       const sessionId = resumable ? plan.sessionId! : randomUUID();
       if (plan.sessionId && !resumable) {
         store.addPlanActivity(id, 'the previous design session left no transcript — starting a new one');

@@ -134,6 +134,13 @@ for (const text of UNRELATED) {
       ran.push(opts.model ?? 'default');
       return { text: 'ok', costUsd: 0, isError: false, errors: [], assistantTurns: 1 };
     },
+    cli: { command: 'fake', versionArgs: ['-v'], install: 'install the fake' },
+    sessionExists: () => false,
+    // a runtime that does not file per directory: a real answer, not a gap
+    transcriptDir: () => undefined,
+    // attach is false above, so there is nothing to hand a terminal
+    attachArgv: () => undefined,
+    resumeHint: () => undefined,
   };
   registerAgent('fake', () => fake);
 
@@ -178,6 +185,35 @@ for (const text of UNRELATED) {
     'and every answer is a boolean',
     Object.values(CLAUDE_CAPABILITIES).every((v) => typeof v === 'boolean'),
   );
+}
+
+/**
+ * The lifecycle around a session, not just the session.
+ *
+ * A runtime that cannot hand a conversation to a terminal has to say so, and
+ * the answer has to be a real one rather than a missing method — `attachArgv`
+ * returning undefined is what stops `s` opening a window onto a command that
+ * cannot work, and `transcriptDir` returning undefined is a runtime that does
+ * not file per directory rather than a gap in the adapter.
+ */
+{
+  const claude = agentFor({} as unknown as Config);
+  check('claude names the binary it needs', claude.cli.command === 'claude', claude.cli.command);
+  check('and how to get it', /claude login/.test(claude.cli.install), claude.cli.install);
+  check(
+    'a resume hands the terminal the session id',
+    (claude.attachArgv({ sessionId: 'abc', permissionMode: 'auto' }) ?? []).includes('abc'),
+    JSON.stringify(claude.attachArgv({ sessionId: 'abc', permissionMode: 'auto' })),
+  );
+  check(
+    'a fresh session starts the id colinear minted rather than resuming it',
+    (claude.attachArgv({ sessionId: 'abc', permissionMode: 'auto', fresh: true }) ?? []).includes('--session-id'),
+    JSON.stringify(claude.attachArgv({ sessionId: 'abc', permissionMode: 'auto', fresh: true })),
+  );
+  check('a primer rides the fresh session', (claude.attachArgv({ sessionId: 'abc', permissionMode: 'auto', fresh: true, primer: 'hello' }) ?? []).includes('hello'));
+  check('and the resume hint names the command', /claude --resume abc/.test(claude.resumeHint('abc') ?? ''), String(claude.resumeHint('abc')));
+  check('transcripts are filed per working directory', (claude.transcriptDir('/tmp/x') ?? '').includes('projects'), String(claude.transcriptDir('/tmp/x')));
+  check('a session with no transcript cannot be resumed', !claude.sessionExists('/tmp/definitely-not-here', 'nope'));
 }
 
 /**
