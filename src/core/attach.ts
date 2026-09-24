@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { agentFor } from './agent.js';
+import { agentFor, agentNamed } from './agent.js';
 import { STATE_DIR, log } from './log.js';
 import type { Config, Task } from './types.js';
 
@@ -21,7 +21,7 @@ export function attachInTerminal(cfg: Config, target: Attachable, delayMs = 0): 
   if (!target.sessionId || !target.worktree || process.platform !== 'darwin') return false;
   // a runtime that cannot hand a session to a terminal says so here rather
   // than opening a window onto a command that will not work
-  const runtime = agentFor(cfg);
+  const runtime = target.runtime ? agentNamed(cfg, target.runtime) : agentFor(cfg);
   const argv = runtime.attachArgv({
     sessionId: target.sessionId,
     permissionMode: cfg.attachPermissionMode,
@@ -88,6 +88,13 @@ export interface Attachable {
   worktree?: string;
   /** an agent is mid-session, so it must be suspended before we take over */
   live: boolean;
+  /**
+   * Which runtime owns this conversation, from the ledger. Absent means the
+   * config's answer will do — either the row predates the ledger, or there is
+   * only one runtime in play. It is read from the last session rather than the
+   * first because that is the one `sessionId` points at.
+   */
+  runtime?: string;
 }
 
 const asAttachable = (task: Task): Attachable => ({
@@ -96,6 +103,7 @@ const asAttachable = (task: Task): Attachable => ({
   sessionId: task.sessionId,
   worktree: task.worktree,
   live: ACTIVE_STATUSES.includes(task.status),
+  runtime: task.spend?.[task.spend.length - 1]?.runtime,
 });
 
 export type PendingAction =
@@ -195,7 +203,7 @@ export function attachTo(
   // Gated here rather than at each view's `s`, so a runtime that cannot hand a
   // session to a terminal says so once and says it everywhere. This is the
   // difference between a feature that is off and a key that appears to work.
-  const runtime = agentFor(cfg);
+  const runtime = target.runtime ? agentNamed(cfg, target.runtime) : agentFor(cfg);
   if (!runtime.capabilities.attach) {
     toast(`${runtime.name} sessions cannot be opened in a terminal — enter reads the transcript`, 'err');
     return;

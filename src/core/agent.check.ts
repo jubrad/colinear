@@ -1,4 +1,4 @@
-import { agentFor, registerAgent, SessionInbox, type AgentBackend } from './agent.js';
+import { agentFor, registerAgent, runtimeFor, splitModel, SessionInbox, type AgentBackend } from './agent.js';
 import { CLAUDE_CAPABILITIES, fallbackFor, outOfAllowance } from './agents/claude.js';
 import { askedIn } from './agents/codex.js';
 import type { Config } from './types.js';
@@ -135,6 +135,7 @@ for (const text of UNRELATED) {
       ran.push(opts.model ?? 'default');
       return { text: 'ok', costUsd: 0, isError: false, errors: [], assistantTurns: 1 };
     },
+    claims: (m) => m.startsWith('fake-'),
     cli: { command: 'fake', versionArgs: ['-v'], install: 'install the fake' },
     sessionExists: () => false,
     // a runtime that does not file per directory: a real answer, not a gap
@@ -145,7 +146,7 @@ for (const text of UNRELATED) {
   };
   registerAgent('fake', () => fake);
 
-  const claudeCfg = { agent: undefined } as unknown as Config;
+  const claudeCfg = {} as unknown as Config;
   const fakeCfg = { agent: 'fake' } as unknown as Config;
 
   check('an unset runtime is claude', agentFor(claudeCfg).name === 'claude', agentFor(claudeCfg).name);
@@ -158,6 +159,22 @@ for (const text of UNRELATED) {
   check('the cache is keyed on the name, not just the object', agentFor(mutating).name === 'fake');
   mutating.agent = undefined;
   check('so a config edited in place re-resolves', agentFor(mutating).name === 'claude', agentFor(mutating).name);
+
+  /**
+   * Two runtimes at once, which is the point. The mix is expressed in the
+   * model names themselves rather than in a second map beside them, so the
+   * runtime cannot drift out of step with the model it is meant to run.
+   */
+  const mixed = {
+    model: { general: 'fable', review: 'gpt-5.6-sol' },
+    fallbackModel: {},
+  } as unknown as Config;
+  check('a claude model picks claude', runtimeFor(mixed, 'work').backend.name === 'claude', runtimeFor(mixed, 'work').backend.name);
+  check('a codex model picks codex', runtimeFor(mixed, 'review').backend.name === 'codex', runtimeFor(mixed, 'review').backend.name);
+  check('and the model survives the trip', runtimeFor(mixed, 'review').model === 'gpt-5.6-sol', String(runtimeFor(mixed, 'review').model));
+  check('asking again does not swap them', runtimeFor(mixed, 'work').backend.name === 'claude' && runtimeFor(mixed, 'review').backend.name === 'codex');
+  check('each runtime is still cached', runtimeFor(mixed, 'review').backend === runtimeFor(mixed, 'review').backend);
+  check('an unnamed kind inherits the general model, and its runtime', runtimeFor(mixed, 'triage').backend.name === 'claude');
 
   check(
     'an unknown runtime says so, and says what it knows',
@@ -253,6 +270,58 @@ for (const text of UNRELATED) {
   // Codex files rollouts by date, not by the directory the work happened in
   check('it files no per-directory transcript', codex.transcriptDir('/tmp/anywhere') === undefined);
   check('and an id it has never seen is not resumable', !codex.sessionExists('/tmp/anywhere', 'not-a-real-thread-id'));
+}
+
+/**
+ * How a model name finds its runtime.
+ *
+ * One field carries the whole decision, so this is the join. A second map
+ * beside the first would drift, and the pairing it encodes — this model, on
+ * that runtime — is a single choice. It is also what makes a per-task override
+ * work: `m` picking a Codex model moves the runtime with it, rather than
+ * handing a Codex model to Claude Code.
+ */
+{
+  const cfg = { model: {}, fallbackModel: {} } as unknown as Config;
+  const named = (m?: string) => splitModel(cfg, m).name;
+
+  check('a claude alias is claude\'s', named('fable') === 'claude', named('fable'));
+  check('an exact claude id too', named('claude-opus-5-5') === 'claude', named('claude-opus-5-5'));
+  check('a codex model is codex\'s', named('gpt-5.6-sol') === 'codex', named('gpt-5.6-sol'));
+  check('and an exact gpt id too', named('gpt-6-astra') === 'codex', named('gpt-6-astra'));
+
+  // the escape hatch, for a name nothing recognises or an ambiguous one
+  check('an explicit prefix wins', named('codex/whatever-new') === 'codex', named('codex/whatever-new'));
+  check('and is stripped off the model', splitModel(cfg, 'codex/whatever-new').model === 'whatever-new', String(splitModel(cfg, 'codex/whatever-new').model));
+  check('a prefix that is not a runtime is left alone', splitModel(cfg, 'vendor/model-x').model === 'vendor/model-x');
+
+  // nothing claims it: the configured default answers
+  check('an unclaimed name falls to the default', named('mystery-2') === 'claude', named('mystery-2'));
+  check('which the operator can change', splitModel({ agent: 'codex', model: {}, fallbackModel: {} } as unknown as Config, 'mystery-2').name === 'codex');
+  check('and an absent model still resolves', named(undefined) === 'claude');
+
+  /**
+   * A fallback on a different runtime is dropped. A session cannot demote
+   * across runtimes, and carrying one would fail only once the first model ran
+   * out — the worst moment to discover it.
+   */
+  const crossed = {
+    model: { general: 'gpt-5.6-sol' },
+    fallbackModel: { general: 'opus' },
+  } as unknown as Config;
+  check('a cross-runtime fallback is dropped', runtimeFor(crossed, 'work').fallbackModel === undefined, String(runtimeFor(crossed, 'work').fallbackModel));
+  check('while the model itself is kept', runtimeFor(crossed, 'work').model === 'gpt-5.6-sol');
+
+  const sameRuntime = {
+    model: { general: 'gpt-5.6-sol' },
+    fallbackModel: { general: 'gpt-6-astra' },
+  } as unknown as Config;
+  check('a same-runtime fallback survives', runtimeFor(sameRuntime, 'work').fallbackModel === 'gpt-6-astra', String(runtimeFor(sameRuntime, 'work').fallbackModel));
+
+  /** A per-task override moves the runtime with it. That is the point of one field. */
+  const claudeCfg2 = { model: { general: 'fable' }, fallbackModel: {} } as unknown as Config;
+  check('an override can send one task to another runtime', runtimeFor(claudeCfg2, 'work', 'gpt-5.6-sol').backend.name === 'codex');
+  check('and the next task stays where it was', runtimeFor(claudeCfg2, 'work').backend.name === 'claude');
 }
 
 /**

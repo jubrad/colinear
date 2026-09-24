@@ -572,6 +572,13 @@ export type ModelChoice = Partial<Record<ModelScope, string>>;
  */
 export interface SessionSpend {
   kind: AgentKind;
+  /**
+   * Which runtime ran it. Absent on rows written before runtimes were scoped
+   * per kind, when there could only be one. It matters beyond bookkeeping:
+   * with triage on one runtime and work on another, `s` has to hand the
+   * terminal to whichever one owns that conversation.
+   */
+  runtime?: string;
   /** what colinear asked for; unset = whatever the runtime defaults to */
   model?: string;
   /**
@@ -633,7 +640,11 @@ export interface Config {
   worktreeRoot: string;
   concurrency: number;
   checks: CheckConfig[];
-  /** which agent runtime runs sessions; unset = claude */
+  /**
+   * The runtime to use for a model nothing claims. Most model names say which
+   * runtime they belong to on their own, so this is the answer for an exact
+   * id no runtime recognises rather than a thing to set per kind of session.
+   */
   agent?: string;
   /** which model runs which kind of session; a bare string sets `general` */
   model: ModelChoice;

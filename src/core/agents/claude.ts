@@ -60,6 +60,7 @@ export function claudeBackend(): AgentBackend {
     name: 'claude',
     capabilities: CLAUDE_CAPABILITIES,
     models: CLAUDE_MODELS,
+    claims: (model) => CLAUDE_MODELS.includes(model) || /^claude[-.]/i.test(model),
     runSession,
     cli: {
       command: 'claude',
@@ -506,6 +507,7 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
   if (opts.agent) {
     result.spend = {
       kind: opts.agent.kind,
+      runtime: 'claude',
       model,
       ...(observed ? { ran: observed } : {}),
       startedAt,

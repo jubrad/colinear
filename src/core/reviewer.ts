@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, type FSWatcher, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { agentFor, type SessionCallbacks } from './agent.js';
+import { agentFor, type SessionCallbacks, runtimeFor } from './agent.js';
 import { guidanceFor } from './guidance.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
@@ -270,7 +270,7 @@ export class Reviewer {
       store.addReviewActivity(id, `reading the diff (${details.changedFiles} files, +${details.additions}/-${details.deletions})`);
 
       await this.excludeReviewFile(worktree);
-      const result = await agentFor(this.cfg).runSession({
+      const result = await runtimeFor(this.cfg, 'review').backend.runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         agent: {
           kind: 'review',
@@ -463,7 +463,7 @@ export class Reviewer {
             () => ({ stdout: '' }),
           )).stdout.trim()
         : '';
-      const result = await agentFor(this.cfg).runSession({
+      const result = await runtimeFor(this.cfg, 'review').backend.runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         agent: { kind: 'review', label: `${review.repository}#${review.number}`, origin: 're-anchoring a rejected review' },
         prompt: reanchorPrompt(review, anchored, moved, detail),
@@ -521,7 +521,7 @@ export class Reviewer {
     const controller = new AbortController();
     this.aborts.set(id, controller);
     try {
-      const result = await agentFor(this.cfg).runSession({
+      const result = await runtimeFor(this.cfg, 'review').backend.runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         agent: { kind: 'review', label: `${review.repository}#${review.number}`, origin: 'you asked it something' },
         prompt: chatPrompt(text, review),
@@ -874,7 +874,7 @@ export class Reviewer {
     const where = at.startLine === at.endLine ? `line ${at.endLine}` : `lines ${at.startLine}\u2013${at.endLine}`;
     store.addReviewActivity(id, `asked what ${at.file} ${where} does`);
     try {
-      const explained = await agentFor(this.cfg).runSession({
+      const explained = await runtimeFor(this.cfg, 'review').backend.runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         agent: {
           kind: 'review',

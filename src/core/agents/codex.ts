@@ -148,6 +148,7 @@ export function codexBackend(): AgentBackend {
     name: 'codex',
     capabilities: CODEX_CAPABILITIES,
     models: CODEX_MODELS,
+    claims: (model) => CODEX_MODELS.includes(model) || /^(gpt|codex|o\d)[-.]?/i.test(model),
     runSession,
     cli: {
       command: 'codex',
@@ -303,6 +304,7 @@ async function runSession(opts: RunSessionOpts): Promise<SessionResult> {
     if (opts.agent) {
       result.spend = {
         kind: opts.agent.kind,
+        runtime: 'codex',
         model,
         ...(model ? { ran: [model] } : {}),
         startedAt,

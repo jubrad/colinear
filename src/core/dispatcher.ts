@@ -824,8 +824,11 @@ export class Dispatcher {
     // the fallback for this kind of session is attached here rather than at
     // each call site, so a new kind of dispatcher session cannot be added
     // without one. An explicit value in `opts` still wins.
-    const withFallback = { fallbackModel: modelFor(this.cfg.fallbackModel, opts.agent?.kind ?? 'general'), ...opts };
-    return isDemo(this.cfg) ? demoSession(withFallback) : agentFor(this.cfg).runSession(withFallback);
+    const scope = opts.agent?.kind ?? 'general';
+    const withFallback = { fallbackModel: modelFor(this.cfg.fallbackModel, scope), ...opts };
+    // the runtime is resolved for the same kind as the fallback, so a config
+    // that sends triage one way and work another is honoured here too
+    return isDemo(this.cfg) ? demoSession(withFallback) : agentFor(this.cfg, scope).runSession(withFallback);
   };
 
   private checks(...args: Parameters<typeof runChecks>) {

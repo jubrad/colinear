@@ -1,5 +1,5 @@
 import { modelsFor } from './models.js';
-import { agentFor } from './agent.js';
+import { runtimeFor } from './agent.js';
 import { providerFor } from './provider.js';
 import type { Config } from './types.js';
 
@@ -22,7 +22,7 @@ export async function createIssueFromPrompt(
   onActivity: (line: string) => void = () => {},
   onAgent?: (id: string) => void,
 ): Promise<{ id: string; identifier: string }> {
-  const result = await agentFor(cfg).runSession({
+  const result = await runtimeFor(cfg, 'draft-issue').backend.runSession({
     permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
     agent: { kind: 'draft-issue', label: request.slice(0, 60), origin: 'you pressed n in :issues', onRegistered: onAgent },
     prompt: `Draft a Linear issue from this request by the user:

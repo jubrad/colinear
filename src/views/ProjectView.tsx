@@ -1,4 +1,4 @@
-import { agentFor } from '../core/agent.js';
+import { pickableModels } from '../core/agent.js';
 import { Box, Text, useInput } from 'ink';
 import { providerFor } from '../core/provider.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -235,7 +235,7 @@ export function ProjectView(props: { param?: string }) {
           return (
             <Popup {...place}>
               <DispatchModal
-                models={agentFor(ctx.cfg).models}
+                models={pickableModels(ctx.cfg)}
                 count={picked().length}
                 repos={ctx.cfg.repos}
                 width={inner}

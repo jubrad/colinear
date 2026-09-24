@@ -1,4 +1,4 @@
-import { agentFor } from '../core/agent.js';
+import { pickableModels } from '../core/agent.js';
 import { modelFor } from '../core/models.js';
 import { Box, Text, useInput, type Key } from 'ink';
 import { providerFor } from '../core/provider.js';
@@ -234,7 +234,7 @@ export function useTaskActions(): TaskActions {
         <EditTaskModal
           task={repoModal}
           repos={ctx.cfg.repos}
-          models={agentFor(ctx.cfg).models}
+          models={pickableModels(ctx.cfg)}
           defaults={{
             autoRebase: ctx.cfg.autoRebase,
             autoDispatchSubs: ctx.cfg.autoDispatchSubs,

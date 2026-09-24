@@ -53,7 +53,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `repos` | one repo (see below) | the allowlist — agents only ever touch these, and only through worktrees. First entry is the default. [Details](#repos) |
 | `team` | your assigned issues | Linear team key (`"CLOUD"`) to browse, or `"all"` for every team. `--team CLOUD` / `--team all` override it for one run, and the last team picked with `t` is remembered |
 | `concurrency` | `3` | agent sessions running at once. Above ~5 you start hitting subscription rate limits |
-| `agent` | `"claude"` | which agent runtime runs sessions: `"claude"` (Claude Code, via the agent SDK) or `"codex"` (OpenAI Codex, via `@openai/codex-sdk`). `:config` lists what the configured runtime cannot do. [Details](#agent-runtimes) |
+| `agent` | `"claude"` | the runtime for a model no runtime recognises. Most model names say which runtime they belong to on their own, so this is rarely worth setting. [Details](#agent-runtimes) |
 | `model` | Claude Code's default | model for agents (`"opus"`, `"sonnet"`, `"fable"`, `"haiku"`). The names are resolved by the Claude Code bundled with the agent SDK, so an alias means whatever that build considers current — `"opus"` is Opus 5.5 and `"fable"` is Fable 5.1 as of SDK 0.3.280 — and an exact id such as `"claude-opus-5"` pins one version. Note that an alias moves when the SDK is bumped: `"opus"` meant Opus 5 before 0.3.280. Overridable per dispatch (`c`) and per task (`m`). Takes a map to run different work on different models. [Details](#models-per-kind-of-session) |
 | `fallbackModel` | `"default"` | what a session demotes to when its model is overloaded or out of allowance. `"default"` is Claude Code's own alias for the model it would otherwise have picked, which is the useful answer when `model` pins an expensive one. Takes a comma-separated list, tried in order; `""` turns it off. Scoped per kind of session the same way as `model`, above. It covers two different failures. An **overloaded** model is handled by the agent SDK, which retries your primary at the start of every turn so a passing spike doesn't strand the session on the cheaper model. A **spent allowance** is handled by colinear itself, because the SDK's fallback does not cover it: Claude Code answers `You've hit your monthly spend limit. Switch to another model to continue.` and the session is re-run on the next model in the list, with a line on the card saying so. A fallback naming the model the session is already on is dropped rather than passed on, since the SDK refuses that pairing outright |
 | `guidance` | none | standing house rules injected into agent prompts, globally or per prompt. [Details](#guidance) |
@@ -134,8 +134,38 @@ reason to keep work on `claude`.
 header says how many sessions are unpriced. Tokens are reported by both, so tokens are the measure
 that compares across them.
 
-Because models are chosen per kind of session, the two can be mixed — reviews on one runtime and
-work on the other — but a model name has to match whichever runtime that kind will use.
+### Running both at once
+
+**The model names its own runtime.** There is no second map to keep in step — you pick a model and
+the runtime follows:
+
+```json
+{
+  "model": { "general": "fable", "review": "gpt-5.6-sol" }
+}
+```
+
+Reviews run on Codex there, everything else on Claude Code, because `gpt-5.6-sol` is Codex's name
+and `fable` is Claude Code's. Each runtime claims its own names, including exact ids like
+`claude-opus-5-5` and `gpt-6-astra`.
+
+This is also what makes it work **per task**, not just per kind. `m` and `c` offer every runtime's
+models, so sending one task to Codex and leaving the next on Claude is one keypress, and the
+runtime moves with the model rather than being a separate thing to remember.
+
+For a name nothing recognises, say which runtime with a prefix:
+
+```json
+{ "model": { "work": "codex/some-new-model" } }
+```
+
+Failing both, `agent` is the default. A **fallback on a different runtime is dropped**: a session
+cannot demote across runtimes, and carrying one would fail only once the first model ran out.
+
+Attaching follows the conversation rather than the config. A session records which runtime ran it,
+so `s` on a review started under Codex opens `codex resume` even when everything else is Claude.
+Rows written before this have no recorded runtime and fall back to the config, which is what it
+was.
 
 ### Models per kind of session
 
