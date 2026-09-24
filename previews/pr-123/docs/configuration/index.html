@@ -1885,8 +1885,8 @@ neither should be given an API key — the runs bill the subscription behind the
 </tr>
 <tr>
 <td>can stop and ask you</td>
-<td>yes</td>
-<td><strong>no</strong></td>
+<td>yes, <code>AskUserQuestion</code></td>
+<td>yes, by convention</td>
 </tr>
 <tr>
 <td><code>M</code> reaches a session</td>
@@ -1910,10 +1910,15 @@ neither should be given an API key — the runs bill the subscription behind the
 </tr>
 </tbody>
 </table>
-<p>The three "no" answers matter more than the rest.</p>
-<p><strong>Codex cannot stop and ask.</strong> <code>codex exec</code> refuses that outright, so an agent that would have
-raised a question decides for itself instead. Tasks reach <strong>Needs Input</strong> less often under Codex,
-and that is quieter rather than better.</p>
+<p>The two "no" answers matter more than the rest.</p>
+<p><strong>How Codex asks is different.</strong> Codex can ask you things interactively, but not over the
+non-interactive path colinear drives: <code>codex exec</code> answers its own ask-the-user request with "not
+supported in exec mode". So colinear supplies the mechanism instead. A Codex agent is told that
+ending a turn with <code>NEEDS INPUT: &lt;question&gt;</code> is how it asks, that becomes a real question on the
+card, and your answer becomes its next turn. Prompts still say "use AskUserQuestion" and the
+adapter translates, so nothing about the prompts is runtime-specific. The practical difference is
+that a Codex question is one free-text question rather than up to four with multiple-choice
+options.</p>
 <p><strong>Codex does not enforce <code>denyTools</code>.</strong> It has sandbox modes rather than per-tool rules, so a rule
 like <code>Bash(git push --force:*)</code> has nothing to attach to. Colinear runs it in <code>workspace-write</code>,
 which confines writes to the worktree it was handed. If your deny list is load-bearing, that is a
