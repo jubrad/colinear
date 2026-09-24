@@ -22,10 +22,12 @@ import { endSession, startSession, updateSession } from '../sessions.js';
  * colinear already has about `ANTHROPIC_API_KEY`.
  */
 export const CODEX_CAPABILITIES: AgentCapabilities = {
-  // `codex exec` rejects request_user_input outright, so an agent that would
-  // have asked has to decide instead. Tasks reach `needs_input` less often and
-  // that is not a better outcome, it is a quieter one.
-  questions: false,
+  // Codex can ask — interactively, and over app-server. What it cannot do is
+  // ask through `codex exec`, which answers `request_user_input` with "not
+  // supported in exec mode". So the adapter supplies the mechanism instead of
+  // the runtime: the agent is told to end its turn with a sentinel, and that
+  // becomes a real question (see ASK_PREAMBLE and askedIn).
+  questions: true,
   // a thread takes consecutive turns, so an operator message becomes the next
   // one — which is exactly colinear's delivery promise, "at the next turn"
   messaging: true,
@@ -45,6 +47,37 @@ export const CODEX_CAPABILITIES: AgentCapabilities = {
 
 /** What the picker offers. `codex debug models` lists what a given build knows. */
 export const CODEX_MODELS = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6-astra'];
+
+/**
+ * How an agent with no ask-the-user tool asks anyway.
+ *
+ * Colinear's prompts tell agents to use `AskUserQuestion`, which is Claude
+ * Code's built-in. Codex has no such tool over exec, so rather than rewrite
+ * every prompt per runtime, the adapter translates: it tells the agent what
+ * that instruction means here. Translating colinear's vocabulary into the
+ * runtime's reality is the adapter's whole job.
+ *
+ * A sentinel rather than a tool because exec gives us one channel back — the
+ * assistant message — and a turn that ends with it is unambiguous.
+ */
+const ASK_SENTINEL = 'NEEDS INPUT:';
+
+const ASK_PREAMBLE = [
+  'You have no AskUserQuestion tool in this environment.',
+  `If anything below tells you to use AskUserQuestion, or you are blocked on a decision only a human can make, stop and make your ENTIRE final message \`${ASK_SENTINEL} <your question>\`.`,
+  'Ask only when you genuinely cannot proceed: you will be answered and the conversation will continue from there. Never use that prefix for anything else.',
+  '',
+].join('\n');
+
+/** The question in a turn that ended by asking one, or nothing if it did not. */
+export function askedIn(text: string): string | undefined {
+  const at = text.indexOf(ASK_SENTINEL);
+  if (at === -1) return undefined;
+  // only a turn that *ends* on the sentinel is asking; a mention mid-answer is
+  // the agent talking about the convention rather than using it
+  const question = text.slice(at + ASK_SENTINEL.length).trim();
+  return question || undefined;
+}
 
 /** Where Codex files its rollouts: by date, not by working directory. */
 function sessionsRoot(): string {
@@ -212,18 +245,48 @@ async function runSession(opts: RunSessionOpts): Promise<SessionResult> {
       }
     };
 
+    /**
+     * A turn that ended by asking. The operator's answer becomes the next turn,
+     * which is the same shape a message takes — Codex has one way in, and a
+     * question is just a turn colinear started rather than the operator.
+     */
+    const answerIfAsked = async (): Promise<boolean> => {
+      const question = askedIn(result.text);
+      if (!question) return false;
+      const answer = await new Promise<string>((resolve) => {
+        callbacks.onQuestion({
+          kind: 'ask',
+          questions: [{ text: question, options: [] }],
+          answer: (answers) => resolve(answers[0] ?? ''),
+        });
+      });
+      await runTurn(answer.trim() || 'Use your best judgement and say what you assumed.');
+      return true;
+    };
+
+    // Bounded, because an agent that re-asks after every answer would otherwise
+    // loop forever on the operator's attention rather than on tokens.
+    const MAX_ASKS = 8;
+    const settle = async (): Promise<void> => {
+      for (let i = 0; i < MAX_ASKS; i++) if (!(await answerIfAsked())) return;
+    };
+
     if (inbox) {
       // The mailbox drives the turns: its first yield is the opening prompt and
       // each later one is an operator message, which becomes the next turn.
       // That is colinear's delivery promise already — at the next turn boundary
       // — rather than an approximation of it.
+      let opening = true;
       for await (const text of inbox.stream(prompt)) {
-        await runTurn(text);
+        await runTurn(opening ? ASK_PREAMBLE + text : text);
+        opening = false;
+        await settle();
         inbox.markDelivered();
         if (result.isError || inbox.pending === 0) inbox.close();
       }
     } else {
-      await runTurn(prompt);
+      await runTurn(ASK_PREAMBLE + prompt);
+      await settle();
     }
 
     if (outputSchema && result.text.trim()) {

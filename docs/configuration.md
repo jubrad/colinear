@@ -108,17 +108,22 @@ neither should be given an API key — the runs bill the subscription behind the
 |---|---|---|
 | CLI | `claude` | `codex` |
 | models | `sonnet`, `opus`, `fable`, `haiku` | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-6-astra` |
-| can stop and ask you | yes | **no** |
+| can stop and ask you | yes, `AskUserQuestion` | yes, by convention |
 | `M` reaches a session | yes | yes, as the next turn |
 | `s` opens it in a terminal | yes | yes |
 | enforces `denyTools` | yes | **no**, sandbox modes only |
 | reports a price | yes | **no**, tokens only |
 
-The three "no" answers matter more than the rest.
+The two "no" answers matter more than the rest.
 
-**Codex cannot stop and ask.** `codex exec` refuses that outright, so an agent that would have
-raised a question decides for itself instead. Tasks reach **Needs Input** less often under Codex,
-and that is quieter rather than better.
+**How Codex asks is different.** Codex can ask you things interactively, but not over the
+non-interactive path colinear drives: `codex exec` answers its own ask-the-user request with "not
+supported in exec mode". So colinear supplies the mechanism instead. A Codex agent is told that
+ending a turn with `NEEDS INPUT: <question>` is how it asks, that becomes a real question on the
+card, and your answer becomes its next turn. Prompts still say "use AskUserQuestion" and the
+adapter translates, so nothing about the prompts is runtime-specific. The practical difference is
+that a Codex question is one free-text question rather than up to four with multiple-choice
+options.
 
 **Codex does not enforce `denyTools`.** It has sandbox modes rather than per-tool rules, so a rule
 like `Bash(git push --force:*)` has nothing to attach to. Colinear runs it in `workspace-write`,

@@ -1,5 +1,6 @@
 import { agentFor, registerAgent, SessionInbox, type AgentBackend } from './agent.js';
 import { CLAUDE_CAPABILITIES, fallbackFor, outOfAllowance } from './agents/claude.js';
+import { askedIn } from './agents/codex.js';
 import type { Config } from './types.js';
 
 /**
@@ -228,7 +229,14 @@ for (const text of UNRELATED) {
 {
   const codex = agentFor({ agent: 'codex' } as unknown as Config);
   check('codex resolves through the seam', codex.name === 'codex', codex.name);
-  check('it cannot stop and ask — exec mode rejects that', !codex.capabilities.questions);
+  // Codex CAN ask; `codex exec` just will not carry it. The adapter supplies
+  // the mechanism, so the capability is true and the sentinel is what makes it
+  // true — parse it wrongly and a question silently becomes a normal reply.
+  check('it can ask, because the adapter gives it a way to', codex.capabilities.questions);
+  check('a turn that ends by asking is recognised', askedIn('NEEDS INPUT: which name?') === 'which name?', String(askedIn('NEEDS INPUT: which name?')));
+  check('with the preamble quoted back around it', askedIn('Checked a.md.\n\nNEEDS INPUT: which name?') === 'which name?');
+  check('an ordinary reply is not a question', askedIn('I renamed the mascot and pushed.') === undefined);
+  check('and neither is the prefix with nothing after it', askedIn('NEEDS INPUT:   ') === undefined);
   check('it enforces no per-tool deny rules, only sandbox modes', !codex.capabilities.denyRules);
   check('it reports no price', !codex.capabilities.cost);
   check('it cannot be handed an id colinear minted', !codex.capabilities.sharedSessionId);
