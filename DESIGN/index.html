@@ -2115,10 +2115,22 @@ the configured runtime cannot do, next to the same line for the tracker.</p>
 around them, because the queueing, the in-flight bookkeeping and the re-queue on a dead session are
 the same problem whatever reads the stream. The model pickers read <code>backend.models</code>, so a different
 runtime offers its own models rather than Claude's four aliases.</p>
-<p>What has <em>not</em> moved yet, and is the rest of this work: the transcript layout
-(<code>~/.claude/projects/&lt;encoded cwd&gt;/&lt;id&gt;.jsonl</code>), <code>claude --resume</code> in <code>attach.ts</code> and <code>index.tsx</code>,
-and <code>doctor</code>'s probe for the <code>claude</code> binary. Those shell out rather than import the SDK, so the
-doctrine above holds, but a second runtime needs them behind the seam too.</p>
+<p>The lifecycle around a session is behind the seam too, not just the session: <code>cli</code> (what <code>doctor</code>
+probes), <code>sessionExists</code> and <code>transcriptDir</code> (which decide fresh-vs-resume, and what backup
+archives), <code>attachArgv</code> (what <code>s</code> hands a terminal, and what the plan chat starts under a minted
+id), and <code>resumeHint</code> (what the views tell you to type). <code>transcripts.ts</code> is gone; its knowledge of
+<code>~/.claude/projects/&lt;encoded cwd&gt;/&lt;id&gt;.jsonl</code> is Claude Code's business and lives in its adapter.</p>
+<p><strong>Capabilities gate rather than decorate.</strong> <code>attachTo</code> refuses once, for every view's <code>s</code>, when
+<code>capabilities.attach</code> is false — a key that appears to work and opens a window onto a broken
+command is worse than one that says why. <code>attachArgv</code> returning undefined and <code>transcriptDir</code>
+returning undefined are real answers, not missing methods: a runtime that files no per-directory
+transcript has nothing for backup to archive. <code>messaging: false</code> needs no gate, because <code>M</code> already
+degrades correctly — the message lands on <code>task.inbox</code> and rides into the next session's opening
+prompt instead of reaching a live one.</p>
+<p>One thing is knowingly still Claude-shaped: <strong>restore</strong> re-encodes into Claude Code's transcript
+layout. Restore runs before you have a config, so it cannot ask <code>agentFor</code> which runtime wrote the
+archive; a second runtime that files transcripts per directory needs the manifest to record which
+one did. Capture already goes through the seam.</p>
 <p><code>agent.check.ts</code> registers a fake runtime and drives a session through it. An interface nothing has
 ever been substituted through is a shape rather than a seam — demo mode proved only that the
 <em>type</em> fits, since it ignores cwd, model, resume, cancellation and the mailbox.</p>
