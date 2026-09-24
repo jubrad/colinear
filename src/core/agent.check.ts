@@ -1,5 +1,6 @@
 import { agentFor, registerAgent, SessionInbox, type AgentBackend } from './agent.js';
 import { CLAUDE_CAPABILITIES, fallbackFor, outOfAllowance } from './agents/claude.js';
+import { askedIn } from './agents/codex.js';
 import type { Config } from './types.js';
 
 /**
@@ -214,6 +215,44 @@ for (const text of UNRELATED) {
   check('and the resume hint names the command', /claude --resume abc/.test(claude.resumeHint('abc') ?? ''), String(claude.resumeHint('abc')));
   check('transcripts are filed per working directory', (claude.transcriptDir('/tmp/x') ?? '').includes('projects'), String(claude.transcriptDir('/tmp/x')));
   check('a session with no transcript cannot be resumed', !claude.sessionExists('/tmp/definitely-not-here', 'nope'));
+}
+
+/**
+ * The second runtime, on its own terms.
+ *
+ * Codex answers several capabilities `false`, and those answers are the whole
+ * reason the record exists. They are not unimplemented corners of this
+ * adapter: `codex exec` *rejects* approval requests and ask-the-user, and
+ * reports tokens with no price at all. A future adapter quietly flipping one
+ * of these to true would be claiming something the runtime does not do.
+ */
+{
+  const codex = agentFor({ agent: 'codex' } as unknown as Config);
+  check('codex resolves through the seam', codex.name === 'codex', codex.name);
+  // Codex CAN ask; `codex exec` just will not carry it. The adapter supplies
+  // the mechanism, so the capability is true and the sentinel is what makes it
+  // true — parse it wrongly and a question silently becomes a normal reply.
+  check('it can ask, because the adapter gives it a way to', codex.capabilities.questions);
+  check('a turn that ends by asking is recognised', askedIn('NEEDS INPUT: which name?') === 'which name?', String(askedIn('NEEDS INPUT: which name?')));
+  check('with the preamble quoted back around it', askedIn('Checked a.md.\n\nNEEDS INPUT: which name?') === 'which name?');
+  check('an ordinary reply is not a question', askedIn('I renamed the mascot and pushed.') === undefined);
+  check('and neither is the prefix with nothing after it', askedIn('NEEDS INPUT:   ') === undefined);
+  check('it enforces no per-tool deny rules, only sandbox modes', !codex.capabilities.denyRules);
+  check('it reports no price', !codex.capabilities.cost);
+  check('it cannot be handed an id colinear minted', !codex.capabilities.sharedSessionId);
+  check('but a thread takes consecutive turns, so messages land', codex.capabilities.messaging);
+  check('and it can be resumed', codex.capabilities.resume);
+
+  check('it names its own binary', codex.cli.command === 'codex', codex.cli.command);
+  check('and its own resume command', codex.resumeHint('T1') === 'codex resume T1', String(codex.resumeHint('T1')));
+  check(
+    'attach resumes by thread id',
+    JSON.stringify(codex.attachArgv({ sessionId: 'T1', permissionMode: 'auto' })) === '["resume","T1"]',
+    JSON.stringify(codex.attachArgv({ sessionId: 'T1', permissionMode: 'auto' })),
+  );
+  // Codex files rollouts by date, not by the directory the work happened in
+  check('it files no per-directory transcript', codex.transcriptDir('/tmp/anywhere') === undefined);
+  check('and an id it has never seen is not resumable', !codex.sessionExists('/tmp/anywhere', 'not-a-real-thread-id'));
 }
 
 /**

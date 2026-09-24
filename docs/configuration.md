@@ -53,7 +53,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `repos` | one repo (see below) | the allowlist — agents only ever touch these, and only through worktrees. First entry is the default. [Details](#repos) |
 | `team` | your assigned issues | Linear team key (`"CLOUD"`) to browse, or `"all"` for every team. `--team CLOUD` / `--team all` override it for one run, and the last team picked with `t` is remembered |
 | `concurrency` | `3` | agent sessions running at once. Above ~5 you start hitting subscription rate limits |
-| `agent` | `"claude"` | which agent runtime runs sessions. One runtime ships today; the key exists because everything above `core/agent.ts` is written against an interface rather than against Claude Code, and `:config` lists what the configured runtime cannot do |
+| `agent` | `"claude"` | which agent runtime runs sessions: `"claude"` (Claude Code, via the agent SDK) or `"codex"` (OpenAI Codex, via `@openai/codex-sdk`). `:config` lists what the configured runtime cannot do. [Details](#agent-runtimes) |
 | `model` | Claude Code's default | model for agents (`"opus"`, `"sonnet"`, `"fable"`, `"haiku"`). The names are resolved by the Claude Code bundled with the agent SDK, so an alias means whatever that build considers current — `"opus"` is Opus 5.5 and `"fable"` is Fable 5.1 as of SDK 0.3.280 — and an exact id such as `"claude-opus-5"` pins one version. Note that an alias moves when the SDK is bumped: `"opus"` meant Opus 5 before 0.3.280. Overridable per dispatch (`c`) and per task (`m`). Takes a map to run different work on different models. [Details](#models-per-kind-of-session) |
 | `fallbackModel` | `"default"` | what a session demotes to when its model is overloaded or out of allowance. `"default"` is Claude Code's own alias for the model it would otherwise have picked, which is the useful answer when `model` pins an expensive one. Takes a comma-separated list, tried in order; `""` turns it off. Scoped per kind of session the same way as `model`, above. It covers two different failures. An **overloaded** model is handled by the agent SDK, which retries your primary at the start of every turn so a passing spike doesn't strand the session on the cheaper model. A **spent allowance** is handled by colinear itself, because the SDK's fallback does not cover it: Claude Code answers `You've hit your monthly spend limit. Switch to another model to continue.` and the session is re-run on the next model in the list, with a line on the card saying so. A fallback naming the model the session is already on is dropped rather than passed on, since the SDK refuses that pairing outright |
 | `guidance` | none | standing house rules injected into agent prompts, globally or per prompt. [Details](#guidance) |
@@ -98,6 +98,44 @@ Agents only ever touch repos on this list, and only through worktrees under each
 | `checks` | none | commands run in the worktree after the work pass: `[{ "name": "fmt", "cmd": "bin/fmt --check" }]`. Output lands on the task detail view |
 
 `remote` / `pushRemote` are git remote names as they appear in `git remote -v` for that repo (`"mz"`, `"jubrad"`) — not `owner/repo` slugs. In fork mode agents skip stacked PRs, since those would require pushing to the upstream.
+
+### Agent runtimes
+
+`agent` picks what actually runs a session. Both need their own CLI installed and logged in, and
+neither should be given an API key — the runs bill the subscription behind the logged-in CLI.
+
+| | `claude` | `codex` |
+|---|---|---|
+| CLI | `claude` | `codex` |
+| models | `sonnet`, `opus`, `fable`, `haiku` | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-6-astra` |
+| can stop and ask you | yes, `AskUserQuestion` | yes, by convention |
+| `M` reaches a session | yes | yes, as the next turn |
+| `s` opens it in a terminal | yes | yes |
+| enforces `denyTools` | yes | **no**, sandbox modes only |
+| reports a price | yes | **no**, tokens only |
+
+The two "no" answers matter more than the rest.
+
+**How Codex asks is different.** Codex can ask you things interactively, but not over the
+non-interactive path colinear drives: `codex exec` answers its own ask-the-user request with "not
+supported in exec mode". So colinear supplies the mechanism instead. A Codex agent is told that
+ending a turn with `NEEDS INPUT: <question>` is how it asks, that becomes a real question on the
+card, and your answer becomes its next turn. Prompts still say "use AskUserQuestion" and the
+adapter translates, so nothing about the prompts is runtime-specific. The practical difference is
+that a Codex question is one free-text question rather than up to four with multiple-choice
+options.
+
+**Codex does not enforce `denyTools`.** It has sandbox modes rather than per-tool rules, so a rule
+like `Bash(git push --force:*)` has nothing to attach to. Colinear runs it in `workspace-write`,
+which confines writes to the worktree it was handed. If your deny list is load-bearing, that is a
+reason to keep work on `claude`.
+
+**Codex reports no price.** Its runs show `--` in `:costs` instead of a dollar figure, and the
+header says how many sessions are unpriced. Tokens are reported by both, so tokens are the measure
+that compares across them.
+
+Because models are chosen per kind of session, the two can be mixed — reviews on one runtime and
+work on the other — but a model name has to match whichever runtime that kind will use.
 
 ### Models per kind of session
 

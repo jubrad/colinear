@@ -403,6 +403,31 @@ transcript has nothing for backup to archive. `messaging: false` needs no gate, 
 degrades correctly — the message lands on `task.inbox` and rides into the next session's opening
 prompt instead of reaching a live one.
 
+**Two runtimes ship.** `agents/claude.ts` and `agents/codex.ts`. The Codex adapter is a wrapper
+over `codex exec --json` through `@openai/codex-sdk`, imported lazily inside its factory so a
+Claude-only operator never loads it — the same reason the sqlite provider defers `node:sqlite`.
+Two of its capabilities are `false` because `codex exec` *rejects* the thing, not because the
+adapter skipped it: it answers approval requests with "not supported in exec mode", and reports
+tokens with no price. The rich surface for those is `codex app-server`, an experimental JSON-RPC
+protocol with no published client; that is the door if per-command approval is ever needed, not
+this one.
+
+**Questions are the case where the adapter supplies what the runtime will not.** `codex exec`
+refuses `request_user_input` the same way, but a question does not need a tool: the adapter
+prepends a preamble saying that ending a turn with `NEEDS INPUT: <question>` is how you ask here,
+reads that sentinel off the finished turn, raises a real `PendingQuestion`, and feeds the answer
+back as the next turn. Prompts keep saying "use AskUserQuestion" and the adapter translates —
+teaching colinear's vocabulary to a runtime is what an adapter is for, and it is why `questions`
+is honestly true. Bounded at eight rounds, because an agent that re-asks after every answer would
+otherwise loop on the operator's attention rather than on tokens.
+
+Two mappings are worth knowing. Codex takes **consecutive turns on a thread**, so the shared
+mailbox drives them directly: its first yield is the opening prompt and each later one becomes the
+next turn, which is colinear's delivery promise rather than an approximation of it. And Codex files
+rollouts by **date** (`~/.codex/sessions/YYYY/MM/DD/rollout-<iso>-<uuid>.jsonl`), not by working
+directory, so `transcriptDir` returns undefined and `sessionExists` ignores `cwd` and walks that
+fixed shape for the id.
+
 One thing is knowingly still Claude-shaped: **restore** re-encodes into Claude Code's transcript
 layout. Restore runs before you have a config, so it cannot ask `agentFor` which runtime wrote the
 archive; a second runtime that files transcripts per directory needs the manifest to record which
