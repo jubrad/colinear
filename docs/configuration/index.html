@@ -633,6 +633,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#agent-runtimes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent runtimes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#models-per-kind-of-session" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1440,6 +1451,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#agent-runtimes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Agent runtimes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#models-per-kind-of-session" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1664,7 +1686,7 @@
 <tr>
 <td><code>agent</code></td>
 <td><code>"claude"</code></td>
-<td>which agent runtime runs sessions. One runtime ships today; the key exists because everything above <code>core/agent.ts</code> is written against an interface rather than against Claude Code, and <code>:config</code> lists what the configured runtime cannot do</td>
+<td>which agent runtime runs sessions: <code>"claude"</code> (Claude Code, via the agent SDK) or <code>"codex"</code> (OpenAI Codex, via <code>@openai/codex-sdk</code>). <code>:config</code> lists what the configured runtime cannot do. <a href="#agent-runtimes">Details</a></td>
 </tr>
 <tr>
 <td><code>model</code></td>
@@ -1839,6 +1861,73 @@
 </tbody>
 </table>
 <p><code>remote</code> / <code>pushRemote</code> are git remote names as they appear in <code>git remote -v</code> for that repo (<code>"mz"</code>, <code>"jubrad"</code>) — not <code>owner/repo</code> slugs. In fork mode agents skip stacked PRs, since those would require pushing to the upstream.</p>
+<h3 id="agent-runtimes">Agent runtimes<a class="headerlink" href="#agent-runtimes" title="Permanent link">&para;</a></h3>
+<p><code>agent</code> picks what actually runs a session. Both need their own CLI installed and logged in, and
+neither should be given an API key — the runs bill the subscription behind the logged-in CLI.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>claude</code></th>
+<th><code>codex</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CLI</td>
+<td><code>claude</code></td>
+<td><code>codex</code></td>
+</tr>
+<tr>
+<td>models</td>
+<td><code>sonnet</code>, <code>opus</code>, <code>fable</code>, <code>haiku</code></td>
+<td><code>gpt-5.6-sol</code>, <code>gpt-5.6-terra</code>, <code>gpt-5.6-luna</code>, <code>gpt-6-astra</code></td>
+</tr>
+<tr>
+<td>can stop and ask you</td>
+<td>yes, <code>AskUserQuestion</code></td>
+<td>yes, by convention</td>
+</tr>
+<tr>
+<td><code>M</code> reaches a session</td>
+<td>yes</td>
+<td>yes, as the next turn</td>
+</tr>
+<tr>
+<td><code>s</code> opens it in a terminal</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>enforces <code>denyTools</code></td>
+<td>yes</td>
+<td><strong>no</strong>, sandbox modes only</td>
+</tr>
+<tr>
+<td>reports a price</td>
+<td>yes</td>
+<td><strong>no</strong>, tokens only</td>
+</tr>
+</tbody>
+</table>
+<p>The two "no" answers matter more than the rest.</p>
+<p><strong>How Codex asks is different.</strong> Codex can ask you things interactively, but not over the
+non-interactive path colinear drives: <code>codex exec</code> answers its own ask-the-user request with "not
+supported in exec mode". So colinear supplies the mechanism instead. A Codex agent is told that
+ending a turn with <code>NEEDS INPUT: &lt;question&gt;</code> is how it asks, that becomes a real question on the
+card, and your answer becomes its next turn. Prompts still say "use AskUserQuestion" and the
+adapter translates, so nothing about the prompts is runtime-specific. The practical difference is
+that a Codex question is one free-text question rather than up to four with multiple-choice
+options.</p>
+<p><strong>Codex does not enforce <code>denyTools</code>.</strong> It has sandbox modes rather than per-tool rules, so a rule
+like <code>Bash(git push --force:*)</code> has nothing to attach to. Colinear runs it in <code>workspace-write</code>,
+which confines writes to the worktree it was handed. If your deny list is load-bearing, that is a
+reason to keep work on <code>claude</code>.</p>
+<p><strong>Codex reports no price.</strong> Its runs show <code>--</code> in <code>:costs</code> instead of a dollar figure, and the
+header says how many sessions are unpriced. Tokens are reported by both, so tokens are the measure
+that compares across them.</p>
+<p>Because models are chosen per kind of session, the two can be mixed — reviews on one runtime and
+work on the other — but a model name has to match whichever runtime that kind will use.</p>
 <h3 id="models-per-kind-of-session">Models per kind of session<a class="headerlink" href="#models-per-kind-of-session" title="Permanent link">&para;</a></h3>
 <p><code>model</code> and <code>fallbackModel</code> both take either a bare string, which applies to everything, or a map
 naming a model per kind of session. The kinds are the ones <code>:agents</code> already shows:</p>

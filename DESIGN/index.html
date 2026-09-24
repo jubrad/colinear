@@ -2127,6 +2127,28 @@ returning undefined are real answers, not missing methods: a runtime that files 
 transcript has nothing for backup to archive. <code>messaging: false</code> needs no gate, because <code>M</code> already
 degrades correctly — the message lands on <code>task.inbox</code> and rides into the next session's opening
 prompt instead of reaching a live one.</p>
+<p><strong>Two runtimes ship.</strong> <code>agents/claude.ts</code> and <code>agents/codex.ts</code>. The Codex adapter is a wrapper
+over <code>codex exec --json</code> through <code>@openai/codex-sdk</code>, imported lazily inside its factory so a
+Claude-only operator never loads it — the same reason the sqlite provider defers <code>node:sqlite</code>.
+Two of its capabilities are <code>false</code> because <code>codex exec</code> <em>rejects</em> the thing, not because the
+adapter skipped it: it answers approval requests with "not supported in exec mode", and reports
+tokens with no price. The rich surface for those is <code>codex app-server</code>, an experimental JSON-RPC
+protocol with no published client; that is the door if per-command approval is ever needed, not
+this one.</p>
+<p><strong>Questions are the case where the adapter supplies what the runtime will not.</strong> <code>codex exec</code>
+refuses <code>request_user_input</code> the same way, but a question does not need a tool: the adapter
+prepends a preamble saying that ending a turn with <code>NEEDS INPUT: &lt;question&gt;</code> is how you ask here,
+reads that sentinel off the finished turn, raises a real <code>PendingQuestion</code>, and feeds the answer
+back as the next turn. Prompts keep saying "use AskUserQuestion" and the adapter translates —
+teaching colinear's vocabulary to a runtime is what an adapter is for, and it is why <code>questions</code>
+is honestly true. Bounded at eight rounds, because an agent that re-asks after every answer would
+otherwise loop on the operator's attention rather than on tokens.</p>
+<p>Two mappings are worth knowing. Codex takes <strong>consecutive turns on a thread</strong>, so the shared
+mailbox drives them directly: its first yield is the opening prompt and each later one becomes the
+next turn, which is colinear's delivery promise rather than an approximation of it. And Codex files
+rollouts by <strong>date</strong> (<code>~/.codex/sessions/YYYY/MM/DD/rollout-&lt;iso&gt;-&lt;uuid&gt;.jsonl</code>), not by working
+directory, so <code>transcriptDir</code> returns undefined and <code>sessionExists</code> ignores <code>cwd</code> and walks that
+fixed shape for the id.</p>
 <p>One thing is knowingly still Claude-shaped: <strong>restore</strong> re-encodes into Claude Code's transcript
 layout. Restore runs before you have a config, so it cannot ask <code>agentFor</code> which runtime wrote the
 archive; a second runtime that files transcripts per directory needs the manifest to record which
