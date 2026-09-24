@@ -166,7 +166,13 @@ export function AnnotatedDiff(props: {
     return shown;
   }, [unanchored, width]);
   // the panes get what is left: one row per line the PR-wide comment takes
-  const paneHeight = Math.max(4, height - chatRows - 2 - Math.max(1, aboutLines.length));
+  // the behind-the-head notice is a row like any other: taking it out of the
+  // pane here is what stops it pushing the last diff line off the bottom
+  // Both shas are known: the poll records where the pull request is, and the
+  // review records what it was read at. They are only comparable when both are
+  // present, which excludes a task's own diff — it has no upstream head to move.
+  const behind = Boolean(review.headSha && review.reviewedSha && review.headSha !== review.reviewedSha);
+  const paneHeight = Math.max(4, height - chatRows - 2 - Math.max(1, aboutLines.length) - (behind ? 1 : 0));
   const diffWidth = Math.max(30, Math.floor(width * 0.62));
   const noteWidth = width - diffWidth - 3;
   // What a margin row has left for words: the pane's border and padding (4),
@@ -415,6 +421,19 @@ export function AnnotatedDiff(props: {
           {review.posted ? ' · posted' : ''}
         </Text>
       </Text>
+      {/*
+        The diff is the one this review is about, read out of a checkout pinned
+        at the sha that was reviewed — which is what keeps the annotations in
+        the margin pointing at the lines they were written against. When the
+        author pushes, that stays right and stops being the whole story, and
+        the only symptom was a diff that looked as though it just stopped. So
+        the gap is stated rather than left to be noticed.
+      */}
+      {behind && (
+        <Text color={theme.warn} wrap="truncate">
+          showing {review.reviewedSha?.slice(0, 8)} — the author has pushed since ({review.headSha?.slice(0, 8)}); r re-reviews at the new head
+        </Text>
+      )}
 
       <Box height={paneHeight}>
         <Box flexDirection="column" width={diffWidth} borderStyle="single" borderColor={focus === 'diff' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">

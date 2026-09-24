@@ -260,6 +260,17 @@ what you see is what round two would post.
 
 `p` then posts the revised review as a second one on the PR.
 
+## When the branch has moved under you
+
+The annotated diff is read out of the review's own checkout, pinned at the sha the agent read. That
+is deliberate: the margin's comments are anchored to those lines, and re-reading a newer diff
+underneath them would point every one of them somewhere else.
+
+So when the author pushes, the diff stays right about the review and stops being the whole pull
+request. It used to say nothing, which looked exactly like a diff that had been cut short. Now the
+header says which sha you are looking at, which one the branch is on, and that `r` re-reviews at
+the new head — which refetches `pull/<n>/head`, resets the checkout and reads it again.
+
 ## Posting
 
 `p` posts, `A` approves, `X` requests changes — the same review with a different event. Posting is
