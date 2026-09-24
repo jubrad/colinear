@@ -148,6 +148,7 @@ export function codexBackend(): AgentBackend {
     name: 'codex',
     capabilities: CODEX_CAPABILITIES,
     models: CODEX_MODELS,
+    claims: (model) => CODEX_MODELS.includes(model) || /^(gpt|codex|o\d)[-.]?/i.test(model),
     runSession,
     cli: {
       command: 'codex',

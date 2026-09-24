@@ -373,12 +373,19 @@ plan's worktree for the same reason and offers it once the plan is gone.
 ## Agent runtimes
 
 Everything above `core/agent.ts` is runtime-agnostic; everything below it is one adapter.
-`agentFor(cfg, kind)` returns the instance for a kind of session, and **nothing outside `agents/`
-imports an agent SDK**. The runtime is scoped exactly as the model is — same `ModelChoice` shape,
-same `AgentKind` key, same normalizer — because the two answer the same question and the runtimes
-differ in what they can *do*, not only in what they cost. The cache is per config object and then
-per runtime name: one config resolving to two runtimes would otherwise thrash a single-instance
-cache every time a review followed a work session.
+`runtimeFor(cfg, kind, override)` answers the whole question — what runs this, on what model, with
+what to demote to — and **nothing outside `agents/` imports an agent SDK**.
+
+**The model names its runtime; there is no second map.** A runtime `claims()` its own names
+(`fable` is Claude Code's, `gpt-5.6-sol` is Codex's, plus the `claude-*` and `gpt-*` id shapes), an
+explicit `runtime/model` prefix overrides that, and `cfg.agent` catches whatever nothing claims.
+Two maps keyed alike would drift, and the pairing they encode is a single decision. It is also the
+only shape in which a *per-task* override works: `m` picking a Codex model has to move the runtime
+with it, or the task runs a Codex model on Claude Code. A fallback resolving to a different runtime
+is dropped, because a session cannot demote across one.
+
+The cache is per config object and then per runtime name: one config resolving to two runtimes
+would otherwise thrash a single-instance cache every time a review followed a work session.
 
 **A conversation remembers its runtime.** `SessionSpend.runtime` is stamped by the adapter, and
 `s` resolves by that name (`agentNamed`) rather than by the config, because with triage on one

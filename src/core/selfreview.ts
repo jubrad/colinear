@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { agentFor } from './agent.js';
+import { runtimeFor } from './agent.js';
 import { demoDiff, isDemo } from './demo.js';
 import { guidanceFor } from './guidance.js';
 import { log } from './log.js';
@@ -88,7 +88,7 @@ export async function reviewTask(cfg: Config, task: Task): Promise<void> {
   store.addActivity(id, 'reading its own work');
   try {
     const sha = await headSha(task.worktree);
-    const result = await agentFor(cfg, 'review').runSession({
+    const result = await runtimeFor(cfg, 'review').backend.runSession({
       permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
       agent: { kind: 'review', label: task.issue.identifier, origin: 'you asked for a self-review' },
       prompt: selfReviewPrompt(cfg, task),
@@ -140,7 +140,7 @@ export async function explainLines(
   const where = at.startLine === at.endLine ? `line ${at.endLine}` : `lines ${at.startLine}–${at.endLine}`;
   store.addActivity(id, `asked what ${at.file} ${where} does`);
   try {
-    const explained = await agentFor(cfg, 'review').runSession({
+    const explained = await runtimeFor(cfg, 'review').backend.runSession({
       permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
       agent: { kind: 'review', label: task.issue.identifier, origin: `you asked about ${at.file}:${at.endLine}` },
       prompt: explainPrompt(cfg, at, where),

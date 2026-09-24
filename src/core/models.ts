@@ -1,3 +1,4 @@
+import { runtimeFor } from './agent.js';
 import type { Config, ModelChoice, ModelScope } from './types.js';
 
 /**
@@ -31,8 +32,9 @@ export function modelsFor(
   scope: ModelScope,
   override?: string,
 ): { model?: string; fallbackModel?: string } {
-  return {
-    model: override ?? modelFor(cfg.model, scope),
-    fallbackModel: modelFor(cfg.fallbackModel, scope),
-  };
+  // Routed through the seam because a model name may carry its runtime, and
+  // what the session wants is the name with that prefix taken off. Resolving
+  // it here as well would be a second place for the two to disagree.
+  const { model, fallbackModel } = runtimeFor(cfg, scope, override);
+  return { model, fallbackModel };
 }

@@ -1,4 +1,4 @@
-import { agentFor } from '../core/agent.js';
+import { pickableModels } from '../core/agent.js';
 import { Box, Text, useInput } from 'ink';
 import { providerFor } from '../core/provider.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -406,7 +406,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
           return (
             <Popup {...place}>
               <DispatchModal
-                models={agentFor(cfg).models}
+                models={pickableModels(cfg)}
                 count={picked().length}
                 repos={ctx.cfg.repos}
                 width={inner}

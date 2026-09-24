@@ -60,6 +60,7 @@ export function claudeBackend(): AgentBackend {
     name: 'claude',
     capabilities: CLAUDE_CAPABILITIES,
     models: CLAUDE_MODELS,
+    claims: (model) => CLAUDE_MODELS.includes(model) || /^claude[-.]/i.test(model),
     runSession,
     cli: {
       command: 'claude',

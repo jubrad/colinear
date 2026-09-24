@@ -641,12 +641,11 @@ export interface Config {
   concurrency: number;
   checks: CheckConfig[];
   /**
-   * Which agent runtime runs which kind of session. Same shape as `model`: a
-   * bare string is `{ general: it }`, a map names a kind. Reviews on one
-   * runtime and work on another is the point — they differ in what they can
-   * do, not only in what they cost.
+   * The runtime to use for a model nothing claims. Most model names say which
+   * runtime they belong to on their own, so this is the answer for an exact
+   * id no runtime recognises rather than a thing to set per kind of session.
    */
-  agent: ModelChoice;
+  agent?: string;
   /** which model runs which kind of session; a bare string sets `general` */
   model: ModelChoice;
   /**

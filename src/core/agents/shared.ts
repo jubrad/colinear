@@ -188,6 +188,17 @@ export interface AgentBackend {
   readonly capabilities: AgentCapabilities;
   /** what the model pickers offer; the config takes any string besides */
   readonly models: string[];
+
+  /**
+   * Is this model name this runtime's?
+   *
+   * How a model string finds its runtime without the operator maintaining a
+   * second map alongside the first. `fable` is Claude Code's and
+   * `gpt-5.6-sol` is Codex's, and saying so here is what lets one field carry
+   * the whole decision — including a per-task override, which moves the
+   * runtime with it rather than pairing a Codex model with Claude Code.
+   */
+  claims(model: string): boolean;
   runSession(opts: RunSessionOpts): Promise<SessionResult>;
 
   /** what must be on PATH for this runtime to work at all — `coli doctor` asks */
