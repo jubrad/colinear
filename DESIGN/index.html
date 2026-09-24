@@ -2102,9 +2102,22 @@ a plan is a conversation the operator can return to, so only they remove one. <c
 plan's worktree for the same reason and offers it once the plan is gone.</p>
 <h2 id="agent-runtimes">Agent runtimes<a class="headerlink" href="#agent-runtimes" title="Permanent link">&para;</a></h2>
 <p>Everything above <code>core/agent.ts</code> is runtime-agnostic; everything below it is one adapter.
-<code>agentFor(cfg)</code> returns the instance for a config (cached per config object, so a <code>reloadConfig</code>
-that mutates in place keeps working, and a changed <code>agent</code> re-resolves), and <strong>nothing outside
-<code>agents/</code> imports an agent SDK</strong>. That is the same arrangement <code>core/provider.ts</code> has with
+<code>runtimeFor(cfg, kind, override)</code> answers the whole question — what runs this, on what model, with
+what to demote to — and <strong>nothing outside <code>agents/</code> imports an agent SDK</strong>.</p>
+<p><strong>The model names its runtime; there is no second map.</strong> A runtime <code>claims()</code> its own names
+(<code>fable</code> is Claude Code's, <code>gpt-5.6-sol</code> is Codex's, plus the <code>claude-*</code> and <code>gpt-*</code> id shapes), an
+explicit <code>runtime/model</code> prefix overrides that, and <code>cfg.agent</code> catches whatever nothing claims.
+Two maps keyed alike would drift, and the pairing they encode is a single decision. It is also the
+only shape in which a <em>per-task</em> override works: <code>m</code> picking a Codex model has to move the runtime
+with it, or the task runs a Codex model on Claude Code. A fallback resolving to a different runtime
+is dropped, because a session cannot demote across one.</p>
+<p>The cache is per config object and then per runtime name: one config resolving to two runtimes
+would otherwise thrash a single-instance cache every time a review followed a work session.</p>
+<p><strong>A conversation remembers its runtime.</strong> <code>SessionSpend.runtime</code> is stamped by the adapter, and
+<code>s</code> resolves by that name (<code>agentNamed</code>) rather than by the config, because with triage on one
+runtime and work on another the config's answer is not necessarily the one that owns the session
+you are attaching to. Absent on rows written before this, which correctly falls back to the
+config. That is the same arrangement <code>core/provider.ts</code> has with
 trackers, for the same reason.</p>
 <p><code>AgentCapabilities</code> is asked rather than assumed: <code>questions</code>, <code>messaging</code>, <code>attach</code>, <code>denyRules</code>,
 <code>cost</code>, <code>structuredOutput</code>, <code>resume</code>, <code>sharedSessionId</code>. These are not cosmetic. A runtime that

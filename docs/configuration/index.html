@@ -644,6 +644,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#running-both-at-once" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running both at once
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#models-per-kind-of-session" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1462,6 +1473,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#running-both-at-once" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running both at once
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#models-per-kind-of-session" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1686,7 +1708,7 @@
 <tr>
 <td><code>agent</code></td>
 <td><code>"claude"</code></td>
-<td>which agent runtime runs sessions: <code>"claude"</code> (Claude Code, via the agent SDK) or <code>"codex"</code> (OpenAI Codex, via <code>@openai/codex-sdk</code>). <code>:config</code> lists what the configured runtime cannot do. <a href="#agent-runtimes">Details</a></td>
+<td>the runtime for a model no runtime recognises. Most model names say which runtime they belong to on their own, so this is rarely worth setting. <a href="#agent-runtimes">Details</a></td>
 </tr>
 <tr>
 <td><code>model</code></td>
@@ -1926,8 +1948,28 @@ reason to keep work on <code>claude</code>.</p>
 <p><strong>Codex reports no price.</strong> Its runs show <code>--</code> in <code>:costs</code> instead of a dollar figure, and the
 header says how many sessions are unpriced. Tokens are reported by both, so tokens are the measure
 that compares across them.</p>
-<p>Because models are chosen per kind of session, the two can be mixed — reviews on one runtime and
-work on the other — but a model name has to match whichever runtime that kind will use.</p>
+<h3 id="running-both-at-once">Running both at once<a class="headerlink" href="#running-both-at-once" title="Permanent link">&para;</a></h3>
+<p><strong>The model names its own runtime.</strong> There is no second map to keep in step — you pick a model and
+the runtime follows:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">"model"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"general"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fable"</span><span class="p">,</span><span class="w"> </span><span class="nt">"review"</span><span class="p">:</span><span class="w"> </span><span class="s2">"gpt-5.6-sol"</span><span class="w"> </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<p>Reviews run on Codex there, everything else on Claude Code, because <code>gpt-5.6-sol</code> is Codex's name
+and <code>fable</code> is Claude Code's. Each runtime claims its own names, including exact ids like
+<code>claude-opus-5-5</code> and <code>gpt-6-astra</code>.</p>
+<p>This is also what makes it work <strong>per task</strong>, not just per kind. <code>m</code> and <code>c</code> offer every runtime's
+models, so sending one task to Codex and leaving the next on Claude is one keypress, and the
+runtime moves with the model rather than being a separate thing to remember.</p>
+<p>For a name nothing recognises, say which runtime with a prefix:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="w"> </span><span class="nt">"model"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">"work"</span><span class="p">:</span><span class="w"> </span><span class="s2">"codex/some-new-model"</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="p">}</span>
+</code></pre></div>
+<p>Failing both, <code>agent</code> is the default. A <strong>fallback on a different runtime is dropped</strong>: a session
+cannot demote across runtimes, and carrying one would fail only once the first model ran out.</p>
+<p>Attaching follows the conversation rather than the config. A session records which runtime ran it,
+so <code>s</code> on a review started under Codex opens <code>codex resume</code> even when everything else is Claude.
+Rows written before this have no recorded runtime and fall back to the config, which is what it
+was.</p>
 <h3 id="models-per-kind-of-session">Models per kind of session<a class="headerlink" href="#models-per-kind-of-session" title="Permanent link">&para;</a></h3>
 <p><code>model</code> and <code>fallbackModel</code> both take either a bare string, which applies to everything, or a map
 naming a model per kind of session. The kinds are the ones <code>:agents</code> already shows:</p>
