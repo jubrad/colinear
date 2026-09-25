@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
-import { anchorKey, expandTabs, layoutMargin, parseDiff, toVisualRows, type DiffLine, type VisualRow } from '../core/diff.js';
+import { anchorKey, expandTabs, layoutMargin, parseDiff, toVisualRows, type DiffLine, type TokenKind, type VisualRow } from '../core/diff.js';
+import { highlightDiff } from '../core/highlight.js';
 import type { ChatTurn, Review, ReviewFinding, Severity } from '../core/types.js';
 import { spinner } from './format.js';
 import { TextArea } from './TextArea.js';
@@ -110,7 +111,9 @@ export function AnnotatedDiff(props: {
   /** how far into a finding being read in full we have scrolled */
   const [readScroll, setReadScroll] = useState(0);
 
-  const parsed = useMemo(() => (diff ? parseDiff(diff) : []), [diff]);
+  // parse then highlight, both keyed on the diff so tokenizing runs once per
+  // diff and never in the frame loop (the app re-renders on a clock)
+  const parsed = useMemo(() => (diff ? highlightDiff(parseDiff(diff)) : []), [diff]);
   // the gutter this pane spends before the code: marker, line number, sign
   const codeWidth = Math.max(8, Math.floor(width * 0.62) - 11);
   /** what is actually drawn — long lines wrap, so a row is not always a line */
@@ -609,6 +612,19 @@ export function AnnotatedDiff(props: {
   );
 }
 
+/**
+ * Token colours. `ok`/`err` are deliberately absent — those are reserved for the
+ * sign column and gutter (what changed), so a green string literal never fights a
+ * green `+`. Colour the frame of the code, not every identifier.
+ */
+const SYNTAX_COLOR: Record<TokenKind, string> = {
+  comment: theme.dim,
+  string: theme.warn,
+  keyword: theme.key,
+  number: theme.annotation,
+  type: theme.accent,
+};
+
 function DiffRow(props: {
   row: VisualRow;
   width: number;
@@ -634,7 +650,10 @@ function DiffRow(props: {
     );
   }
   const sign = row.first ? (line.kind === 'add' ? '+' : line.kind === 'del' ? '-' : ' ') : ' ';
-  const color = line.kind === 'add' ? theme.ok : line.kind === 'del' ? theme.err : undefined;
+  // add/del now live in the sign column, not the code foreground, so syntax can
+  // own the code. A removed row is dimmed whole so what is going away recedes.
+  const signColor = line.kind === 'add' ? theme.ok : line.kind === 'del' ? theme.err : undefined;
+  const dimCode = line.kind === 'del';
   // a continuation shows no number: it is the same line, still
   const num = (row.first ? (line.newLine ?? line.oldLine ?? '') : '').toString().padStart(4);
   return (
@@ -649,10 +668,17 @@ function DiffRow(props: {
       <Text dimColor={!selected} color={selected ? theme.selection : undefined} bold={selected}>
         {num}{' '}
       </Text>
-      <Text color={onCursor ? undefined : color}>
-        {sign}
-        {line.text}
-      </Text>
+      <Text color={onCursor ? undefined : signColor}>{sign}</Text>
+      {row.spans.map((sp, i) => (
+        <Text
+          key={i}
+          // under the cursor the whole row is inverted, so colour is dropped
+          color={onCursor ? undefined : sp.token ? SYNTAX_COLOR[sp.token] : undefined}
+          dimColor={dimCode && !onCursor}
+        >
+          {sp.text}
+        </Text>
+      ))}
     </Text>
   );
 }

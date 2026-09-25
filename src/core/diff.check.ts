@@ -1,4 +1,5 @@
-import { expandTabs, parseDiff, toVisualRows } from './diff.js';
+import { expandTabs, parseDiff, sliceSpans, toVisualRows, type Span } from './diff.js';
+import { highlightDiff, highlightLine } from './highlight.js';
 
 /**
  * A diff row must never be drawn wider than the pane it was laid out in.
@@ -107,9 +108,123 @@ for (const paneWidth of [60, 80, 100, 120, 140, 183, 220, 300]) {
   }
 }
 
+// ── syntax spans ─────────────────────────────────────────────────────────
+//
+// The render path now carries coloured spans instead of a raw string. Two
+// invariants keep it honest, and they are the tab guard restated on the span
+// model: a wrong flatten or a mis-cut wrap that dropped or duplicated a
+// character would mis-colour the one view whose job is catching bugs.
+
+const concat = (spans: Span[]) => spans.map((s) => s.text).join('');
+const spanWidth = (spans: Span[]) => spans.reduce((n, s) => n + drawnColumns(s.text), 0);
+
+// a real TypeScript diff, highlighted, wrapped at every width
+const TS_DIFF = [
+  'diff --git a/src/x.ts b/src/x.ts',
+  'index 1..2 100644',
+  '--- a/src/x.ts',
+  '+++ b/src/x.ts',
+  '@@ -1,2 +1,3 @@',
+  '+  const label = "a rather long string literal that will wrap at the narrow pane widths"; // trailing note',
+  '   return label;',
+  '-  const gone = 12345;',
+  '',
+].join('\n');
+const tsLines = highlightDiff(parseDiff(TS_DIFF));
+
+for (const paneWidth of [60, 80, 100, 120, 183, 300]) {
+  const rows = toVisualRows(tsLines, codeWidthFor(paneWidth));
+  for (const r of rows) {
+    if (r.line.kind !== 'add' && r.line.kind !== 'del' && r.line.kind !== 'context') continue;
+    check(`spans concatenate to the row text at ${paneWidth}`, concat(r.spans) === r.text, JSON.stringify(r.text).slice(0, 50));
+    check(`span widths sum to the row width at ${paneWidth}`, spanWidth(r.spans) === drawnColumns(r.text), `${spanWidth(r.spans)} vs ${drawnColumns(r.text)}`);
+  }
+}
+
+// sliceSpans must not lose or invent a character at any cut point
+{
+  const spans: Span[] = [{ text: 'const ', token: 'keyword' }, { text: 'x = ' }, { text: '42', token: 'number' }];
+  const whole = 'const x = 42';
+  for (let cut = 0; cut <= whole.length; cut++) {
+    const joined = concat(sliceSpans(spans, 0, cut)) + concat(sliceSpans(spans, cut, whole.length));
+    check(`sliceSpans is lossless at cut ${cut}`, joined === whole, joined);
+  }
+}
+
+// the tokenizer earns its place only if it actually classifies — a comment, a
+// string and a keyword on one line, still concatenating losslessly
+{
+  const spans = highlightLine('const s = "hi"; // note', 'typescript');
+  check('tokenizer is lossless', concat(spans) === 'const s = "hi"; // note', concat(spans));
+  const kinds = new Set(spans.map((s) => s.token).filter(Boolean));
+  check('tokenizer finds a keyword', kinds.has('keyword'), [...kinds].join(','));
+  check('tokenizer finds a string', kinds.has('string'), [...kinds].join(','));
+  check('tokenizer finds a comment', kinds.has('comment'), [...kinds].join(','));
+  // the string body stays a string end to end (the flatten inherits the parent)
+  const str = spans.find((s) => s.text.includes('hi'));
+  check('the string literal is coloured as a string', str?.token === 'string', JSON.stringify(str));
+}
+
+// markdown: a heading, a code span and a link — mapped onto the shared kinds
+{
+  const heading = highlightLine('## Rate limiting', 'markdown');
+  check('markdown heading is a keyword', heading.some((s) => s.token === 'keyword'), JSON.stringify(heading));
+  const body = highlightLine('Set the `limit` and see [docs](http://x).', 'markdown');
+  check('markdown is lossless', concat(body) === 'Set the `limit` and see [docs](http://x).', concat(body));
+  const kinds = new Set(body.map((s) => s.token).filter(Boolean));
+  check('markdown code span is a string', kinds.has('string'), [...kinds].join(','));
+  check('markdown link is a number', kinds.has('number'), [...kinds].join(','));
+}
+
+// the load-order fix: tsx resolves rather than silently rendering plain
+{
+  const spans = highlightLine('const App = () => <div className="x">{n}</div>;', 'tsx');
+  check('tsx is lossless', concat(spans) === 'const App = () => <div className="x">{n}</div>;', concat(spans));
+  check('tsx classifies a keyword', spans.some((s) => s.token === 'keyword'), JSON.stringify(spans).slice(0, 80));
+}
+
+// per-hunk lexing: a block comment across two added lines colours both — the
+// whole point of lexing the hunk rather than each line alone
+{
+  const diff = [
+    'diff --git a/x.ts b/x.ts',
+    'index 1..2 100644',
+    '--- a/x.ts',
+    '+++ b/x.ts',
+    '@@ -1,0 +1,3 @@',
+    '+/* a comment that',
+    '+   runs onto a second line */',
+    '+const x = 1;',
+    '',
+  ].join('\n');
+  const adds = highlightDiff(parseDiff(diff)).filter((l) => l.kind === 'add');
+  const commentLines = adds.slice(0, 2);
+  check(
+    'a multi-line comment colours every line',
+    commentLines.every((l) => (l.spans ?? []).every((sp) => sp.token === 'comment')),
+    JSON.stringify(commentLines.map((l) => (l.spans ?? []).map((sp) => sp.token))),
+  );
+  check(
+    'the code line after it lexes as code, not comment',
+    (adds[2].spans ?? []).some((sp) => sp.token === 'keyword'),
+    JSON.stringify(adds[2].spans),
+  );
+  for (const l of adds) {
+    check('per-hunk spans stay lossless', concat(l.spans ?? []) === l.text, JSON.stringify(l.text));
+  }
+}
+
+// an unknown language renders plain — never worse than today
+{
+  const spans = highlightLine('some plain text', undefined);
+  check('no grammar yields one plain span', spans.length === 1 && spans[0].token === undefined, JSON.stringify(spans));
+}
+
 if (failures.length) {
   console.error(`diff layout: ${failures.length} failure(s)`);
   for (const f of failures) console.error(`  ✖ ${f}`);
   process.exit(1);
 }
-console.log('ok — tab-indented diff rows fit the pane they are drawn in, at every width');
+console.log(
+  'ok — diff rows fit the pane at every width, and syntax spans are lossless and classified',
+);

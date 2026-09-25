@@ -9,6 +9,19 @@
  */
 export type DiffLineKind = 'file' | 'hunk' | 'add' | 'del' | 'context' | 'meta';
 
+/**
+ * A syntax token class the diff view colours. A span with no `token` is drawn in
+ * the default foreground. The set is deliberately small — colour the frame of the
+ * code, not every identifier (see the design doc).
+ */
+export type TokenKind = 'comment' | 'string' | 'keyword' | 'number' | 'type';
+
+/** A run of a line's text sharing one token class. Spans concatenate to the line. */
+export interface Span {
+  text: string;
+  token?: TokenKind;
+}
+
 export interface DiffLine {
   kind: DiffLineKind;
   /** the raw text, without the leading +/-/space */
@@ -19,6 +32,8 @@ export interface DiffLine {
   newLine?: number;
   /** line number in the old file, for context when reading a removal */
   oldLine?: number;
+  /** syntax spans for the code column; set by highlight.ts, absent = render plain */
+  spans?: Span[];
 }
 
 /**
@@ -230,6 +245,8 @@ export function layoutMargin(
 export interface VisualRow {
   line: DiffLine;
   text: string;
+  /** the row's slice of the line's syntax spans; concatenates to `text` */
+  spans: Span[];
   /** false on the wrapped remainder of a long line */
   first: boolean;
 }
@@ -247,14 +264,38 @@ export function toVisualRows(lines: DiffLine[], width: number): VisualRow[] {
   const w = Math.max(8, width);
   const out: VisualRow[] = [];
   for (const line of lines) {
+    // one plain span when nothing highlighted the line, so every row carries a
+    // span list and the renderer has one code path
+    const spans = line.spans ?? [{ text: line.text }];
     // headers and hunk markers stay one row: they are chrome, not content
     if (line.kind === 'file' || line.kind === 'hunk' || line.kind === 'meta' || line.text.length <= w) {
-      out.push({ line, text: line.text, first: true });
+      out.push({ line, text: line.text, spans, first: true });
       continue;
     }
+    // tabs were expanded at parse time, so a character is a column and the wrap
+    // offsets below are painted columns — the spans are cut at the same offsets
     for (let i = 0; i < line.text.length; i += w) {
-      out.push({ line, text: line.text.slice(i, i + w), first: i === 0 });
+      out.push({ line, text: line.text.slice(i, i + w), spans: sliceSpans(spans, i, i + w), first: i === 0 });
     }
+  }
+  return out;
+}
+
+/**
+ * The spans covering `[start, end)` of a line, splitting the spans that straddle
+ * either edge. Wrapping has to cut the span list, not re-tokenize the slice: a
+ * token split across a wrap boundary keeps its colour on both rows this way,
+ * where re-lexing the remainder alone would mis-colour everything after the break.
+ */
+export function sliceSpans(spans: Span[], start: number, end: number): Span[] {
+  const out: Span[] = [];
+  let at = 0;
+  for (const s of spans) {
+    const from = Math.max(start, at);
+    const to = Math.min(end, at + s.text.length);
+    if (to > from) out.push(s.token ? { text: s.text.slice(from - at, to - at), token: s.token } : { text: s.text.slice(from - at, to - at) });
+    at += s.text.length;
+    if (at >= end) break;
   }
   return out;
 }
