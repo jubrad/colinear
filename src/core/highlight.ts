@@ -3,31 +3,28 @@ import Prism from 'prismjs';
 import type { DiffLine, Span, TokenKind } from './diff.js';
 
 /**
- * Syntax tokens for the diff view. SPIKE.
+ * Syntax tokens for the diff view: a line's text becomes coloured spans.
  *
- * Turns a diff line's text into coloured spans. The render path (diff.ts's
- * span model, AnnotatedDiff's DiffRow, diff.check.ts's invariants) is what this
- * proves; the token *source* is deliberately the simplest thing that exercises
- * it — Prism over each line's own text.
+ * **Lexed per hunk, not per line.** A hunk's lines are consecutive, so the
+ * new-side block (context + additions) and the old-side block (context +
+ * deletions) are each tokenized whole — a block comment, template literal or
+ * raw string that spans several lines then colours every one of them, which
+ * lexing a line in isolation (what `delta`/`bat` do) cannot manage. The only
+ * construct this still gets wrong is one opened *before* the hunk's first line,
+ * i.e. outside the diff entirely; fixing that needs the whole file, which lives
+ * in the review worktree on the daemon's machine — not here, where a remote
+ * daemon sends only the diff string. A daemon-side pass could carry it later,
+ * but per-hunk is correct for everything the diff actually contains.
  *
- * Two shortcuts the production version removes, both noted where they bite:
- *
- *  - **Per-line, not whole-file.** The design tokenizes the new-side file out of
- *    the review worktree and maps hunk lines to it, so a string or comment opened
- *    above the hunk lexes correctly. Here each line is lexed alone, which is what
- *    `delta`/`bat` do and is wrong at exactly those boundaries. The span shape is
- *    identical either way, so swapping the source later touches only this file.
- *  - **A fixed grammar set**, loaded once below. Production lazy-loads per language.
- *
- * Grammars are pulled in with `createRequire`: Prism's component files are CJS
- * that mutate the singleton, and requiring them synchronously keeps
- * `highlightLine` synchronous (it runs inside a render memo) without a
- * top-level await or an async init the TUI would have to wait on.
+ * Grammars load with `createRequire`: Prism's components are CJS that mutate the
+ * singleton, and requiring them synchronously keeps highlighting sync (it runs
+ * inside a render memo) with no top-level await. The whole set is ~10ms at
+ * import, paid once when the TUI starts.
  */
 
 const require = createRequire(import.meta.url);
 
-/** file extension → Prism language id. The set the spike loads. */
+/** file extension → Prism language id. */
 const LANGS: Record<string, string> = {
   ts: 'typescript',
   tsx: 'tsx',
@@ -49,7 +46,7 @@ const LANGS: Record<string, string> = {
  * Grammars to register, **dependencies first**. A Prism component throws when a
  * grammar it extends is not loaded yet — `markdown` needs `markup`, `tsx` needs
  * `jsx` needs `javascript` needs `clike` — and the throw is swallowed below, so
- * a wrong order silently drops a language (the spike shipped with `.tsx` plain
+ * a wrong order silently drops a language (an earlier cut rendered `.tsx` plain
  * for exactly this reason). Base grammars lead so the dependents resolve.
  */
 const GRAMMARS = [
@@ -120,7 +117,7 @@ function kindOf(prismType: string): TokenKind | undefined {
   }
 }
 
-/** The language for a path, if the spike loaded a grammar for it. */
+/** The language for a path, if a grammar is loaded for it. */
 export function langFor(file: string): string | undefined {
   const ext = file.slice(file.lastIndexOf('.') + 1).toLowerCase();
   const lang = LANGS[ext];
@@ -163,13 +160,62 @@ export function highlightLine(text: string, lang: string | undefined): Span[] {
 }
 
 /**
+ * Spans for a block of lines tokenized together, split back out per line. The
+ * block is joined with newlines and lexed once, so a token that spans lines
+ * (a block comment, a multi-line string) keeps its class on every line; the
+ * flat result is then cut at the newlines. Lossless: the returned arrays
+ * concatenate to the inputs, one array per input line.
+ */
+function highlightBlock(texts: string[], lang: string): Span[][] {
+  const flat = highlightLine(texts.join('\n'), lang);
+  const out: Span[][] = [[]];
+  for (const s of flat) {
+    const parts = s.text.split('\n');
+    for (let j = 0; j < parts.length; j++) {
+      if (j > 0) out.push([]);
+      if (parts[j]) push(out[out.length - 1], parts[j], s.token);
+    }
+  }
+  // a lossless tokenizer yields exactly one array per line; if some grammar ever
+  // breaks that, fall back to plain rather than mis-align the whole hunk
+  return out.length === texts.length ? out : texts.map((t) => (t ? [{ text: t }] : []));
+}
+
+/**
  * Set `spans` on every code line of a parsed diff, in place, once per diff.
- * Chrome rows (file/hunk/meta) are left plain — they are not source.
+ * Chrome rows (file/hunk/meta) are left plain — they are not source. Code lines
+ * are grouped into hunk bodies (a run of context/add/del in one file) and each
+ * body's two sides are lexed as blocks so multi-line constructs colour right.
  */
 export function highlightDiff(lines: DiffLine[]): DiffLine[] {
-  for (const line of lines) {
-    if (line.kind !== 'add' && line.kind !== 'del' && line.kind !== 'context') continue;
-    line.spans = highlightLine(line.text, langFor(line.file));
+  let i = 0;
+  const isCode = (l: DiffLine) => l.kind === 'add' || l.kind === 'del' || l.kind === 'context';
+  while (i < lines.length) {
+    if (!isCode(lines[i])) {
+      i++;
+      continue;
+    }
+    const file = lines[i].file;
+    const start = i;
+    while (i < lines.length && isCode(lines[i]) && lines[i].file === file) i++;
+    const body = lines.slice(start, i);
+    const lang = langFor(file);
+    if (!lang) {
+      for (const l of body) l.spans = l.text ? [{ text: l.text }] : [];
+      continue;
+    }
+    // new side = what the file becomes (context + additions); old side carries
+    // the deletions. Context is coloured from the new side; both are in order.
+    const newSide = body.filter((l) => l.kind !== 'del');
+    const newSpans = highlightBlock(newSide.map((l) => l.text), lang);
+    newSide.forEach((l, k) => (l.spans = newSpans[k]));
+    const oldSide = body.filter((l) => l.kind !== 'add');
+    if (oldSide.some((l) => l.kind === 'del')) {
+      const oldSpans = highlightBlock(oldSide.map((l) => l.text), lang);
+      oldSide.forEach((l, k) => {
+        if (l.kind === 'del') l.spans = oldSpans[k];
+      });
+    }
   }
   return lines;
 }

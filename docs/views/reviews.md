@@ -73,6 +73,12 @@ outside colinear.
 `enter` opens the **annotated diff**: the PR's diff on the left, and beside each line what the agent
 had to say about it. Chat sits along the bottom.
 
+The code is **syntax-highlighted** — TypeScript, Go, Rust, Python, SQL, YAML, Markdown and the
+JS/TS family, by file extension; anything else stays plain. Add and removed stay legible underneath
+it: the `+`/`-` sign and the gutter keep green and red, so highlighting owns only the code itself,
+and a removed line is dimmed whole. Each file is lexed a hunk at a time, so a comment or string that
+runs across several lines is coloured on every one.
+
 ```
 ┌ diff ──────────────────────────────┬──────────────────────────┐
 │     1  fn reconnect(&mut self) {   │                          │

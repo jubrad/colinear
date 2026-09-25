@@ -1,8 +1,8 @@
 # Design: syntax highlighting in the diff view
 
-Status: **spiked** (branch `diff-syntax-highlighting`). Touches `src/core/diff.ts`,
+Status: **implemented** on branch `diff-syntax-highlighting`. Touches `src/core/diff.ts`,
 `src/ui/AnnotatedDiff.tsx`, `src/core/diff.check.ts`, and `src/core/highlight.ts` (new). See
-"Spike results" at the end for what is proven and what production still needs.
+"Implementation" at the end for what shipped and the one limitation that remains.
 
 ## What and why
 
@@ -104,17 +104,19 @@ heuristics to re-scan far enough back that a block comment opened above the view
 everything below; tree-sitter (helix, neovim) parses the whole buffer. A diff hunk is exactly the fragment
 both are working around, and `delta`/`bat` accept the resulting inaccuracy.
 
-We do not have to. **The new-side files are already on disk in the review worktree** — `reviewer.diff`
-and `selfreview.taskDiff` read `git diff <base>...HEAD` out of `review.worktree` / `task.worktree`. So:
+**Correction from implementation.** The design assumed the highlighter could read the new-side file
+from the review worktree. It cannot: highlighting runs in the TUI, which receives only the diff
+*string* over the socket, and the worktree lives on the daemon's machine — a remote daemon puts it out
+of reach entirely. Reading files here would be wrong.
 
-1. For each file in the diff, read the new-side file from the worktree and tokenize it **whole** — one
-   lex per file, exact, no fragment guessing, no `:syntax sync` to invent.
-2. Map each `DiffLine.newLine` to that file's tokens for the line's spans.
-3. **Removed lines have no new-side line.** They are the one approximate case — lex the hunk text alone,
-   or leave them the default foreground. Dimming removed rows whole (§2) makes either acceptable.
-
-For a four-file diff that is four reads and four tokenizes, memoised with the diff. Whole-file is the part
-that matters most, and it is **independent of which tokenizer wins** — worth landing even under a weak lexer.
+So the shipped approach is **per hunk, from the diff string**. A hunk's lines are consecutive, so the
+new-side block (context + additions) and the old-side block (context + deletions) are each tokenized
+whole and cut back apart at the newlines. That colours any multi-line construct **contained in the
+hunk** correctly — the common case, and everything `delta`/`bat` get wrong. The only residue is a
+construct opened *before* the hunk's first line, outside the diff; closing that needs the whole file,
+which only a daemon-side pass (tokenize there, send spans) could supply — a wire-format change worth
+making only if the residue ever bites. Removed lines are lexed from the old-side block and dimmed
+whole (§2), so they cost nothing extra.
 
 ### 4. The tokenizer
 
@@ -177,36 +179,34 @@ Extend `src/core/diff.check.ts` (the file that made the tab fix safe):
 - Whether to gate stage 2 behind a config flag while the colour map settles, or ship dark and iterate.
 
 
-## Spike results
+## Implementation
 
-A working end-to-end spike is on this branch: `bin/check` is green and the demo's TypeScript diff
-renders highlighted (`design/spike/annotated-diff-highlighted.png`) — `const`/`if`/`return`/`this` in
-orange, numbers in blue, comments dim, ordinary identifiers plain, while the `+` sign stays green and
-the blocking anchor stays red in the margin. What each open question turned into:
+Shipped on this branch; `bin/check` is green, including the syntax invariants. The flagship docs
+screenshot (`docs/images/annotated-diff.png`) now shows it: keywords orange, numbers blue, comments
+dim, strings yellow, ordinary identifiers plain, while the `+`/`-` sign and gutter keep green/red.
 
-- **The row model (stage 1) is done.** `VisualRow` carries `spans: Span[]`; `toVisualRows` slices them
-  in step with the text wrap via `sliceSpans`; `DiffRow` maps spans to `<Text>` with the colour map;
-  `onCursor` drops colour; a removed row is dimmed whole. `Span`/`TokenKind` live in `diff.ts` (still
-  dependency-free). Tokenizing is memoised per diff alongside `parseDiff`, never per frame.
-- **Prism under NodeNext ESM works** — the flagged #1 risk. `import Prism from 'prismjs'` gives the
-  singleton; grammar components load synchronously with `createRequire` (no top-level await, so
-  `highlightLine` stays sync inside the render memo); `Prism.tokenize` returns the token tree, flattened
-  to spans that concatenate losslessly. `prismjs` is a runtime dep, `@types/prismjs` a dev dep.
-- **The check is the safety net.** `diff.check.ts` now proves, at every pane width, that a row's spans
-  concatenate to its text and that their widths sum to `drawnColumns` (the tab guard, restated on
-  spans), that `sliceSpans` is lossless at every cut point, and that the tokenizer classifies a
-  keyword/string/comment while staying lossless. A one-character mis-cut fails it four ways.
+- **Row model.** `VisualRow` carries `spans: Span[]`; `toVisualRows` slices them in step with the
+  text wrap via `sliceSpans`; `DiffRow` maps spans to `<Text>`; `onCursor` drops colour; a removed row
+  is dimmed whole. `Span`/`TokenKind` live in `diff.ts`, still dependency-free. Tokenizing is memoised
+  per diff alongside `parseDiff`, never per frame.
+- **Per-hunk tokenizing** (see §3's correction) via Prism, which works under NodeNext ESM: `import
+  Prism from 'prismjs'` gives the singleton, grammar components load synchronously with `createRequire`
+  (no top-level await, so highlighting stays sync in the render memo), and the token tree flattens to
+  spans that concatenate losslessly. `prismjs` is a runtime dep, `@types/prismjs` a dev dep.
+- **Grammars load eagerly** in dependency order (bases first) — ~10ms once at TUI start, so no lazy
+  loading needed. Languages: TypeScript, TSX, JavaScript, JSX, Python, Go, Rust, SQL, YAML, Markdown.
+  Markdown maps onto the existing five kinds (heading→keyword, code→string, link→number, emphasis→type),
+  so the palette is untouched. An unlisted extension renders plain.
+- **The check** proves, at every pane width, that a row's spans concatenate to its text and their
+  widths sum to `drawnColumns` (the tab guard, on spans), that `sliceSpans` is lossless at every cut,
+  that a multi-line comment colours every line (per-hunk), and that the tokenizer classifies
+  keyword/string/comment/markdown/tsx losslessly. A one-character mis-cut fails it four ways.
 
-What the spike deliberately left for production:
+Deliberately not done:
 
-- **Whole-file tokenizing (§3).** The spike lexes each line's own text (fragment), like `delta`/`bat`;
-  it is wrong exactly at a string or comment opened above the hunk. The new-side file is in the review
-  worktree, so the fix reads and lexes it whole and maps `newLine` — and touches only `highlight.ts`,
-  because the span shape is identical.
-- **Lazy, full grammar set.** The spike loads a fixed set once at import, now
-  **dependency-ordered** so a grammar's base loads first — TypeScript, TSX, JavaScript, JSX, Python,
-  Go, Rust, SQL, YAML, and **Markdown** (headings→keyword, code spans→string, links→number, bold/italic
-  →type, all mapped onto the existing five kinds, no new colours). Production lazy-loads per language
-  and adds HCL etc. The earlier `.tsx`-renders-plain finding was this ordering bug and is fixed.
-- **The colour map is a first cut** — the §2 table, unreviewed against light/dark. Removed-line
-  dimming is on; the token→colour choices are the cheap part to change.
+- **The colour map** is the §2 table, unreviewed against light and dark — the one subjective choice,
+  and the cheap part to change.
+- **Whole-file (across-hunk) correctness** and **HCL/more grammars** — the residue in §3; a
+  daemon-side pass if it ever matters.
+- **No config flag.** Highlighting ships on: it is presentational, degrades to plain on any unknown
+  language, and the check guards losslessness. A disable switch is a trivial follow-up if wanted.

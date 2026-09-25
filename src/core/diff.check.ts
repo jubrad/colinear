@@ -183,6 +183,37 @@ for (const paneWidth of [60, 80, 100, 120, 183, 300]) {
   check('tsx classifies a keyword', spans.some((s) => s.token === 'keyword'), JSON.stringify(spans).slice(0, 80));
 }
 
+// per-hunk lexing: a block comment across two added lines colours both — the
+// whole point of lexing the hunk rather than each line alone
+{
+  const diff = [
+    'diff --git a/x.ts b/x.ts',
+    'index 1..2 100644',
+    '--- a/x.ts',
+    '+++ b/x.ts',
+    '@@ -1,0 +1,3 @@',
+    '+/* a comment that',
+    '+   runs onto a second line */',
+    '+const x = 1;',
+    '',
+  ].join('\n');
+  const adds = highlightDiff(parseDiff(diff)).filter((l) => l.kind === 'add');
+  const commentLines = adds.slice(0, 2);
+  check(
+    'a multi-line comment colours every line',
+    commentLines.every((l) => (l.spans ?? []).every((sp) => sp.token === 'comment')),
+    JSON.stringify(commentLines.map((l) => (l.spans ?? []).map((sp) => sp.token))),
+  );
+  check(
+    'the code line after it lexes as code, not comment',
+    (adds[2].spans ?? []).some((sp) => sp.token === 'keyword'),
+    JSON.stringify(adds[2].spans),
+  );
+  for (const l of adds) {
+    check('per-hunk spans stay lossless', concat(l.spans ?? []) === l.text, JSON.stringify(l.text));
+  }
+}
+
 // an unknown language renders plain — never worse than today
 {
   const spans = highlightLine('some plain text', undefined);

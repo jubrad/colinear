@@ -3,7 +3,8 @@
 Alias: `selfreview`. Argument: a task identifier (`:diff CLO-203`), or `v` on a task whose draft PR
 is open.
 
-The [annotated diff](reviews.md#reading-it-against-the-code) pointed at a task's own branch. Same
+The [annotated diff](reviews.md#reading-it-against-the-code) pointed at a task's own branch —
+syntax-highlighted the same way. Same
 two panes, same margin, same `.colinear-review.md` behind it — a finding written here is a finding
 in every sense. What differs is where it goes: **`p` hands the list to the agent that wrote the
 code** instead of posting it to an author.
