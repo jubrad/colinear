@@ -1,7 +1,8 @@
 # Design: syntax highlighting in the diff view
 
-Status: proposed. Owner: unassigned. Touches `src/core/diff.ts`, `src/ui/AnnotatedDiff.tsx`,
-`src/core/diff.check.ts`, and one new tokenizer module. Not yet scheduled.
+Status: **spiked** (branch `diff-syntax-highlighting`). Touches `src/core/diff.ts`,
+`src/ui/AnnotatedDiff.tsx`, `src/core/diff.check.ts`, and `src/core/highlight.ts` (new). See
+"Spike results" at the end for what is proven and what production still needs.
 
 ## What and why
 
@@ -174,3 +175,35 @@ Extend `src/core/diff.check.ts` (the file that made the tab fix safe):
 - Token→colour map in light vs dark, and whether `function`/`type` earn a colour or read better plain.
 - Removed-line tokenizing: hunk-fragment lex vs default foreground — decide once dimming is on screen.
 - Whether to gate stage 2 behind a config flag while the colour map settles, or ship dark and iterate.
+
+
+## Spike results
+
+A working end-to-end spike is on this branch: `bin/check` is green and the demo's TypeScript diff
+renders highlighted (`design/spike/annotated-diff-highlighted.png`) — `const`/`if`/`return`/`this` in
+orange, numbers in blue, comments dim, ordinary identifiers plain, while the `+` sign stays green and
+the blocking anchor stays red in the margin. What each open question turned into:
+
+- **The row model (stage 1) is done.** `VisualRow` carries `spans: Span[]`; `toVisualRows` slices them
+  in step with the text wrap via `sliceSpans`; `DiffRow` maps spans to `<Text>` with the colour map;
+  `onCursor` drops colour; a removed row is dimmed whole. `Span`/`TokenKind` live in `diff.ts` (still
+  dependency-free). Tokenizing is memoised per diff alongside `parseDiff`, never per frame.
+- **Prism under NodeNext ESM works** — the flagged #1 risk. `import Prism from 'prismjs'` gives the
+  singleton; grammar components load synchronously with `createRequire` (no top-level await, so
+  `highlightLine` stays sync inside the render memo); `Prism.tokenize` returns the token tree, flattened
+  to spans that concatenate losslessly. `prismjs` is a runtime dep, `@types/prismjs` a dev dep.
+- **The check is the safety net.** `diff.check.ts` now proves, at every pane width, that a row's spans
+  concatenate to its text and that their widths sum to `drawnColumns` (the tab guard, restated on
+  spans), that `sliceSpans` is lossless at every cut point, and that the tokenizer classifies a
+  keyword/string/comment while staying lossless. A one-character mis-cut fails it four ways.
+
+What the spike deliberately left for production:
+
+- **Whole-file tokenizing (§3).** The spike lexes each line's own text (fragment), like `delta`/`bat`;
+  it is wrong exactly at a string or comment opened above the hunk. The new-side file is in the review
+  worktree, so the fix reads and lexes it whole and maps `newLine` — and touches only `highlight.ts`,
+  because the span shape is identical.
+- **Lazy, full grammar set.** The spike loads a fixed set (ts/tsx/js/py/go/rust/sql/yaml) once at
+  import; production lazy-loads per language and adds HCL etc.
+- **The colour map is a first cut** — the §2 table, unreviewed against light/dark. Removed-line
+  dimming is on; the token→colour choices are the cheap part to change.
