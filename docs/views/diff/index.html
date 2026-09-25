@@ -1274,11 +1274,11 @@
 <h1 id="diff-read-your-own-agents-work"><code>:diff</code> — read your own agent's work<a class="headerlink" href="#diff-read-your-own-agents-work" title="Permanent link">&para;</a></h1>
 <p>Alias: <code>selfreview</code>. Argument: a task identifier (<code>:diff CLO-203</code>), or <code>v</code> on a task whose draft PR
 is open.</p>
-<p>The <a href="../reviews/#reading-it-against-the-code">annotated diff</a> pointed at a task's own branch —
-syntax-highlighted the same way. Same
-two panes, same margin, same <code>.colinear-review.md</code> behind it — a finding written here is a finding
-in every sense. What differs is where it goes: <strong><code>p</code> hands the list to the agent that wrote the
-code</strong> instead of posting it to an author.</p>
+<p>The <a href="../reviews/#reading-it-against-the-code">annotated diff</a> pointed at a task's own branch — the
+same in every way: syntax-highlighted, full-screen with a tab per changed file (<code>]</code>/<code>[</code> to hop, <code>f</code>
+for the header), one pane for the level and the comment (<code>tab</code> between them), same margin, same
+<code>.colinear-review.md</code> behind it. A finding written here is a finding in every sense. What differs is
+where it goes: <strong><code>p</code> hands the list to the agent that wrote the code</strong> instead of posting it to an author.</p>
 <p><a class="glightbox" href="../../images/task-diff.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The same view against a task's own branch: a consider finding beside the line it is about, and a footer whose keys end in R review and p hand back" src="../../images/task-diff.png" /></a></p>
 <table>
 <thead>
@@ -1297,8 +1297,12 @@ code</strong> instead of posting it to an author.</p>
 <td>mark a block, so a comment covers the passage rather than a line</td>
 </tr>
 <tr>
+<td><code>]</code> <code>[</code></td>
+<td>hop to the next / previous changed file · <code>f</code> full screen</td>
+</tr>
+<tr>
 <td><code>e</code> <code>i</code></td>
-<td>write a comment · write an annotation — the same picker as a PR review</td>
+<td>write a comment · write an annotation — level and comment in one pane, <code>tab</code> between</td>
 </tr>
 <tr>
 <td><code>a</code></td>

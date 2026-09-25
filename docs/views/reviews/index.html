@@ -1667,7 +1667,7 @@ onto the card. <strong>Nothing is posted.</strong></p>
 <code>claude --resume</code> — the same handles a task shows, and the way back into a review session from
 outside colinear.</p>
 <h2 id="reading-it-against-the-code">Reading it against the code<a class="headerlink" href="#reading-it-against-the-code" title="Permanent link">&para;</a></h2>
-<p><a class="glightbox" href="../../images/annotated-diff.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The annotated diff: a blocking finding sitting in the right pane beside the line it is about, the line marked in the gutter, with the PR-wide comment and the agent chat below" src="../../images/annotated-diff.png" /></a></p>
+<p><a class="glightbox" href="../../images/annotated-diff.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The annotated diff full-screen: a file-tab strip across the top with the current file lit, the diff on the left with a blocking finding beside the line it is about, and the PR-wide comment and agent chat below" src="../../images/annotated-diff.png" /></a></p>
 <p><code>enter</code> opens the <strong>annotated diff</strong>: the PR's diff on the left, and beside each line what the agent
 had to say about it. Chat sits along the bottom.</p>
 <p>The code is <strong>syntax-highlighted</strong> — TypeScript, Go, Rust, Python, SQL, YAML, Markdown and the
@@ -1675,6 +1675,11 @@ JS/TS family, by file extension; anything else stays plain. Add and removed stay
 it: the <code>+</code>/<code>-</code> sign and the gutter keep green and red, so highlighting owns only the code itself,
 and a removed line is dimmed whole. Each file is lexed a hunk at a time, so a comment or string that
 runs across several lines is coloured on every one.</p>
+<p>The view <strong>fills the screen</strong> — the board's header steps aside to give the diff the room; <code>f</code> brings
+it back if you want the context bar. Across the top is a <strong>tab per changed file</strong>, the one you are in
+lit; <code>]</code> and <code>[</code> hop to the next and previous file, and the strip tracks your scroll so it always
+says where you are (<code>2/5</code>). It opens at the <strong>top of the diff</strong> — <code>n</code>/<code>N</code> still walk what the agent
+flagged, from wherever you are.</p>
 <div class="highlight"><pre><span></span><code>┌ diff ──────────────────────────────┬──────────────────────────┐
 │     1  fn reconnect(&amp;mut self) {   │                          │
 │ ▍  42 +    for _ in 0..RETRIES {   │ ▌ This retry loop has no │
@@ -1736,20 +1741,18 @@ and anything else returns. A comment about the PR as a whole has no line to sit 
 its own line under both panes.</p>
 <p>The chat along the bottom is one line, so <strong>enter sends it</strong>.</p>
 <p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours.</p>
-<p><code>e</code> on any line — whether or not something is already there — asks <strong>what kind</strong> first:</p>
-<div class="highlight"><pre><span></span><code>▸ blocking   would request changes over it
-  consider   worth a second look
-  nit        optional polish
-  praise     worth saying out loud
-  annotation explains the code — never posted
-</code></pre></div>
-<p><code>j</code>/<code>k</code> or the kind's first letter, <code>enter</code> to write it. Editing something that already exists
-pre-selects what it is, so changing your mind about severity is the same keystroke as changing the
-words. Then the editor names the kind <em>and</em> what happens to it — "goes to the author when you post",
-or "stays in colinear — never posted" — because that is the difference that matters.</p>
-<p><code>ctrl+d</code> saves, an empty comment removes it, and <code>d</code> drops one outright. <strong><code>i</code> skips the picker</strong> and
-goes straight to an annotation, which is the common case while reading unfamiliar code. Every edit rewrites the <code>``findings fence in the review document,
-so what you post and what the agent sees never diverge — a later chat turn reads your wording, and</code>p` posts it.</p>
+<p><code>e</code> on any line opens one pane with <strong>both</strong> the level and the comment in it — you start typing
+straight away, and <code>tab</code> moves the keyboard up to the level row (blocking · consider · nit · praise ·
+annotation) and back down to the text. No separate picker step: set the level before, during or after
+writing, whichever you reach for.</p>
+<p><a class="glightbox" href="../../images/review-compose.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The compose pane: the level row with blocking selected above the comment being typed, the target line lit in the diff" src="../../images/review-compose.png" /></a></p>
+<p>The pane names the level and what happens to it — "goes to the author when you post", or "stays in
+colinear — never posted" — because that is the difference that matters. Editing an existing finding
+opens with its level already selected. <code>ctrl+d</code> saves, an empty comment removes it, and <code>d</code> drops one
+outright. <strong><code>i</code></strong> opens the same pane pre-set to an annotation — the common case while reading
+unfamiliar code — still one <code>tab</code> from any other level. Every edit rewrites the <code>``findings fence in
+the review document, so what you post and what the agent sees never diverge — a later chat turn reads
+your wording, and</code>p` posts it.</p>
 <h3 id="the-keys-in-one-place">The keys, in one place<a class="headerlink" href="#the-keys-in-one-place" title="Permanent link">&para;</a></h3>
 <p>The flow above spread across a few pages; this is the whole of it. Everything except <code>p</code> and <code>tab</code>
 acts on the line under the cursor, or on the marked block when there is one.</p>
@@ -1770,6 +1773,10 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 <td>the next and previous line something is anchored to</td>
 </tr>
 <tr>
+<td><code>]</code> <code>[</code></td>
+<td>hop to the next / previous changed file</td>
+</tr>
+<tr>
 <td><code>enter</code></td>
 <td>read the current finding in full, scrolling inside it</td>
 </tr>
@@ -1779,11 +1786,11 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 </tr>
 <tr>
 <td><code>e</code></td>
-<td>write a finding, choosing the kind first</td>
+<td>write a finding — level and comment in one pane, <code>tab</code> between them</td>
 </tr>
 <tr>
 <td><code>i</code></td>
-<td>write an annotation directly, skipping the picker</td>
+<td>the same pane, pre-set to an annotation</td>
 </tr>
 <tr>
 <td><code>a</code></td>
@@ -1803,7 +1810,11 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 </tr>
 <tr>
 <td><code>tab</code></td>
-<td>talk to the reviewing agent · <code>esc</code> back to the diff, then out</td>
+<td>talk to the reviewing agent · in compose, switch level ⇄ comment · <code>esc</code> back to the diff, then out</td>
+</tr>
+<tr>
+<td><code>f</code></td>
+<td>full screen on/off (the header)</td>
 </tr>
 </tbody>
 </table>
