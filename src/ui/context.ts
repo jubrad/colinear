@@ -39,6 +39,9 @@ export interface AppCtx {
   /** operator preferences that outlive the run (the daemon persists them) */
   ui: UiState;
   setUi: (patch: Partial<UiState>) => void;
+  /** a view has claimed the whole terminal: the app drops its header for it */
+  fullScreen: boolean;
+  setFullScreen: (on: boolean) => void;
 }
 
 export const AppContext = createContext<AppCtx>(null as unknown as AppCtx);
@@ -61,15 +64,17 @@ export function useColinear(): AppCtx {
 export function viewPaneSize(
   size: { columns: number; rows: number },
   cmdOpen = false,
+  fullScreen = false,
 ): { width: number; height: number } {
+  // full screen reclaims the 4-row header the app otherwise draws above the view
   return {
     width: Math.max(20, size.columns - 6),
-    height: Math.max(6, size.rows - 8 - (cmdOpen ? 4 : 0)),
+    height: Math.max(6, size.rows - (fullScreen ? 4 : 8) - (cmdOpen ? 4 : 0)),
   };
 }
 
 /** The same, for a view that can just ask. */
 export function useViewSize(): { width: number; height: number } {
-  const { size, cmdOpen } = useColinear();
-  return viewPaneSize(size, cmdOpen);
+  const { size, cmdOpen, fullScreen } = useColinear();
+  return viewPaneSize(size, cmdOpen, fullScreen);
 }

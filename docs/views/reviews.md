@@ -68,7 +68,7 @@ outside colinear.
 
 ## Reading it against the code
 
-![The annotated diff: a blocking finding sitting in the right pane beside the line it is about, the line marked in the gutter, with the PR-wide comment and the agent chat below](../images/annotated-diff.png)
+![The annotated diff full-screen: a file-tab strip across the top with the current file lit, the diff on the left with a blocking finding beside the line it is about, and the PR-wide comment and agent chat below](../images/annotated-diff.png)
 
 `enter` opens the **annotated diff**: the PR's diff on the left, and beside each line what the agent
 had to say about it. Chat sits along the bottom.
@@ -78,6 +78,12 @@ JS/TS family, by file extension; anything else stays plain. Add and removed stay
 it: the `+`/`-` sign and the gutter keep green and red, so highlighting owns only the code itself,
 and a removed line is dimmed whole. Each file is lexed a hunk at a time, so a comment or string that
 runs across several lines is coloured on every one.
+
+The view **fills the screen** — the board's header steps aside to give the diff the room; `f` brings
+it back if you want the context bar. Across the top is a **tab per changed file**, the one you are in
+lit; `]` and `[` hop to the next and previous file, and the strip tracks your scroll so it always
+says where you are (`2/5`). It opens at the **top of the diff** — `n`/`N` still walk what the agent
+flagged, from wherever you are.
 
 ```
 ┌ diff ──────────────────────────────┬──────────────────────────┐
@@ -152,25 +158,20 @@ The chat along the bottom is one line, so **enter sends it**.
 
 **The right pane is editable**, because the agent's comment is a draft of yours.
 
-`e` on any line — whether or not something is already there — asks **what kind** first:
+`e` on any line opens one pane with **both** the level and the comment in it — you start typing
+straight away, and `tab` moves the keyboard up to the level row (blocking · consider · nit · praise ·
+annotation) and back down to the text. No separate picker step: set the level before, during or after
+writing, whichever you reach for.
 
-```
-▸ blocking   would request changes over it
-  consider   worth a second look
-  nit        optional polish
-  praise     worth saying out loud
-  annotation explains the code — never posted
-```
+![The compose pane: the level row with blocking selected above the comment being typed, the target line lit in the diff](../images/review-compose.png)
 
-`j`/`k` or the kind's first letter, `enter` to write it. Editing something that already exists
-pre-selects what it is, so changing your mind about severity is the same keystroke as changing the
-words. Then the editor names the kind *and* what happens to it — "goes to the author when you post",
-or "stays in colinear — never posted" — because that is the difference that matters.
-
-`ctrl+d` saves, an empty comment removes it, and `d` drops one outright. **`i` skips the picker** and
-goes straight to an annotation, which is the common case while reading unfamiliar code. Every edit rewrites the ```findings fence in the review document,
-so what you post and what the agent sees never diverge — a later chat turn reads your wording, and
-`p` posts it.
+The pane names the level and what happens to it — "goes to the author when you post", or "stays in
+colinear — never posted" — because that is the difference that matters. Editing an existing finding
+opens with its level already selected. `ctrl+d` saves, an empty comment removes it, and `d` drops one
+outright. **`i`** opens the same pane pre-set to an annotation — the common case while reading
+unfamiliar code — still one `tab` from any other level. Every edit rewrites the ```findings fence in
+the review document, so what you post and what the agent sees never diverge — a later chat turn reads
+your wording, and `p` posts it.
 
 ### The keys, in one place
 
@@ -181,15 +182,17 @@ acts on the line under the cursor, or on the marked block when there is one.
 |---|---|
 | `j`/`k` arrows | move a line · `space`/`pageup` a page · `g`/`G` top and bottom |
 | `n` `N` | the next and previous line something is anchored to |
+| `]` `[` | hop to the next / previous changed file |
 | `enter` | read the current finding in full, scrolling inside it |
 | `v` | mark a block — move to grow it, `v` or `esc` to drop it |
-| `e` | write a finding, choosing the kind first |
-| `i` | write an annotation directly, skipping the picker |
+| `e` | write a finding — level and comment in one pane, `tab` between them |
+| `i` | the same pane, pre-set to an annotation |
 | `a` | ask an agent what the marked lines do — the answer lands as an annotation |
 | `d` | drop the finding here, block and all |
 | `ctrl+d` | save what you are writing · an empty comment removes it |
 | `p` post · `A` approve · `X` request changes — the same as from the list |
-| `tab` | talk to the reviewing agent · `esc` back to the diff, then out |
+| `tab` | talk to the reviewing agent · in compose, switch level ⇄ comment · `esc` back to the diff, then out |
+| `f` | full screen on/off (the header) |
 
 The task-side view, [`:diff`](diff.md), has the same keys against your own agent's branch — the one
 difference being where `p` sends them.
