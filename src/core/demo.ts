@@ -309,6 +309,21 @@ index 0000000..8c2e5b7 100644
 +  limiter.take('acme');
 +  expect(limiter.remaining('acme')).toBe(0);
 +});
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index e1a2b3c..f4d5e6a 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,4 +1,10 @@
+ # Changelog
+ 
++## Unreleased
++
++- **Rate limiting** per workspace: an over-limit digest is skipped, not queued.
++  See [the limiter](docs/limiter.md) for the window math.
++
+ ## 0.4.0
+ 
+ - Weekly digest of completed work.
 `;
 }
 

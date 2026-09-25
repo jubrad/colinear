@@ -165,6 +165,24 @@ for (const paneWidth of [60, 80, 100, 120, 183, 300]) {
   check('the string literal is coloured as a string', str?.token === 'string', JSON.stringify(str));
 }
 
+// markdown: a heading, a code span and a link — mapped onto the shared kinds
+{
+  const heading = highlightLine('## Rate limiting', 'markdown');
+  check('markdown heading is a keyword', heading.some((s) => s.token === 'keyword'), JSON.stringify(heading));
+  const body = highlightLine('Set the `limit` and see [docs](http://x).', 'markdown');
+  check('markdown is lossless', concat(body) === 'Set the `limit` and see [docs](http://x).', concat(body));
+  const kinds = new Set(body.map((s) => s.token).filter(Boolean));
+  check('markdown code span is a string', kinds.has('string'), [...kinds].join(','));
+  check('markdown link is a number', kinds.has('number'), [...kinds].join(','));
+}
+
+// the load-order fix: tsx resolves rather than silently rendering plain
+{
+  const spans = highlightLine('const App = () => <div className="x">{n}</div>;', 'tsx');
+  check('tsx is lossless', concat(spans) === 'const App = () => <div className="x">{n}</div>;', concat(spans));
+  check('tsx classifies a keyword', spans.some((s) => s.token === 'keyword'), JSON.stringify(spans).slice(0, 80));
+}
+
 // an unknown language renders plain — never worse than today
 {
   const spans = highlightLine('some plain text', undefined);

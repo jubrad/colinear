@@ -41,11 +41,35 @@ const LANGS: Record<string, string> = {
   sql: 'sql',
   yaml: 'yaml',
   yml: 'yaml',
+  md: 'markdown',
+  markdown: 'markdown',
 };
+
+/**
+ * Grammars to register, **dependencies first**. A Prism component throws when a
+ * grammar it extends is not loaded yet — `markdown` needs `markup`, `tsx` needs
+ * `jsx` needs `javascript` needs `clike` — and the throw is swallowed below, so
+ * a wrong order silently drops a language (the spike shipped with `.tsx` plain
+ * for exactly this reason). Base grammars lead so the dependents resolve.
+ */
+const GRAMMARS = [
+  'markup',
+  'clike',
+  'javascript',
+  'typescript',
+  'jsx',
+  'tsx',
+  'python',
+  'go',
+  'rust',
+  'sql',
+  'yaml',
+  'markdown',
+];
 
 // load each grammar once; a missing component must never take the view down
 const loaded = new Set<string>();
-for (const lang of new Set(Object.values(LANGS))) {
+for (const lang of GRAMMARS) {
   try {
     require(`prismjs/components/prism-${lang}.js`);
     loaded.add(lang);
@@ -75,6 +99,22 @@ function kindOf(prismType: string): TokenKind | undefined {
     case 'class-name':
     case 'builtin':
       return 'type';
+    // markdown, mapped onto the same five kinds rather than new colours
+    case 'title':
+      return 'keyword';
+    case 'code':
+    case 'code-snippet':
+      return 'string';
+    case 'url':
+    case 'url-reference':
+      return 'number';
+    case 'bold':
+    case 'italic':
+      return 'type';
+    case 'blockquote':
+    case 'hr':
+    case 'strike':
+      return 'comment';
     default:
       return undefined;
   }

@@ -203,7 +203,10 @@ What the spike deliberately left for production:
   it is wrong exactly at a string or comment opened above the hunk. The new-side file is in the review
   worktree, so the fix reads and lexes it whole and maps `newLine` — and touches only `highlight.ts`,
   because the span shape is identical.
-- **Lazy, full grammar set.** The spike loads a fixed set (ts/tsx/js/py/go/rust/sql/yaml) once at
-  import; production lazy-loads per language and adds HCL etc.
+- **Lazy, full grammar set.** The spike loads a fixed set once at import, now
+  **dependency-ordered** so a grammar's base loads first — TypeScript, TSX, JavaScript, JSX, Python,
+  Go, Rust, SQL, YAML, and **Markdown** (headings→keyword, code spans→string, links→number, bold/italic
+  →type, all mapped onto the existing five kinds, no new colours). Production lazy-loads per language
+  and adds HCL etc. The earlier `.tsx`-renders-plain finding was this ordering bug and is fixed.
 - **The colour map is a first cut** — the §2 table, unreviewed against light/dark. Removed-line
   dimming is on; the token→colour choices are the cheap part to change.
