@@ -23,7 +23,7 @@ const check = (name: string, ok: boolean, detail = '') => {
   if (!ok) failures.push(`${name}${detail ? ` — ${detail}` : ''}`);
 };
 
-/** Mirrors AnnotatedDiff: marker + 4-wide number + space + sign before the code. */
+/** Mirrors AnnotatedDiff: marker + sign + 4-wide number + space before the code. */
 const GUTTER = 7;
 
 /**

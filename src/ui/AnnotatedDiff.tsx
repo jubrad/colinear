@@ -736,10 +736,12 @@ function DiffRow(props: {
       <Text color={selected ? theme.selection : annotated ? (info ? theme.annotation : theme.key) : undefined}>
         {selected ? '▏' : annotated ? (info ? '│' : '▍') : ' '}
       </Text>
+      {/* the +/- sits left of the number: that gutter has the room, and it puts
+          "what changed" closest to the eye scanning down the margin */}
+      <Text color={onCursor ? undefined : signColor}>{sign}</Text>
       <Text dimColor={!selected} color={selected ? theme.selection : undefined} bold={selected}>
         {num}{' '}
       </Text>
-      <Text color={onCursor ? undefined : signColor}>{sign}</Text>
       {row.spans.map((sp, i) => (
         <Text
           key={i}
