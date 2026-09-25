@@ -112,6 +112,7 @@ export function App(props: {
     return [{ name: store.list().length ? 'board' : 'issues', key: 0 }];
   });
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [fullScreen, setFullScreen] = useState(false);
   const [toast, setToastState] = useState<{ text: string; kind: ToastKind; at: number }>();
   const [viewer, setViewer] = useState<{ id: string; displayName: string }>();
   const [teams, setTeams] = useState<Scope[]>([]);
@@ -205,8 +206,10 @@ export function App(props: {
       },
       ui,
       setUi,
+      fullScreen,
+      setFullScreen,
     }),
-    [cfg, dispatcher, onGc, onGcProgress, onPlanChatReady, onAgents, onReviewDiff, onTaskDiff, onCreating, onLogTail, onChannels, onChannelHistory, viewer, teams, size, now, navigate, back, exit, cmdOpen, ui, setUi],
+    [cfg, dispatcher, onGc, onGcProgress, onPlanChatReady, onAgents, onReviewDiff, onTaskDiff, onCreating, onLogTail, onChannels, onChannelHistory, viewer, teams, size, now, navigate, back, exit, cmdOpen, ui, setUi, fullScreen],
   );
 
   useInput(
@@ -267,7 +270,9 @@ export function App(props: {
           rows (equality included) — one spare row keeps it on the incremental
           diff path, which is what stops the flicker */}
       <Box flexDirection="column" width={size.columns} height={size.rows - 1} paddingX={1} overflow="hidden">
-        <Header info={info} keys={[...viewDef.keys, ...GLOBAL_KEYS]} width={size.columns - 2} version={VERSION} />
+        {!fullScreen && (
+          <Header info={info} keys={[...viewDef.keys, ...GLOBAL_KEYS]} width={size.columns - 2} version={VERSION} />
+        )}
         {cmdOpen && (
           <Box borderStyle="round" borderColor={theme.key} paddingX={1}>
             <CommandBar
@@ -295,7 +300,8 @@ export function App(props: {
           // hard height: flex-basis is content size in yoga, so a grown pane
           // would otherwise push the whole app taller than the terminal and
           // scroll the header off the top
-          height={Math.max(8, size.rows - 4 - 2 - (cmdOpen ? 4 : 0))}
+          // full screen has no header above it, so the view keeps those 4 rows
+          height={Math.max(8, size.rows - (fullScreen ? 0 : 4) - 2 - (cmdOpen ? 4 : 0))}
           overflow="hidden"
           borderStyle="round"
           borderColor={theme.border}

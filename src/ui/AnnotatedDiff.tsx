@@ -1,11 +1,12 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
-import { anchorKey, expandTabs, layoutMargin, parseDiff, toVisualRows, type DiffLine, type TokenKind, type VisualRow } from '../core/diff.js';
+import { anchorKey, expandTabs, filesIn, layoutMargin, parseDiff, toVisualRows, type DiffLine, type TokenKind, type VisualRow } from '../core/diff.js';
 import { highlightDiff } from '../core/highlight.js';
 import type { ChatTurn, Review, ReviewFinding, Severity } from '../core/types.js';
 import { spinner } from './format.js';
 import { TextArea } from './TextArea.js';
 import { theme } from '../theme.js';
+import { useColinear } from './context.js';
 
 const SEVERITY_COLOR: Record<string, string> = {
   blocking: theme.err,
@@ -16,7 +17,7 @@ const SEVERITY_COLOR: Record<string, string> = {
   info: theme.annotation,
 };
 
-type Focus = 'diff' | 'severity' | 'edit' | 'chat' | 'read';
+type Focus = 'diff' | 'compose' | 'chat' | 'read';
 
 /**
  * What a finding can be, in the order you are offered it — and what each one
@@ -90,13 +91,23 @@ export function AnnotatedDiff(props: {
   onClose: () => void;
 }) {
   const { review, diff, width, height, busy, now, onSend, onEditFinding, onExplain, onPost, onReview, onClose } = props;
+  const { fullScreen, setFullScreen } = useColinear();
+  // the annotated diff wants the room: claim the whole terminal while it is open,
+  // and give it back on the way out. `f` toggles the header back if you want it.
+  useEffect(() => {
+    setFullScreen(true);
+    return () => setFullScreen(false);
+  }, [setFullScreen]);
+
   const [cursor, setCursor] = useState(0);
   const [scroll, setScroll] = useState(0);
   const [focus, setFocus] = useState<Focus>('diff');
   const [draft, setDraft] = useState('');
-  /** which kind the editor is writing: a comment to send, or an annotation that never is */
-  const [editAs, setEditAs] = useState<Severity | undefined>(undefined);
   const [kindIdx, setKindIdx] = useState(1);
+  /** in the compose pane, which half has the keyboard — the level row or the text */
+  const [composeFocus, setComposeFocus] = useState<'kind' | 'text'>('text');
+  /** the kind being written, read live off the selector */
+  const editAs: Severity = KINDS[kindIdx].severity;
   /** where a visual selection started, in diff rows; null when not selecting */
   const [markRow, setMarkRow] = useState<number | null>(null);
   /**
@@ -118,6 +129,8 @@ export function AnnotatedDiff(props: {
   const codeWidth = Math.max(8, Math.floor(width * 0.62) - 11);
   /** what is actually drawn — long lines wrap, so a row is not always a line */
   const lines = useMemo(() => toVisualRows(parsed, codeWidth), [parsed, codeWidth]);
+  /** files changed, in diff order — the tabs across the top */
+  const files = useMemo(() => filesIn(parsed), [parsed]);
 
   /** file:line → what is anchored there. `info` entries are annotations, the rest are comments. */
   const byLine = useMemo(() => {
@@ -175,7 +188,13 @@ export function AnnotatedDiff(props: {
   // review records what it was read at. They are only comparable when both are
   // present, which excludes a task's own diff — it has no upstream head to move.
   const behind = Boolean(review.headSha && review.reviewedSha && review.headSha !== review.reviewedSha);
-  const paneHeight = Math.max(4, height - chatRows - 2 - Math.max(1, aboutLines.length) - (behind ? 1 : 0));
+  // the file-tab strip is a row like the title and footer: subtract it here, or
+  // the panes overflow by one and Ink paints the overflow over the title
+  // (DESIGN.md rendering gotchas)
+  const paneHeight = Math.max(
+    4,
+    height - chatRows - 2 - Math.max(1, aboutLines.length) - (behind ? 1 : 0) - (files.length ? 1 : 0),
+  );
   const diffWidth = Math.max(30, Math.floor(width * 0.62));
   const noteWidth = width - diffWidth - 3;
   // What a margin row has left for words: the pane's border and padding (4),
@@ -191,6 +210,8 @@ export function AnnotatedDiff(props: {
   }, [cursor, paneHeight]);
 
   const current = lines[cursor]?.line;
+  // the changed file the cursor is in, and its place in the tab strip
+  const fileIdx = current ? Math.max(0, files.indexOf(current.file)) : 0;
   const anchor =
     current?.newLine !== undefined ? { file: current.file, line: current.newLine } : undefined;
   const finding = anchor ? byLine.get(anchorKey(anchor.file, anchor.line)) : undefined;
@@ -289,14 +310,16 @@ export function AnnotatedDiff(props: {
     };
   }, [anchor?.file, anchor?.line, markRow, lines]);
 
-  // open on the first thing the agent flagged rather than on a file header:
-  // the point of this view is the annotations, so start at one
-  const [landed, setLanded] = useState(false);
-  useEffect(() => {
-    if (landed || !annotatedRows.length) return;
-    setCursor(annotatedRows[0]);
-    setLanded(true);
-  }, [annotatedRows, landed]);
+  // start at the top of the diff; n/N walk what the agent flagged from there
+  /** cursor to the first row of the next/previous changed file — the tab hop */
+  const hopFile = (dir: 1 | -1) => {
+    if (!files.length || !current) return;
+    const idx = files.indexOf(current.file);
+    const next = Math.min(files.length - 1, Math.max(0, idx + dir));
+    if (next === idx) return;
+    const row = lines.findIndex((r) => r.line.file === files[next]);
+    if (row !== -1) setCursor(row);
+  };
 
   const jump = (dir: 1 | -1) => {
     if (!annotatedRows.length) return;
@@ -308,25 +331,24 @@ export function AnnotatedDiff(props: {
   };
 
   useInput((input, key) => {
-    if (focus === 'severity') {
-      if (key.escape) return setFocus('diff');
-      if (key.leftArrow || input === 'k' || key.upArrow) setKindIdx((i) => Math.max(0, i - 1));
-      if (key.rightArrow || input === 'j' || key.downArrow) setKindIdx((i) => Math.min(KINDS.length - 1, i + 1));
-      // the first letter of each kind, for anyone who already knows what they want
-      const typed = KINDS.findIndex((k) => k.severity[0] === input);
-      if (typed !== -1) setKindIdx(typed);
-      if (key.return || input === ' ') {
-        setEditAs(KINDS[typed !== -1 ? typed : kindIdx].severity);
-        setFocus('edit');
-      }
-      return;
-    }
-    if (focus === 'edit') {
+    if (focus === 'compose') {
+      // one pane, both halves: the level row and the comment, tab between them.
       if (key.escape) {
         setFocus('diff');
         setDraft('');
+        return;
       }
-      return; // the TextArea owns everything else
+      if (key.tab) return setComposeFocus((f) => (f === 'kind' ? 'text' : 'kind'));
+      if (composeFocus === 'kind') {
+        if (key.leftArrow || input === 'k' || key.upArrow) setKindIdx((i) => Math.max(0, i - 1));
+        if (key.rightArrow || input === 'j' || key.downArrow) setKindIdx((i) => Math.min(KINDS.length - 1, i + 1));
+        // the first letter of each kind, for anyone who already knows the level
+        const typed = KINDS.findIndex((k) => k.severity[0] === input);
+        if (typed !== -1) setKindIdx(typed);
+        if (key.return) setComposeFocus('text');
+        return;
+      }
+      return; // composeFocus === 'text': the TextArea owns everything but tab/esc
     }
     if (focus === 'chat') {
       if (key.escape || key.tab) setFocus('diff');
@@ -347,7 +369,8 @@ export function AnnotatedDiff(props: {
         setDraft(finding?.comment ?? '');
         const existing = KINDS.findIndex((k) => k.severity === finding?.severity);
         setKindIdx(existing === -1 ? 1 : existing);
-        return setFocus('severity');
+        setComposeFocus('text');
+        return setFocus('compose');
       }
       setFocus('diff');
       return;
@@ -371,6 +394,9 @@ export function AnnotatedDiff(props: {
     }
     if (input === 'n') jump(1);
     if (input === 'N') jump(-1);
+    if (input === ']') return hopFile(1);
+    if (input === '[') return hopFile(-1);
+    if (input === 'f') return setFullScreen(!fullScreen);
     // pick what kind of finding this is *before* writing it: the old default
     // put every new comment on the author's PR at `consider` without asking,
     // and left blocking, nit and praise unreachable from this view entirely
@@ -391,13 +417,15 @@ export function AnnotatedDiff(props: {
       setDraft(finding?.comment ?? '');
       const existing = KINDS.findIndex((k) => k.severity === finding?.severity);
       setKindIdx(existing === -1 ? 1 : existing);
-      setFocus('severity');
+      setComposeFocus('text');
+      setFocus('compose');
     }
     // straight to an annotation: the common case when reading unfamiliar code
     if (input === 'i' && anchor) {
       setDraft(finding?.severity === 'info' ? finding.comment : '');
-      setEditAs('info');
-      setFocus('edit');
+      setKindIdx(KINDS.findIndex((k) => k.severity === 'info'));
+      setComposeFocus('text');
+      setFocus('compose');
     }
     if (input === 'd' && anchor && finding) onEditFinding(anchor.file, anchor.line, '');
     if (input === 'p') onPost();
@@ -424,6 +452,30 @@ export function AnnotatedDiff(props: {
           {review.posted ? ' · posted' : ''}
         </Text>
       </Text>
+      {files.length > 0 &&
+        (() => {
+          // basenames, windowed so the current file is always on screen; the
+          // full relative path would blow the row apart on a deep tree
+          const bases = files.map((f) => f.split('/').pop() ?? f);
+          const { lo, hi } = windowTabs(bases, fileIdx, Math.max(20, width - 18));
+          return (
+            <Text wrap="truncate">
+              <Text dimColor>{lo > 0 ? '‹ ' : '  '}</Text>
+              {bases.slice(lo, hi + 1).map((b, k) => {
+                const idx = lo + k;
+                const here = idx === fileIdx;
+                return (
+                  <Text key={files[idx]} inverse={here} bold={here} color={here ? theme.accent : theme.dim}>
+                    {' '}{b}{' '}
+                  </Text>
+                );
+              })}
+              <Text dimColor>
+                {hi < files.length - 1 ? ' ›' : ''} {fileIdx + 1}/{files.length} · ]/[ file
+              </Text>
+            </Text>
+          );
+        })()}
       {/*
         The diff is the one this review is about, read out of a checkout pinned
         at the sha that was reviewed — which is what keeps the annotations in
@@ -467,7 +519,7 @@ export function AnnotatedDiff(props: {
           ))}
         </Box>
 
-        <Box flexDirection="column" width={noteWidth} borderStyle="single" borderColor={focus === 'edit' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
+        <Box flexDirection="column" width={noteWidth} borderStyle="single" borderColor={focus === 'compose' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
           {focus === 'read' && finding && anchor ? (
             <Box flexDirection="column">
               <Text bold color={SEVERITY_COLOR[finding.severity ?? 'consider']} wrap="truncate">
@@ -488,27 +540,61 @@ export function AnnotatedDiff(props: {
                 any other key returns · e edits it
               </Text>
             </Box>
-          ) : focus === 'severity' && anchor ? (
+          ) : focus === 'compose' && anchor ? (
             <Box flexDirection="column">
-              <Text bold color={theme.key} wrap="truncate">
-                {finding ? 'change' : 'new'} finding on {target(selection)}
+              <Text bold color={SEVERITY_COLOR[editAs]} wrap="truncate">
+                {editAs === 'info' ? 'annotation on ' : `${editAs} on `}
+                {target(selection)}
               </Text>
-              <Box height={1} />
-              {KINDS.map((kind, i) => (
-                <Text key={kind.severity} wrap="truncate" inverse={i === kindIdx}>
-                  <Text color={i === kindIdx ? undefined : SEVERITY_COLOR[kind.severity]}>
-                    {i === kindIdx ? '▸ ' : '  '}
-                    {kind.label.padEnd(11)}
-                  </Text>
-                  <Text dimColor={i !== kindIdx}>{kind.hint}</Text>
-                </Text>
-              ))}
-              <Box flexGrow={1} />
+              {/* the consequence, said plainly */}
               <Text dimColor wrap="truncate">
-                j/k or the first letter · enter writes it · esc cancels
+                {editAs === 'info' ? 'stays in colinear — never posted' : 'goes to the author when you post'}
+              </Text>
+              {/* the level selector, one row; tab moves the keyboard here */}
+              <Text wrap="truncate">
+                {KINDS.map((kind, i) => (
+                  <Text
+                    key={kind.severity}
+                    inverse={composeFocus === 'kind' && i === kindIdx}
+                    bold={i === kindIdx}
+                    color={i === kindIdx ? SEVERITY_COLOR[kind.severity] : theme.dim}
+                  >
+                    {' '}{kind.label}{' '}
+                  </Text>
+                ))}
+              </Text>
+              <TextArea
+                value={draft}
+                onChange={setDraft}
+                focus={composeFocus === 'text'}
+                width={noteWidth - 4}
+                height={Math.max(3, paneHeight - 6)}
+                placeholder={
+                  editAs === 'info'
+                    ? 'what this code does, for whoever reads the review — never posted'
+                    : "what you'd say to the author"
+                }
+                onSubmit={() => {
+                  onEditFinding(
+                    anchor.file,
+                    selection?.end ?? anchor.line,
+                    draft,
+                    editAs,
+                    selection && selection.end > selection.start ? selection.start : undefined,
+                  );
+                  setFocus('diff');
+                  setDraft('');
+                  setMarkRow(null);
+                }}
+              />
+              <Text dimColor wrap="truncate">
+                {composeFocus === 'kind'
+                  ? 'j/k or a letter picks the level · tab to the comment'
+                  : 'tab to the level · ctrl+d saves · empty removes it'}{' '}
+                · esc cancels
               </Text>
             </Box>
-          ) : focus !== 'edit' ? (
+          ) : (
             margin.map((row, i) => {
               // the block the cursor is in stays lit even when the cursor is on
               // one of its middle lines, which is where you stand while reading it
@@ -532,46 +618,7 @@ export function AnnotatedDiff(props: {
                 </Text>
               );
             })
-          ) : anchor ? (
-            <>
-              <Text bold color={editAs ? SEVERITY_COLOR[editAs] : theme.key} wrap="truncate">
-                {editAs === 'info' ? 'annotation on ' : `${editAs ?? 'comment'} on `}
-                {target(selection)}
-              </Text>
-              {/* the consequence, said plainly: this is the difference between
-                  thinking out loud and writing on someone else's PR */}
-              <Text dimColor wrap="truncate">
-                {editAs === 'info' ? 'stays in colinear — never posted' : 'goes to the author when you post'}
-              </Text>
-              <TextArea
-                value={draft}
-                onChange={setDraft}
-                focus
-                width={noteWidth - 4}
-                height={paneHeight - 6}
-                placeholder={
-                  editAs === 'info'
-                    ? 'what this code does, for whoever reads the review — never posted'
-                    : "what you'd say to the author — ctrl+d saves, esc cancels"
-                }
-                onSubmit={() => {
-                  onEditFinding(
-                    anchor.file,
-                    selection?.end ?? anchor.line,
-                    draft,
-                    editAs,
-                    selection && selection.end > selection.start ? selection.start : undefined,
-                  );
-                  setFocus('diff');
-                  setDraft('');
-                  setMarkRow(null);
-                }}
-              />
-              <Text dimColor wrap="truncate">
-                ctrl+d saves · esc cancels · empty removes it
-              </Text>
-            </>
-          ) : null}
+          )}
         </Box>
       </Box>
 
@@ -605,8 +652,8 @@ export function AnnotatedDiff(props: {
       </Box>
 
       <Text dimColor wrap="truncate">
-        j/k move · n/N next · enter reads · v select · a explain · e finding · i annotate · d drop ·{' '}
-        {onReview ? 'R review · p hand back' : 'p post'} · esc
+        j/k move · n/N next · ]/[ file · enter reads · v select · a explain · e finding · i annotate · d drop ·{' '}
+        {onReview ? 'R review · p hand back' : 'p post'} · f {fullScreen ? 'header' : 'full'} · esc
       </Text>
     </Box>
   );
@@ -624,6 +671,30 @@ const SYNTAX_COLOR: Record<TokenKind, string> = {
   number: theme.annotation,
   type: theme.accent,
 };
+
+/**
+ * Which changed-file tabs fit on one row, always keeping the current one shown.
+ * Grows outward from the current file until the width budget is spent; the
+ * caller draws ‹ › when there is more off either edge.
+ */
+function windowTabs(basenames: string[], cur: number, budget: number): { lo: number; hi: number } {
+  if (!basenames.length) return { lo: 0, hi: -1 };
+  let lo = cur;
+  let hi = cur;
+  let used = basenames[cur].length + 2;
+  for (let grew = true; grew; ) {
+    grew = false;
+    if (hi + 1 < basenames.length && used + basenames[hi + 1].length + 2 <= budget) {
+      used += basenames[++hi].length + 2;
+      grew = true;
+    }
+    if (lo - 1 >= 0 && used + basenames[lo - 1].length + 2 <= budget) {
+      used += basenames[--lo].length + 2;
+      grew = true;
+    }
+  }
+  return { lo, hi };
+}
 
 function DiffRow(props: {
   row: VisualRow;

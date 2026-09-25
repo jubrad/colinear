@@ -3,11 +3,11 @@
 Alias: `selfreview`. Argument: a task identifier (`:diff CLO-203`), or `v` on a task whose draft PR
 is open.
 
-The [annotated diff](reviews.md#reading-it-against-the-code) pointed at a task's own branch —
-syntax-highlighted the same way. Same
-two panes, same margin, same `.colinear-review.md` behind it — a finding written here is a finding
-in every sense. What differs is where it goes: **`p` hands the list to the agent that wrote the
-code** instead of posting it to an author.
+The [annotated diff](reviews.md#reading-it-against-the-code) pointed at a task's own branch — the
+same in every way: syntax-highlighted, full-screen with a tab per changed file (`]`/`[` to hop, `f`
+for the header), one pane for the level and the comment (`tab` between them), same margin, same
+`.colinear-review.md` behind it. A finding written here is a finding in every sense. What differs is
+where it goes: **`p` hands the list to the agent that wrote the code** instead of posting it to an author.
 
 ![The same view against a task's own branch: a `consider` finding beside the line it is about, and a footer whose keys end in R review and p hand back](../images/task-diff.png)
 
@@ -15,7 +15,8 @@ code** instead of posting it to an author.
 |---|---|
 | `R` | have a **fresh** agent review the branch and write the findings |
 | `v` | mark a block, so a comment covers the passage rather than a line |
-| `e` `i` | write a comment · write an annotation — the same picker as a PR review |
+| `]` `[` | hop to the next / previous changed file · `f` full screen |
+| `e` `i` | write a comment · write an annotation — level and comment in one pane, `tab` between |
 | `a` | ask an agent what the marked lines do — the answer lands as an annotation |
 | `enter` `n`/`N` | read the current finding in full, scrolling · walk between them |
 | `p` | hand the comments back to the agent |
