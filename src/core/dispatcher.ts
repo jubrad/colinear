@@ -474,7 +474,13 @@ export class Dispatcher {
         costUsd: 0,
         instructions: opts?.instructions,
         model: opts?.model,
-        skipTriage: opts?.skipTriage,
+        // No repo named means triage picks it, and triage is the only thing
+        // that can — so the two cannot both be honoured. Enforced here rather
+        // than only in the form, because `skipTriage` also arrives from a
+        // config default and from re-dispatch, and a task that skipped triage
+        // without a repo would silently run in whichever repo happened to be
+        // first in the allowlist.
+        skipTriage: opts?.repo || this.cfg.repos.length === 1 ? opts?.skipTriage : false,
         awaitingStart: opts?.manual || undefined,
         repo: (({ name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot }) => ({ name, path, defaultBranch, remote, pushRemote, prBase, worktreeRoot }))(
           opts?.repo ?? this.cfg.repos[0],
@@ -482,9 +488,21 @@ export class Dispatcher {
       };
       store.upsert(task);
       if (opts?.instructions) store.addActivity(issue.id, `instructions: ${opts.instructions.slice(0, 100)}`);
-      if (opts?.skipTriage) store.addActivity(issue.id, 'triage skipped by operator');
       if (opts?.model) store.addActivity(issue.id, `model: ${opts.model}`);
-      if (opts?.repo) store.addActivity(issue.id, `repo: ${opts.repo.name}`);
+      if (opts?.repo) {
+        store.addActivity(issue.id, `repo: ${opts.repo.name}`);
+        if (opts.skipTriage) store.addActivity(issue.id, 'triage skipped by operator');
+      } else if (this.cfg.repos.length > 1) {
+        // say which repo the worktree is being cut in, because the board will
+        // show it until triage moves the task — and it is a placeholder, not a
+        // decision anyone made
+        store.addActivity(
+          issue.id,
+          `repo: auto — triage chooses; starting in ${this.cfg.repos[0].name}${opts?.skipTriage ? ' (triage kept: it is what picks the repo)' : ''}`,
+        );
+      } else if (opts?.skipTriage) {
+        store.addActivity(issue.id, 'triage skipped by operator');
+      }
       // dispatch = mine + in progress, immediately (not when an agent slot frees up)
       const viewer = this.viewer;
       if (viewer && issue.assigneeId !== viewer.id) {
