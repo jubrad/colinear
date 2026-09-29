@@ -87,6 +87,9 @@ export function ReviewsView(props: { param?: string }) {
   const ctx = useColinear();
   const pane = useViewSize();
   const reviews = useReviews();
+  // settled rows are hidden rather than gone: the count is always shown, so a
+  // list that looks short says how much it is not showing
+  const [showHidden, setShowHidden] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [query, setQuery] = useState('');
   const [filtering, setFiltering] = useState(false);
@@ -104,8 +107,11 @@ export function ReviewsView(props: { param?: string }) {
   const rows = useMemo(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     const matched = reviews.filter((r) => {
-      // PRs that stopped requesting me pile up otherwise; /stale finds them
-      if (r.status === 'stale' && !query.includes('stale')) return false;
+      // Settled reviews pile up — a month of them, since retention keeps them
+      // that long — so the list is what is still live and `h` reveals the rest.
+      // It used to be the filter text containing the word "stale", which found
+      // them by accident as often as on purpose and told nobody they existed.
+      if (r.status === 'stale' && !showHidden) return false;
       if (!terms.length) return true;
       const hay = `${r.repository} ${r.number} ${r.title} ${r.author} ${r.status}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
@@ -147,7 +153,7 @@ export function ReviewsView(props: { param?: string }) {
     };
     const sorted = [...matched].sort(compare);
     return desc ? sorted.reverse() : sorted;
-  }, [reviews, query, sort, desc]);
+  }, [reviews, query, sort, desc, showHidden]);
 
   const selected = rows[Math.min(cursor, Math.max(0, rows.length - 1))];
 
@@ -273,6 +279,10 @@ export function ReviewsView(props: { param?: string }) {
       // active useInput hook, so binding it here fired both — a refresh
       // that also restarted the frontend
       if (input === 'u') ctx.dispatcher.pollReviews();
+      if (input === 'h') {
+        setShowHidden((v) => !v);
+        setCursor(0);
+      }
       if (input === 'S') {
         // cycle the field; landing back on the current one flips direction
         const next = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length];
@@ -288,6 +298,7 @@ export function ReviewsView(props: { param?: string }) {
   );
 
   const ready = reviews.filter((r) => r.status === 'ready').length;
+  const hidden = reviews.filter((r) => r.status === 'stale').length;
   const cols = layout(ctx.size.columns);
   // rows that fit: total height less the detail pane, header and chrome
   const visible = Math.max(3, ctx.size.rows - 16);
@@ -357,9 +368,14 @@ export function ReviewsView(props: { param?: string }) {
           reviews{' '}
         </Text>
         <Text dimColor>
-          {rows.length} awaiting me ·{' '}
+          {rows.length} {showHidden ? 'shown' : 'awaiting me'} ·{' '}
         </Text>
         {ready > 0 && <Text color={REVIEW_COLORS.ready}>{ready} pre-reviewed </Text>}
+        {hidden > 0 && (
+          <Text color={showHidden ? theme.accent : REVIEW_COLORS.stale}>
+            · {hidden} settled {showHidden ? 'shown (h hides)' : 'hidden (h shows)'}{' '}
+          </Text>
+        )}
         <Text dimColor>· sort: </Text>
         <Text color={theme.accent}>
           {sort}
@@ -596,6 +612,7 @@ export const reviewsKeys: Array<[string, string]> = [
   ['o', 'open PR'],
   ['x', 'cancel'],
   ['S', 'sort'],
+  ['h', 'show settled'],
   ['u', 'refresh'],
   ['/', 'filter'],
 ];
