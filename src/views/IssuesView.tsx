@@ -396,7 +396,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
           // options + a paragraph-sized instructions box, capped so a short
           // terminal still shows the whole form rather than clipping the footer
           const optionRows = ctx.cfg.repos.length > 1 ? 5 : 4;
-          const inner = Math.min(88, ctx.size.columns - 8) - 4;
+          const inner = Math.min(112, ctx.size.columns - 6) - 4;
           const lines = Math.max(3, Math.min(10, ctx.size.rows - 8 - formHeight(optionRows) - 4));
           const place = popupPlacement(
             ctx.size,

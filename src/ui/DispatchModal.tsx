@@ -16,6 +16,7 @@ function modelOptions(models: string[]): Array<{ label: string; value?: string }
 export interface DispatchOptions {
   instructions?: string;
   model?: string;
+  /** unset means "let triage choose" — see AUTO_REPO */
   repo?: RepoConfig;
   /** go straight to the work pass — no triage session */
   skipTriage?: boolean;
@@ -24,6 +25,23 @@ export interface DispatchOptions {
 }
 
 type Field = 'model' | 'repo' | 'triage' | 'start' | 'instructions';
+
+/**
+ * Letting triage pick the repository.
+ *
+ * Triage already reads the allowlist's descriptions and names the repo the
+ * work belongs in — it is how a mis-routed task gets moved today. What was
+ * missing was a way to say up front that you do not know, so the field forced
+ * a guess, and a guess is wrong often enough on a set of sub-issues spread
+ * across repositories.
+ *
+ * First in the list and selected by default, because "I don't know" is the
+ * honest starting point for the case this exists for.
+ */
+const AUTO_REPO = 'auto — triage picks';
+
+/** The label gutter every row shares, so the rows line up and the hint can too. */
+const LABEL_WIDTH = 14;
 
 const TRIAGE_OPTIONS = ['triage first', 'skip triage'];
 const START_OPTIONS = ['start now', 'manual — worktree only'];
@@ -60,12 +78,19 @@ export function DispatchModal(props: {
     [repos.length],
   );
 
+  // index 0 is AUTO_REPO, so the repos themselves start at 1
+  const chosenRepo = repoIdx === 0 ? undefined : repos[repoIdx - 1];
+  const auto = repoIdx === 0 && repos.length > 1;
+
   const submit = () =>
     onSubmit({
       instructions: instructions.trim() || undefined,
       model: modelChoices[modelIdx].value,
-      repo: repos[repoIdx],
-      skipTriage: triageIdx === 1,
+      repo: repos.length > 1 ? chosenRepo : repos[0],
+      // Triage is what picks the repo, so skipping it and asking for auto are
+      // contradictory. The dispatcher enforces this too — this only keeps the
+      // form from offering a combination it will not honour.
+      skipTriage: triageIdx === 1 && !auto,
       manual: startIdx === 1,
     });
 
@@ -80,36 +105,51 @@ export function DispatchModal(props: {
       if (key.rightArrow || input === 'l') set((i) => (i + 1) % len);
     };
     if (focus === 'model') cycle(modelChoices.length, setModelIdx);
-    if (focus === 'repo') cycle(repos.length, setRepoIdx);
-    if (focus === 'triage') cycle(TRIAGE_OPTIONS.length, setTriageIdx);
+    if (focus === 'repo') cycle(repos.length + 1, setRepoIdx);
+    if (focus === 'triage') cycle(auto ? 1 : TRIAGE_OPTIONS.length, setTriageIdx);
     if (focus === 'start') cycle(START_OPTIONS.length, setStartIdx);
     if (key.return) submit();
   });
 
   const optionRow = (label: string, field: Field, options: string[], activeIdx: number) => {
-    // Options are values, not prose: a row wider than the modal used to wrap
-    // mid-name, so "terraform-provider-materialize" arrived as two fragments on
-    // two lines and the selection landed on a syllable. Show whole names and
-    // scroll instead — the ‹ › say the rest are still there.
-    const { start, end } = optionWindow(options, activeIdx, width - 14 - 4);
+    const active = Math.max(0, Math.min(activeIdx, options.length - 1));
+    const avail = width - LABEL_WIDTH - 4;
+    const fits = options.reduce((n, o) => n + o.length + 2, 0) <= avail;
+    // Two shapes, because one never suited both. A pair like "triage first /
+    // skip triage" wants to show both — you are comparing them. Nine repository
+    // names do not fit on any row, and a window that scrolled them moved the
+    // list under the cursor and wrapped names mid-word. So past the point where
+    // they all fit, the row shows the one you have chosen and says where you
+    // are in the list. Either way the row is exactly one line, which is what
+    // stops the form's height changing as you arrow along it.
+    const shown = fits ? options : [options[active]];
     return (
       <Box>
         <Text bold color={focus === field ? theme.accent : theme.dim}>
-          {label.padEnd(14)}
+          {label.padEnd(LABEL_WIDTH)}
         </Text>
-        <Text dimColor>{start > 0 ? '‹' : ' '}</Text>
-        {options.slice(start, end).map((opt, i) => (
-          <Text
-            key={opt}
-            wrap="truncate"
-            inverse={focus === field && start + i === activeIdx}
-            color={start + i === activeIdx ? theme.selection : theme.dim}
-            bold={start + i === activeIdx}
-          >
-            {` ${opt} `}
+        <Text dimColor>{fits ? ' ' : '‹'}</Text>
+        {shown.map((opt, i) => {
+          const idx = fits ? i : active;
+          return (
+            <Text
+              key={`${opt}-${idx}`}
+              wrap="truncate"
+              inverse={focus === field && idx === active}
+              color={idx === active ? theme.selection : theme.dim}
+              bold={idx === active}
+            >
+              {` ${opt} `}
+            </Text>
+          );
+        })}
+        <Text dimColor>{fits ? ' ' : '›'}</Text>
+        {!fits && (
+          <Text dimColor>
+            {'  '}
+            {active + 1}/{options.length}
           </Text>
-        ))}
-        <Text dimColor>{end < options.length ? '›' : ' '}</Text>
+        )}
       </Box>
     );
   };
@@ -122,14 +162,27 @@ export function DispatchModal(props: {
         custom dispatch — {count} issue{count > 1 ? 's' : ''}
       </Text>
       {optionRow('model', 'model', modelChoices.map((m) => m.label), modelIdx)}
-      {repos.length > 1 && optionRow('repo', 'repo', repos.map((r) => r.name), repoIdx)}
-      {optionRow('triage', 'triage', TRIAGE_OPTIONS, triageIdx)}
+      {repos.length > 1 && optionRow('repo', 'repo', [AUTO_REPO, ...repos.map((r) => r.name)], repoIdx)}
+      {optionRow('triage', 'triage', auto ? [TRIAGE_OPTIONS[0]] : TRIAGE_OPTIONS, triageIdx)}
       {optionRow('start', 'start', START_OPTIONS, startIdx)}
-      {manual && (
-        <Text dimColor>
-          {'              '}worktree and branch only — <Text color={theme.key}>r</Text> starts the agent
-        </Text>
-      )}
+      {/*
+        Always a row, never sometimes a row. It used to appear only while
+        "manual" was selected, so arrowing along that field grew and shrank the
+        form inside a popup whose height was already fixed — which is what made
+        the spacing jump.
+      */}
+      <Text dimColor wrap="truncate">
+        {' '.repeat(LABEL_WIDTH)}
+        {manual ? (
+          <Text>
+            worktree and branch only — <Text color={theme.key}>r</Text> starts the agent
+          </Text>
+        ) : auto ? (
+          <Text>triage reads the repo descriptions and routes each issue</Text>
+        ) : (
+          <Text> </Text>
+        )}
+      </Text>
       <Box marginTop={1}>
         <Text bold color={focus === 'instructions' ? theme.accent : theme.dim}>
           instructions
@@ -154,43 +207,4 @@ export function DispatchModal(props: {
       </Text>
     </Box>
   );
-}
-
-/**
- * The widest run of whole options that fits, always containing the active one.
- *
- * Growing outward from the selection rather than from the left keeps the thing
- * you are choosing on screen no matter where in the list it sits — and every
- * name stays whole, which is the point: a truncated repo name is ambiguous
- * exactly when the repos are similarly named.
- */
-export function optionWindow(
-  options: string[],
-  activeIdx: number,
-  avail: number,
-): { start: number; end: number } {
-  if (!options.length) return { start: 0, end: 0 };
-  const active = Math.max(0, Math.min(activeIdx, options.length - 1));
-  const cost = (i: number) => options[i].length + 2; // the padding around each
-  let start = active;
-  let end = active + 1;
-  let used = cost(active);
-  // Alternate outward so the selection stays roughly centred. Each side is
-  // re-tested against the *updated* width — testing both against the width
-  // before either grew is how a window ends up one option too wide.
-  for (;;) {
-    let grew = false;
-    if (end < options.length && used + cost(end) <= avail) {
-      used += cost(end);
-      end++;
-      grew = true;
-    }
-    if (start > 0 && used + cost(start - 1) <= avail) {
-      start--;
-      used += cost(start);
-      grew = true;
-    }
-    if (!grew) break;
-  }
-  return { start, end };
 }
