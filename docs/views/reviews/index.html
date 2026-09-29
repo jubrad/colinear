@@ -999,6 +999,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#adopting-a-pull-request" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adopting a pull request
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#when-the-branch-has-moved-under-you" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1535,6 +1546,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#adopting-a-pull-request" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adopting a pull request
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#when-the-branch-has-moved-under-you" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1877,6 +1899,17 @@ first two rather than keeping them alive to look thorough, and engaging with the
 third rather than restating the original comment. The document is rewritten whole each round, so
 what you see is what round two would post.</p>
 <p><code>p</code> then posts the revised review as a second one on the PR.</p>
+<h2 id="adopting-a-pull-request">Adopting a pull request<a class="headerlink" href="#adopting-a-pull-request" title="Permanent link">&para;</a></h2>
+<p><code>:reviews owner/repo#123</code> (or the URL) puts a pull request on the list that nobody asked you to
+review. It stays there until the PR settles, rather than being dropped by the next sweep the way an
+unasked-for one would be.</p>
+<p>Adopting one that is <strong>already on the list and settled brings it back</strong>. The sweep marks a review
+<code>stale</code> when the PR stops asking for you, and adopting is you saying otherwise — so the status
+comes back to <code>pending</code>, or to <code>ready</code> when a review had already been written for it. Every other
+status is yours and is left exactly as it is: a posted verdict stays posted, a session in flight
+stays in flight.</p>
+<p>Reviews that got stuck this way before are recovered at the next daemon start, so they do not need
+re-importing.</p>
 <h2 id="when-the-branch-has-moved-under-you">When the branch has moved under you<a class="headerlink" href="#when-the-branch-has-moved-under-you" title="Permanent link">&para;</a></h2>
 <p>The annotated diff is read out of the review's own checkout, pinned at the sha the agent read. That
 is deliberate: the margin's comments are anchored to those lines, and re-reading a newer diff
