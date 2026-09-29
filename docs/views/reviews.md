@@ -269,6 +269,21 @@ what you see is what round two would post.
 
 `p` then posts the revised review as a second one on the PR.
 
+## Adopting a pull request
+
+`:reviews owner/repo#123` (or the URL) puts a pull request on the list that nobody asked you to
+review. It stays there until the PR settles, rather than being dropped by the next sweep the way an
+unasked-for one would be.
+
+Adopting one that is **already on the list and settled brings it back**. The sweep marks a review
+`stale` when the PR stops asking for you, and adopting is you saying otherwise — so the status
+comes back to `pending`, or to `ready` when a review had already been written for it. Every other
+status is yours and is left exactly as it is: a posted verdict stays posted, a session in flight
+stays in flight.
+
+Reviews that got stuck this way before are recovered at the next daemon start, so they do not need
+re-importing.
+
 ## When the branch has moved under you
 
 The annotated diff is read out of the review's own checkout, pinned at the sha the agent read. That

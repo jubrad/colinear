@@ -251,12 +251,19 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
 }
 
 /**
- * Un-stale reviews that were staled by the fulfilled-request bug: for a while,
- * posting a review dropped the PR out of the review-requested search and the
- * reconcile read that absence as "finished with". GitHub still knows the truth
- * — the submitted review is right there on the PR — so ask it, once per daemon
- * start: a stale review whose PR is still open and carries a review of ours
- * gets its status back from GitHub's own record.
+ * Un-stale reviews the sweep settled and should not have. Two ways that has
+ * happened, both recovered here once per daemon start.
+ *
+ * The fulfilled-request bug: for a while, posting a review dropped the PR out
+ * of the review-requested search and the reconcile read that absence as
+ * "finished with". GitHub still knows the truth — the submitted review is
+ * right there on the PR — so its status comes back from GitHub's own record.
+ *
+ * And adoption after staling: `:reviews <spec>` pinned the row but left the
+ * status, so a pull request adopted *after* the sweep had settled it kept the
+ * pin and stayed invisible, with nothing able to bring it back — the sweep
+ * skips `stale` rows for good, and importing it again only re-set the pin.
+ * `revivedStatus` stops new ones; this is for the ones already lost.
  *
  * Bounded by what staling never touches: retention drops settled reviews after
  * 30 days, so this walks at most a month of them, once.
@@ -283,7 +290,17 @@ async function recoverPostedReviews(): Promise<void> {
     } catch {
       continue; // could not check ≠ anything; leave it stale
     }
-    if (state !== 'OPEN' || !mine) continue;
+    if (state !== 'OPEN') continue;
+    if (!mine) {
+      // no review of ours to read a verdict from, but the operator had asked
+      // for this one by name and the pull request is still open
+      const revived = review.adopted ? revivedStatus(review, state) : undefined;
+      if (!revived) continue;
+      store.updateReview(review.id, { status: revived, error: undefined });
+      store.addReviewActivity(review.id, 'recovered: adopted, and its PR is still open');
+      log(`review recovery: ${review.id} stale -> ${revived} (adopted)`);
+      continue;
+    }
     const status =
       mine === 'APPROVED' ? 'approved' : mine === 'CHANGES_REQUESTED' ? 'changes_requested' : 'commented';
     store.updateReview(review.id, { status });
@@ -372,6 +389,25 @@ export function parsePrSpec(spec: string): { repository: string; number: number 
  * is the door: name a PR and it joins the list, marked as adopted so the
  * reconcile knows the search's silence about it means nothing.
  */
+/**
+ * What adopting does to the status of a review already on the list.
+ *
+ * `undefined` means leave it alone, which is the answer for every status the
+ * operator owns — a posted verdict, a written review, a session in flight.
+ * Only `stale` is the sweep's, and only it is undone, because adopting is the
+ * operator saying "no, keep this".
+ *
+ * Reviving to `ready` rather than `pending` where a review was already written
+ * is the difference between getting the pull request back and getting it back
+ * with the work that had been done on it.
+ */
+export function revivedStatus(existing: Review, prState: string): Review['status'] | undefined {
+  if (existing.status !== 'stale') return undefined;
+  // a settled pull request has nothing to come back to
+  if (prState !== 'OPEN') return undefined;
+  return existing.findings?.length || existing.doc ? 'ready' : 'pending';
+}
+
 export async function adoptReview(cfg: Config, spec: string): Promise<Review> {
   const parsed = parsePrSpec(spec);
   if (!parsed) {
@@ -415,10 +451,20 @@ export async function adoptReview(cfg: Config, spec: string): Promise<Review> {
   };
 
   if (existing) {
-    // already known — adopting it only pins it to the list and refreshes what
-    // the search would have refreshed. Nothing the operator owns is touched.
-    store.updateReview(id, meta);
-    store.addReviewActivity(id, 'adopted — it stays on the list until the PR settles');
+    // Already known. Adopting pins it and refreshes what the search would have
+    // refreshed; nothing the operator owns is touched — except `stale`, which
+    // is not theirs. Naming a pull request is asking for it back, and a review
+    // the sweep had already settled would otherwise take the flag and stay
+    // invisible, with nothing left to revive it: the sweep skips `stale` rows
+    // for good.
+    const revived = revivedStatus(existing, pr.state);
+    store.updateReview(id, revived ? { ...meta, status: revived, error: undefined } : meta);
+    store.addReviewActivity(
+      id,
+      revived
+        ? `adopted — back on the list${revived === 'ready' ? ' with the review it already had' : ''}`
+        : 'adopted — it stays on the list until the PR settles',
+    );
     return store.getReview(id)!;
   }
 

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { clearBrokenSubmodules, leadFinding, reviewBody, staleAnchors } from './reviewer.js';
-import { parsePrSpec } from './reviews.js';
+import { parsePrSpec, revivedStatus } from './reviews.js';
 import type { Review, ReviewFinding } from './types.js';
 
 /**
@@ -27,6 +27,9 @@ import type { Review, ReviewFinding } from './types.js';
  */
 
 const failures: string[] = [];
+const eqStatus = (name: string, got: unknown, want: unknown): void =>
+  check(name, got === want, `got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
+
 const check = (name: string, ok: boolean, detail = ''): void => {
   if (!ok) failures.push(`${name}${detail ? ` — ${detail}` : ''}`);
 };
@@ -191,6 +194,39 @@ for (const [spec, repository, number] of SPECS) {
 }
 
 /**
+ * Adopting a pull request the sweep had already settled.
+ *
+ * `:reviews <spec>` is how a pull request nobody asked you to review gets onto
+ * the list. Adopting one that was already there set the pin and left the
+ * status alone — deliberately, since the statuses are the operator's. But
+ * `stale` is not theirs, it is the sweep's, and the sweep skips `stale` rows
+ * for good. So a pull request adopted after being staled took the flag, stayed
+ * invisible, and had nothing left that could bring it back. Importing it again
+ * did nothing, which is exactly how it was found.
+ */
+{
+  const at = (status: string, extra: Partial<Review> = {}) =>
+    ({ status, ...extra }) as unknown as Review;
+
+  eqStatus('a staled review comes back', revivedStatus(at('stale'), 'OPEN'), 'pending');
+  eqStatus(
+    'and comes back with the review it already had',
+    revivedStatus(at('stale', { findings: [{ file: 'a.ts', line: 1, comment: 'x', severity: 'nit' }] } as Partial<Review>), 'OPEN'),
+    'ready',
+  );
+  eqStatus('a document counts as that work too', revivedStatus(at('stale', { doc: '## What this changes' } as Partial<Review>), 'OPEN'), 'ready');
+
+  // a settled pull request has nothing to come back to
+  eqStatus('a merged one stays settled', revivedStatus(at('stale'), 'MERGED'), undefined);
+  eqStatus('and so does a closed one', revivedStatus(at('stale'), 'CLOSED'), undefined);
+
+  // every other status belongs to the operator and is left exactly as it is
+  for (const status of ['pending', 'ready', 'reviewing', 'posting', 'queued', 'approved', 'commented', 'changes_requested']) {
+    eqStatus(`adopting does not touch ${status}`, revivedStatus(at(status), 'OPEN'), undefined);
+  }
+}
+
+/**
  * A review checkout must survive a half-initialised submodule.
  *
  * With `submodule.recurse = true` in the operator's own git config, a checkout
@@ -282,5 +318,5 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(
-  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, a PR spec parses in every form\n     the operator writes it, and a half-initialised submodule cannot wedge a review checkout',
+  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, and a half-initialised submodule cannot wedge a review checkout',
 );
