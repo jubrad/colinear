@@ -1981,12 +1981,20 @@ the network) still just fails and says so, because re-anchoring cannot help with
 <td><code>o</code></td>
 <td>open the PR</td>
 </tr>
+<tr>
+<td><code>h</code></td>
+<td>show the settled ones too, and hide them again</td>
+</tr>
 </tbody>
 </table>
 <p>A posted review stays on the list while its PR is open — submitting a review <em>fulfils</em> the review
 request on GitHub's side, so the list can't rely on the request alone, and checks the PR itself
 before letting go. When the PR merges or closes, the review settles to stale and its worktree is
-reclaimed — not when it's posted, since the author may push again. <code>/stale</code> shows the settled ones.</p>
+reclaimed — not when it's posted, since the author may push again.</p>
+<p><strong>Settled reviews are hidden, not gone.</strong> Retention keeps them for <code>retentionDays</code>, so there are
+usually far more of them than live ones, and a list of everything would bury the work. The header
+always says how many are being held back, so a short list tells you what it is not showing, and
+<code>h</code> shows them. Filtering with <code>/</code> still narrows whichever set you are looking at.</p>
 <p>Reviews staled by the old behaviour recover on their own: once per daemon start, stale reviews whose
 PR is still open and carries a review of yours get their status back from GitHub's record.</p>
 
