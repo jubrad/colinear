@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { STATE_DIR, log } from './log.js';
 import { store } from './store.js';
-import type { Config, ProjectPlan, Review, Task, TaskStatus, UiState } from './types.js';
+import type { Config, ProjectPlan, Review, Task, TaskStatus, TodoList, UiState } from './types.js';
 
 const STATE_FILE = join(STATE_DIR, 'state.json');
 const LIVE_STATUSES: TaskStatus[] = ['queued', 'triage', 'working', 'checks', 'needs_input'];
@@ -16,6 +16,7 @@ interface PersistedState {
   tasks?: PersistedTask[];
   reviews?: PersistedReview[];
   plans?: PersistedPlan[];
+  todo?: TodoList;
   ui?: UiState;
 }
 
@@ -33,7 +34,7 @@ function serialize(): string {
   const tasks: PersistedTask[] = store.list().map(({ question: _q, ...rest }) => rest);
   const reviews: PersistedReview[] = store.listReviews().map(({ question: _q, ...rest }) => rest);
   const plans: PersistedPlan[] = store.listPlans().map(({ question: _q, ...rest }) => rest);
-  const state: PersistedState = { version: 3, tasks, reviews, plans, ui: uiState };
+  const state: PersistedState = { version: 3, tasks, reviews, plans, todo: store.todo, ui: uiState };
   return JSON.stringify(state, null, 2);
 }
 
@@ -76,6 +77,15 @@ export function loadState(cfg: Config): void {
       // a plan session mid-chat comes back idle; the draft and its parse survive
       const status = plan.status === 'drafting' && plan.sessionId ? 'ready' : plan.status;
       store.upsertPlan({ ...plan, status, question: undefined });
+    }
+    if (data.todo) {
+      // a refresh cut off by the restart: keep what it had, say it stopped
+      const live = data.todo.status === 'gathering' || data.todo.status === 'ranking';
+      store.setTodo({
+        ...data.todo,
+        status: live ? (data.todo.items.length ? 'ready' : 'idle') : data.todo.status,
+        ...(live ? { error: 'colinear restarted mid-refresh — r to try again' } : {}),
+      });
     }
     uiState = data.ui ?? {};
   } catch (err) {

@@ -18,6 +18,7 @@ import {
   type ModelChoice,
   type GuidanceScope,
   type RepoConfig,
+  type TodoConfig,
 } from './types.js';
 
 /**
@@ -84,7 +85,8 @@ interface RawRepo {
   checks?: CheckConfig[];
 }
 
-type RawConfig = Partial<Config> & {
+type RawConfig = Omit<Partial<Config>, 'todo'> & {
+  todo?: RawTodo | boolean;
   repos?: RawRepo[];
   guidance?: RawGuidance;
   prSignoff?: RawText;
@@ -197,6 +199,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     autoDispatchSubs: raw.autoDispatchSubs ?? false,
     retentionDays: raw.retentionDays ?? 30,
     worktreeRetentionDays: raw.worktreeRetentionDays ?? 7,
+    todo: normalizeTodo(raw.todo),
     tickMs: raw.tickMs ?? 1000,
     agentPermissionMode: permissionMode(raw.agentPermissionMode, 'auto'),
     attachPermissionMode: permissionMode(raw.attachPermissionMode, 'auto'),
@@ -209,6 +212,34 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
 }
 
 type RawText = string | string[] | undefined;
+
+type RawTodo = Partial<Omit<TodoConfig, 'prompt' | 'guidance'>> & { prompt?: RawText; guidance?: RawText };
+
+/** A positive number, or the default — a zero SLA would put every review overdue. */
+const positive = (v: unknown, fallback: number): number =>
+  typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : fallback;
+
+function normalizeTodo(given: RawTodo | boolean | undefined): TodoConfig {
+  // `"todo": false` switches it off; `true` is the default spelled out
+  const raw = typeof given === 'boolean' ? undefined : given;
+  const enabled = typeof given === 'boolean' ? given : given?.enabled !== false;
+  const text = (v: RawText) => {
+    const joined = joinLines(v);
+    return joined?.trim() ? joined : undefined;
+  };
+  return {
+    enabled,
+    prompt: text(raw?.prompt),
+    guidance: text(raw?.guidance),
+    reviewSlaHours: positive(raw?.reviewSlaHours, 24),
+    staleDays: positive(raw?.staleDays, 14),
+    horizonDays: positive(raw?.horizonDays, 21),
+    // 0 is meaningful here: only when asked
+    refreshMinutes:
+      typeof raw?.refreshMinutes === 'number' && raw.refreshMinutes >= 0 ? raw.refreshMinutes : 0,
+    maxCandidates: Math.round(positive(raw?.maxCandidates, 60)),
+  };
+}
 type RawGuidance = RawText | ({ general?: RawText } & Partial<Record<GuidanceScope, RawText>>);
 
 const joinLines = (v: RawText): string | undefined => (Array.isArray(v) ? v.join('\n') : v);
@@ -309,7 +340,7 @@ const PERMISSION_MODES = ['auto', 'acceptEdits', 'default', 'plan', 'dontAsk', '
 /** Every scope a model can be named for; the key set `normalizeModel` accepts. */
 const MODEL_SCOPES = [
   'general', 'triage', 'work', 'maintenance', 'coordinator', 'review', 'plan',
-  'draft-issue', 'draft-project',
+  'draft-issue', 'draft-project', 'todo',
 ] as const;
 
 /**

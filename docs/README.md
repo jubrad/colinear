@@ -27,6 +27,7 @@
 | [`:project`](views/projects.md) | `p` | project kanban (:project NAME) |
 | [`:plan`](views/plan.md) | `chat` | project planning chat (:plan PROJECT) |
 | [`:reviews`](views/reviews.md) | `rev` `pr` | PRs awaiting my review + assisted pre-review |
+| [`:todo`](views/todo.md) | `next` `agenda` `recs` | what to do next: reviews, waiting agents, deadlines, ranked |
 | [`:costs`](views/costs.md) | `cost` `$` | spend per ticket |
 | [`:logs`](views/logs.md) | `log` `debug` | live debug log (what colinear is actually doing) |
 | [`:diff`](views/diff.md) | `selfreview` | read a task's own branch before promoting its draft PR |

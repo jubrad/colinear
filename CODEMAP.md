@@ -37,7 +37,8 @@ src/core/
                      (a command the daemon has no case for is reported, not swallowed —
                      an additive command needs no version bump, but it must not go quiet)
   store.check.ts     `npm run check`: replays a realistic mutation sequence into a mirror and asserts
-                     they agree (cleared fields, activity cap, answer callback, gap → re-snapshot)
+                     they agree (cleared fields, activity cap, answer callback, gap → re-snapshot,
+                     the :todo singleton)
   hooks.ts           useTasks(): memoized per store.version — identity stability is load-bearing (see gotchas)
   dispatcher.ts      the heart: queue + concurrency (default 3), runTask (triage→work→checks),
                      worktree management (PR-branch adoption, existing-worktree reuse), prompts
@@ -123,6 +124,14 @@ src/core/
   reviewer.check.ts  an info finding reaches no review body, over every caller shape and
                      every event — the guarantee that has escaped twice — and only a stale
                      anchor is read as one (bin/check runs it)
+  todo.ts            :todo's pure half — every source (reviews, tasks, issues, milestones,
+                     projects) reduced to one TodoItem shape and scored; the ranking prompt
+                     (policy configurable, contract not), applyRanking (the agent orders by key,
+                     can't add), and handledReason, which ticks rows off against live state
+  todo.check.ts      the scoring with a fixed clock: working-hour SLA, dedupe, ranking can't
+                     invent (bin/check runs it)
+  todolist.ts        TodoManager, the daemon half: gather (tracker + a fresh review poll),
+                     land colinear's order, then one read-only ranking session; optional clock
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
                      read-only (denies Write/Edit), parses ```json subtasks fence into drafts,
                      approve() creates Linear sub-issues; snapshot/restore for persistence

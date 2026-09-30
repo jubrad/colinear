@@ -24,6 +24,11 @@ interface SearchedPr {
   // a team's entry comes back null without an org scope, which is all the
   // signal needed: a request that is not you by name reached you by team
   reviewRequests?: { nodes: Array<{ requestedReviewer: { __typename?: string; login?: string } | null }> };
+  createdAt?: string;
+  // newest last; a team reviewer reads as null for the same reason as above
+  timelineItems?: {
+    nodes: Array<{ createdAt?: string; requestedReviewer?: { __typename?: string; login?: string } | null }>;
+  };
   author: { login: string } | null;
   repository: { nameWithOwner: string };
 }
@@ -37,10 +42,13 @@ const SEARCH_QUERY = `
 query($q: String!) {
   search(query: $q, type: ISSUE, first: 50) {
     nodes { ... on PullRequest {
-      number title url isDraft updatedAt additions deletions changedFiles
+      number title url isDraft createdAt updatedAt additions deletions changedFiles
       headRefName baseRefName
       headRefOid
       reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } } } }
+      timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 20) {
+        nodes { ... on ReviewRequestedEvent { createdAt requestedReviewer { __typename ... on User { login } } } }
+      }
       author { login }
       repository { nameWithOwner }
     } }
@@ -162,6 +170,8 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
       // it came back from a review-requested search, so it is asking for yours
       requested: true,
       requestedVia: requestedVia(pr, login),
+      createdAt: pr.createdAt,
+      requestedAt: requestedAt(pr, login),
     };
     if (existing) {
       // A review whose repo never resolved is stuck: the config it needed may
@@ -350,6 +360,22 @@ function requestedVia(pr: SearchedPr, login: string): 'you' | 'team' {
   return byName ? 'you' : 'team';
 }
 
+/**
+ * When the request that is open now was made — the start of the review SLA
+ * clock `:todo` weighs. The latest request event naming you, or naming a
+ * team (unreadable without an org scope, which is itself the sign), since a
+ * re-request restarts the wait. Falls back to the PR's creation: a PR opened
+ * with reviewers already set may carry no event at all.
+ */
+function requestedAt(pr: SearchedPr, login: string): string | undefined {
+  const events = pr.timelineItems?.nodes ?? [];
+  const mine = events.filter((e) => {
+    const who = e.requestedReviewer;
+    return !who?.login || who.login.toLowerCase() === login.toLowerCase();
+  });
+  return mine.at(-1)?.createdAt ?? pr.createdAt;
+}
+
 function announceNewCommits(id: string, headSha?: string): void {
   const review = store.getReview(id);
   if (!review || !headSha) return;
@@ -422,14 +448,14 @@ export async function adoptReview(cfg: Config, spec: string): Promise<Review> {
     [
       'pr', 'view', String(number),
       '--repo', repository,
-      '--json', 'title,url,isDraft,updatedAt,additions,deletions,changedFiles,headRefName,baseRefName,headRefOid,author,state',
+      '--json', 'title,url,isDraft,createdAt,updatedAt,additions,deletions,changedFiles,headRefName,baseRefName,headRefOid,author,state',
     ],
     { maxBuffer: 10 * 1024 * 1024 },
   ).catch((err: unknown) => {
     throw new Error(`${repository}#${number}: ${String((err as { stderr?: string })?.stderr ?? err).slice(0, 200)}`);
   });
   const pr = JSON.parse(stdout) as {
-    title: string; url: string; isDraft: boolean; updatedAt: string;
+    title: string; url: string; isDraft: boolean; createdAt?: string; updatedAt: string;
     additions: number; deletions: number; changedFiles: number;
     headRefName: string; baseRefName: string; headRefOid: string;
     author: { login?: string } | null; state: string;
@@ -440,6 +466,7 @@ export async function adoptReview(cfg: Config, spec: string): Promise<Review> {
     url: pr.url,
     author: pr.author?.login ?? 'unknown',
     isDraft: pr.isDraft,
+    createdAt: pr.createdAt,
     updatedAt: pr.updatedAt,
     additions: pr.additions,
     deletions: pr.deletions,

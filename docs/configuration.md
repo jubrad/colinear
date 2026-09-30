@@ -64,6 +64,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `ciAutofix` | `true` | dispatch a fix session when a task's PR checks go red (one per red rollup, re-armed when it goes green) |
 | `autoRebase` | `false` | default for [auto-rebase on conflict](#auto-rebase); the `m` modal overrides it per task |
 | `autoDispatchSubs` | `false` | when a tracking parent gains a sub-issue nobody has started, dispatch it. [Details](#new-sub-issues) |
+| `todo` | on | [`:todo`](views/todo.md): `false` switches it off; an object sets how it ranks: the policy its agent is given, the review turnaround, what counts as stale, and an optional refresh clock. [Details](#todo) |
 | `retentionDays` | `30` | how long finished work stays on the board. [Details](#retention-and-disk) |
 | `worktreeRetentionDays` | `7` | how long a finished task's worktree is kept before `coli gc` offers it. [Details](#retention-and-disk) |
 | `experimental` | `false` | master switch for unfinished features. Nothing in `experiments` runs unless this is true. [Details](#experimental-features) |
@@ -172,8 +173,8 @@ was.
 `model` and `fallbackModel` both take either a bare string, which applies to everything, or a map
 naming a model per kind of session. The kinds are the ones `:agents` already shows:
 
-`triage`, `work`, `maintenance`, `coordinator`, `review`, `plan`, `draft-issue` and
-`draft-project`, plus `general` for everything you have not named.
+`triage`, `work`, `maintenance`, `coordinator`, `review`, `plan`, `draft-issue`,
+`draft-project` and `todo`, plus `general` for everything you have not named.
 
 ```json
 {
@@ -216,6 +217,40 @@ or a map, where each scope's text is **added to** `general` for that one kind of
 ```
 
 Every value takes a string or a list of lines. Precedence: per-task instructions (`m`, or `c` at dispatch) outrank guidance, and repo-specific conventions still belong in that repo's `CLAUDE.md`, which agents read anyway.
+
+### Todo
+
+What [`:todo`](views/todo.md) ranks by. Every key is optional.
+
+```json
+"todo": {
+  "reviewSlaHours": 24,
+  "staleDays": 14,
+  "horizonDays": 21,
+  "refreshMinutes": 0,
+  "maxCandidates": 60,
+  "guidance": "Mornings are for deep work: nothing below `today` before noon."
+}
+```
+
+| key | default | what |
+|---|---|---|
+| `enabled` | `true` | the whole feature: the view, the ranking agent and the refresh clock. `"todo": false` is the same as `"todo": { "enabled": false }`. Off, `:todo` explains how to turn it back on, and the daemon refuses to gather or rank |
+| `prompt` | the built-in policy | replaces the policy the ranking agent is given, which says how to weigh reviews, deadlines and priority. String or list of lines |
+| `guidance` | none | added after the policy, whether built in or replaced. It suits a rule or two you want on top of the defaults |
+| `reviewSlaHours` | `24` | the review turnaround you hold yourself to, in working hours. A request past it goes to `now` |
+| `staleDays` | `14` | a PR untouched this long is stale. Its clock stops and it sinks. A draft is always stale |
+| `horizonDays` | `21` | how far ahead a deadline starts to count. Milestones and projects past it are not listed |
+| `refreshMinutes` | `0` | re-rank on a clock, with the agent. `0` means only when you press `r` |
+| `maxCandidates` | `60` | the most candidates handed to the agent, best-scored first. The rest are counted but not ranked |
+
+`prompt` replaces only the policy. The description of the data and the answer format stay the same,
+because they are what colinear parses. Without them a custom policy would stop the answer
+parsing, and the list would fall back to colinear's own order every time. To see the default policy,
+look for `DEFAULT_TODO_POLICY` in `src/core/todo.ts`.
+
+The ranking agent is a session of kind `todo`, so `"model": { "todo": "haiku" }` gives it its own
+model. It is denied every tool that could write, whatever `denyTools` says.
 
 ### Retention and disk
 

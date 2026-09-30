@@ -76,7 +76,7 @@ eq('a per-task override outranks the scope', modelsFor(cfg, 'review', 'haiku'), 
  * output of `modelsFor` rather than on hand-written pairs.
  */
 const SCOPES: ModelScope[] = [
-  'general', 'triage', 'work', 'maintenance', 'coordinator', 'review', 'plan', 'draft-issue', 'draft-project',
+  'general', 'triage', 'work', 'maintenance', 'coordinator', 'review', 'plan', 'draft-issue', 'draft-project', 'todo',
 ];
 const COLLIDING: Array<Record<string, string>> = [
   { general: 'opus' },

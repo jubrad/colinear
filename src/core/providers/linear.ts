@@ -34,7 +34,8 @@ const ISSUE_FIELDS = `
   labels { nodes { name color } }
   assignee { id displayName }
   parent { id identifier }
-  projectMilestone { name }
+  dueDate
+  projectMilestone { name targetDate }
 `;
 
 interface IssueNode {
@@ -51,7 +52,8 @@ interface IssueNode {
   labels: { nodes: Array<{ name: string; color: string }> };
   assignee?: { id: string; displayName: string } | null;
   parent?: { id: string; identifier: string } | null;
-  projectMilestone?: { name: string } | null;
+  dueDate?: string | null;
+  projectMilestone?: { name: string; targetDate?: string | null } | null;
 }
 
 function toIssue(n: IssueNode): Issue {
@@ -69,6 +71,8 @@ function toIssue(n: IssueNode): Issue {
     projectId: n.project?.id,
     projectName: n.project?.name,
     milestoneName: n.projectMilestone?.name,
+    milestoneTargetDate: n.projectMilestone?.targetDate ?? undefined,
+    dueDate: n.dueDate ?? undefined,
     labels: n.labels.nodes,
     assignee: n.assignee?.displayName,
     assigneeId: n.assignee?.id,

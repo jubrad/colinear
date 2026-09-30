@@ -15,7 +15,7 @@ visible in the view that owned it, if it had one at all.
 
 | column | what |
 |---|---|
-| `KIND` | `work` · `triage` · `maintenance` (a CI fix or rebase on an open PR) · `coordinator` · `review` · `plan` · `draft-issue` · `draft-project` |
+| `KIND` | `work` · `triage` · `maintenance` (a CI fix or rebase on an open PR) · `coordinator` · `review` · `plan` · `draft-issue` · `draft-project` · `todo` (ranking [`:todo`](todo.md)) |
 | `WORKING ON` | the issue, PR or project it belongs to |
 | `STARTED BY` | why it exists — *dispatch*, *CI failing*, *you pressed r*, *you messaged the parent* |
 | `FOR` | how long it has been going |

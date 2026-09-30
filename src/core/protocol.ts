@@ -21,7 +21,7 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 15;
+export const PROTOCOL_VERSION = 16;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -79,6 +79,9 @@ export type Command =
   /** cut a worktree and mint a session id, then hand them back to attach with */
   | { name: 'startPlanChat'; projectId: string }
   | { name: 'pollReviews' }
+  /** rebuild the :todo list; agent:false keeps colinear's own order and spends nothing */
+  | { name: 'refreshTodo'; agent: boolean }
+  | { name: 'cancelTodo' }
   | { name: 'gcScan'; olderThanDays: number }
   /** say something to a task's agent without attaching */
   | { name: 'message'; id: string; text: string; wake?: boolean }
