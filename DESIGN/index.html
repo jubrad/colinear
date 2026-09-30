@@ -860,6 +860,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../docs/views/todo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :todo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../docs/views/projects/" class="md-nav__link">
         
   
@@ -1332,6 +1360,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-todo-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The todo list
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#agent-runtimes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1628,6 +1667,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-todo-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The todo list
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#agent-runtimes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1847,6 +1897,11 @@ because divergence here is invisible until someone acts on a stale card.</p>
 <td><code>gh</code> search for PRs awaiting your review</td>
 <td>a review request is not urgent, and the search is expensive</td>
 </tr>
+<tr>
+<td><code>todo.refreshMinutes</code></td>
+<td>re-rank <code>:todo</code> with the agent — off (<code>0</code>) by default</td>
+<td>it spends tokens, so the operator chooses whether a clock may</td>
+</tr>
 </tbody>
 </table>
 <p>Two retries also sit on clocks: a session that dies before starting is requeued once after <strong>5s</strong>,
@@ -1962,7 +2017,7 @@ queues the task so that session happens now. Waking deliberately skips <code>blo
 not a reason to jump a dependency), <code>tracking</code> and already-queued tasks, and it pushes onto the
 queue like <code>resume()</code> rather than going through <code>enqueue()</code>, so no Linear state moves.</p>
 <p><strong>Which model runs a session is a property of what kind of session it is.</strong> <code>AgentKind</code> already
-tags all eight — triage, work, maintenance, coordinator, review, plan, draft-issue, draft-project —
+tags all nine — triage, work, maintenance, coordinator, review, plan, draft-issue, draft-project, todo —
 and every session announces one to <code>:agents</code>, so that tag is the routing key and no call site needed
 new plumbing to carry it. <code>model</code> and <code>fallbackModel</code> take the <code>guidance</code> shape: a bare string is
 <code>{ general: it }</code>, a map names a kind. <code>modelsFor(cfg, kind, override)</code> resolves the pair together
@@ -2100,6 +2155,43 @@ sessions finish on the brief they started with and read the channel at their pre
 <p>Plans never leave the store on their own — retention drops finished tasks and settled reviews, but
 a plan is a conversation the operator can return to, so only they remove one. <code>:gc</code> spares a live
 plan's worktree for the same reason and offers it once the plan is gone.</p>
+<h2 id="the-todo-list">The todo list<a class="headerlink" href="#the-todo-list" title="Permanent link">&para;</a></h2>
+<p>A fourth CDC entity, and the first singleton: <code>store.todo</code>, travelling whole as <code>todo-set</code> (a
+patch protocol for one small document buys nothing) plus <code>todo-activity</code> lines. The owner brings
+the list into being before its first activity line, because a mirror rejects a line with nothing
+to land on.</p>
+<p><strong>One shape, then one order.</strong> <code>core/todo.ts</code> reduces reviews, tasks, issues, milestones and
+projects to a <code>TodoItem</code> — key, kind, ref, next move, reason, urgency, the facts it was scored on —
+and scores each with plain rules. Pure, clock-injected, and held to its word by <code>todo.check.ts</code>. The
+agent then orders those items. It answers in <strong>keys</strong>, and a key colinear never offered is dropped
+and counted, so the agent can reorder, reword and leave out but never add. What an entry points at,
+its facts and its link always come from colinear.</p>
+<p><strong>Two answers on purpose.</strong> <code>TodoManager.refresh</code> lands colinear's scored order the moment
+gathering finishes, then runs the ranking session. A ranking that fails, is cancelled or doesn't
+parse costs the operator the ranking, not the list. The agent is denied every writing tool and
+given nothing but its prompt, so it runs in a scratch directory with no checkout.</p>
+<p><strong>The policy is config; the contract isn't.</strong> <code>todo.prompt</code> replaces the section that says how to
+weigh reviews, deadlines and priority. The description of the data and the answer format are
+fixed, since those are what <code>applyRanking</code> parses. Letting an operator edit them would mean a typo
+silently turns every ranking into a fallback.</p>
+<p><strong>Deduplication is by construction.</strong> An issue with a live task is represented by the task, and
+only when the task needs the operator. When an agent holds it, it isn't listed at all. Several
+issues sharing a milestone date also produce a milestone entry, because three rows due Friday are
+really one deadline.</p>
+<p><strong>The review clock</strong> starts at the latest <code>ReviewRequestedEvent</code> naming you or a team (a
+re-request restarts it), read in the same GraphQL search that fills <code>:reviews</code>. It counts working
+hours, so a Friday request isn't late on Monday morning. A draft, or a PR untouched for
+<code>staleDays</code>, stops the clock. Deadlines are read as local midnight, because trackers store them as
+bare days and parsing them as UTC moves every date by one for anyone west of Greenwich.</p>
+<p><strong>On by default, behind <code>todo.enabled</code>.</strong> A plain flag rather than an experiment, because
+experiments are off until the master <code>experimental</code> switch is on and this one ships on. The gate
+sits in the daemon, not only the view. <code>refresh</code> and the clock both check it, so a client that
+disagrees with the daemon's config still cannot start a ranking session. Switched off, the view
+stays registered and says how to turn it back on, the same rule experimental views follow.</p>
+<p><strong>A snapshot that ticks itself off.</strong> The view asks <code>handledReason</code> about each row against the
+live store, using the same predicates that listed it (<code>reviewNeed</code>, <code>taskNeed</code>). "Handled" therefore
+means exactly "would not be listed now", and posting a review or answering a question marks the row
+without re-ranking anything.</p>
 <h2 id="agent-runtimes">Agent runtimes<a class="headerlink" href="#agent-runtimes" title="Permanent link">&para;</a></h2>
 <p>Everything above <code>core/agent.ts</code> is runtime-agnostic; everything below it is one adapter.
 <code>runtimeFor(cfg, kind, override)</code> answers the whole question — what runs this, on what model, with
@@ -2300,8 +2392,12 @@ every live worktree looks dead.</p>
 <td><code>~/.config/colinear/views/*.json</code></td>
 </tr>
 <tr>
-<td>task/review/plan/UI state</td>
+<td>task/review/plan/todo/UI state</td>
 <td><code>~/.local/state/colinear/state.json</code> (pruned by <code>retentionDays</code>; plans only leave when the operator removes them)</td>
+</tr>
+<tr>
+<td>todo ranking scratch cwd</td>
+<td><code>~/.local/state/colinear/todo/</code> (empty — the ranking session reads no code)</td>
 </tr>
 <tr>
 <td>plan drafts</td>

@@ -677,6 +677,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#todo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Todo
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#retention-and-disk" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1054,6 +1065,34 @@
     
   
     :reviews
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../views/todo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :todo
   
 
     
@@ -1506,6 +1545,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#todo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Todo
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#retention-and-disk" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1761,6 +1811,11 @@
 <td>when a tracking parent gains a sub-issue nobody has started, dispatch it. <a href="#new-sub-issues">Details</a></td>
 </tr>
 <tr>
+<td><code>todo</code></td>
+<td>on</td>
+<td><a href="../views/todo/"><code>:todo</code></a>: <code>false</code> switches it off; an object sets how it ranks: the policy its agent is given, the review turnaround, what counts as stale, and an optional refresh clock. <a href="#todo">Details</a></td>
+</tr>
+<tr>
 <td><code>retentionDays</code></td>
 <td><code>30</code></td>
 <td>how long finished work stays on the board. <a href="#retention-and-disk">Details</a></td>
@@ -1973,8 +2028,8 @@ was.</p>
 <h3 id="models-per-kind-of-session">Models per kind of session<a class="headerlink" href="#models-per-kind-of-session" title="Permanent link">&para;</a></h3>
 <p><code>model</code> and <code>fallbackModel</code> both take either a bare string, which applies to everything, or a map
 naming a model per kind of session. The kinds are the ones <code>:agents</code> already shows:</p>
-<p><code>triage</code>, <code>work</code>, <code>maintenance</code>, <code>coordinator</code>, <code>review</code>, <code>plan</code>, <code>draft-issue</code> and
-<code>draft-project</code>, plus <code>general</code> for everything you have not named.</p>
+<p><code>triage</code>, <code>work</code>, <code>maintenance</code>, <code>coordinator</code>, <code>review</code>, <code>plan</code>, <code>draft-issue</code>,
+<code>draft-project</code> and <code>todo</code>, plus <code>general</code> for everything you have not named.</p>
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
 <span class="w">  </span><span class="nt">"model"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="nt">"general"</span><span class="p">:</span><span class="w"> </span><span class="s2">"fable"</span><span class="p">,</span>
@@ -2004,6 +2059,74 @@ model can be given its own way down as well.</p>
 <span class="p">}</span>
 </code></pre></div>
 <p>Every value takes a string or a list of lines. Precedence: per-task instructions (<code>m</code>, or <code>c</code> at dispatch) outrank guidance, and repo-specific conventions still belong in that repo's <code>CLAUDE.md</code>, which agents read anyway.</p>
+<h3 id="todo">Todo<a class="headerlink" href="#todo" title="Permanent link">&para;</a></h3>
+<p>What <a href="../views/todo/"><code>:todo</code></a> ranks by. Every key is optional.</p>
+<div class="highlight"><pre><span></span><code><span class="nt">"todo"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">"reviewSlaHours"</span><span class="p">:</span><span class="w"> </span><span class="mi">24</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"staleDays"</span><span class="p">:</span><span class="w"> </span><span class="mi">14</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"horizonDays"</span><span class="p">:</span><span class="w"> </span><span class="mi">21</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"refreshMinutes"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"maxCandidates"</span><span class="p">:</span><span class="w"> </span><span class="mi">60</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"guidance"</span><span class="p">:</span><span class="w"> </span><span class="s2">"Mornings are for deep work: nothing below `today` before noon."</span>
+<span class="p">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>key</th>
+<th>default</th>
+<th>what</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enabled</code></td>
+<td><code>true</code></td>
+<td>the whole feature: the view, the ranking agent and the refresh clock. <code>"todo": false</code> is the same as <code>"todo": { "enabled": false }</code>. Off, <code>:todo</code> explains how to turn it back on, and the daemon refuses to gather or rank</td>
+</tr>
+<tr>
+<td><code>prompt</code></td>
+<td>the built-in policy</td>
+<td>replaces the policy the ranking agent is given, which says how to weigh reviews, deadlines and priority. String or list of lines</td>
+</tr>
+<tr>
+<td><code>guidance</code></td>
+<td>none</td>
+<td>added after the policy, whether built in or replaced. It suits a rule or two you want on top of the defaults</td>
+</tr>
+<tr>
+<td><code>reviewSlaHours</code></td>
+<td><code>24</code></td>
+<td>the review turnaround you hold yourself to, in working hours. A request past it goes to <code>now</code></td>
+</tr>
+<tr>
+<td><code>staleDays</code></td>
+<td><code>14</code></td>
+<td>a PR untouched this long is stale. Its clock stops and it sinks. A draft is always stale</td>
+</tr>
+<tr>
+<td><code>horizonDays</code></td>
+<td><code>21</code></td>
+<td>how far ahead a deadline starts to count. Milestones and projects past it are not listed</td>
+</tr>
+<tr>
+<td><code>refreshMinutes</code></td>
+<td><code>0</code></td>
+<td>re-rank on a clock, with the agent. <code>0</code> means only when you press <code>r</code></td>
+</tr>
+<tr>
+<td><code>maxCandidates</code></td>
+<td><code>60</code></td>
+<td>the most candidates handed to the agent, best-scored first. The rest are counted but not ranked</td>
+</tr>
+</tbody>
+</table>
+<p><code>prompt</code> replaces only the policy. The description of the data and the answer format stay the same,
+because they are what colinear parses. Without them a custom policy would stop the answer
+parsing, and the list would fall back to colinear's own order every time. To see the default policy,
+look for <code>DEFAULT_TODO_POLICY</code> in <code>src/core/todo.ts</code>.</p>
+<p>The ranking agent is a session of kind <code>todo</code>, so <code>"model": { "todo": "haiku" }</code> gives it its own
+model. It is denied every tool that could write, whatever <code>denyTools</code> says.</p>
 <h3 id="retention-and-disk">Retention and disk<a class="headerlink" href="#retention-and-disk" title="Permanent link">&para;</a></h3>
 <p>Two windows, deliberately different numbers — a checkout is exactly what you want the day a task lands, long after the card stops being interesting.</p>
 <ul>
