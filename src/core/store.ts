@@ -8,7 +8,7 @@ import {
   type WireReview,
   type WireTask,
 } from './delta.js';
-import type { ProjectPlan, Review, SessionSpend, Task, TaskStatus } from './types.js';
+import type { ProjectPlan, Review, SessionSpend, Task, TaskStatus, TodoList } from './types.js';
 
 type Listener = () => void;
 
@@ -21,6 +21,8 @@ class Store {
   reviews = new Map<string, Review>();
   /** project plans, keyed by project id — same CDC contract again */
   plans = new Map<string, ProjectPlan>();
+  /** the :todo list — one per context, absent until first refreshed */
+  todo: TodoList | undefined;
   version = 0;
   private listeners = new Set<Listener>();
   private log: Delta[] = [];
@@ -208,12 +210,50 @@ class Store {
     return [...this.plans.values()];
   }
 
+  /** Replace the :todo list wholesale. */
+  setTodo(todo: TodoList) {
+    const change: Change = { kind: 'todo-set', todo: structuredClone(todo) };
+    if (this.remote) return this.remote(change);
+    this.todo = todo;
+    this.emit(change);
+  }
+
+  /** Merge into the :todo list; it travels whole either way. */
+  updateTodo(patch: Partial<TodoList>) {
+    const base: TodoList = this.todo ?? emptyTodo();
+    const next = { ...base, ...patch };
+    // an explicit undefined clears, the same meaning `update` gives it
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) delete (next as unknown as Record<string, unknown>)[key];
+    }
+    this.setTodo(next);
+  }
+
+  addTodoActivity(line: string) {
+    if (this.remote) return this.remote({ kind: 'todo-activity', line });
+    // a line with no list to land on would be rejected by every mirror, so
+    // the list comes into being first, as its own delta
+    if (!this.todo) this.setTodo(emptyTodo());
+    appendActivity(this.todo!, line);
+    this.emit({ kind: 'todo-activity', line });
+  }
+
+  /** The ranking session's spend; see `addSpend`. */
+  addTodoSpend(entry: SessionSpend) {
+    const todo = this.todo ?? emptyTodo();
+    this.updateTodo({
+      spend: [...(todo.spend ?? []), entry],
+      costUsd: todo.costUsd + (entry.costUsd ?? 0),
+    });
+  }
+
   snapshot(): Snapshot {
     return {
       version: this.version,
       tasks: this.list().map((t) => toWire(t) as WireTask),
       reviews: this.listReviews().map((r) => toWire(r) as WireReview),
       plans: this.listPlans().map((p) => toWire(p) as WirePlan),
+      ...(this.todo ? { todo: structuredClone(this.todo) } : {}),
     };
   }
 
@@ -266,6 +306,10 @@ class Store {
         return this.updatePlan(change.id, withCleared<Partial<ProjectPlan>>(change.patch, change.clear));
       case 'plan-delete':
         return this.deletePlan(change.id);
+      case 'todo-set':
+        return this.setTodo(change.todo);
+      case 'todo-activity':
+        return this.addTodoActivity(change.line);
       case 'delete':
         return this.delete(change.id);
       case 'review-delete':
@@ -280,6 +324,7 @@ class Store {
     this.reviews = new Map(snapshot.reviews.map((r) => [r.id, this.fromWire(r, r.id) as unknown as Review]));
     // older daemons don't send plans; an empty map beats a crash mid-hydrate
     this.plans = new Map((snapshot.plans ?? []).map((p) => [p.id, this.fromWire(p, p.id) as unknown as ProjectPlan]));
+    this.todo = snapshot.todo;
     this.version = snapshot.version;
     this.log = [];
     this.notify();
@@ -291,7 +336,12 @@ class Store {
    */
   apply(delta: Delta): boolean {
     if (delta.v !== this.version + 1) return false;
-    if (delta.kind === 'delete') {
+    if (delta.kind === 'todo-set') {
+      this.todo = structuredClone(delta.todo);
+    } else if (delta.kind === 'todo-activity') {
+      if (!this.todo) return false;
+      appendActivity(this.todo, delta.line);
+    } else if (delta.kind === 'delete') {
       this.tasks.delete(delta.id);
     } else if (delta.kind === 'review-delete') {
       this.reviews.delete(delta.id);
@@ -334,6 +384,17 @@ class Store {
     }
     return task;
   }
+}
+
+export function emptyTodo(): TodoList {
+  return {
+    status: 'idle',
+    items: [],
+    considered: 0,
+    activity: [],
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    costUsd: 0,
+  };
 }
 
 /** Same cap on both sides, so a mirror stays byte-identical without resends. */

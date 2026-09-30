@@ -15,6 +15,7 @@ const KIND_COLOR: Record<string, string> = {
   plan: theme.info,
   'draft-issue': theme.key,
   'draft-project': theme.key,
+  todo: theme.info,
 };
 
 /**

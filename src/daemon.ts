@@ -29,6 +29,7 @@ import { createIssueFromPrompt } from './core/newissue.js';
 import { createProjectFromPrompt } from './core/newproject.js';
 import { listSessions, updateSession } from './core/sessions.js';
 import { store } from './core/store.js';
+import { TodoManager } from './core/todolist.js';
 
 /** Liveness marker so `coli daemon status|stop` doesn't need the socket. */
 /** The tail of this daemon's log, for a client that can't read its disk. */
@@ -68,6 +69,7 @@ export async function runDaemon(): Promise<void> {
     message: (id, text) => dispatcher.message(id, text),
     cancel: (id) => dispatcher.cancel(id),
   });
+  const todo = new TodoManager(cfg);
   loadState(cfg);
   reviewer.resumeWatching(); // reviews restored from disk keep their live doc
   plans.resumeWatching();
@@ -100,6 +102,8 @@ export async function runDaemon(): Promise<void> {
   dispatcher.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
   reviewer.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
   plans.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
+  todo.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
+  todo.startClock();
 
   // every store mutation fans out to attached clients as a delta
   let sent = store.version;
@@ -163,6 +167,7 @@ export async function runDaemon(): Promise<void> {
         break;
       case 'reloadConfig':
         Object.assign(cfg, loadConfig());
+        todo.startClock(); // refreshMinutes may have changed
         log('config reloaded');
         break;
       case 'change':
@@ -198,6 +203,12 @@ export async function runDaemon(): Promise<void> {
         break;
       case 'pollReviews':
         if (!isDemo(cfg)) void pollReviewRequests(cfg);
+        break;
+      case 'refreshTodo':
+        void todo.refresh({ agent: cmd.agent, origin: cmd.agent ? 'you pressed r in :todo' : "colinear's own order, no agent" });
+        break;
+      case 'cancelTodo':
+        todo.cancel();
         break;
       case 'startPlan':
         void withProject(cmd.projectId, (project) => plans.start(project));
@@ -479,6 +490,7 @@ export async function runDaemon(): Promise<void> {
     dispatcher.shutdown();
     reviewer.shutdown();
     plans.shutdown();
+    todo.shutdown();
     stopPrPolling();
     stopReviewPolling();
     setTimeout(() => {

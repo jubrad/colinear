@@ -20,7 +20,8 @@
     "check:review": "tsx src/core/reviewer.check.ts",
     "check:agent": "tsx src/core/agent.check.ts",
     "check:models": "tsx src/core/models.check.ts",
-    "check:spend": "tsx src/core/spend.check.ts"
+    "check:spend": "tsx src/core/spend.check.ts",
+    "check:todo": "tsx src/core/todo.check.ts"
   },
   "engines": {
     "node": ">=20"

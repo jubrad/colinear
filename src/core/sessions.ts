@@ -19,7 +19,9 @@ export type AgentKind =
   | 'review'
   | 'plan'
   | 'draft-issue'
-  | 'draft-project';
+  | 'draft-project'
+  /** orders the :todo list */
+  | 'todo';
 
 export interface AgentSession {
   /** registry id, not the Claude session id */

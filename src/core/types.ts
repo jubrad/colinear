@@ -29,6 +29,10 @@ export interface Issue {
   projectName?: string;
   /** the project milestone this issue belongs to, where the provider has them */
   milestoneName?: string;
+  /** that milestone's target date (ISO day) — what :todo weighs deadlines by */
+  milestoneTargetDate?: string;
+  /** the issue's own due date (ISO day), where the tracker has one */
+  dueDate?: string;
   /** set when this issue is a sub-issue */
   parent?: { id: string; identifier: string };
 }
@@ -432,6 +436,14 @@ export interface Review {
   deletions: number;
   changedFiles: number;
   updatedAt: string;
+  /** when the PR was opened */
+  createdAt?: string;
+  /**
+   * When the review request open now was made (the latest one — a re-request
+   * restarts it). Where :todo starts the review SLA clock; absent on rows
+   * polled before it was recorded, which fall back to createdAt.
+   */
+  requestedAt?: string;
   status: ReviewStatus;
   activity: string[];
   /** local repo the diff was reviewed in, when one is configured */
@@ -496,6 +508,114 @@ export interface Review {
   spend?: SessionSpend[];
   error?: string;
   question?: PendingQuestion;
+}
+
+/** What a :todo entry points at. */
+export type TodoKind = 'review' | 'task' | 'issue' | 'milestone' | 'project';
+
+/**
+ * How soon, in the operator's words rather than a score: a list you read
+ * top-down wants "now / today / this week / later", not 87.3.
+ */
+export type TodoUrgency = 'now' | 'today' | 'week' | 'later';
+
+/**
+ * The signals a todo entry is ranked on — every one a fact colinear read, so
+ * the ranking agent can cite them and the operator can check them. Absent
+ * means "doesn't apply" (a review has no milestone), never zero.
+ */
+export interface TodoFacts {
+  /** tracker priority: 0 none, 1 urgent … 4 low */
+  priority?: number;
+  /** the project's own priority, same scale */
+  projectPriority?: number;
+  project?: string;
+  milestone?: string;
+  /** the nearest date that bears on it: issue due date, milestone, project target (ISO day) */
+  due?: string;
+  /** which of those `due` is */
+  dueFrom?: 'issue' | 'milestone' | 'project';
+  /** whole days until `due`; negative when overdue */
+  daysToDue?: number;
+  /** tracker state name ("In Progress") */
+  state?: string;
+  /** started in the tracker — finishing beats starting */
+  started?: boolean;
+  /** review: working hours since the open request was made */
+  waitingHours?: number;
+  /** review: the SLA it is measured against */
+  slaHours?: number;
+  /** review: a draft, or untouched for `staleDays` — the SLA stops counting */
+  stale?: boolean;
+  /** review: the author, and how big it is */
+  author?: string;
+  size?: string;
+  /** review: asked of you by name, or through a team */
+  via?: 'you' | 'team';
+  /** task: its colinear status */
+  status?: string;
+  /** anything else worth one line: the agent's question, the error, the CI state */
+  note?: string;
+  /** project: 0..1 */
+  progress?: number;
+  /** milestone: how many of your open issues sit in it */
+  openIssues?: number;
+}
+
+/**
+ * One entry on the :todo list — the general form every source is reduced to
+ * before anything ranks it. Reviews, tasks, issues, milestones and projects
+ * all arrive as this, so the view renders one shape and the ranking agent
+ * compares like with like.
+ */
+export interface TodoItem {
+  /**
+   * Stable identity: "review:owner/repo#12", "task:<issue id>",
+   * "issue:<issue id>", "milestone:<project id>:<name>", "project:<id>".
+   * The ranking agent answers in keys, and an answer naming a key colinear
+   * never offered is dropped — the agent orders the list, it can't add to it.
+   */
+  key: string;
+  kind: TodoKind;
+  /** short handle: CLO-12, cloud#902, a project name */
+  ref: string;
+  title: string;
+  /** the next move, imperative and short: "Review it", "Answer the agent" */
+  action: string;
+  /** one sentence on why it is here, citing the facts */
+  why: string;
+  urgency: TodoUrgency;
+  facts: TodoFacts;
+  url?: string;
+  /** where `enter` goes: the view that owns it (a view name and its param) */
+  open?: { view: string; param?: string };
+  /** colinear's own ranking score — the order before (or without) the agent */
+  score: number;
+}
+
+/**
+ * The :todo list. A singleton, CDC'd like the other entities: gathering and
+ * ranking happen in the daemon, the view only reads.
+ */
+export interface TodoList {
+  /** gathering = reading the tracker and GitHub; ranking = the agent is ordering it */
+  status: 'idle' | 'gathering' | 'ranking' | 'ready' | 'error';
+  /** in rank order */
+  items: TodoItem[];
+  /** how many candidates were gathered — the agent may leave some out */
+  considered: number;
+  /** who ordered `items`: the agent, or colinear's scoring alone */
+  rankedBy?: 'agent' | 'baseline';
+  /** the agent's one-paragraph read of the day */
+  summary?: string;
+  generatedAt?: number;
+  /** what started the last refresh — "you pressed r", "hourly refresh" */
+  origin?: string;
+  error?: string;
+  activity: string[];
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  costUsd: number;
+  spend?: SessionSpend[];
 }
 
 /** Operator's edits from the board's `m` modal; applied by the dispatcher. */
@@ -594,6 +714,33 @@ export interface SessionSpend {
   tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
   /** absent when the runtime reports no price — never write 0 to mean that */
   costUsd?: number;
+}
+
+/** `todo` in the config: what :todo ranks by. */
+export interface TodoConfig {
+  /**
+   * The whole feature: the view, the ranking agent, the refresh clock. On by
+   * default; `"todo": false` is shorthand for switching it off.
+   */
+  enabled: boolean;
+  /**
+   * Replaces the ranking policy the agent is given — how to weigh reviews,
+   * deadlines and priority. The data and the answer format around it are not
+   * configurable: those are what colinear parses.
+   */
+  prompt?: string;
+  /** added after the policy (default or replaced), for a rule or two */
+  guidance?: string;
+  /** the review turnaround you hold yourself to, in working hours (default 24) */
+  reviewSlaHours: number;
+  /** a PR untouched this many days is stale and stops climbing (default 14) */
+  staleDays: number;
+  /** how far ahead a deadline starts to count, in days (default 21) */
+  horizonDays: number;
+  /** re-rank on a clock, in minutes; 0 = only when asked (default 0) */
+  refreshMinutes: number;
+  /** most candidates handed to the agent, best-scored first (default 60) */
+  maxCandidates: number;
 }
 
 export interface CheckConfig {
@@ -710,6 +857,8 @@ export interface Config {
   experimental: boolean;
   /** per-feature opt-in; only consulted when `experimental` is true */
   experiments: Partial<Record<ExperimentName, boolean>>;
+  /** how :todo gathers and ranks; see TodoConfig */
+  todo: TodoConfig;
   /** UI refresh tick in ms — raise it (e.g. 2000) if your terminal/mux flickers (default 1000) */
   tickMs: number;
   /**

@@ -87,6 +87,7 @@ nav:
       - ':tasks': docs/views/tasks.md
       - ':task': docs/views/task.md
       - ':reviews': docs/views/reviews.md
+      - ':todo': docs/views/todo.md
       - ':projects': docs/views/projects.md
       - ':plan': docs/views/plan.md
       - ':costs': docs/views/costs.md

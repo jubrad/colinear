@@ -60,4 +60,9 @@ echo '── spend'
 npm run check:spend
 
 echo
+echo '── todo ranking'
+# the review SLA, the dedupe, and an agent that can reorder but never invent
+npm run check:todo
+
+echo
 echo 'ok'

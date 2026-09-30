@@ -18,6 +18,7 @@ import { ProjectView, projectKeys } from './ProjectView.js';
 import { ReviewsView, reviewsKeys } from './ReviewsView.js';
 import { TaskView, taskKeys } from './TaskView.js';
 import { TasksView, tasksKeys } from './TasksView.js';
+import { TodoView, todoKeys } from './TodoView.js';
 
 export interface ViewDef {
   name: string;
@@ -85,6 +86,13 @@ const builtinViews: ViewDef[] = [
     describe: 'PRs awaiting my review + assisted pre-review',
     Component: ReviewsView,
     keys: reviewsKeys,
+  },
+  {
+    name: 'todo',
+    aliases: ['next', 'agenda', 'recs'],
+    describe: 'what to do next: reviews, waiting agents, deadlines, ranked',
+    Component: TodoView,
+    keys: todoKeys,
   },
   {
     name: 'costs',

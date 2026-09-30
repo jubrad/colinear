@@ -81,6 +81,7 @@ Nothing polls on render. Every recurring read lives in the daemon on a fixed tim
 | 60s | PR state, CI rollup, review decision, mergeability | GitHub's own numbers move on this order; faster mostly buys rate limits |
 | 60s | blocked recheck, retention sweep, closed-issue sweep, sub-issue rollup | one tick, four jobs — see `recheckBlocked()` |
 | 5m | `gh` search for PRs awaiting your review | a review request is not urgent, and the search is expensive |
+| `todo.refreshMinutes` | re-rank `:todo` with the agent — off (`0`) by default | it spends tokens, so the operator chooses whether a clock may |
 
 Two retries also sit on clocks: a session that dies before starting is requeued once after **5s**,
 and a rate-limited session after **30s**. Both are one-shot — a second failure parks the task rather
@@ -214,7 +215,7 @@ not a reason to jump a dependency), `tracking` and already-queued tasks, and it 
 queue like `resume()` rather than going through `enqueue()`, so no Linear state moves.
 
 **Which model runs a session is a property of what kind of session it is.** `AgentKind` already
-tags all eight — triage, work, maintenance, coordinator, review, plan, draft-issue, draft-project —
+tags all nine — triage, work, maintenance, coordinator, review, plan, draft-issue, draft-project, todo —
 and every session announces one to `:agents`, so that tag is the routing key and no call site needed
 new plumbing to carry it. `model` and `fallbackModel` take the `guidance` shape: a bare string is
 `{ general: it }`, a map names a kind. `modelsFor(cfg, kind, override)` resolves the pair together
@@ -369,6 +370,52 @@ sessions finish on the brief they started with and read the channel at their pre
 Plans never leave the store on their own — retention drops finished tasks and settled reviews, but
 a plan is a conversation the operator can return to, so only they remove one. `:gc` spares a live
 plan's worktree for the same reason and offers it once the plan is gone.
+
+## The todo list
+
+A fourth CDC entity, and the first singleton: `store.todo`, travelling whole as `todo-set` (a
+patch protocol for one small document buys nothing) plus `todo-activity` lines. The owner brings
+the list into being before its first activity line, because a mirror rejects a line with nothing
+to land on.
+
+**One shape, then one order.** `core/todo.ts` reduces reviews, tasks, issues, milestones and
+projects to a `TodoItem` — key, kind, ref, next move, reason, urgency, the facts it was scored on —
+and scores each with plain rules. Pure, clock-injected, and held to its word by `todo.check.ts`. The
+agent then orders those items. It answers in **keys**, and a key colinear never offered is dropped
+and counted, so the agent can reorder, reword and leave out but never add. What an entry points at,
+its facts and its link always come from colinear.
+
+**Two answers on purpose.** `TodoManager.refresh` lands colinear's scored order the moment
+gathering finishes, then runs the ranking session. A ranking that fails, is cancelled or doesn't
+parse costs the operator the ranking, not the list. The agent is denied every writing tool and
+given nothing but its prompt, so it runs in a scratch directory with no checkout.
+
+**The policy is config; the contract isn't.** `todo.prompt` replaces the section that says how to
+weigh reviews, deadlines and priority. The description of the data and the answer format are
+fixed, since those are what `applyRanking` parses. Letting an operator edit them would mean a typo
+silently turns every ranking into a fallback.
+
+**Deduplication is by construction.** An issue with a live task is represented by the task, and
+only when the task needs the operator. When an agent holds it, it isn't listed at all. Several
+issues sharing a milestone date also produce a milestone entry, because three rows due Friday are
+really one deadline.
+
+**The review clock** starts at the latest `ReviewRequestedEvent` naming you or a team (a
+re-request restarts it), read in the same GraphQL search that fills `:reviews`. It counts working
+hours, so a Friday request isn't late on Monday morning. A draft, or a PR untouched for
+`staleDays`, stops the clock. Deadlines are read as local midnight, because trackers store them as
+bare days and parsing them as UTC moves every date by one for anyone west of Greenwich.
+
+**On by default, behind `todo.enabled`.** A plain flag rather than an experiment, because
+experiments are off until the master `experimental` switch is on and this one ships on. The gate
+sits in the daemon, not only the view. `refresh` and the clock both check it, so a client that
+disagrees with the daemon's config still cannot start a ranking session. Switched off, the view
+stays registered and says how to turn it back on, the same rule experimental views follow.
+
+**A snapshot that ticks itself off.** The view asks `handledReason` about each row against the
+live store, using the same predicates that listed it (`reviewNeed`, `taskNeed`). "Handled" therefore
+means exactly "would not be listed now", and posting a review or answering a question marks the row
+without re-ranking anything.
 
 ## Agent runtimes
 
@@ -581,7 +628,8 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
 | config | `~/.config/colinear/config.json` |
 | contexts | `~/.config/colinear/contexts/<name>.json` (layered over the config above) |
 | custom views | `~/.config/colinear/views/*.json` |
-| task/review/plan/UI state | `~/.local/state/colinear/state.json` (pruned by `retentionDays`; plans only leave when the operator removes them) |
+| task/review/plan/todo/UI state | `~/.local/state/colinear/state.json` (pruned by `retentionDays`; plans only leave when the operator removes them) |
+| todo ranking scratch cwd | `~/.local/state/colinear/todo/` (empty — the ranking session reads no code) |
 | plan drafts | `~/.local/state/colinear/plans/<project>.md` (workspace only — the tracker's document is the source of truth) |
 | debug log + diverted stderr | `~/.local/state/colinear/colinear.log` |
 | coordination channels (experimental) | `~/.local/state/colinear/channels/*.jsonl` + `cursors.json` |

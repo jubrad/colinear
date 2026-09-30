@@ -149,7 +149,7 @@ const ISSUE_SELECT = `
   SELECT i.*, s.key AS scope_key, st.name AS state_name, st.type AS state_type,
          p.name AS project_name, u.display_name AS assignee_name,
          par.identifier AS parent_identifier,
-         m.name AS milestone_name
+         m.name AS milestone_name, m.target_date AS milestone_target_date
   FROM issues i
   JOIN scopes s ON s.id = i.scope_id
   JOIN states st ON st.id = i.state_id
@@ -182,6 +182,7 @@ function toIssue(db: Db, row: Row): Issue {
     projectId: row.project_id ? String(row.project_id) : undefined,
     projectName: row.project_name ? String(row.project_name) : undefined,
     milestoneName: row.milestone_name ? String(row.milestone_name) : undefined,
+    milestoneTargetDate: row.milestone_target_date ? String(row.milestone_target_date) : undefined,
     parent: row.parent_id
       ? { id: String(row.parent_id), identifier: String(row.parent_identifier) }
       : undefined,

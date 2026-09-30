@@ -138,6 +138,38 @@ store.upsertPlan({
 });
 store.deletePlan('proj-gone');
 
+// the :todo list: a singleton that travels whole, plus activity lines. The
+// first write is an activity line with no list yet — the case a mirror would
+// reject if the owner did not bring the list into being first
+store.addTodoActivity('you pressed r: gathering');
+store.updateTodo({
+  status: 'ranking',
+  considered: 2,
+  rankedBy: 'baseline',
+  generatedAt: 7,
+  error: 'could not read projects',
+  items: [
+    {
+      key: 'review:o/r#7', kind: 'review', ref: 'r#7', title: 'Fix the flake', action: 'Review it',
+      why: 'Waiting 30h, 6h past the 24h review SLA.', urgency: 'now', score: 120,
+      facts: { waitingHours: 30, slaHours: 24, stale: false, author: 'someone', via: 'you' },
+      url: 'https://example.invalid/o/r/pull/7', open: { view: 'reviews', param: 'o/r#7' },
+    },
+    {
+      key: 'issue:X', kind: 'issue', ref: 'CLO-9', title: 'Ship it', action: 'Pick it up',
+      why: 'High priority, due tomorrow.', urgency: 'today', score: 120,
+      facts: { priority: 2, due: '2026-10-01', dueFrom: 'milestone', daysToDue: 1 }, open: { view: 'issues' },
+    },
+  ],
+});
+store.addTodoActivity('2 candidates');
+store.addTodoSpend({
+  kind: 'todo', model: 'haiku', startedAt: 20, endedAt: 21,
+  tokens: { input: 3, output: 4, cacheRead: 0, cacheWrite: 0 }, costUsd: 0.01,
+});
+// the agent's answer replaces the list and clears the error
+store.updateTodo({ status: 'ready', rankedBy: 'agent', summary: 'Review first.', error: undefined });
+
 let answered: string | undefined;
 mirror.hydrate({ version: 0, tasks: [], reviews: [], plans: [] }, (id, answers) => {
   answered = `${id}:${answers.join(',')}`;
@@ -150,13 +182,17 @@ const strip = (t: Task) => ({
   ...t,
   question: t.question ? { kind: t.question.kind, questions: t.question.questions } : undefined,
 });
-const left = JSON.stringify([store.list().map(strip), store.listReviews(), store.listPlans()]);
-const right = JSON.stringify([mirror.list().map(strip), mirror.listReviews(), mirror.listPlans()]);
+const left = JSON.stringify([store.list().map(strip), store.listReviews(), store.listPlans(), store.todo]);
+const right = JSON.stringify([mirror.list().map(strip), mirror.listReviews(), mirror.listPlans(), mirror.todo]);
 if (left !== right) {
   console.error('DIVERGED\n source:', left, '\n mirror:', right);
   process.exit(1);
 }
 if (store.get('A')?.error !== undefined) throw new Error('source kept a cleared field');
+if (!mirror.todo || mirror.todo.status !== 'ready') throw new Error('mirror lost the todo list');
+if (mirror.todo.error !== undefined) throw new Error('mirror kept a cleared todo field');
+if (mirror.todo.items.length !== 2 || mirror.todo.activity.length !== 2) throw new Error('mirror todo list drifted');
+if (mirror.todo.costUsd !== 0.01 || mirror.todo.spend?.length !== 1) throw new Error('mirror todo spend drifted');
 if (mirror.get('A')?.error !== undefined) throw new Error('mirror kept a cleared field');
 {
   const ledger = mirror.get('A')?.spend ?? [];

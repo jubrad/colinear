@@ -44,6 +44,7 @@ Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset) and `
 - **Steer** — answer an agent's questions in a form, message a running agent without attaching, attach to its session and hand it back, cancel, resume, rebase.
 - **Review** — PRs awaiting your review get an assisted pre-review you edit and post deterministically, never by an agent.
 - **Plan** — a read-only planning chat that drafts sub-issues for you to approve.
+- **Prioritize** — `:todo` pulls reviews, waiting agents, your issues, milestones and projects into one list, ranked by an agent against a policy you can rewrite: reviews within a working day, deadlines, then priority.
 
 ## Documentation
 
