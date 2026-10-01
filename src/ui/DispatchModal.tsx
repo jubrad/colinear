@@ -9,7 +9,7 @@ import { TextArea } from './TextArea.js';
  * "whatever the config says". The list is the runtime's rather than a constant
  * here, so a different runtime offers its own models instead of Claude's.
  */
-function modelOptions(models: string[]): Array<{ label: string; value?: string }> {
+export function modelOptions(models: string[]): Array<{ label: string; value?: string }> {
   return [{ label: 'default' }, ...models.map((label) => ({ label, value: label }))];
 }
 

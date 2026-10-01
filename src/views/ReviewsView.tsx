@@ -1,4 +1,5 @@
-import { agentFor } from '../core/agent.js';
+import { agentFor, pickableModels } from '../core/agent.js';
+import { modelsFor } from '../core/models.js';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
@@ -11,6 +12,8 @@ import type { Review } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
 import { AnnotatedDiff } from '../ui/AnnotatedDiff.js';
 import { ReviewDocModal } from '../ui/ReviewDocModal.js';
+import { ReviewOptionsModal } from '../ui/ReviewOptionsModal.js';
+import { Popup, formHeight, popupPlacement } from '../ui/Popup.js';
 import { useColinear, useViewSize } from '../ui/context.js';
 import { cell, formatDuration, formatTokens, spinner } from '../ui/format.js';
 import { REVIEW_COLORS, theme } from '../theme.js';
@@ -99,6 +102,8 @@ export function ReviewsView(props: { param?: string }) {
   const [reading, setReading] = useState(false);
   const [diffs, setDiffs] = useState<Record<string, string>>({});
   const [annotated, setAnnotated] = useState(true);
+  /** the `c` popup: a model and instructions for this review */
+  const [customizing, setCustomizing] = useState(false);
 
   useEffect(() => ctx.onReviewDiff?.((id, diff) => setDiffs((d) => ({ ...d, [id]: diff }))), []);
   const [sort, setSort] = useState<SortKey>('needs me');
@@ -163,8 +168,8 @@ export function ReviewsView(props: { param?: string }) {
 
   useEffect(() => {
     // the modal's chat input owns the keyboard too
-    ctx.setCapture(filtering || noting || reading);
-  }, [filtering, noting, reading]);
+    ctx.setCapture(filtering || noting || reading || customizing);
+  }, [filtering, noting, reading, customizing]);
   useEffect(() => () => ctx.setCapture(false), []);
   useEffect(() => {
     ctx.setEscHandler(query ? () => (setQuery(''), true) : null);
@@ -249,6 +254,11 @@ export function ReviewsView(props: { param?: string }) {
           'info',
         );
       }
+      if (input === 'c') {
+        if (ACTIVE.includes(selected.status)) ctx.toast('a session is running on this review — x stops it first', 'info');
+        else if (!selected.repo) ctx.toast(`${selected.repository} is not in your repos allowlist`, 'err');
+        else setCustomizing(true);
+      }
       if (input === 's') {
         // same as the board: hand this terminal to the review's own session
         rememberView('reviews', selected.id);
@@ -294,7 +304,7 @@ export function ReviewsView(props: { param?: string }) {
         }
       }
     },
-    { isActive: !filtering && !noting && !reading && !ctx.cmdOpen },
+    { isActive: !filtering && !noting && !reading && !customizing && !ctx.cmdOpen },
   );
 
   const ready = reviews.filter((r) => r.status === 'ready').length;
@@ -318,8 +328,8 @@ export function ReviewsView(props: { param?: string }) {
         onEditFinding={(file, line, comment, severity, startLine) =>
           ctx.dispatcher.editFinding(selected.id, file, line, comment, severity, startLine)
         }
-        onExplain={(file, startLine, endLine) =>
-          ctx.dispatcher.explainLines(selected.id, file, startLine, endLine)
+        onExplain={(file, startLine, endLine, opts) =>
+          ctx.dispatcher.explainLines(selected.id, file, startLine, endLine, opts)
         }
         onPost={() => {
           ctx.dispatcher.postReview(selected.id);
@@ -490,6 +500,40 @@ export function ReviewsView(props: { param?: string }) {
           </Text>
         </Box>
       )}
+
+      {/* last: an absolute box is overdrawn by anything rendered after it */}
+      {customizing &&
+        selected &&
+        (() => {
+          const inner = Math.min(100, ctx.size.columns - 6) - 4;
+          const lines = Math.max(3, Math.min(8, ctx.size.rows - 8 - formHeight(2) - 4));
+          const place = popupPlacement(ctx.size, { width: inner + 4, height: formHeight(2, lines + 2) }, ctx.cmdOpen);
+          const ref = `${shortRepo(selected.repository)}#${selected.number}`;
+          return (
+            <Popup {...place}>
+              <ReviewOptionsModal
+                title={`${selected.posted ? 're-review' : 'review'} ${ref}${selected.posted ? ' — what changed since you posted' : ''}`}
+                models={pickableModels(ctx.cfg)}
+                model={selected.model}
+                instructions={selected.instructions}
+                configured={modelsFor(ctx.cfg, 'review').model}
+                width={inner}
+                instructionLines={lines}
+                onSubmit={(opts) => {
+                  setCustomizing(false);
+                  ctx.dispatcher.startReview(selected.id, opts);
+                  ctx.toast(
+                    `${selected.posted ? 're-reviewing' : 'pre-reviewing'} ${ref}${opts.model ? ` on ${opts.model}` : ''}${
+                      opts.instructions ? ' with your instructions' : ''
+                    }`,
+                    'info',
+                  );
+                }}
+                onCancel={() => setCustomizing(false)}
+              />
+            </Popup>
+          );
+        })()}
     </Box>
   );
 }
@@ -539,6 +583,14 @@ function Detail(props: { review: Review; now: number; resumeHint: (id: string) =
       {review.note && (
         <Text color={theme.accent} wrap="truncate">
           note: {review.note}
+        </Text>
+      )}
+      {(review.model || review.instructions) && (
+        <Text color={theme.accent} wrap="truncate">
+          {review.model ? `model: ${review.model}` : ''}
+          {review.model && review.instructions ? ' · ' : ''}
+          {review.instructions ? `instructions: ${review.instructions.replace(/\s+/g, ' ')}` : ''}
+          <Text dimColor> — c changes</Text>
         </Text>
       )}
 
@@ -602,6 +654,7 @@ function shortRepo(repository: string): string {
 export const reviewsKeys: Array<[string, string]> = [
   ['i/k ↑↓', 'row'],
   ['r', 'pre-review · re-review once posted'],
+  ['c', 'review with a model + instructions'],
   ['enter', 'diff + annotations'],
   ['d', 'the review document'],
   ['s', 'attach claude'],

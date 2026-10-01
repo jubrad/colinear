@@ -2,9 +2,10 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { clearBrokenSubmodules, leadFinding, reviewBody, staleAnchors } from './reviewer.js';
+import { clearBrokenSubmodules, leadFinding, reviewBody, reviewPrompt, rereviewPrompt, staleAnchors } from './reviewer.js';
 import { parsePrSpec, revivedStatus } from './reviews.js';
-import type { Review, ReviewFinding } from './types.js';
+import { askedLine, explainPrompt } from './selfreview.js';
+import type { Config, Review, ReviewFinding } from './types.js';
 
 /**
  * An `info` finding must never reach GitHub. Not by any path.
@@ -312,11 +313,56 @@ for (const [spec, repository, number] of SPECS) {
   }
 }
 
+// ── instructions and a model picked with `c` ──
+{
+  const cfg = { guidance: { review: 'HOUSE RULE' } } as unknown as Config;
+  const details = { baseRefName: 'main', body: 'the description' };
+  const context = { delta: 'abc123 fix it', thread: '(no replies)' };
+  const asked = {
+    ...review,
+    instructions: 'FOCUS ON THE MIGRATION',
+    posted: { at: 0, event: 'COMMENT', url: '', comments: 1, sha: 'abc12345' },
+  } as unknown as Review;
+  const first = reviewPrompt(cfg, asked, details);
+  const second = rereviewPrompt(cfg, asked, details, context);
+  for (const [name, prompt] of [['a first round', first], ['round two', second]] as const) {
+    check(`${name} carries the operator's instructions`, prompt.includes('FOCUS ON THE MIGRATION'));
+    check(
+      `${name} puts them ahead of standing guidance, which still follows`,
+      prompt.indexOf('FOCUS ON THE MIGRATION') < prompt.indexOf('HOUSE RULE'),
+    );
+  }
+  const plain = { ...asked, instructions: undefined } as unknown as Review;
+  check('no instructions, no instructions section', !reviewPrompt(cfg, plain, details).includes('Instructions from the operator'));
+  check('a resumed round two is told it wrote the review', !second.includes('taking over'));
+  const fresh = rereviewPrompt(cfg, asked, details, context, true);
+  check('a fresh session on another runtime is told to read the posted review first', fresh.startsWith('You are taking over'));
+  check('and still gets the round-two brief', fresh.includes('This is round two'));
+}
+
+// ── `c` over marked lines: a request of your own ──
+{
+  const cfg = { guidance: { review: 'HOUSE RULE' } } as unknown as Config;
+  const at = { file: 'src/a.ts', startLine: 10, endLine: 14 };
+  const plain = explainPrompt(cfg, at, 'lines 10–14');
+  const asked = explainPrompt(cfg, at, 'lines 10–14', 'Is the retry loop safe under cancellation?');
+  check('a plain ask is unchanged: explain, as info', plain.includes('wants to understand') && !plain.includes('Their request'));
+  check('a request reaches the prompt', asked.includes('Is the retry loop safe under cancellation?'));
+  check('it still anchors to the marked range', asked.includes('"line": 14, "startLine": 10'));
+  check('a critique may come back as a postable finding', asked.includes('"blocking"') && !plain.includes('"blocking"'));
+  check('an empty request is no request', explainPrompt(cfg, at, 'lines 10–14', '   ') === plain);
+  check(
+    'the activity line names the model and the request',
+    askedLine('src/a.ts', 'lines 10–14', { model: 'opus', instructions: 'is it safe?' }) ===
+      'asked about src/a.ts lines 10–14 on opus: "is it safe?"',
+  );
+}
+
 if (failures.length) {
   console.error(`review posting: ${failures.length} failure(s)`);
   for (const f of failures) console.error(`  ✖ ${f}`);
   process.exit(1);
 }
 console.log(
-  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, and a half-initialised submodule cannot wedge a review checkout',
+  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, a half-initialised submodule cannot wedge a review checkout, and\n     the instructions given for a review reach every round ahead of standing guidance',
 );

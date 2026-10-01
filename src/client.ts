@@ -43,7 +43,7 @@ export interface DispatcherApi {
   setViewer(viewer: { id: string; displayName: string }): void;
   reloadConfig(): void;
   /** PR review flow — see Reviewer; nothing reaches GitHub until asked */
-  startReview(id: string): void;
+  startReview(id: string, opts?: { model?: string; instructions?: string }): void;
   /** put a PR on the review list by owner/repo#n or URL */
   adoptReview(spec: string): void;
   cancelReview(id: string): void;
@@ -68,7 +68,13 @@ export interface DispatcherApi {
   listAgents(): void;
   reviewDiff(id: string): void;
   taskDiff(id: string): void;
-  explainLines(id: string, file: string, startLine: number, endLine: number): void;
+  explainLines(
+    id: string,
+    file: string,
+    startLine: number,
+    endLine: number,
+    opts?: { model?: string; instructions?: string },
+  ): void;
   reviewTask(id: string): void;
   editTaskFinding(id: string, file: string, line: number, comment: string, severity?: string, startLine?: number): void;
   sendFindings(id: string): void;
@@ -355,7 +361,7 @@ export async function connectToDaemon(): Promise<Connection> {
             applyEdits: (id, edits) => command({ name: 'applyEdits', id, edits }),
             setViewer: (viewer) => command({ name: 'setViewer', viewer }),
             reloadConfig: () => command({ name: 'reloadConfig' }),
-            startReview: (id) => command({ name: 'startReview', id }),
+            startReview: (id, opts) => command({ name: 'startReview', id, opts }),
             adoptReview: (spec) => command({ name: 'adoptReview', spec }),
             cancelReview: (id) => command({ name: 'cancelReview', id }),
             suspendReview: (id) => command({ name: 'suspendReview', id }),
@@ -377,8 +383,8 @@ export async function connectToDaemon(): Promise<Connection> {
           listAgents: () => command({ name: 'listAgents' }),
           reviewDiff: (id) => command({ name: 'reviewDiff', id }),
           taskDiff: (id) => command({ name: 'taskDiff', id }),
-          explainLines: (id, file, startLine, endLine) =>
-            command({ name: 'explainLines', id, file, startLine, endLine }),
+          explainLines: (id, file, startLine, endLine, opts) =>
+            command({ name: 'explainLines', id, file, startLine, endLine, opts }),
           reviewTask: (id) => command({ name: 'reviewTask', id }),
           editTaskFinding: (id, file, line, comment, severity, startLine) =>
             command({ name: 'editTaskFinding', id, file, line, comment, severity, startLine }),

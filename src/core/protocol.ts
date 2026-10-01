@@ -21,7 +21,7 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 16;
+export const PROTOCOL_VERSION = 17;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -39,7 +39,8 @@ export type Command =
   /** operator preference that outlives the run — the daemon owns the file */
   | { name: 'setUi'; patch: Partial<UiState> }
   | { name: 'reloadConfig' }
-  | { name: 'startReview'; id: string }
+  /** opts: the `c` popup — a model and instructions kept on the review */
+  | { name: 'startReview'; id: string; opts?: { model?: string; instructions?: string } }
   /** put a pull request on the review list by name — `:reviews owner/repo#123` */
   | { name: 'adoptReview'; spec: string }
   | { name: 'cancelReview'; id: string }
@@ -57,7 +58,8 @@ export type Command =
   /** deterministic post of the plan summary as a tracker project update */
   | { name: 'postPlanUpdate'; projectId: string }
   /** ask the reviewing agent what a range of lines does, as an annotation */
-  | { name: 'explainLines'; id: string; file: string; startLine: number; endLine: number }
+  /** opts: `c` over the marked lines — a model and a request, for this one ask */
+  | { name: 'explainLines'; id: string; file: string; startLine: number; endLine: number; opts?: { model?: string; instructions?: string } }
   /** the diff of a task's own branch, for reading it before promoting the PR */
   | { name: 'taskDiff'; id: string }
   /** review a task's own work with a fresh session */

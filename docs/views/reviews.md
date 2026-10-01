@@ -188,6 +188,7 @@ acts on the line under the cursor, or on the marked block when there is one.
 | `e` | write a finding — level and comment in one pane, `tab` between them |
 | `i` | the same pane, pre-set to an annotation |
 | `a` | ask an agent what the marked lines do — the answer lands as an annotation |
+| `c` | ask about the marked lines your own way — pick a model, write the request |
 | `d` | drop the finding here, block and all |
 | `ctrl+d` | save what you are writing · an empty comment removes it |
 | `p` post · `A` approve · `X` request changes — the same as from the list |
@@ -226,6 +227,22 @@ rather than waiting for you to reopen it. A session that dies writes nothing, so
 the row says **`no explanation came back — see :logs`** instead of spinning for the rest of the day.
 
 `a` with nothing marked asks about the line under the cursor.
+
+### Asking with a model and a request
+
+**`c` is `a` with a popup first**, the same one `c` opens from the list. Pick a model, then write
+what you want to know: *is this safe under cancellation?*, *why not a map here?*, *review this for
+races*. The session reads the marked lines and what is around them, then answers that request
+rather than giving a general explanation. The row holds a spinner (`asking about these lines…`)
+until the answer lands in the margin, exactly as with `a`.
+
+A question gets an `info` annotation, which is never posted. When you ask for a critique and the
+agent finds a real problem, the answer comes back as an ordinary finding (`blocking`, `consider` or
+`nit`). It sits with the rest, for you to edit, drop or post. Finding nothing is an annotation that
+says so.
+
+The choice applies to **this ask only**. The model starts on the review's own (the one set with
+`c` from the list, if any), and `default` means that one. Nothing is kept for the next ask.
 
 `d` from the list opens the **document** itself instead — the agent's prose write-up with the same
 chat beside it (`tab` switches, `j/k` scrolls, `e` edits it in `$EDITOR`). Your turn resumes the
@@ -268,6 +285,26 @@ third rather than restating the original comment. The document is rewritten whol
 what you see is what round two would post.
 
 `p` then posts the revised review as a second one on the PR.
+
+## A different model, your own instructions
+
+`c` is `r` with a popup first. It runs the same thing `r` would: a pre-review, or round two once
+you have posted. Before it starts, you pick:
+
+- **a model**, from the ones your runtimes offer. `default` is the config's `review` model, and
+  the popup says which one that is.
+- **instructions** for this review. Write what to concentrate on, what to leave alone, or how hard
+  to push. They go into the prompt ahead of your standing `guidance.review`, which still applies.
+
+Both are **kept on the review**, so a plain `r` afterwards runs the same way. The chat,
+re-anchoring and "what does this do" all run on that model too, because they continue the same
+conversation. The review's detail pane shows what is set, and `c` changes or clears it.
+
+A conversation belongs to the runtime that wrote it. Round two on a model from the **same**
+runtime resumes the session as usual, just on the new model. A model from **another** runtime
+can't open it, so round two starts a fresh session there. That session reads the posted review
+first and revises it as its own. The thread and the commits since you posted are handed over
+exactly as before.
 
 ## Adopting a pull request
 
@@ -337,6 +374,7 @@ the network) still just fails and says so, because re-anchoring cannot help with
 | key | what |
 |---|---|
 | `r` | pre-review · **re-review** once posted · `x` cancel one · `u` refresh the list |
+| `c` | the same, on a [model and with instructions](#a-different-model-your-own-instructions) you pick — kept on the review |
 | `enter` | the annotated diff · `d` the review document |
 | `p` post · `A` approve · `X` request changes · `n` attach a note that rides along |
 | `s` | hand the terminal to that review's claude session |
