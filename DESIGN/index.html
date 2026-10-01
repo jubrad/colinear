@@ -2111,6 +2111,19 @@ and none of it belongs on someone else's PR:</p>
   posted was the "What this changes" paragraph: the PR described back to its author</li>
 <li><code>prSignoff</code> / <code>prSignoffScope</code> append an attribution to all of that, or just the body</li>
 </ul>
+<p><strong>A review can carry its own model and instructions</strong> (<code>c</code>). They live on the row rather than
+riding one command, so every session in that review's conversation reads them: the rounds, chat,
+re-anchoring and explain. A later <code>r</code> then can't quietly run a different reviewer than the
+one the operator chose. Instructions go into the prompt ahead of standing guidance, because they
+were written for this PR. The one constraint is the runtime seam: a session can only be resumed by
+the runtime that wrote it. So round two resumes only when the chosen model's runtime matches the
+one recorded on the review's last spend. Otherwise it starts fresh, with a prompt that says it is
+taking over and must read the posted document first.</p>
+<p><code>c</code> over marked lines in the annotated diff is the one-off counterpart. The model and request ride
+the <code>explainLines</code> command and are not stored, because an ask is a single question rather than a
+review's standing setup. The prompt keeps <code>info</code> for answers, and lets a requested critique come
+back at a review severity: by then the operator has asked for a judgment and will see it before
+anything is posted.</p>
 <p>Findings survive missing fields: no <code>line</code> or no <code>file</code> means the body rather than the bin;
 only a missing <code>comment</code> drops one. A line outside the diff makes GitHub reject the whole
 review; nothing is posted, and the findings go back to the agent to re-anchor against the

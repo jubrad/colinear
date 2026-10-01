@@ -972,6 +972,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#asking-with-a-model-and-a-request" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asking with a model and a request
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#the-checkout-is-disposable" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -992,6 +1003,17 @@
     <span class="md-ellipsis">
       
         Round two
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-different-model-your-own-instructions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A different model, your own instructions
       
     </span>
   </a>
@@ -1547,6 +1569,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#asking-with-a-model-and-a-request" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asking with a model and a request
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#the-checkout-is-disposable" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1567,6 +1600,17 @@
     <span class="md-ellipsis">
       
         Round two
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-different-model-your-own-instructions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A different model, your own instructions
       
     </span>
   </a>
@@ -1847,6 +1891,10 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 <td>ask an agent what the marked lines do — the answer lands as an annotation</td>
 </tr>
 <tr>
+<td><code>c</code></td>
+<td>ask about the marked lines your own way — pick a model, write the request</td>
+</tr>
+<tr>
 <td><code>d</code></td>
 <td>drop the finding here, block and all</td>
 </tr>
@@ -1892,6 +1940,18 @@ answer lands, which it does in place, in the margin, beside the code — the vie
 rather than waiting for you to reopen it. A session that dies writes nothing, so after five minutes
 the row says <strong><code>no explanation came back — see :logs</code></strong> instead of spinning for the rest of the day.</p>
 <p><code>a</code> with nothing marked asks about the line under the cursor.</p>
+<h3 id="asking-with-a-model-and-a-request">Asking with a model and a request<a class="headerlink" href="#asking-with-a-model-and-a-request" title="Permanent link">&para;</a></h3>
+<p><strong><code>c</code> is <code>a</code> with a popup first</strong>, the same one <code>c</code> opens from the list. Pick a model, then write
+what you want to know: <em>is this safe under cancellation?</em>, <em>why not a map here?</em>, <em>review this for
+races</em>. The session reads the marked lines and what is around them, then answers that request
+rather than giving a general explanation. The row holds a spinner (<code>asking about these lines…</code>)
+until the answer lands in the margin, exactly as with <code>a</code>.</p>
+<p>A question gets an <code>info</code> annotation, which is never posted. When you ask for a critique and the
+agent finds a real problem, the answer comes back as an ordinary finding (<code>blocking</code>, <code>consider</code> or
+<code>nit</code>). It sits with the rest, for you to edit, drop or post. Finding nothing is an annotation that
+says so.</p>
+<p>The choice applies to <strong>this ask only</strong>. The model starts on the review's own (the one set with
+<code>c</code> from the list, if any), and <code>default</code> means that one. Nothing is kept for the next ask.</p>
 <p><code>d</code> from the list opens the <strong>document</strong> itself instead — the agent's prose write-up with the same
 chat beside it (<code>tab</code> switches, <code>j/k</code> scrolls, <code>e</code> edits it in <code>$EDITOR</code>). Your turn resumes the
 reviewing session, so the PR is still in context; when the agent needs a decision it asks in the
@@ -1927,6 +1987,23 @@ first two rather than keeping them alive to look thorough, and engaging with the
 third rather than restating the original comment. The document is rewritten whole each round, so
 what you see is what round two would post.</p>
 <p><code>p</code> then posts the revised review as a second one on the PR.</p>
+<h2 id="a-different-model-your-own-instructions">A different model, your own instructions<a class="headerlink" href="#a-different-model-your-own-instructions" title="Permanent link">&para;</a></h2>
+<p><code>c</code> is <code>r</code> with a popup first. It runs the same thing <code>r</code> would: a pre-review, or round two once
+you have posted. Before it starts, you pick:</p>
+<ul>
+<li><strong>a model</strong>, from the ones your runtimes offer. <code>default</code> is the config's <code>review</code> model, and
+  the popup says which one that is.</li>
+<li><strong>instructions</strong> for this review. Write what to concentrate on, what to leave alone, or how hard
+  to push. They go into the prompt ahead of your standing <code>guidance.review</code>, which still applies.</li>
+</ul>
+<p>Both are <strong>kept on the review</strong>, so a plain <code>r</code> afterwards runs the same way. The chat,
+re-anchoring and "what does this do" all run on that model too, because they continue the same
+conversation. The review's detail pane shows what is set, and <code>c</code> changes or clears it.</p>
+<p>A conversation belongs to the runtime that wrote it. Round two on a model from the <strong>same</strong>
+runtime resumes the session as usual, just on the new model. A model from <strong>another</strong> runtime
+can't open it, so round two starts a fresh session there. That session reads the posted review
+first and revises it as its own. The thread and the commits since you posted are handed over
+exactly as before.</p>
 <h2 id="adopting-a-pull-request">Adopting a pull request<a class="headerlink" href="#adopting-a-pull-request" title="Permanent link">&para;</a></h2>
 <p><code>:reviews owner/repo#123</code> (or the URL) puts a pull request on the list that nobody asked you to
 review. It stays there until the PR settles, rather than being dropped by the next sweep the way an
@@ -1988,6 +2065,10 @@ the network) still just fails and says so, because re-anchoring cannot help with
 <tr>
 <td><code>r</code></td>
 <td>pre-review · <strong>re-review</strong> once posted · <code>x</code> cancel one · <code>u</code> refresh the list</td>
+</tr>
+<tr>
+<td><code>c</code></td>
+<td>the same, on a <a href="#a-different-model-your-own-instructions">model and with instructions</a> you pick — kept on the review</td>
 </tr>
 <tr>
 <td><code>enter</code></td>
