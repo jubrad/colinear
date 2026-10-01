@@ -461,6 +461,14 @@ export interface Review {
   chatting?: boolean;
   /** operator's own note, appended to whatever gets posted */
   note?: string;
+  /**
+   * Model this review's sessions run on, picked with `c` — outranks the
+   * config's `review` model, and stays until changed, so a plain `r` later
+   * runs the same way.
+   */
+  model?: string;
+  /** operator's instructions for this review, from `c`; ride into every round's prompt */
+  instructions?: string;
   /** head commit the current document was written against — the anchor a
       second round diffs from, so it reviews what changed rather than the PR again */
   reviewedSha?: string;

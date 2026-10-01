@@ -181,7 +181,7 @@ export async function runDaemon(): Promise<void> {
           );
         break;
       case 'startReview':
-        void reviewer.start(cmd.id);
+        void reviewer.start(cmd.id, cmd.opts);
         break;
       case 'cancelReview':
         reviewer.cancel(cmd.id);
@@ -259,8 +259,8 @@ export async function runDaemon(): Promise<void> {
         // one this is needs no extra flag — the same trick `answer` uses
         const at = { file: cmd.file, startLine: cmd.startLine, endLine: cmd.endLine };
         const task = store.get(cmd.id);
-        if (task) void selfreview.explainLines(cfg, task, at);
-        else if (store.getReview(cmd.id)) void reviewer.explainLines(cmd.id, at);
+        if (task) void selfreview.explainLines(cfg, task, at, cmd.opts);
+        else if (store.getReview(cmd.id)) void reviewer.explainLines(cmd.id, at, cmd.opts);
         break;
       }
       case 'taskDiff': {

@@ -7,6 +7,10 @@ import { spinner } from './format.js';
 import { TextArea } from './TextArea.js';
 import { theme } from '../theme.js';
 import { useColinear } from './context.js';
+import { pickableModels } from '../core/agent.js';
+import { modelsFor } from '../core/models.js';
+import { Popup, formHeight } from './Popup.js';
+import { ReviewOptionsModal } from './ReviewOptionsModal.js';
 
 const SEVERITY_COLOR: Record<string, string> = {
   blocking: theme.err,
@@ -83,15 +87,23 @@ export function AnnotatedDiff(props: {
     severity?: Severity,
     startLine?: number,
   ) => void;
-  /** ask the reviewing agent to explain a range of lines, as an annotation */
-  onExplain?: (file: string, startLine: number, endLine: number) => void;
+  /**
+   * Ask an agent about a range of lines; the answer lands as a finding there.
+   * No opts is `a` (what does this do?); opts is `c` — a model and a request.
+   */
+  onExplain?: (
+    file: string,
+    startLine: number,
+    endLine: number,
+    opts?: { model?: string; instructions?: string },
+  ) => void;
   onPost: () => void;
   /** run an agent over this diff; absent where the review already has one */
   onReview?: () => void;
   onClose: () => void;
 }) {
   const { review, diff, width, height, busy, now, onSend, onEditFinding, onExplain, onPost, onReview, onClose } = props;
-  const { fullScreen, setFullScreen } = useColinear();
+  const { fullScreen, setFullScreen, cfg } = useColinear();
   // the annotated diff wants the room: claim the whole terminal while it is open,
   // and give it back on the way out. `f` toggles the header back if you want it.
   useEffect(() => {
@@ -116,8 +128,10 @@ export function AnnotatedDiff(props: {
    * landed: the text at that anchor changed.
    */
   const [pending, setPending] = useState<
-    Array<{ file: string; start: number; end: number; was?: string; since: number }>
+    Array<{ file: string; start: number; end: number; was?: string; since: number; custom?: boolean }>
   >([]);
+  /** the `c` popup is open over these lines */
+  const [asking, setAsking] = useState<{ file: string; start: number; end: number } | null>(null);
   const [chat, setChat] = useState('');
   /** how far into a finding being read in full we have scrolled */
   const [readScroll, setReadScroll] = useState(0);
@@ -268,8 +282,10 @@ export function AnnotatedDiff(props: {
           comment: undefined,
           note:
             now - asked.since > EXPLAIN_TIMEOUT
-              ? 'no explanation came back — see :logs'
-              : `${spinner(now)} explaining these lines…`,
+              ? asked.custom
+                ? 'no answer came back — see :logs'
+                : 'no explanation came back — see :logs'
+              : `${spinner(now)} ${asked.custom ? 'asking about' : 'explaining'} these lines…`,
           severity: 'info',
           line: row?.line.newLine,
         };
@@ -330,7 +346,20 @@ export function AnnotatedDiff(props: {
     setCursor(next);
   };
 
+  /** hand a range to the agent, and hold its row until the answer lands */
+  const ask = (at: { file: string; start: number; end: number }, opts?: { model?: string; instructions?: string }) => {
+    onExplain?.(at.file, at.start, at.end, opts);
+    const was = byLine.get(anchorKey(at.file, at.end))?.comment;
+    setPending((p) => [
+      ...p.filter((r) => !(r.file === at.file && r.end === at.end)),
+      { ...at, was, since: now, custom: Boolean(opts) },
+    ]);
+    setMarkRow(null);
+  };
+
   useInput((input, key) => {
+    // the popup has the keyboard while it is open
+    if (asking) return;
     if (focus === 'compose') {
       // one pane, both halves: the level row and the comment, tab between them.
       if (key.escape) {
@@ -403,16 +432,9 @@ export function AnnotatedDiff(props: {
     // mark a block: v again (or esc) drops it, and moving extends it
     if (input === 'v') return setMarkRow((m) => (m === null ? cursor : null));
     // hand the selection to the agent and ask what it does
-    if (input === 'a' && selection && onExplain) {
-      onExplain(selection.file, selection.start, selection.end);
-      const was = byLine.get(anchorKey(selection.file, selection.end))?.comment;
-      setPending((p) => [
-        ...p.filter((r) => !(r.file === selection.file && r.end === selection.end)),
-        { ...selection, was, since: now },
-      ]);
-      setMarkRow(null);
-      return;
-    }
+    if (input === 'a' && selection && onExplain) return ask(selection);
+    // the same, with a model and a request of your own
+    if (input === 'c' && selection && onExplain) return setAsking(selection);
     if (input === 'e' && anchor) {
       setDraft(finding?.comment ?? '');
       const existing = KINDS.findIndex((k) => k.severity === finding?.severity);
@@ -652,9 +674,44 @@ export function AnnotatedDiff(props: {
       </Box>
 
       <Text dimColor wrap="truncate">
-        j/k move · n/N next · ]/[ file · enter reads · v select · a explain · e finding · i annotate · d drop ·{' '}
+        j/k move · n/N next · ]/[ file · enter reads · v select · a explain · c ask · e finding · i annotate · d drop ·{' '}
         {onReview ? 'R review · p hand back' : 'p post'} · f {fullScreen ? 'header' : 'full'} · esc
       </Text>
+
+      {/* last: an absolute box is overdrawn by anything rendered after it */}
+      {asking &&
+        (() => {
+          const inner = Math.min(96, width - 4) - 4;
+          const lines = Math.max(3, Math.min(8, height - formHeight(2) - 6));
+          const h = Math.min(height, formHeight(2, lines + 2));
+          const w = inner + 4;
+          const where = asking.start === asking.end ? `${asking.end}` : `${asking.start}–${asking.end}`;
+          return (
+            <Popup
+              width={w}
+              height={h}
+              top={Math.max(0, Math.floor((height - h) / 2))}
+              left={Math.max(0, Math.floor((width - w) / 2))}
+            >
+              <ReviewOptionsModal
+                title={`ask about ${asking.file}:${where}`}
+                models={pickableModels(cfg)}
+                model={review.model}
+                configured={review.model ?? modelsFor(cfg, 'review').model}
+                hint="for this ask only — the answer lands in the margin beside these lines"
+                placeholder="what you want: a question, or 'review this for races'"
+                verb="ask"
+                width={inner}
+                instructionLines={lines}
+                onSubmit={(opts) => {
+                  ask(asking, opts);
+                  setAsking(null);
+                }}
+                onCancel={() => setAsking(null)}
+              />
+            </Popup>
+          );
+        })()}
     </Box>
   );
 }

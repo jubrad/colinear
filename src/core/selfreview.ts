@@ -129,6 +129,7 @@ export async function explainLines(
   cfg: Config,
   task: Task,
   at: { file: string; startLine: number; endLine: number },
+  opts: AskOptions = {},
 ): Promise<void> {
   const id = task.issue.id;
   const path = docPath(task);
@@ -138,14 +139,14 @@ export async function explainLines(
     return;
   }
   const where = at.startLine === at.endLine ? `line ${at.endLine}` : `lines ${at.startLine}–${at.endLine}`;
-  store.addActivity(id, `asked what ${at.file} ${where} does`);
+  store.addActivity(id, askedLine(at.file, where, opts));
   try {
-    const explained = await runtimeFor(cfg, 'review').backend.runSession({
+    const explained = await runtimeFor(cfg, 'review', opts.model).backend.runSession({
       permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
       agent: { kind: 'review', label: task.issue.identifier, origin: `you asked about ${at.file}:${at.endLine}` },
-      prompt: explainPrompt(cfg, at, where),
+      prompt: explainPrompt(cfg, at, where, opts.instructions),
       cwd: task.worktree,
-      ...modelsFor(cfg, 'review'),
+      ...modelsFor(cfg, 'review', opts.model),
       callbacks: {
         onActivity: (line) => store.addActivity(id, line),
         onSessionId: () => {},
@@ -162,14 +163,39 @@ export async function explainLines(
   }
 }
 
+/** The activity line for an ask: what, where, and on what if you said. */
+export function askedLine(file: string, where: string, opts: AskOptions): string {
+  const request = opts.instructions?.trim().replace(/\s+/g, ' ');
+  const on = opts.model ? ` on ${opts.model}` : '';
+  return request
+    ? `asked about ${file} ${where}${on}: "${request.length > 80 ? `${request.slice(0, 79)}…` : request}"`
+    : `asked what ${file} ${where} does${on}`;
+}
+
+/** What the operator typed into `c` over a marked block, if anything. */
+export interface AskOptions {
+  model?: string;
+  instructions?: string;
+}
+
 export function explainPrompt(
   cfg: Config,
   at: { file: string; startLine: number; endLine: number },
   where: string,
+  instructions?: string,
 ): string {
-  return `The operator is reading a diff and wants to understand one part of it: **${at.file}, ${where}**.
+  const request = instructions?.trim();
+  const opening = request
+    ? `The operator is reading a diff and has a request about one part of it: **${at.file}, ${where}**.
 
-Read those lines and enough of the code around them to explain them properly, then add ONE finding to the \`\`\`findings block in \`${REVIEW_FILE}\` in this directory — creating the file with a short prose header if it does not exist, and leaving every finding already in it exactly as it is.
+Their request:
+${request}
+
+Read those lines and enough of the code around them to do what they asked properly, then add ONE finding`
+    : `The operator is reading a diff and wants to understand one part of it: **${at.file}, ${where}**.
+
+Read those lines and enough of the code around them to explain them properly, then add ONE finding`;
+  return `${opening} to the \`\`\`findings block in \`${REVIEW_FILE}\` in this directory — creating the file with a short prose header if it does not exist, and leaving every finding already in it exactly as it is.
 
 The finding is:
 
@@ -178,7 +204,13 @@ The finding is:
 \`\`\`
 
 \`info\` is never posted anywhere — it annotates the code for the person reading the diff. So write what lets them judge it rather than a paraphrase: what this code is doing and why it is here, the invariant or assumption it rests on and where that is established, and anything they would otherwise have to go and find out for themselves. If the answer is genuinely "exactly what it looks like", say that in one line rather than padding it.
-
+${
+    request
+      ? `
+Answer the request itself, not a general explanation. Keep \`info\` for an answer — what it does, why, whether it holds up. If they asked you to review or critique these lines and you found a real problem, write it as a review finding instead — \`"severity": "blocking"\`, \`"consider"\` or \`"nit"\` — which the operator may choose to post; finding nothing is an \`info\` that says so.
+`
+      : ''
+  }
 Change nothing else. Reply with one sentence.${guidanceFor(cfg.guidance, 'review')}`;
 }
 

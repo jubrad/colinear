@@ -18,6 +18,7 @@ where it goes: **`p` hands the list to the agent that wrote the code** instead o
 | `]` `[` | hop to the next / previous changed file · `f` full screen |
 | `e` `i` | write a comment · write an annotation — level and comment in one pane, `tab` between |
 | `a` | ask an agent what the marked lines do — the answer lands as an annotation |
+| `c` | ask about them your own way — a model and a request; a critique that finds a problem comes back as a finding you can hand back with `p`. See [asking with a model and a request](reviews.md#asking-with-a-model-and-a-request) |
 | `enter` `n`/`N` | read the current finding in full, scrolling · walk between them |
 | `p` | hand the comments back to the agent |
 | `tab` | say something to the agent directly |

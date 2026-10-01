@@ -18,7 +18,7 @@ import {
   type ReviewEvent,
 } from './reviews.js';
 import { demoDiff, isDemo } from './demo.js';
-import { explainPrompt } from './selfreview.js';
+import { askedLine, explainPrompt, type AskOptions } from './selfreview.js';
 import { store } from './store.js';
 import { extractFencedJson, hasFenceOpening } from './fence.js';
 import { questionSummary } from './types.js';
@@ -224,9 +224,45 @@ export class Reviewer {
     return true;
   }
 
-  /** Pre-review: check out the PR and have an agent read the diff. */
-  async start(id: string) {
+  /**
+   * What this review's sessions run on: the model picked for it with `c`, else
+   * the config's `review` model. Every session in the conversation — the
+   * rounds, chat, re-anchoring, explain — asks here, so a review moved to
+   * another model stays on it.
+   */
+  private session(review: Review) {
+    return {
+      backend: runtimeFor(this.cfg, 'review', review.model).backend,
+      ...modelsFor(this.cfg, 'review', review.model),
+    };
+  }
+
+  /**
+   * Can this review's conversation be resumed on `backend`? A session belongs
+   * to the runtime that wrote it, and picking a model on another runtime moves
+   * the review there. Rows from before runtimes were recorded ran on the
+   * config's review runtime.
+   */
+  private resumable(review: Review, backend: { name: string }): boolean {
+    if (!review.sessionId) return false;
+    const ran =
+      review.spend?.filter((s) => s.kind === 'review').at(-1)?.runtime ?? runtimeFor(this.cfg, 'review').backend.name;
+    return ran === backend.name;
+  }
+
+  /**
+   * Pre-review: check out the PR and have an agent read the diff. `opts` is
+   * the `c` popup: a model and instructions for this review, kept on it so a
+   * plain `r` afterwards runs the same way. An empty value clears it.
+   */
+  async start(id: string, opts?: { model?: string; instructions?: string }) {
     if (this.refuseInDemo(id, 'starting a pre-review')) return;
+    if (opts && store.getReview(id) && !this.aborts.has(id)) {
+      store.updateReview(id, {
+        model: opts.model?.trim() || undefined,
+        instructions: opts.instructions?.trim() || undefined,
+      });
+    }
     const review = store.getReview(id);
     if (!review || this.aborts.has(id)) return;
     if (!review.repo) {
@@ -270,7 +306,21 @@ export class Reviewer {
       store.addReviewActivity(id, `reading the diff (${details.changedFiles} files, +${details.additions}/-${details.deletions})`);
 
       await this.excludeReviewFile(worktree);
-      const result = await runtimeFor(this.cfg, 'review').backend.runSession({
+      const { backend, ...models } = this.session(review);
+      // round two resumes the conversation that wrote the document: it knows
+      // what it said and why, which is the whole point of not starting over.
+      // A model on another runtime can't resume it, so it starts fresh and
+      // reads the document instead
+      const resume = roundTwo && this.resumable(review, backend) ? review.sessionId : undefined;
+      if (review.model || review.instructions) {
+        store.addReviewActivity(
+          id,
+          [review.model ? `on ${review.model}` : '', review.instructions ? 'with your instructions' : '']
+            .filter(Boolean)
+            .join(', ') + (roundTwo && !resume ? ' — a fresh session, reading the posted review' : ''),
+        );
+      }
+      const result = await backend.runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         agent: {
           kind: 'review',
@@ -278,13 +328,11 @@ export class Reviewer {
           origin: roundTwo ? 'you asked for another round' : 'you pressed r',
         },
         prompt: roundTwo
-          ? rereviewPrompt(this.cfg, review, details, await this.roundTwoContext(review))
+          ? rereviewPrompt(this.cfg, review, details, await this.roundTwoContext(review), !resume)
           : reviewPrompt(this.cfg, review, details),
         cwd: worktree,
-        // round two resumes the conversation that wrote the document: it knows
-        // what it said and why, which is the whole point of not starting over
-        resume: roundTwo ? review.sessionId : undefined,
-        ...modelsFor(this.cfg, 'review'),
+        resume,
+        ...models,
         abortController: controller,
         callbacks: this.callbacks(id),
       });
@@ -463,13 +511,14 @@ export class Reviewer {
             () => ({ stdout: '' }),
           )).stdout.trim()
         : '';
-      const result = await runtimeFor(this.cfg, 'review').backend.runSession({
+      const { backend, ...models } = this.session(review);
+      const result = await backend.runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         agent: { kind: 'review', label: `${review.repository}#${review.number}`, origin: 're-anchoring a rejected review' },
         prompt: reanchorPrompt(review, anchored, moved, detail),
         cwd: worktree,
-        resume: review.sessionId,
-        ...modelsFor(this.cfg, 'review'),
+        resume: this.resumable(review, backend) ? review.sessionId : undefined,
+        ...models,
         abortController: controller,
         callbacks: this.callbacks(id),
       });
@@ -516,18 +565,30 @@ export class Reviewer {
       });
       return;
     }
+    const { backend, ...models } = this.session(review);
+    if (!this.resumable(review, backend)) {
+      // the model picked for it lives on another runtime, which can't open
+      // this conversation; the next round starts one there
+      store.updateReview(id, {
+        chat: withTurn([
+          typed,
+          { role: 'note', text: `This conversation is on another runtime than ${review.model}. Press r to run a round there, then ask again.`, at: now },
+        ]),
+      });
+      return;
+    }
     store.updateReview(id, { chat: withTurn([typed]), chatting: true });
 
     const controller = new AbortController();
     this.aborts.set(id, controller);
     try {
-      const result = await runtimeFor(this.cfg, 'review').backend.runSession({
+      const result = await backend.runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         agent: { kind: 'review', label: `${review.repository}#${review.number}`, origin: 'you asked it something' },
         prompt: chatPrompt(text, review),
         cwd: review.worktree,
         resume: review.sessionId,
-        ...modelsFor(this.cfg, 'review'),
+        ...models,
         abortController: controller,
         callbacks: this.callbacks(id),
       });
@@ -867,23 +928,29 @@ export class Reviewer {
    * lands as an `info` finding in the same document — annotating the code for
    * you, never posted to the author.
    */
-  async explainLines(id: string, at: { file: string; startLine: number; endLine: number }): Promise<void> {
+  async explainLines(
+    id: string,
+    at: { file: string; startLine: number; endLine: number },
+    opts: AskOptions = {},
+  ): Promise<void> {
     const review = store.getReview(id);
     if (!review?.worktree) return this.toast('no worktree for this review yet', 'err');
     if (this.refuseInDemo(id, 'explaining code')) return;
     const where = at.startLine === at.endLine ? `line ${at.endLine}` : `lines ${at.startLine}\u2013${at.endLine}`;
-    store.addReviewActivity(id, `asked what ${at.file} ${where} does`);
+    store.addReviewActivity(id, askedLine(at.file, where, opts));
     try {
-      const explained = await runtimeFor(this.cfg, 'review').backend.runSession({
+      // a model named for this one ask outranks the review's own
+      const { backend, ...models } = this.session(opts.model ? { ...review, model: opts.model } : review);
+      const explained = await backend.runSession({
         permissions: { mode: this.cfg.agentPermissionMode, deny: this.cfg.denyTools },
         agent: {
           kind: 'review',
           label: `${review.repository}#${review.number}`,
           origin: `you asked about ${at.file}:${at.endLine}`,
         },
-        prompt: explainPrompt(this.cfg, at, where),
+        prompt: explainPrompt(this.cfg, at, where, opts.instructions),
         cwd: review.worktree,
-        ...modelsFor(this.cfg, 'review'),
+        ...models,
         callbacks: this.callbacks(id),
       });
       if (explained.spend) store.addReviewSpend(id, explained.spend);
@@ -1058,9 +1125,14 @@ export function rereviewPrompt(
   review: Review,
   details: { baseRefName: string; body: string },
   context: { delta: string; thread: string },
+  /** a new session rather than the one that wrote the review — a model on another runtime */
+  fresh = false,
 ): string {
   const since = review.posted?.sha ?? review.reviewedSha;
-  return `You reviewed ${review.repository}#${review.number} before, and your review was posted to GitHub${
+  const opening = fresh
+    ? `A review of ${review.repository}#${review.number} was written in an earlier session, and posted to GitHub`
+    : `You reviewed ${review.repository}#${review.number} before, and your review was posted to GitHub`;
+  return `${fresh ? `You are taking over a review someone else started. Read \`${REVIEW_FILE}\` first: it is that review, and you are revising it as your own.\n\n` : ''}${opening}${
     review.posted ? ` on ${new Date(review.posted.at).toISOString().slice(0, 10)} (${review.posted.event})` : ''
   }. The author has since pushed changes, replied, or both. This is round two: revise your existing review at \`${REVIEW_FILE}\`, do not start it again.
 
@@ -1086,10 +1158,22 @@ Go through your existing findings one at a time and decide, honestly, which of t
 
 Then rewrite the document with the same three sections and a closing \`findings\` block, exactly as before — it is fully replaced each round, so it must contain everything you still want posted, not just the changes. The first entry is still the lead: a verdict in a few words, and for a second round it says where things now stand — \`All addressed, looks good.\`, \`One still open.\` — never what the PR does.
 
-Only what is in the findings array reaches GitHub. Keep your chat reply short.${guidanceFor(cfg.guidance, 'review')}`;
+Only what is in the findings array reaches GitHub. Keep your chat reply short.${operatorInstructions(review)}${guidanceFor(cfg.guidance, 'review')}`;
 }
 
-function reviewPrompt(cfg: Config, review: Review, details: { baseRefName: string; body: string }): string {
+/**
+ * The operator's instructions for this one review, from the `c` popup. They
+ * outrank standing guidance — they were written for this PR — so they come
+ * first and say so.
+ */
+function operatorInstructions(review: Review): string {
+  const text = review.instructions?.trim();
+  return text
+    ? `\n\n## Instructions from the operator for this review\nThese were written for this pull request and outrank the standing guidance below.\n\n${text}`
+    : '';
+}
+
+export function reviewPrompt(cfg: Config, review: Review, details: { baseRefName: string; body: string }): string {
   return `You are reviewing someone else's pull request. Your working directory is a git worktree checked out on the PR's head branch.
 
 ## The pull request
@@ -1161,7 +1245,7 @@ Severity means:
 - "nit": small polish. Be sparing.
 - "praise": worth calling out as good. Optional, at most a couple.
 
-Report what you actually found. An empty findings list is a fine answer for a clean PR — do not invent problems to look thorough, and do not soften a real one. Keep your chat reply short; the document is the deliverable.${guidanceFor(cfg.guidance, 'review')}`;
+Report what you actually found. An empty findings list is a fine answer for a clean PR — do not invent problems to look thorough, and do not soften a real one. Keep your chat reply short; the document is the deliverable.${operatorInstructions(review)}${guidanceFor(cfg.guidance, 'review')}`;
 }
 
 /**

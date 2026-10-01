@@ -88,8 +88,8 @@ export function DiffView(props: { param?: string }) {
       onEditFinding={(file, line, comment, severity, startLine) =>
         ctx.dispatcher.editTaskFinding(task.issue.id, file, line, comment, severity, startLine)
       }
-      onExplain={(file, startLine, endLine) =>
-        ctx.dispatcher.explainLines(task.issue.id, file, startLine, endLine)
+      onExplain={(file, startLine, endLine, opts) =>
+        ctx.dispatcher.explainLines(task.issue.id, file, startLine, endLine, opts)
       }
       onPost={() => {
         ctx.dispatcher.sendFindings(task.issue.id);
