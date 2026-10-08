@@ -1778,12 +1778,12 @@
 <tr>
 <td><code>prSignoff</code></td>
 <td>none</td>
-<td>markdown appended to what colinear posts on a PR, so the author knows what wrote it. String or list of lines. An empty comment never becomes a signoff-only comment</td>
+<td>markdown appended to what the agent wrote when colinear posts it on a PR, so the author knows what wrote it. Your own comments are never signed: each finding records who wrote it, and <code>s</code> in the compose pane flips that. <a href="../views/reviews/#who-wrote-it">Details</a>. String or list of lines. An empty comment never becomes a signoff-only comment</td>
 </tr>
 <tr>
 <td><code>prSignoffScope</code></td>
 <td><code>"all"</code></td>
-<td><code>"all"</code> signs the review body and every inline comment; <code>"body"</code> signs only the body, so a review with six findings carries one attribution instead of seven</td>
+<td><code>"all"</code> signs each of the agent's inline comments, and the body when it carries the agent's words. <code>"body"</code> signs only the body, whenever the agent wrote any of the review, so a review with six findings carries one attribution instead of seven</td>
 </tr>
 <tr>
 <td><code>notifications</code></td>

@@ -1055,6 +1055,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#who-wrote-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who wrote it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#when-the-anchors-have-gone-stale" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1652,6 +1663,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#who-wrote-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who wrote it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#when-the-anchors-have-gone-stale" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1791,7 +1813,7 @@ rather than on a file header.</p>
 <p>Two kinds share the margin, told apart by their bar:</p>
 <ul>
 <li><strong><code>▌</code> a comment</strong> the agent would send, coloured by severity — red <em>blocking</em>, yellow <em>consider</em>,
-  grey <em>nit</em>, green <em>praise</em>;</li>
+  grey <em>nit</em>, green <em>praise</em> — or cyan for a plain <strong>comment</strong> of yours (below);</li>
 <li><strong><code>│</code> an annotation</strong> in <strong>blue</strong> — severity <strong><code>info</code></strong>, which is <em>never posted</em>. Its job is to
   make <strong>your</strong> review possible: the context that lets you judge the code rather than a paraphrase
   of it. The agent is asked for the intent behind a hunk, the invariant it rests on and where that
@@ -1837,8 +1859,15 @@ its own line under both panes.</p>
 <p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours.</p>
 <p><code>e</code> on any line opens one pane with <strong>both</strong> the level and the comment in it — you start typing
 straight away, and <code>tab</code> moves the keyboard up to the level row (blocking · consider · nit · praise ·
-annotation) and back down to the text. No separate picker step: set the level before, during or after
-writing, whichever you reach for.</p>
+comment · annotation) and back down to the text. No separate picker step: set the level before, during
+or after writing, whichever you reach for. On the level row, a kind's first letter picks it, except
+<strong><code>m</code></strong> for comment, since <code>c</code> is consider.</p>
+<p><strong><code>comment</code> is for what isn't a judgement</strong>: a question for the author, a note, a "ping me when the
+follow-up lands". It is posted like any other comment, but nothing labels it. The verdict's count
+leaves it out ("Looks good, 1 nit" doesn't become "1 nit, 2 comments"). One with no line to anchor
+to goes in the review body as a plain paragraph, without the bold severity the others carry. The
+agent never writes one, and in round two it keeps yours word for word, dropping one only when the
+conversation shows it was answered.</p>
 <p><a class="glightbox" href="../../images/review-compose.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The compose pane: the level row with blocking selected above the comment being typed, the target line lit in the diff" src="../../images/review-compose.png" /></a></p>
 <p>The pane names the level and what happens to it — "goes to the author when you post", or "stays in
 colinear — never posted" — because that is the difference that matters. Editing an existing finding
@@ -2030,15 +2059,50 @@ pending review of yours and makes the <code>gh api</code> call itself. It costs 
 says why.</p>
 <p>What actually gets sent is deliberately small:</p>
 <ul>
-<li><strong>inline comments</strong> — one per finding with a file and a line</li>
+<li><strong>inline comments</strong> — one per finding with a file and a line, opening with its severity in bold
+  (<code>**nit** — …</code>). A <code>comment</code> has no label</li>
 <li><strong>the body</strong> — one line, the shape you would type yourself: the lead finding's verdict (no file,
   no line, a few words on whether it is ready) with the count by severity folded in — <code>Looks good —
   1 nit.</code>, <code>Solid, but one thing to fix — 1 blocker, 2 considerations.</code> — then each finding with no
   line as its own paragraph, and your note. The agent is told the lead never describes the PR or
   narrates what it checked: the author wrote the change, and the checking is for you, in the
   document</li>
-<li><code>prSignoff</code> appends attribution to all of that, or to the body alone</li>
+<li><code>prSignoff</code> attributes <strong>what the agent wrote</strong>, and never your own words. See <a href="#who-wrote-it">who wrote it</a></li>
 </ul>
+<h3 id="who-wrote-it">Who wrote it<a class="headerlink" href="#who-wrote-it" title="Permanent link">&para;</a></h3>
+<p>Every finding records whether it is <strong>yours or the agent's</strong>, and that decides where <code>prSignoff</code>
+goes. A finding the review session wrote is the agent's. A comment you add with <code>e</code> is yours.
+Rewording one of the agent's leaves it the agent's, because a light edit doesn't make the thinking
+yours. In the compose pane, the line under the level row says which it is and what that means
+("signed with your prSignoff", "posted as yours, unsigned"). <strong><code>s</code></strong> on the level row flips it. In
+the margin, yours are marked <code>(you)</code>.</p>
+<table>
+<thead>
+<tr>
+<th><code>prSignoffScope</code></th>
+<th>the agent's inline comment</th>
+<th>your inline comment</th>
+<th>the body</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>all</code></td>
+<td>signed</td>
+<td>unsigned</td>
+<td>signed when it carries the agent's words: its verdict, or a finding with no line</td>
+</tr>
+<tr>
+<td><code>body</code></td>
+<td>unsigned</td>
+<td>unsigned</td>
+<td>signed when the agent wrote any of the review</td>
+</tr>
+</tbody>
+</table>
+<p>A bare <code>A</code> or <code>X</code> with no review written is entirely yours, so it goes up unsigned. The agent is told
+never to write the field, and to keep it on any entry that has it when it rewrites the document in
+round two.</p>
 <p>The document's prose is written for you, to decide what to send. It never leaves your machine.</p>
 <h3 id="when-the-anchors-have-gone-stale">When the anchors have gone stale<a class="headerlink" href="#when-the-anchors-have-gone-stale" title="Permanent link">&para;</a></h3>
 <p>GitHub rejects a review <strong>entirely</strong> if any one comment names a line that is not part of the diff,
