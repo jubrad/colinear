@@ -316,6 +316,7 @@ export async function runDaemon(): Promise<void> {
           { file: cmd.file, line: cmd.line, startLine: cmd.startLine },
           cmd.comment,
           cmd.severity as Severity | undefined,
+          cmd.by === 'you' || cmd.by === 'agent' ? cmd.by : undefined,
         );
         break;
       case 'listAgents':

@@ -81,6 +81,8 @@ const SEVERITY_COLOR: Record<string, string> = {
   consider: theme.warn,
   nit: theme.dim,
   praise: theme.ok,
+  // a question or a remark: no judgement, so off the severity ramp
+  comment: theme.accent,
   // an annotation is not a mild finding, so it is not a mild yellow
   info: theme.annotation,
 };
@@ -325,9 +327,10 @@ export function ReviewsView(props: { param?: string }) {
         now={ctx.now}
       busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
         onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
-        onEditFinding={(file, line, comment, severity, startLine) =>
-          ctx.dispatcher.editFinding(selected.id, file, line, comment, severity, startLine)
+        onEditFinding={(file, line, comment, severity, startLine, by) =>
+          ctx.dispatcher.editFinding(selected.id, file, line, comment, severity, startLine, by)
         }
+        signing={{ signoff: ctx.cfg.prSignoff, scope: ctx.cfg.prSignoffScope }}
         onExplain={(file, startLine, endLine, opts) =>
           ctx.dispatcher.explainLines(selected.id, file, startLine, endLine, opts)
         }

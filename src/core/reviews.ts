@@ -643,34 +643,57 @@ export function formatThread(comments: ThreadComment[], limit = 40): string {
   );
 }
 
+/** How a posted review is attributed: the configured line, where it goes, and what the body holds. */
+export interface Signing {
+  signoff?: string;
+  scope: 'all' | 'body';
+  /** the body carries words the agent wrote (its verdict, an unanchored finding) */
+  bodyByAgent: boolean;
+}
+
+/**
+ * What goes to GitHub, built apart from the call so the rules can be checked.
+ *
+ * Two of them. A finding is labelled by its severity — `**nit** — …` — except
+ * a `comment`, which is the operator's unlabelled question or note. And the
+ * signoff goes only on what the agent wrote: with scope `all`, on each of its
+ * inline comments and on a body that carries its words; with scope `body`, on
+ * the body whenever the agent wrote any of the review. The operator's own words
+ * are never attributed to it.
+ */
+export function reviewPayload(event: ReviewEvent, body: string, comments: ReviewFinding[], signing: Signing) {
+  const line = signing.signoff?.trim();
+  const sign = (text: string) => (line ? `${text}\n\n${line}` : text);
+  const byAgent = (f: ReviewFinding) => f.by !== 'you';
+  const inline = comments.filter((f) => f.line && f.file);
+  const signBody = signing.scope === 'body' ? signing.bodyByAgent || inline.some(byAgent) : signing.bodyByAgent;
+  return {
+    event,
+    body: body.trim() && signBody ? sign(body) : body,
+    comments: inline.map((f) => {
+      const label = f.severity && f.severity !== 'comment' ? `**${f.severity}** — ` : '';
+      const text = `${label}${f.comment}`;
+      return {
+        path: f.file,
+        line: f.line,
+        side: 'RIGHT',
+        // GitHub takes a block as start_line..line; both sides must be given
+        // or it rejects the whole review rather than the one comment
+        ...(f.startLine ? { start_line: f.startLine, start_side: 'RIGHT' } : {}),
+        body: signing.scope === 'all' && byAgent(f) ? sign(text) : text,
+      };
+    }),
+  };
+}
+
 export async function submitReview(
   review: Review,
   event: ReviewEvent,
   body: string,
   comments: ReviewFinding[],
-  signoff?: string,
-  scope: 'all' | 'body' = 'all',
+  signing: Signing,
 ): Promise<PostedReview> {
-  // whoever reads a comment on their PR should know what wrote it
-  const sign = (text: string) => (signoff?.trim() ? `${text}\n\n${signoff.trim()}` : text);
-  const payload = {
-    event,
-    body: body.trim() ? sign(body) : body,
-    comments: comments
-      .filter((f) => f.line && f.file)
-      .map((f) => {
-        const text = f.severity ? `**${f.severity}** — ${f.comment}` : f.comment;
-        return {
-          path: f.file,
-          line: f.line,
-          side: 'RIGHT',
-          // GitHub takes a block as start_line..line; both sides must be given
-          // or it rejects the whole review rather than the one comment
-          ...(f.startLine ? { start_line: f.startLine, start_side: 'RIGHT' } : {}),
-          body: scope === 'all' ? sign(text) : text,
-        };
-      }),
-  };
+  const payload = reviewPayload(event, body, comments, signing);
   const dir = mkdtempSync(join(tmpdir(), 'coli-review-'));
   const file = join(dir, 'review.json');
   try {

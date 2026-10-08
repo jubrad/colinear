@@ -318,7 +318,11 @@ and none of it belongs on someone else's PR:
   then each finding with no line as a paragraph, then the operator's `n` note. The document's
   prose never goes up — it did once, as the fallback when nothing was anchored, and what was
   posted was the "What this changes" paragraph: the PR described back to its author
-- `prSignoff` / `prSignoffScope` append an attribution to all of that, or just the body
+- `prSignoff` / `prSignoffScope` attribute what the **agent** wrote: each finding carries `by`
+  (absent means the agent, `you` is the operator's), and the signoff goes on the agent's inline
+  comments and on a body that quotes the agent, or on the body alone. The operator's words are never
+  signed as the agent's. `reviewPayload` builds the request apart from the `gh` call so
+  `reviewer.check.ts` can hold it to that
 
 **A review can carry its own model and instructions** (`c`). They live on the row rather than
 riding one command, so every session in that review's conversation reads them: the rounds, chat,
@@ -334,6 +338,12 @@ the `explainLines` command and are not stored, because an ask is a single questi
 review's standing setup. The prompt keeps `info` for answers, and lets a requested critique come
 back at a review severity: by then the operator has asked for a judgment and will see it before
 anything is posted.
+
+**`comment` is a severity that isn't one.** It exists for the operator's questions and notes, which
+were being forced into `consider` or `nit` and counted in the verdict as judgements. It is postable
+like any other finding, but with no severity label, inline or in the body, and the tally skips it. It lives in the same fence rather than in a separate list, so editing, re-anchoring and round
+two handle it with no new path. The prompts tell the agent never to write one, and to keep the
+operator's verbatim in a rewrite.
 
 Findings survive missing fields: no `line` or no `file` means the body rather than the bin;
 only a missing `comment` drops one. A line outside the diff makes GitHub reject the whole

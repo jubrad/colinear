@@ -17,6 +17,8 @@ const SEVERITY_COLOR: Record<string, string> = {
   consider: theme.warn,
   nit: theme.dim,
   praise: theme.ok,
+  // a question or a remark: no judgement, so off the severity ramp
+  comment: theme.accent,
   // never posted, never a problem: blue keeps it off the severity ramp
   info: theme.annotation,
 };
@@ -39,6 +41,7 @@ const KIND_WORD: Record<string, string> = {
   consider: 'consider',
   nit: 'nit',
   praise: 'praise',
+  comment: 'comment',
   info: 'note',
 };
 
@@ -53,12 +56,17 @@ const ABOUT_MAX = 3;
  */
 const EXPLAIN_TIMEOUT = 5 * 60_000;
 
-const KINDS: Array<{ severity: Severity; label: string; hint: string }> = [
-  { severity: 'blocking', label: 'blocking', hint: 'would request changes over it' },
-  { severity: 'consider', label: 'consider', hint: 'worth a second look' },
-  { severity: 'nit', label: 'nit', hint: 'optional polish' },
-  { severity: 'praise', label: 'praise', hint: 'worth saying out loud' },
-  { severity: 'info', label: 'annotation', hint: 'explains the code — never posted' },
+/**
+ * `letter` picks a kind in the compose pane: the first letter of its severity,
+ * except `comment`, which would collide with `consider` and gets `m` instead.
+ */
+const KINDS: Array<{ severity: Severity; label: string; hint: string; letter: string }> = [
+  { severity: 'blocking', label: 'blocking', hint: 'would request changes over it', letter: 'b' },
+  { severity: 'consider', label: 'consider', hint: 'worth a second look', letter: 'c' },
+  { severity: 'nit', label: 'nit', hint: 'optional polish', letter: 'n' },
+  { severity: 'praise', label: 'praise', hint: 'worth saying out loud', letter: 'p' },
+  { severity: 'comment', label: 'comment', hint: 'a question or a note — posted with no label', letter: 'm' },
+  { severity: 'info', label: 'annotation', hint: 'explains the code — never posted', letter: 'i' },
 ];
 
 /**
@@ -86,7 +94,15 @@ export function AnnotatedDiff(props: {
     comment: string,
     severity?: Severity,
     startLine?: number,
+    by?: 'you' | 'agent',
   ) => void;
+  /**
+   * Where findings get posted under the operator's signoff — :reviews. With it,
+   * the compose pane says who wrote a comment and `s` on the level row flips
+   * it, which decides whether the signoff goes on it. Absent (:diff, where
+   * nothing is posted) the question does not come up.
+   */
+  signing?: { signoff?: string; scope: 'all' | 'body' };
   /**
    * Ask an agent about a range of lines; the answer lands as a finding there.
    * No opts is `a` (what does this do?); opts is `c` — a model and a request.
@@ -102,7 +118,7 @@ export function AnnotatedDiff(props: {
   onReview?: () => void;
   onClose: () => void;
 }) {
-  const { review, diff, width, height, busy, now, onSend, onEditFinding, onExplain, onPost, onReview, onClose } = props;
+  const { review, diff, width, height, busy, now, onSend, onEditFinding, onExplain, onPost, onReview, onClose, signing } = props;
   const { fullScreen, setFullScreen, cfg } = useColinear();
   // the annotated diff wants the room: claim the whole terminal while it is open,
   // and give it back on the way out. `f` toggles the header back if you want it.
@@ -118,6 +134,8 @@ export function AnnotatedDiff(props: {
   const [kindIdx, setKindIdx] = useState(1);
   /** in the compose pane, which half has the keyboard — the level row or the text */
   const [composeFocus, setComposeFocus] = useState<'kind' | 'text'>('text');
+  /** who the comment being written is by — the agent's stay its own until flipped with `s` */
+  const [by, setBy] = useState<'you' | 'agent'>('you');
   /** the kind being written, read live off the selector */
   const editAs: Severity = KINDS[kindIdx].severity;
   /** where a visual selection started, in diff rows; null when not selecting */
@@ -271,7 +289,9 @@ export function AnnotatedDiff(props: {
           ? pending.find((r) => r.file === row.line.file && r.end === row.line.newLine)
           : undefined;
       const info = finding?.severity === 'info';
-      const label = finding ? `${KIND_WORD[finding.severity ?? 'consider'] ?? 'comment'} · ` : '';
+      const label = finding
+        ? `${KIND_WORD[finding.severity ?? 'consider'] ?? 'comment'}${signing && finding.by === 'you' ? ' (you)' : ''} · `
+        : '';
       // an explanation is on its way and what is written here is still what was
       // written when we asked: hold the row, so the answer lands where you
       // asked for it. A session that dies leaves the row saying so rather than
@@ -372,8 +392,10 @@ export function AnnotatedDiff(props: {
         if (key.leftArrow || input === 'k' || key.upArrow) setKindIdx((i) => Math.max(0, i - 1));
         if (key.rightArrow || input === 'j' || key.downArrow) setKindIdx((i) => Math.min(KINDS.length - 1, i + 1));
         // the first letter of each kind, for anyone who already knows the level
-        const typed = KINDS.findIndex((k) => k.severity[0] === input);
+        const typed = KINDS.findIndex((k) => k.letter === input);
         if (typed !== -1) setKindIdx(typed);
+        // who wrote it, which is whether the signoff goes on it
+        if (input === 's' && signing) setBy((b) => (b === 'you' ? 'agent' : 'you'));
         if (key.return) setComposeFocus('text');
         return;
       }
@@ -398,6 +420,7 @@ export function AnnotatedDiff(props: {
         setDraft(finding?.comment ?? '');
         const existing = KINDS.findIndex((k) => k.severity === finding?.severity);
         setKindIdx(existing === -1 ? 1 : existing);
+        setBy(authorOf(finding));
         setComposeFocus('text');
         return setFocus('compose');
       }
@@ -439,12 +462,14 @@ export function AnnotatedDiff(props: {
       setDraft(finding?.comment ?? '');
       const existing = KINDS.findIndex((k) => k.severity === finding?.severity);
       setKindIdx(existing === -1 ? 1 : existing);
+      setBy(authorOf(finding));
       setComposeFocus('text');
       setFocus('compose');
     }
     // straight to an annotation: the common case when reading unfamiliar code
     if (input === 'i' && anchor) {
       setDraft(finding?.severity === 'info' ? finding.comment : '');
+      setBy(finding?.severity === 'info' ? authorOf(finding) : 'you');
       setKindIdx(KINDS.findIndex((k) => k.severity === 'info'));
       setComposeFocus('text');
       setFocus('compose');
@@ -572,19 +597,45 @@ export function AnnotatedDiff(props: {
               <Text dimColor wrap="truncate">
                 {editAs === 'info' ? 'stays in colinear — never posted' : 'goes to the author when you post'}
               </Text>
-              {/* the level selector, one row; tab moves the keyboard here */}
-              <Text wrap="truncate">
-                {KINDS.map((kind, i) => (
-                  <Text
-                    key={kind.severity}
-                    inverse={composeFocus === 'kind' && i === kindIdx}
-                    bold={i === kindIdx}
-                    color={i === kindIdx ? SEVERITY_COLOR[kind.severity] : theme.dim}
-                  >
-                    {' '}{kind.label}{' '}
+              {signing && (
+                <Text wrap="truncate">
+                  <Text bold color={by === 'you' ? theme.accent : theme.key}>
+                    by {by === 'you' ? 'you' : 'the agent'}
                   </Text>
-                ))}
-              </Text>
+                  <Text dimColor>
+                    {' — '}
+                    {signedNote(by, editAs, signing)}
+                    {composeFocus === 'kind' ? ' · s flips it' : ''}
+                  </Text>
+                </Text>
+              )}
+              {/* the level selector, one row; tab moves the keyboard here. On a
+                  margin too narrow for all six it shows the one picked and where
+                  it is in the list, rather than truncating it out of sight */}
+              {(() => {
+                const fits = KINDS.reduce((n, k) => n + k.label.length + 2, 0) <= noteWidth - 4;
+                const shown = fits ? KINDS.map((k, i) => [k, i] as const) : [[KINDS[kindIdx], kindIdx] as const];
+                return (
+                  <Text wrap="truncate">
+                    {!fits && <Text dimColor>‹</Text>}
+                    {shown.map(([kind, i]) => (
+                      <Text
+                        key={kind.severity}
+                        inverse={composeFocus === 'kind' && i === kindIdx}
+                        bold={i === kindIdx}
+                        color={i === kindIdx ? SEVERITY_COLOR[kind.severity] : theme.dim}
+                      >
+                        {' '}{kind.label}{' '}
+                      </Text>
+                    ))}
+                    {!fits && (
+                      <Text dimColor>
+                        ›  {kindIdx + 1}/{KINDS.length}
+                      </Text>
+                    )}
+                  </Text>
+                );
+              })()}
               <TextArea
                 value={draft}
                 onChange={setDraft}
@@ -594,7 +645,9 @@ export function AnnotatedDiff(props: {
                 placeholder={
                   editAs === 'info'
                     ? 'what this code does, for whoever reads the review — never posted'
-                    : "what you'd say to the author"
+                    : editAs === 'comment'
+                      ? 'a question or a note for the author — posted with no label'
+                      : "what you'd say to the author"
                 }
                 onSubmit={() => {
                   onEditFinding(
@@ -603,6 +656,7 @@ export function AnnotatedDiff(props: {
                     draft,
                     editAs,
                     selection && selection.end > selection.start ? selection.start : undefined,
+                    signing ? by : undefined,
                   );
                   setFocus('diff');
                   setDraft('');
@@ -611,7 +665,7 @@ export function AnnotatedDiff(props: {
               />
               <Text dimColor wrap="truncate">
                 {composeFocus === 'kind'
-                  ? 'j/k or a letter picks the level · tab to the comment'
+                  ? `j/k or a letter picks the level (m: comment)${signing ? ' · s: who wrote it' : ''} · tab to write it`
                   : 'tab to the level · ctrl+d saves · empty removes it'}{' '}
                 · esc cancels
               </Text>
@@ -856,4 +910,18 @@ function wrapText(text: string, width: number): string[] {
     if (line) out.push(line);
   }
   return out;
+}
+
+/** A finding with no `by` is the agent's; a line with no finding yet is yours to write. */
+function authorOf(finding: ReviewFinding | undefined): 'you' | 'agent' {
+  if (!finding) return 'you';
+  return finding.by === 'you' ? 'you' : 'agent';
+}
+
+/** What the author choice means for the signoff, in the words the pane shows. */
+function signedNote(by: 'you' | 'agent', severity: Severity, signing: { signoff?: string; scope: 'all' | 'body' }): string {
+  if (severity === 'info') return 'never posted, so never signed';
+  if (!signing.signoff?.trim()) return by === 'you' ? 'your words' : 'no prSignoff is set, so nothing is signed';
+  if (by === 'you') return 'posted as yours, unsigned';
+  return signing.scope === 'all' ? 'signed with your prSignoff' : 'the review body carries the prSignoff';
 }

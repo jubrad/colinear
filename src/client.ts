@@ -78,7 +78,15 @@ export interface DispatcherApi {
   reviewTask(id: string): void;
   editTaskFinding(id: string, file: string, line: number, comment: string, severity?: string, startLine?: number): void;
   sendFindings(id: string): void;
-  editFinding(id: string, file: string, line: number, comment: string, severity?: string, startLine?: number): void;
+  editFinding(
+    id: string,
+    file: string,
+    line: number,
+    comment: string,
+    severity?: string,
+    startLine?: number,
+    by?: 'you' | 'agent',
+  ): void;
   createIssue(scopeId: string, request: string): void;
   createProject(brief: ProjectBrief): void;
   gcScan(olderThanDays: number): void;
@@ -389,8 +397,8 @@ export async function connectToDaemon(): Promise<Connection> {
           editTaskFinding: (id, file, line, comment, severity, startLine) =>
             command({ name: 'editTaskFinding', id, file, line, comment, severity, startLine }),
           sendFindings: (id) => command({ name: 'sendFindings', id }),
-          editFinding: (id, file, line, comment, severity, startLine) =>
-            command({ name: 'editFinding', id, file, line, comment, severity, startLine }),
+          editFinding: (id, file, line, comment, severity, startLine, by) =>
+            command({ name: 'editFinding', id, file, line, comment, severity, startLine, by }),
           createIssue: (scopeId, request) => command({ name: 'createIssue', scopeId, request }),
           createProject: (brief) => command({ name: 'createProject', brief }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),
