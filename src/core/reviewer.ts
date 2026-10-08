@@ -35,7 +35,7 @@ const DOC_LIMIT = 64_000;
 /** A diff past this is not being read line by line anyway. */
 const DIFF_LIMIT = 2_000_000;
 
-const SEVERITIES = new Set(['blocking', 'consider', 'nit', 'praise', 'info']);
+const SEVERITIES = new Set(['blocking', 'consider', 'nit', 'praise', 'comment', 'info']);
 
 /** ```findings preferred, ```json accepted. */
 const FENCE_NAMES = ['findings', 'json'];
@@ -65,7 +65,10 @@ function validFindings(value: unknown): ReviewFinding[] {
     // anchor and dropping the start is better than refusing the whole comment
     const rawStart = typeof f.startLine === 'number' && Number.isFinite(f.startLine) ? f.startLine : undefined;
     const startLine = rawStart !== undefined && line !== undefined && rawStart < line ? rawStart : undefined;
-    return [{ file, line, startLine, severity, comment: f.comment }];
+    // only the operator's mark is kept; anything else is the agent's, which is
+    // what an absent field already means
+    const by = f.by === 'you' ? ('you' as const) : undefined;
+    return [{ file, line, startLine, severity, comment: f.comment, ...(by ? { by } : {}) }];
   });
 }
 
@@ -96,8 +99,11 @@ export function upsertFinding(
   at: { file: string; line: number; startLine?: number },
   comment: string,
   severity?: Severity,
+  /** who wrote it: a new finding written here is the operator's unless told otherwise */
+  by?: 'you' | 'agent',
 ): string {
   const { findings } = parseDoc(text);
+  const mark = (who: 'you' | 'agent' | undefined) => (who === 'you' ? { by: 'you' as const } : {});
   const idx = findings.findIndex((f) => f.file === at.file && f.line === at.line);
   const trimmed = comment.trim();
   if (!trimmed) {
@@ -112,10 +118,15 @@ export function upsertFinding(
       ...(at.startLine ? { startLine: at.startLine } : {}),
       severity: severity ?? 'consider',
       comment: trimmed,
+      ...mark(by ?? 'you'),
     });
   } else {
+    // rewording the agent's comment leaves it the agent's; the toggle is how
+    // it becomes yours
+    const { by: was, ...rest } = next[idx];
     next[idx] = {
-      ...next[idx],
+      ...rest,
+      ...mark(by ?? was),
       comment: trimmed,
       severity: severity ?? next[idx].severity ?? 'consider',
       // re-commenting on a single line does not silently un-block an existing
@@ -419,7 +430,11 @@ export class Reviewer {
 
       let posted;
       try {
-        posted = await submitReview(review, event, body, anchored, this.cfg.prSignoff, this.cfg.prSignoffScope);
+        posted = await submitReview(review, event, body, anchored, {
+          signoff: this.cfg.prSignoff,
+          scope: this.cfg.prSignoffScope,
+          bodyByAgent: bodyByAgent(review, loose),
+        });
       } catch (err) {
         // Anchors that no longer match the diff are a fixable review, not a
         // failed post. This used to fall back to putting every finding in the
@@ -633,8 +648,8 @@ export class Reviewer {
         event,
         review.note?.trim() || (event === 'APPROVE' ? '' : 'Requesting changes.'),
         [],
-        this.cfg.prSignoff,
-        this.cfg.prSignoffScope,
+        // a bare verdict is yours alone: no review was written to attribute
+        { signoff: this.cfg.prSignoff, scope: this.cfg.prSignoffScope, bodyByAgent: false },
       );
       store.updateReview(id, {
         status: verdict === 'approve' ? 'approved' : 'changes_requested',
@@ -908,13 +923,14 @@ export class Reviewer {
     at: { file: string; line: number; startLine?: number },
     comment: string,
     severity?: Severity,
+    by?: 'you' | 'agent',
   ): void {
     const review = store.getReview(id);
     if (!review?.worktree) return this.toast('no worktree for this review yet', 'err');
     const path = join(review.worktree, REVIEW_FILE);
     if (!existsSync(path)) return this.toast('no review document yet — press r first', 'err');
     const before = readFileSync(path, 'utf8');
-    const after = upsertFinding(before, at, comment, severity);
+    const after = upsertFinding(before, at, comment, severity, by);
     if (after === before) return;
     writeFileSync(path, after);
     // the watcher would catch this too; absorbing directly means the card is
@@ -1041,9 +1057,22 @@ const SEVERITY_LABEL: Record<Severity, [string, string]> = {
   consider: ['consideration', 'considerations'],
   nit: ['nit', 'nits'],
   praise: ['praise', 'praise'],
+  // never counted: a question is not a verdict on the PR
+  comment: ['comment', 'comments'],
   // never reaches a count: an info finding is not posted
   info: ['note', 'notes'],
 };
+
+/**
+ * Does the posted body carry the agent's words? Its verdict (the lead) and any
+ * finding with no line to hang on are what the body quotes; the operator's
+ * note and the tally colinear computes are not the agent's. Info never posts.
+ */
+export function bodyByAgent(review: Review, unanchored: ReviewFinding[]): boolean {
+  const postable = (f: ReviewFinding) => f.severity !== 'info';
+  const lead = leadFinding((review.findings ?? []).filter(postable));
+  return [lead, ...unanchored.filter(postable)].some((f) => f && f.by !== 'you');
+}
 
 /** The lead: no file, no line, no severity — the verdict that opens the review. */
 export function leadFinding(findings: ReviewFinding[]): ReviewFinding | undefined {
@@ -1099,7 +1128,9 @@ export function reviewBody(review: Review, unanchored: ReviewFinding[], event: R
   for (const f of unanchoredPostable) {
     if (f === lead) continue;
     const where = f.file ? `\`${f.file}${f.line ? `:${f.line}` : ''}\` — ` : '';
-    parts.push(`**${f.severity ?? 'note'}** — ${where}${f.comment.trim()}`);
+    // a comment is unlabelled on GitHub wherever it lands, the body included
+    const label = f.severity === 'comment' ? '' : `**${f.severity ?? 'note'}** — `;
+    parts.push(`${label}${where}${f.comment.trim()}`);
   }
 
   if (review.note?.trim()) parts.push(review.note.trim());
@@ -1155,6 +1186,8 @@ Go through your existing findings one at a time and decide, honestly, which of t
 - **answered** — the author explained why it is fine and they are right. Drop it, and say in the prose that you were satisfied.
 - **still standing** — not addressed, or the answer doesn't hold. Keep it, and if they pushed back, engage with what they actually said rather than restating the original comment.
 - **new** — the new commits introduced something. Add it.
+
+Entries with severity \`comment\` are the operator's own questions and notes, and an entry carrying \`"by": "you"\` is in their words whatever its severity. Keep both exactly — wording and the \`by\` field. Drop one only when the conversation shows it has been answered or fixed.
 
 Then rewrite the document with the same three sections and a closing \`findings\` block, exactly as before — it is fully replaced each round, so it must contain everything you still want posted, not just the changes. The first entry is still the lead: a verdict in a few words, and for a second round it says where things now stand — \`All addressed, looks good.\`, \`One still open.\` — never what the PR does.
 
@@ -1235,7 +1268,7 @@ What does not: restating a line in English (\`increments the counter\`), narrati
 
 And it is not the place for criticism: anything you would say to the author gets a real severity instead.
 
-Rules for the rest of the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches — omit both only when the point isn't about any particular place, and it will be posted in the review body instead; \`severity\` is one of blocking, consider, nit, praise, or info (never posted). Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
+Rules for the rest of the array: \`file\` is the repository-relative path exactly as it appears in the diff; \`line\` is a line **in the new version of the file** that the diff touches — omit both only when the point isn't about any particular place, and it will be posted in the review body instead; \`severity\` is one of blocking, consider, nit, praise, comment, or info (never posted). Keep the \`## Findings\` prose short — a line per finding is plenty, since the full text is in the array.
 
 colinear assembles the posted body itself: your lead with the count of what you raised folded in (\"Solid — 2 considerations, 1 nit.\"), then anything that had no line to attach to. Don't write those parts yourself.
 
@@ -1244,6 +1277,9 @@ Severity means:
 - "consider": a real improvement that is the author's call.
 - "nit": small polish. Be sparing.
 - "praise": worth calling out as good. Optional, at most a couple.
+- "comment": an unlabelled question or remark — the operator writes these, you don't. Leave any you find exactly as they are.
+
+An entry carrying \`"by": "you"\` is in the operator's own words. Never write that field yourself, and never remove it from an entry that has it.
 
 Report what you actually found. An empty findings list is a fine answer for a clean PR — do not invent problems to look thorough, and do not soften a real one. Keep your chat reply short; the document is the deliverable.${operatorInstructions(review)}${guidanceFor(cfg.guidance, 'review')}`;
 }

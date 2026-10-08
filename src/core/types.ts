@@ -397,8 +397,12 @@ export interface ChatTurn {
  * `info` is the odd one out: it is never posted. It annotates code for whoever
  * reads the review — what a dense block is doing — so an explanation and a
  * criticism can live in the same list without one being mistaken for the other.
+ *
+ * `comment` is the unlabelled one: posted like any other, but it is a question
+ * or a remark rather than a judgement, so nothing names it and the verdict's
+ * tally ("2 nits") does not count it.
  */
-export type Severity = 'blocking' | 'consider' | 'nit' | 'praise' | 'info';
+export type Severity = 'blocking' | 'consider' | 'nit' | 'praise' | 'comment' | 'info';
 
 export interface ReviewFinding {
   /** unset when the point isn't about a particular file — it goes in the body */
@@ -417,6 +421,12 @@ export interface ReviewFinding {
    */
   severity?: Severity;
   comment: string;
+  /**
+   * Who wrote it. Absent means the agent, which is every finding a review
+   * session writes; `you` is the operator's own words. Signing follows it: the
+   * prSignoff attribution goes only on what the agent wrote.
+   */
+  by?: 'you' | 'agent';
 }
 
 /** An LLM pre-review of someone else's PR; the operator decides what to post. */

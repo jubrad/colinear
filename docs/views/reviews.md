@@ -105,7 +105,7 @@ rather than on a file header.
 Two kinds share the margin, told apart by their bar:
 
 - **`▌` a comment** the agent would send, coloured by severity — red *blocking*, yellow *consider*,
-  grey *nit*, green *praise*;
+  grey *nit*, green *praise* — or cyan for a plain **comment** of yours (below);
 - **`│` an annotation** in **blue** — severity **`info`**, which is *never posted*. Its job is to
   make **your** review possible: the context that lets you judge the code rather than a paraphrase
   of it. The agent is asked for the intent behind a hunk, the invariant it rests on and where that
@@ -160,8 +160,16 @@ The chat along the bottom is one line, so **enter sends it**.
 
 `e` on any line opens one pane with **both** the level and the comment in it — you start typing
 straight away, and `tab` moves the keyboard up to the level row (blocking · consider · nit · praise ·
-annotation) and back down to the text. No separate picker step: set the level before, during or after
-writing, whichever you reach for.
+comment · annotation) and back down to the text. No separate picker step: set the level before, during
+or after writing, whichever you reach for. On the level row, a kind's first letter picks it, except
+**`m`** for comment, since `c` is consider.
+
+**`comment` is for what isn't a judgement**: a question for the author, a note, a "ping me when the
+follow-up lands". It is posted like any other comment, but nothing labels it. The verdict's count
+leaves it out ("Looks good, 1 nit" doesn't become "1 nit, 2 comments"). One with no line to anchor
+to goes in the review body as a plain paragraph, without the bold severity the others carry. The
+agent never writes one, and in round two it keeps yours word for word, dropping one only when the
+conversation shows it was answered.
 
 ![The compose pane: the level row with blocking selected above the comment being typed, the target line lit in the diff](../images/review-compose.png)
 
@@ -341,14 +349,33 @@ says why.
 
 What actually gets sent is deliberately small:
 
-- **inline comments** — one per finding with a file and a line
+- **inline comments** — one per finding with a file and a line, opening with its severity in bold
+  (`**nit** — …`). A `comment` has no label
 - **the body** — one line, the shape you would type yourself: the lead finding's verdict (no file,
   no line, a few words on whether it is ready) with the count by severity folded in — `Looks good —
   1 nit.`, `Solid, but one thing to fix — 1 blocker, 2 considerations.` — then each finding with no
   line as its own paragraph, and your note. The agent is told the lead never describes the PR or
   narrates what it checked: the author wrote the change, and the checking is for you, in the
   document
-- `prSignoff` appends attribution to all of that, or to the body alone
+- `prSignoff` attributes **what the agent wrote**, and never your own words. See [who wrote it](#who-wrote-it)
+
+### Who wrote it
+
+Every finding records whether it is **yours or the agent's**, and that decides where `prSignoff`
+goes. A finding the review session wrote is the agent's. A comment you add with `e` is yours.
+Rewording one of the agent's leaves it the agent's, because a light edit doesn't make the thinking
+yours. In the compose pane, the line under the level row says which it is and what that means
+("signed with your prSignoff", "posted as yours, unsigned"). **`s`** on the level row flips it. In
+the margin, yours are marked `(you)`.
+
+| `prSignoffScope` | the agent's inline comment | your inline comment | the body |
+|---|---|---|---|
+| `all` | signed | unsigned | signed when it carries the agent's words: its verdict, or a finding with no line |
+| `body` | unsigned | unsigned | signed when the agent wrote any of the review |
+
+A bare `A` or `X` with no review written is entirely yours, so it goes up unsigned. The agent is told
+never to write the field, and to keep it on any entry that has it when it rewrites the document in
+round two.
 
 The document's prose is written for you, to decide what to send. It never leaves your machine.
 

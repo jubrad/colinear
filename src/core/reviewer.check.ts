@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { clearBrokenSubmodules, leadFinding, reviewBody, reviewPrompt, rereviewPrompt, staleAnchors } from './reviewer.js';
-import { parsePrSpec, revivedStatus } from './reviews.js';
+import { bodyByAgent, clearBrokenSubmodules, leadFinding, parseDoc, reviewBody, reviewPrompt, rereviewPrompt, staleAnchors, upsertFinding, writeFindings } from './reviewer.js';
+import { parsePrSpec, reviewPayload, revivedStatus } from './reviews.js';
 import { askedLine, explainPrompt } from './selfreview.js';
 import type { Config, Review, ReviewFinding } from './types.js';
 
@@ -313,6 +313,64 @@ for (const [spec, repository, number] of SPECS) {
   }
 }
 
+// ── an unlabelled comment: a question or a note, not a judgement ──
+{
+  const asked = { file: 'src/a.ts', line: 3, severity: 'comment', comment: 'Why not reuse the existing pool here?' } as ReviewFinding;
+  const aside = { severity: 'comment', comment: 'Ping me when the follow-up lands.' } as ReviewFinding;
+  const nit = { file: 'src/a.ts', line: 9, severity: 'nit', comment: 'Typo.' } as ReviewFinding;
+  const withComments = { ...review, findings: [lead, asked, aside, nit] } as unknown as Review;
+  const body = reviewBody(withComments, [aside], 'COMMENT');
+  check('a comment is not counted in the verdict', body.split('\n')[0] === 'Overall this looks right — 1 nit.', body);
+  check('one with no line rides in the body with no label', body.includes('\n\nPing me when the follow-up lands.') && !body.includes('**comment**'), body);
+  const onlyQuestions = { ...review, findings: [asked] } as unknown as Review;
+  check('a review of nothing but an inline question has an empty body, not a count', reviewBody(onlyQuestions, [], 'COMMENT') === '');
+  const doc = writeFindings('# Review\n', [asked]);
+  check('a comment keeps its kind through the document', parseDoc(doc).findings[0]?.severity === 'comment', JSON.stringify(parseDoc(doc).findings));
+  const edited = upsertFinding(doc, { file: 'src/a.ts', line: 3 }, 'Why not reuse the pool?', 'comment');
+  check('and through an edit', parseDoc(edited).findings[0]?.severity === 'comment' && parseDoc(edited).findings[0]?.comment === 'Why not reuse the pool?');
+}
+
+// ── what reaches GitHub: labels, and the signoff only on the agent's words ──
+{
+  const SIG = '_written by claude_';
+  const agentNit = { file: 'a.ts', line: 1, severity: 'nit', comment: 'Typo.' } as ReviewFinding;
+  const myNit = { file: 'a.ts', line: 2, severity: 'nit', comment: 'Rename?', by: 'you' } as ReviewFinding;
+  const myQuestion = { file: 'a.ts', line: 3, severity: 'comment', comment: 'Why here?', by: 'you' } as ReviewFinding;
+  const all = reviewPayload('COMMENT', 'Looks good.', [agentNit, myNit, myQuestion], { signoff: SIG, scope: 'all', bodyByAgent: true });
+  const text = (n: number) => all.comments[n].body;
+  check('a severity is labelled inline', text(0).startsWith('**nit** — Typo.'), text(0));
+  check('a comment is not labelled inline', text(2) === 'Why here?', text(2));
+  check("the agent's inline comment is signed", text(0).endsWith(SIG), text(0));
+  check('yours is not', !text(1).includes(SIG) && !text(2).includes(SIG), JSON.stringify(all.comments));
+  check('a body with the agent in it is signed', all.body.endsWith(SIG), all.body);
+  const mine = reviewPayload('COMMENT', 'My note.', [myNit], { signoff: SIG, scope: 'all', bodyByAgent: false });
+  check('a body of only your words is not', mine.body === 'My note.', mine.body);
+  const bodyScope = reviewPayload('COMMENT', 'My note.', [agentNit, myNit], { signoff: SIG, scope: 'body', bodyByAgent: false });
+  check('scope body signs no inline comment', bodyScope.comments.every((c) => !c.body.includes(SIG)));
+  check('but signs the body when the agent wrote any of the review', bodyScope.body.endsWith(SIG), bodyScope.body);
+  const yoursOnly = reviewPayload('COMMENT', 'My note.', [myNit], { signoff: SIG, scope: 'body', bodyByAgent: false });
+  check('and not when it wrote none of it', yoursOnly.body === 'My note.', yoursOnly.body);
+
+  const verdict = (by?: 'you') => ({ comment: 'Looks good.', ...(by ? { by } : {}) }) as ReviewFinding;
+  const withLead = (lead: ReviewFinding, ...rest: ReviewFinding[]) => ({ ...review, findings: [lead, ...rest] }) as unknown as Review;
+  check("the agent's verdict makes the body its", bodyByAgent(withLead(verdict(), myNit), []));
+  check('your verdict and your loose comment do not', !bodyByAgent(withLead(verdict('you')), [{ comment: 'x', severity: 'comment', by: 'you' }]));
+  check("an agent finding with no line does", bodyByAgent(withLead(verdict('you')), [{ comment: 'x', severity: 'nit' }]));
+
+  const doc = writeFindings('# R\n', [agentNit, myNit, { ...agentNit, line: 5, by: 'agent' } as ReviewFinding]);
+  const parsed = parseDoc(doc).findings;
+  check('"by": "you" survives the document', parsed[1]?.by === 'you', JSON.stringify(parsed));
+  check('and an agent mark reads as absent, which already means the agent', parsed[0]?.by === undefined && parsed[2]?.by === undefined);
+  const added = parseDoc(upsertFinding('# R\n', { file: 'a.ts', line: 9 }, 'Mine.', 'nit')).findings[0];
+  check('a comment you add is yours', added?.by === 'you', JSON.stringify(added));
+  const reworded = parseDoc(upsertFinding(doc, { file: 'a.ts', line: 1 }, 'Typo here.', 'nit')).findings[0];
+  check("rewording the agent's comment leaves it the agent's", reworded?.by === undefined && reworded?.comment === 'Typo here.');
+  const flipped = parseDoc(upsertFinding(doc, { file: 'a.ts', line: 1 }, 'Typo.', 'nit', 'you')).findings[0];
+  check('the toggle makes it yours', flipped?.by === 'you');
+  const back = parseDoc(upsertFinding(doc, { file: 'a.ts', line: 2 }, 'Rename?', 'nit', 'agent')).findings[1];
+  check("and back to the agent's", back?.by === undefined, JSON.stringify(back));
+}
+
 // ── instructions and a model picked with `c` ──
 {
   const cfg = { guidance: { review: 'HOUSE RULE' } } as unknown as Config;
@@ -364,5 +422,5 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(
-  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, a half-initialised submodule cannot wedge a review checkout, and\n     the instructions given for a review reach every round ahead of standing guidance',
+  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, a half-initialised submodule cannot wedge a review checkout, and\n     the instructions given for a review reach every round ahead of standing guidance,\n     a plain comment posts with no label and no place in the count, and the signoff\n     goes only on what the agent wrote',
 );

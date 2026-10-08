@@ -21,7 +21,7 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 17;
+export const PROTOCOL_VERSION = 18;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -71,7 +71,8 @@ export type Command =
   /** the PR's diff, for the annotated review view */
   | { name: 'reviewDiff'; id: string }
   /** edit, add or drop the comment anchored at a line (rewrites the document) */
-  | { name: 'editFinding'; id: string; file: string; line: number; comment: string; severity?: string; startLine?: number }
+  /** by: who wrote it, which decides whether it is signed (absent keeps it as it was) */
+  | { name: 'editFinding'; id: string; file: string; line: number; comment: string; severity?: string; startLine?: number; by?: 'you' | 'agent' }
   /** every agent the daemon is running, for :agents and the creation popup */
   | { name: 'listAgents' }
   /** draft an issue from a description and file it (runs in the daemon) */
