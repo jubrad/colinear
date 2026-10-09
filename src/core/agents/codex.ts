@@ -173,7 +173,7 @@ async function runSession(opts: RunSessionOpts): Promise<SessionResult> {
   const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const result: SessionResult = { text: '', costUsd: 0, isError: false, errors: [], assistantTurns: 0 };
   const startedAt = Date.now();
-  const registered = opts.agent ? startSession({ ...opts.agent, cwd, model }) : undefined;
+  const registered = opts.agent ? startSession({ ...opts.agent, cwd, model, runtime: 'codex' }) : undefined;
   if (registered) opts.agent?.onRegistered?.(registered);
 
   try {

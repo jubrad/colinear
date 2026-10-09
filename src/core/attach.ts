@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { agentFor, agentNamed } from './agent.js';
 import { STATE_DIR, log } from './log.js';
-import type { Config, Task } from './types.js';
+import type { Config, Review, SessionSpend, Task } from './types.js';
 
 /**
  * Open a terminal running the configured runtime's resume command in the
@@ -97,13 +97,35 @@ export interface Attachable {
   runtime?: string;
 }
 
+/**
+ * The runtime that owns a row's current session: the last one in its ledger,
+ * since that is the session `sessionId` points at. Undefined for rows from
+ * before the ledger named runtimes, which the config's answer covers.
+ */
+export const sessionRuntime = (row: { spend?: SessionSpend[] }): string | undefined => row.spend?.at(-1)?.runtime;
+
+/**
+ * A review as something `s` can open. Reviews can run on a runtime other than
+ * the config's — `c` picks a model, and the model names its runtime — so the
+ * owner is read from the ledger exactly as a task's is. Without it, a Codex
+ * review was handed to `claude --resume`, which found nothing and exited.
+ */
+export const reviewAttachable = (review: Review, live: boolean): Attachable => ({
+  id: review.id,
+  identifier: `${review.repository.split('/')[1] ?? review.repository}-${review.number}`,
+  sessionId: review.sessionId,
+  worktree: review.worktree,
+  live,
+  runtime: sessionRuntime(review),
+});
+
 const asAttachable = (task: Task): Attachable => ({
   id: task.issue.id,
   identifier: task.issue.identifier,
   sessionId: task.sessionId,
   worktree: task.worktree,
   live: ACTIVE_STATUSES.includes(task.status),
-  runtime: task.spend?.[task.spend.length - 1]?.runtime,
+  runtime: sessionRuntime(task),
 });
 
 export type PendingAction =
@@ -112,6 +134,8 @@ export type PendingAction =
       mode: 'claude' | 'shell';
       worktree: string;
       sessionId?: string;
+      /** the runtime that owns the session; absent means the config's */
+      runtime?: string;
       identifier: string;
       issueId: string;
       /** transcript flush grace when a live agent was just suspended */
@@ -228,6 +252,7 @@ export function attachTo(
     mode: 'claude',
     worktree: target.worktree,
     sessionId: target.sessionId,
+    runtime: target.runtime,
     identifier: target.identifier,
     issueId: target.id,
     waitMs: target.live ? 1500 : 0,

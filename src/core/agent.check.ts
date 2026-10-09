@@ -1,7 +1,11 @@
 import { agentFor, registerAgent, runtimeFor, splitModel, SessionInbox, type AgentBackend } from './agent.js';
 import { CLAUDE_CAPABILITIES, fallbackFor, outOfAllowance } from './agents/claude.js';
 import { askedIn } from './agents/codex.js';
-import type { Config } from './types.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { attachTo, consumePendingAction, reviewAttachable } from './attach.js';
+import type { Config, Review } from './types.js';
 
 /**
  * A fallback model that equals the primary is not a harmless no-op.
@@ -341,11 +345,42 @@ for (const text of UNRELATED) {
   check('a closed mailbox refuses, so the caller queues it instead', !inbox.push('late'));
 }
 
+// ── `s` opens a session on the runtime that wrote it ──
+// A review moved to a Codex model kept handing its Codex id to `claude
+// --resume`, which found nothing and exited: the review's attach target named
+// no runtime, and the in-place handoff ignored the one a task's did name.
+{
+  const worktree = mkdtempSync(join(tmpdir(), 'coli-attach-'));
+  try {
+    const cfg = {} as unknown as Config; // the default runtime is claude
+    const review = {
+      id: 'o/r#7', repository: 'o/r', number: 7, sessionId: 'codex-thread-1', worktree,
+      spend: [
+        { kind: 'review', runtime: 'claude', startedAt: 0, endedAt: 1, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
+        { kind: 'review', runtime: 'codex', startedAt: 2, endedAt: 3, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
+      ],
+    } as unknown as Review;
+    const target = reviewAttachable(review, false);
+    check("a review's attach names the runtime of its last session", target.runtime === 'codex', String(target.runtime));
+    attachTo(target, cfg, () => {}, () => {}, () => {});
+    const action = consumePendingAction();
+    check(
+      'and the in-place handoff carries it',
+      action?.kind === 'attach' && action.runtime === 'codex' && action.sessionId === 'codex-thread-1',
+      JSON.stringify(action),
+    );
+    const old = reviewAttachable({ ...review, spend: undefined } as unknown as Review, false);
+    check('a review from before the ledger leaves it to the config', old.runtime === undefined);
+  } finally {
+    rmSync(worktree, { recursive: true, force: true });
+  }
+}
+
 if (failures.length) {
   console.error(`fallback model: ${failures.length} failure(s)`);
   for (const f of failures) console.error(`  ✖ ${f}`);
   process.exit(1);
 }
 console.log(
-  'ok — a second runtime resolves and runs through the seam, a session never falls back\n     to the model it is already running (which the agent SDK rejects outright), and a\n     spent allowance is told apart from an overload, which wants the opposite remedy',
+  'ok — a second runtime resolves and runs through the seam, a session never falls back\n     to the model it is already running (which the agent SDK rejects outright), and a\n     spent allowance is told apart from an overload, which wants the opposite remedy,\n     and \`s\` hands a session to the runtime that wrote it',
 );

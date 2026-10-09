@@ -1,9 +1,9 @@
-import { agentFor } from '../core/agent.js';
+import { agentFor, agentNamed } from '../core/agent.js';
 import { Box, Text, useInput } from 'ink';
 import { providerFor } from '../core/provider.js';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
-import { attachSession, attachShell, setPendingAction } from '../core/attach.js';
+import { attachSession, attachShell, sessionRuntime, setPendingAction } from '../core/attach.js';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import { AnswerModal } from '../ui/AnswerModal.js';
@@ -17,12 +17,16 @@ export function TaskView(props: { param?: string }) {
   const ctx = useColinear();
   // what the operator would type to reach a session themselves; a runtime that
   // cannot be reached that way says so by returning nothing
-  const resume = (sessionId: string) => agentFor(ctx.cfg).resumeHint(sessionId);
   const tasks = useTasks();
   const task = useMemo(
     () => tasks.find((t) => t.issue.identifier.toLowerCase() === props.param?.toLowerCase()),
     [tasks, props.param],
   );
+  // on the runtime that owns the session, which is not necessarily the config's
+  const resume = (sessionId: string) => {
+    const owner = task ? sessionRuntime(task) : undefined;
+    return (owner ? agentNamed(ctx.cfg, owner) : agentFor(ctx.cfg)).resumeHint(sessionId);
+  };
   const [scroll, setScroll] = useState<number | null>(null); // null = follow tail
   const [answering, setAnswering] = useState(false);
   // a parked too_big verdict is exactly why you'd open this task — land in review

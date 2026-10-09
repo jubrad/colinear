@@ -383,7 +383,7 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
   // counts the message twice; measured, that inflated cache traffic exactly 2x.
   const counted = new Set<string>();
   const result: SessionResult = { text: '', costUsd: 0, isError: false, errors: [], assistantTurns: 0 };
-  const registered = opts.agent ? startSession({ ...opts.agent, cwd, model }) : undefined;
+  const registered = opts.agent ? startSession({ ...opts.agent, cwd, model, runtime: 'claude' }) : undefined;
   if (registered) opts.agent?.onRegistered?.(registered);
 
   try {

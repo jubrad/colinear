@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { agentFor } from './core/agent.js';
+import { agentFor, agentNamed } from './core/agent.js';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
@@ -385,9 +385,11 @@ async function runTui(): Promise<void> {
         console.log(`suspending ${action.identifier}'s agent…`);
         await sleep(action.waitMs);
       }
-      console.log(`attaching to ${action.identifier}${where(cfg)} — quit claude (/exit) to return to colinear\n`);
       {
-        const runtime = agentFor(cfg);
+        // the session's own runtime, not the config's: a review or task can be
+        // on another one, and handing its id to the wrong CLI finds nothing
+        const runtime = action.runtime ? agentNamed(cfg, action.runtime) : agentFor(cfg);
+        console.log(`attaching to ${action.identifier}${where(cfg)} — quit ${runtime.cli.command} to return to colinear\n`);
         const argv = runtime.attachArgv({
           sessionId: action.sessionId ?? '',
           permissionMode: cfg.attachPermissionMode,
@@ -412,11 +414,12 @@ async function runTui(): Promise<void> {
       // A design conversation, entered rather than typed into: the daemon cut
       // the worktree and minted the id, so a fresh session starts under that
       // id (with the primer as its opening turn) and a later visit resumes it.
+      // the plan scope's runtime, which is what the daemon runs plan sessions on
+      const planRuntime = agentFor(cfg, 'plan');
       console.log(
         `${action.fresh ? 'opening' : 'resuming'} the design session for ${action.projectName}${where(cfg)}` +
-          ` — quit claude (/exit) to return to colinear\n`,
+          ` — quit ${planRuntime.cli.command} to return to colinear\n`,
       );
-      const planRuntime = agentFor(cfg);
       const args = planRuntime.attachArgv({
         sessionId: action.sessionId,
         permissionMode: cfg.attachPermissionMode,

@@ -466,6 +466,15 @@ you are attaching to. Absent on rows written before this, which correctly falls 
 config. That is the same arrangement `core/provider.ts` has with
 trackers, for the same reason.
 
+That rule has to hold at every door, and for a while it held at one. The external-window attach
+read the runtime, but the in-place handoff (`PendingAction` → index.tsx) always launched the
+config's, and `:reviews` built its target without one. A review moved to a Codex model with `c`
+therefore handed its Codex id to `claude --resume`, which found nothing and exited. Now every
+attach target is built from the ledger (`sessionRuntime`): tasks, reviews, and the session
+registry, which each adapter stamps. The handoff carries the runtime through, and the resume hints
+in `:task`, `:reviews` and `:agents` follow the same answer. The plan chat resolves on the `plan`
+scope, which is what runs plan sessions.
+
 `AgentCapabilities` is asked rather than assumed: `questions`, `messaging`, `attach`, `denyRules`,
 `cost`, `structuredOutput`, `resume`, `sharedSessionId`. These are not cosmetic. A runtime that
 cannot stop and ask does not park a task in `needs_input` — it guesses — so `questions: false` is a
