@@ -1,10 +1,10 @@
-import { agentFor, pickableModels } from '../core/agent.js';
+import { agentFor, agentNamed, pickableModels } from '../core/agent.js';
 import { modelsFor } from '../core/models.js';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { attachTo, rememberView, setPendingAction } from '../core/attach.js';
+import { attachTo, rememberView, reviewAttachable, sessionRuntime, setPendingAction } from '../core/attach.js';
 import { useReviews } from '../core/hooks.js';
 import { parsePrSpec } from '../core/reviews.js';
 import { store } from '../core/store.js';
@@ -262,16 +262,11 @@ export function ReviewsView(props: { param?: string }) {
         else setCustomizing(true);
       }
       if (input === 's') {
-        // same as the board: hand this terminal to the review's own session
+        // same as the board: hand this terminal to the review's own session,
+        // on the runtime that owns it
         rememberView('reviews', selected.id);
         attachTo(
-          {
-            id: selected.id,
-            identifier: `${shortRepo(selected.repository)}-${selected.number}`,
-            sessionId: selected.sessionId,
-            worktree: selected.worktree,
-            live: ACTIVE.includes(selected.status),
-          },
+          reviewAttachable(selected, ACTIVE.includes(selected.status)),
           ctx.cfg,
           (id) => ctx.dispatcher.suspendReview(id),
           ctx.toast,
@@ -457,7 +452,16 @@ export function ReviewsView(props: { param?: string }) {
         )}
       </Box>
 
-      {selected && <Detail review={selected} now={ctx.now} resumeHint={(id) => agentFor(ctx.cfg).resumeHint(id)} />}
+      {selected && (
+        <Detail
+          review={selected}
+          now={ctx.now}
+          resumeHint={(id) => {
+            const owner = sessionRuntime(selected);
+            return (owner ? agentNamed(ctx.cfg, owner) : agentFor(ctx.cfg)).resumeHint(id);
+          }}
+        />
+      )}
 
       {selected?.question && (
         <Box flexDirection="column" borderStyle="round" borderColor={theme.info} paddingX={1}>

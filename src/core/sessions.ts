@@ -33,6 +33,8 @@ export interface AgentSession {
   origin: string;
   cwd: string;
   model?: string;
+  /** the runtime running it — what `claude --resume` vs `codex resume` is decided by */
+  runtime?: string;
   /** Claude's own id, once it reports one: what `claude --resume` takes */
   sessionId?: string;
   startedAt: number;
@@ -59,6 +61,7 @@ export function startSession(info: {
   origin: string;
   cwd: string;
   model?: string;
+  runtime?: string;
 }): string {
   const id = `a${++counter}`;
   sessions.set(id, {
