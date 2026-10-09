@@ -2233,6 +2233,14 @@ runtime and work on another the config's answer is not necessarily the one that 
 you are attaching to. Absent on rows written before this, which correctly falls back to the
 config. That is the same arrangement <code>core/provider.ts</code> has with
 trackers, for the same reason.</p>
+<p>That rule has to hold at every door, and for a while it held at one. The external-window attach
+read the runtime, but the in-place handoff (<code>PendingAction</code> → index.tsx) always launched the
+config's, and <code>:reviews</code> built its target without one. A review moved to a Codex model with <code>c</code>
+therefore handed its Codex id to <code>claude --resume</code>, which found nothing and exited. Now every
+attach target is built from the ledger (<code>sessionRuntime</code>): tasks, reviews, and the session
+registry, which each adapter stamps. The handoff carries the runtime through, and the resume hints
+in <code>:task</code>, <code>:reviews</code> and <code>:agents</code> follow the same answer. The plan chat resolves on the <code>plan</code>
+scope, which is what runs plan sessions.</p>
 <p><code>AgentCapabilities</code> is asked rather than assumed: <code>questions</code>, <code>messaging</code>, <code>attach</code>, <code>denyRules</code>,
 <code>cost</code>, <code>structuredOutput</code>, <code>resume</code>, <code>sharedSessionId</code>. These are not cosmetic. A runtime that
 cannot stop and ask does not park a task in <code>needs_input</code> — it guesses — so <code>questions: false</code> is a
