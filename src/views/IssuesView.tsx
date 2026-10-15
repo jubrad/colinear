@@ -9,6 +9,7 @@ import { store } from '../core/store.js';
 import type { Issue } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
 import { CreationProgress, creationHeight, pushActivity, type CreationState } from '../ui/CreationProgress.js';
+import { NewIssueModal, newIssuePopup, type NewIssue } from '../ui/NewIssueModal.js';
 import { useColinear } from '../ui/context.js';
 import { Popup, popupPlacement, formHeight } from '../ui/Popup.js';
 import { DispatchModal, type DispatchOptions } from '../ui/DispatchModal.js';
@@ -18,7 +19,7 @@ import { theme } from '../theme.js';
 export const PRIORITY_LABELS = ['—', 'Urgent', 'High', 'Med', 'Low'];
 export const PRIORITY_COLORS: Array<string | undefined> = [undefined, 'red', 'yellow', 'white', 'gray'];
 
-type BarMode = 'fuzzy' | 'team' | 'label' | 'sort' | 'new';
+type BarMode = 'fuzzy' | 'team' | 'label' | 'sort';
 
 export function filterIssues(issues: Issue[], query: string, labelFilters: string[]): Issue[] {
   const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -76,6 +77,8 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
   const [bar, setBar] = useState<BarMode | null>(null);
   const [dispatching, setDispatching] = useState(false);
+  /** the `n` form is open */
+  const [filing, setFiling] = useState(false);
   const [progress, setProgress] = useState<CreationState | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState(spec?.sort ?? 'updated');
@@ -124,7 +127,10 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
     return () => clearInterval(timer);
   }, [progress?.done, progress !== null]);
 
-  useEffect(() => ctx.setCapture(bar !== null || dispatching || progress !== null), [bar, dispatching, progress]);
+  useEffect(
+    () => ctx.setCapture(bar !== null || dispatching || filing || progress !== null),
+    [bar, dispatching, filing, progress],
+  );
   useEffect(() => () => ctx.setCapture(false), []);
 
   const provider = providerFor(cfg);
@@ -210,22 +216,21 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   );
 
   const createNewIssue = useCallback(
-    (request: string) => {
-      if (!request) return;
-      // resolve the team: current view team, else the config default
-      const teamKey = team && team !== '*' ? team : cfg.team && cfg.team !== '*' ? cfg.team : undefined;
-      const teamObj = teamKey ? teams.find((t) => t.key === teamKey) : undefined;
-      if (!teamObj) {
-        ctx.toast('switch to a specific team first (t) so the issue has a home', 'err');
-        return;
-      }
+    (issue: NewIssue) => {
       // the daemon drafts it, so closing this popup — or reloading the UI —
       // doesn't kill the agent. :agents is where it lives now.
-      setProgress({ title: `new issue in ${teamObj.key}: ${request.slice(0, 60)}`, startedAt: Date.now(), activity: [] });
-      ctx.dispatcher.createIssue(teamObj.id, request);
+      setProgress({
+        title: `new issue in ${issue.scopeLabel}: ${issue.request.slice(0, 60)}`,
+        startedAt: Date.now(),
+        activity: [],
+      });
+      ctx.dispatcher.createIssue(issue.scopeId, issue.request, issue.priority);
     },
-    [team, teams, cfg, ctx],
+    [ctx],
   );
+
+  /** where the `n` form starts: the team on screen, else auto */
+  const startingTeam = team && team !== '*' ? team : undefined;
 
   const dispatch = useCallback(
     (picked: Issue[], opts?: DispatchOptions) => {
@@ -247,7 +252,10 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       if (input === 'l') setBar('label');
       if (input === 's') setBar('sort');
       if (input === 'r') refresh(team);
-      if (input === 'n') setBar('new');
+      if (input === 'n') {
+        if (!teams.length) ctx.toast('no teams to file into — check the tracker connection', 'err');
+        else setFiling(true);
+      }
       if (input === 'p') {
         setIncludeProjects((v) => {
           refresh(team, !v);
@@ -277,7 +285,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       if (input === 'c' && picked().length) setDispatching(true);
       if (input === 'o' && rows[cursor]) openUrl(rows[cursor].url);
     },
-    { isActive: bar === null && !dispatching && !progress && !ctx.cmdOpen },
+    { isActive: bar === null && !dispatching && !filing && !progress && !ctx.cmdOpen },
   );
 
   useInput(
@@ -363,18 +371,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       {bar === 'fuzzy' && (
         <CommandBar prefix="/" initial={query} onChange={setQuery} onSubmit={() => setBar(null)} onCancel={() => { setQuery(''); setBar(null); }} />
       )}
-      {bar === 'new' && (
-        <CommandBar
-          prefix="new issue> "
-          placeholder="describe it — an agent drafts the title/description and files it"
-          onSubmit={(value) => {
-            setBar(null);
-            createNewIssue(value.trim());
-          }}
-          onCancel={() => setBar(null)}
-        />
-      )}
-      {bar && bar !== 'fuzzy' && bar !== 'new' && (
+      {bar && bar !== 'fuzzy' && (
         <CommandBar prefix={`${bar}> `} candidates={barCandidates} onSubmit={submitBar} onCancel={() => setBar(null)} />
       )}
       <Table
@@ -421,6 +418,26 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
           );
         })()
       )}
+      {filing &&
+        (() => {
+          const { place, inner, lines, compact } = newIssuePopup(ctx.size, ctx.cmdOpen);
+          return (
+            <Popup {...place}>
+              <NewIssueModal
+                teams={teams}
+                teamKey={startingTeam}
+                width={inner}
+                textLines={lines}
+                compact={compact}
+                onSubmit={(issue) => {
+                  setFiling(false);
+                  createNewIssue(issue);
+                }}
+                onCancel={() => setFiling(false)}
+              />
+            </Popup>
+          );
+        })()}
       {progress &&
         (() => {
           const inner = Math.min(80, ctx.size.columns - 8) - 4;

@@ -18,8 +18,25 @@ still dispatch.
 | `enter` | **dispatch** |
 | `D` | dispatch, skipping triage |
 | `c` | custom dispatch: model, repo, whether to triage, whether to **start** — and a paragraph-sized instructions box (enter is a newline there, `ctrl-d` dispatches). A row with more options than fit scrolls with `←→`, marked `‹ ›`; names are never cut in half |
-| `n` | **new issue from a description** — an agent drafts the title and body and files it |
+| `n` | **new issue**: a team and a priority, each `auto` or set, and a big box for the request. An agent drafts the title and body and files it. See [new issues](#new-issues) |
 | `o` | open in the tracker · `b` board · `r` refresh |
+
+## New issues
+
+`n` opens a form with the cursor already in the request box. It's the big box, and it takes most of
+the screen, because the request is what the drafting agent works from.
+
+| field | `auto` | set |
+|---|---|---|
+| **team** | the agent picks one of your teams from what the request is about, and the toast says which | filed there |
+| **priority** | the agent sets one only if the request implies it | filed exactly as given; `none` means no priority, on purpose |
+
+The team starts on the one you're browsing, and on `auto` from "mine" or "all". With many teams, a
+letter on the team row jumps to the next key that starts with it. `tab` and `shift-tab` move
+between fields, `←→` chooses, and `ctrl-d` creates from the box, since enter is a newline there.
+
+`auto` can only land on one of your teams. The agent answers with a team key from the list it's
+given, and an answer that isn't one of them fails the draft rather than filing into a guess.
 
 ## Notes
 

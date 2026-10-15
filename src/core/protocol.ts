@@ -21,7 +21,7 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 18;
+export const PROTOCOL_VERSION = 19;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -76,7 +76,8 @@ export type Command =
   /** every agent the daemon is running, for :agents and the creation popup */
   | { name: 'listAgents' }
   /** draft an issue from a description and file it (runs in the daemon) */
-  | { name: 'createIssue'; scopeId: string; request: string }
+  /** scopeId absent: the drafting agent picks the team · priority absent: it judges that too */
+  | { name: 'createIssue'; scopeId?: string; request: string; priority?: number }
   /** draft a project from a brief and create it (runs in the daemon) */
   | { name: 'createProject'; brief: ProjectBrief }
   /** cut a worktree and mint a session id, then hand them back to attach with */

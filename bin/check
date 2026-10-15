@@ -65,4 +65,9 @@ echo '── todo ranking'
 npm run check:todo
 
 echo
+echo '── new issue'
+# auto picks a team from yours and nothing else; a set team or priority is never put to the agent
+npm run check:newissue
+
+echo
 echo 'ok'
