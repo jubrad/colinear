@@ -1894,8 +1894,8 @@ because divergence here is invisible until someone acts on a stale card.</p>
 </tr>
 <tr>
 <td>5m</td>
-<td><code>gh</code> search for PRs awaiting your review</td>
-<td>a review request is not urgent, and the search is expensive</td>
+<td><code>gh</code> search for PRs awaiting your review, then a batched read of every live review it didn't return</td>
+<td>a review request is not urgent, and the search is expensive. The second half is what keeps your own PRs and ones you have reviewed current, since the search no longer returns them</td>
 </tr>
 <tr>
 <td><code>todo.refreshMinutes</code></td>
