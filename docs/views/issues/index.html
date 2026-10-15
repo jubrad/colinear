@@ -793,6 +793,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#new-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New issues
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#notes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1336,6 +1347,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#new-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        New issues
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#notes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1411,7 +1433,7 @@ still dispatch.</p>
 </tr>
 <tr>
 <td><code>n</code></td>
-<td><strong>new issue from a description</strong> — an agent drafts the title and body and files it</td>
+<td><strong>new issue</strong>: a team and a priority, each <code>auto</code> or set, and a big box for the request. An agent drafts the title and body and files it. See <a href="#new-issues">new issues</a></td>
 </tr>
 <tr>
 <td><code>o</code></td>
@@ -1419,6 +1441,35 @@ still dispatch.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="new-issues">New issues<a class="headerlink" href="#new-issues" title="Permanent link">&para;</a></h2>
+<p><code>n</code> opens a form with the cursor already in the request box. It's the big box, and it takes most of
+the screen, because the request is what the drafting agent works from.</p>
+<table>
+<thead>
+<tr>
+<th>field</th>
+<th><code>auto</code></th>
+<th>set</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>team</strong></td>
+<td>the agent picks one of your teams from what the request is about, and the toast says which</td>
+<td>filed there</td>
+</tr>
+<tr>
+<td><strong>priority</strong></td>
+<td>the agent sets one only if the request implies it</td>
+<td>filed exactly as given; <code>none</code> means no priority, on purpose</td>
+</tr>
+</tbody>
+</table>
+<p>The team starts on the one you're browsing, and on <code>auto</code> from "mine" or "all". With many teams, a
+letter on the team row jumps to the next key that starts with it. <code>tab</code> and <code>shift-tab</code> move
+between fields, <code>←→</code> chooses, and <code>ctrl-d</code> creates from the box, since enter is a newline there.</p>
+<p><code>auto</code> can only land on one of your teams. The agent answers with a team key from the list it's
+given, and an answer that isn't one of them fails the draft rather than filing into a guess.</p>
 <h2 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>n</code> keeps you in the loop while it works: a progress popup streams the drafting agent's activity,
