@@ -235,29 +235,135 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
     Boolean(r.sessionId) ||
     Boolean(r.findings?.length) ||
     Boolean(r.worktree);
-  for (const review of store.listReviews()) {
-    if (seen.has(review.id) || review.status === 'stale' || inFlight.has(review.status)) continue;
+  // Everything still live that the search did not return — your own pull
+  // requests, ones you have already reviewed, ones a session is busy with —
+  // is read back from GitHub directly, in batches. The search is the only
+  // thing that used to refresh a review, so these kept whatever they were
+  // when they last appeared in it: a PR marked ready out of band stayed a
+  // draft in colinear for good.
+  const absent = store.listReviews().filter((r) => !seen.has(r.id) && r.status !== 'stale');
+  const lookups = absent.filter((r) => inFlight.has(r.status) || invested(r));
+  const current = lookups.length ? await fetchPrs(lookups) : new Map<string, CurrentPr>();
+  for (const review of absent) {
+    const pr = current.get(review.id);
+    // the metadata is GitHub's, whatever happens to the review itself
+    if (pr) refreshMeta(review, pr);
+    if (inFlight.has(review.status)) continue;
     if (invested(review)) {
       // stale only when the PR actually settles. Until then it stays on the
       // list — the author may push again, and the worktree is deliberately
-      // kept for exactly that (docs/views/reviews.md)
-      const current = await prCurrentState(review.repository, review.number);
-      if (current.state === 'OPEN' || current.state === undefined) {
+      // kept for exactly that (docs/views/reviews.md). A PR that could not be
+      // read is not a settled one.
+      if (!pr || pr.state === 'OPEN') {
         // still open, but no longer asking: you have already had your say
-        const patch: Partial<Review> = { requested: false, requestedVia: undefined };
-        if (current.headSha) patch.headSha = current.headSha;
-        store.updateReview(review.id, patch);
-        announceNewCommits(review.id, current.headSha);
+        if (review.requested !== false || review.requestedVia !== undefined) {
+          store.updateReview(review.id, { requested: false, requestedVia: undefined });
+        }
+        if (pr) announceNewCommits(review.id, pr.headRefOid);
         continue;
       }
-      const state = current.state;
       store.updateReview(review.id, { status: 'stale' });
-      store.addReviewActivity(review.id, `PR ${state.toLowerCase()} — review settled`);
+      store.addReviewActivity(review.id, `PR ${pr.state.toLowerCase()} — review settled`);
       continue;
     }
     store.updateReview(review.id, { status: 'stale' });
     store.addReviewActivity(review.id, 'no longer awaiting my review');
   }
+}
+
+/** A pull request as the reconcile reads it back. */
+export interface CurrentPr {
+  number: number;
+  title: string;
+  url: string;
+  isDraft: boolean;
+  /** OPEN · CLOSED · MERGED */
+  state: string;
+  createdAt: string;
+  updatedAt: string;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  headRefName: string;
+  baseRefName: string;
+  headRefOid: string;
+  author: { login: string } | null;
+}
+
+const PR_FIELDS = `number title url isDraft state createdAt updatedAt additions deletions changedFiles
+  headRefName baseRefName headRefOid author { login }`;
+
+/** How many pull requests one GraphQL request asks about. */
+const PR_BATCH = 25;
+
+/**
+ * The current state of many pull requests, keyed by review id, in one GraphQL
+ * request per batch rather than a `gh pr view` each. A PR that comes back null
+ * (deleted, or no longer visible to you) is simply absent from the map, and so
+ * is a whole batch that fails — "could not read it" must never be mistaken for
+ * "it closed".
+ */
+export async function fetchPrs(prs: Array<{ id: string; repository: string; number: number }>): Promise<Map<string, CurrentPr>> {
+  const out = new Map<string, CurrentPr>();
+  for (let i = 0; i < prs.length; i += PR_BATCH) {
+    const batch = prs.slice(i, i + PR_BATCH);
+    const parts = batch.map((pr, k) => {
+      const [owner, name] = pr.repository.split('/');
+      // GraphQL string literals take JSON's escaping, so JSON.stringify quotes them
+      return `p${k}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(name)}) { pullRequest(number: ${pr.number}) { ${PR_FIELDS} } }`;
+    });
+    let stdout = '';
+    try {
+      ({ stdout } = await exec('gh', ['api', 'graphql', '-f', `query=query { ${parts.join('\n')} }`], {
+        maxBuffer: 10 * 1024 * 1024,
+      }));
+    } catch (err) {
+      // one missing PR fails the whole response with errors, but gh still
+      // prints the data it did get — keep that rather than losing the batch
+      stdout = String((err as { stdout?: string }).stdout ?? '');
+      if (!stdout.trim()) {
+        log(`review refresh failed for ${batch.length} PR(s): ${String(err).slice(0, 160)}`);
+        continue;
+      }
+    }
+    let data: Record<string, { pullRequest?: CurrentPr | null } | null> = {};
+    try {
+      data = (JSON.parse(stdout) as { data?: typeof data }).data ?? {};
+    } catch {
+      continue;
+    }
+    batch.forEach((pr, k) => {
+      const found = data[`p${k}`]?.pullRequest;
+      if (found) out.set(pr.id, found);
+    });
+  }
+  return out;
+}
+
+/** GitHub's own description of the PR onto the review; nothing that is the operator's. */
+export function refreshMeta(review: Review, pr: CurrentPr): void {
+  const meta: Partial<Review> = {
+    title: pr.title,
+    url: pr.url,
+    author: pr.author?.login ?? review.author,
+    isDraft: pr.isDraft,
+    createdAt: pr.createdAt,
+    updatedAt: pr.updatedAt,
+    additions: pr.additions,
+    deletions: pr.deletions,
+    changedFiles: pr.changedFiles,
+    headRefName: pr.headRefName,
+    baseRefName: pr.baseRefName,
+    headSha: pr.headRefOid,
+  };
+  const changed = (Object.keys(meta) as Array<keyof Review>).filter(
+    (key) => JSON.stringify(meta[key]) !== JSON.stringify(review[key]),
+  );
+  if (!changed.length) return;
+  if (changed.includes('isDraft')) {
+    store.addReviewActivity(review.id, pr.isDraft ? 'PR moved back to draft' : 'PR marked ready for review');
+  }
+  store.updateReview(review.id, Object.fromEntries(changed.map((key) => [key, meta[key]])) as Partial<Review>);
 }
 
 /**
@@ -319,25 +425,6 @@ async function recoverPostedReviews(): Promise<void> {
   }
 }
 
-/**
- * The PR's own state, for reviews the search no longer returns. undefined on
- * any failure: "could not check" must never read as "closed", or a rate limit
- * would stale every posted review on the list.
- */
-async function prCurrentState(
-  slug: string,
-  number: number,
-): Promise<{ state?: string; headSha?: string }> {
-  try {
-    const { stdout } = await exec('gh', [
-      'pr', 'view', String(number), '--repo', slug, '--json', 'state,headRefOid',
-    ]);
-    const parsed = JSON.parse(stdout) as { state?: string; headRefOid?: string };
-    return { state: parsed.state || undefined, headSha: parsed.headRefOid || undefined };
-  } catch {
-    return {};
-  }
-}
 
 /**
  * Say once when the author pushes past what you reviewed.

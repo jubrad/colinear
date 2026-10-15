@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bodyByAgent, clearBrokenSubmodules, leadFinding, parseDoc, reviewBody, reviewPrompt, rereviewPrompt, staleAnchors, upsertFinding, writeFindings } from './reviewer.js';
-import { parsePrSpec, reviewPayload, revivedStatus } from './reviews.js';
+import { parsePrSpec, refreshMeta, reviewPayload, revivedStatus, type CurrentPr } from './reviews.js';
+import { store } from './store.js';
 import { askedLine, explainPrompt } from './selfreview.js';
 import type { Config, Review, ReviewFinding } from './types.js';
 
@@ -416,11 +417,38 @@ for (const [spec, repository, number] of SPECS) {
   );
 }
 
+// ── a review the search no longer returns still follows its PR ──
+// Only the review-requested search used to refresh a review, so your own PRs
+// and ones you had reviewed kept whatever they were when last seen: marked
+// ready on GitHub, still a draft here.
+{
+  const id = 'o/r#77';
+  store.upsertReview({
+    ...review, id, number: 77, repository: 'o/r', isDraft: true, requested: false, adopted: true,
+    title: 'Old title', updatedAt: '2026-01-01T00:00:00Z', headSha: 'aaa', activity: [],
+  } as unknown as Review);
+  const pr: CurrentPr = {
+    number: 77, title: 'New title', url: 'u', isDraft: false, state: 'OPEN', createdAt: '2025-12-01T00:00:00Z',
+    updatedAt: '2026-02-01T00:00:00Z', additions: 1, deletions: 2, changedFiles: 3,
+    headRefName: 'h', baseRefName: 'main', headRefOid: 'bbb', author: { login: 'someone' },
+  };
+  refreshMeta(store.getReview(id)!, pr);
+  const after = store.getReview(id)!;
+  check('a PR marked ready out of band stops being a draft', after.isDraft === false);
+  check('and the rest of its description follows', after.title === 'New title' && after.headSha === 'bbb' && after.updatedAt === pr.updatedAt);
+  check('the change is said, once', after.activity.at(-1) === 'PR marked ready for review', JSON.stringify(after.activity));
+  check('nothing of the operator\'s is touched', after.adopted === true && after.requested === false);
+  const v = store.version;
+  refreshMeta(store.getReview(id)!, pr);
+  check('an unchanged PR writes nothing', store.version === v);
+  store.deleteReview(id);
+}
+
 if (failures.length) {
   console.error(`review posting: ${failures.length} failure(s)`);
   for (const f of failures) console.error(`  ✖ ${f}`);
   process.exit(1);
 }
 console.log(
-  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, a half-initialised submodule cannot wedge a review checkout, and\n     the instructions given for a review reach every round ahead of standing guidance,\n     a plain comment posts with no label and no place in the count, and the signoff\n     goes only on what the agent wrote',
+  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, a half-initialised submodule cannot wedge a review checkout, and\n     the instructions given for a review reach every round ahead of standing guidance,\n     a plain comment posts with no label and no place in the count, and the signoff\n     goes only on what the agent wrote, and a review the search no longer returns\n     still follows its PR',
 );

@@ -409,6 +409,12 @@ the network) still just fails and says so, because re-anchoring cannot help with
 | `o` | open the PR |
 | `h` | show the settled ones too, and hide them again |
 
+**Every live review follows its PR**, on the same five-minute poll as the list: draft or ready,
+title, size, head, last update. The search for review requests refreshes the reviews it returns.
+Everything else still live is read back from GitHub in batches: PRs you added yourself, ones you
+have already reviewed, ones a session is busy with. Marking a PR ready (or back to draft) outside
+colinear shows up within one poll, with a line in the review's activity. `u` polls now.
+
 A posted review stays on the list while its PR is open — submitting a review *fulfils* the review
 request on GitHub's side, so the list can't rely on the request alone, and checks the PR itself
 before letting go. When the PR merges or closes, the review settles to stale and its worktree is
