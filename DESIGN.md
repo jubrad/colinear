@@ -80,7 +80,7 @@ Nothing polls on render. Every recurring read lives in the daemon on a fixed tim
 | 2s | the running task's subtask checklist file | it drives a progress bar; the agent rewrites it mid-turn |
 | 60s | PR state, CI rollup, review decision, mergeability | GitHub's own numbers move on this order; faster mostly buys rate limits |
 | 60s | blocked recheck, retention sweep, closed-issue sweep, sub-issue rollup | one tick, four jobs — see `recheckBlocked()` |
-| 5m | `gh` search for PRs awaiting your review | a review request is not urgent, and the search is expensive |
+| 5m | `gh` search for PRs awaiting your review, then a batched read of every live review it didn't return | a review request is not urgent, and the search is expensive. The second half is what keeps your own PRs and ones you have reviewed current, since the search no longer returns them |
 | `todo.refreshMinutes` | re-rank `:todo` with the agent — off (`0`) by default | it spends tokens, so the operator chooses whether a clock may |
 
 Two retries also sit on clocks: a session that dies before starting is requeued once after **5s**,
