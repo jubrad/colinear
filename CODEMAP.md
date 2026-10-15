@@ -141,11 +141,13 @@ src/core/
                      or external window via script file (Ghostty/Terminal); suspend-first for live agents
   checks.ts          per-repo shell checks in the worktree
   customviews.ts     ~/.config/colinear/views/*.json → declarative issue filters
-  newissue.ts        `n`: one-off structured-output session drafts an issue from a description
+  newissue.ts        `n`: one-off structured-output session drafts an issue from a description;
+                     with team `auto` it picks one of the tracker's teams by key (an enum in the
+                     schema, refused if it names anything else). newissue.check.ts holds that
   notify.ts          terminal-notifier (click-through URL) with osascript fallback
   log.ts             append log at ~/.local/state/colinear/colinear.log (also captures diverted stderr)
 src/ui/              presentation primitives: Table (generic sortable), CommandBar (prompt+ranked
-                     completion; rank = prefix>substring>subsequence), modals (Dispatch/EditTask/SubIssue/ReviewOptions — `c` in :reviews),
+                     completion; rank = prefix>substring>subsequence), modals (Dispatch/EditTask/SubIssue/ReviewOptions — `c` in :reviews, NewIssue — `n` in :issues), and Form.tsx — the pieces new popup forms are built from (one label column, one-line choice rows, a fixed-height help area, key hints, the standard form's sizing),
                      Header/Crumbs, format helpers, AppCtx definition (context.ts)
 src/views/           registry.ts maps names/aliases → components + hotkey help; issues/board/tasks/
                      task/projects/project/plan/reviews/costs/logs/gc/config/help; custom views wrap

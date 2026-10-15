@@ -329,12 +329,19 @@ export async function runDaemon(): Promise<void> {
         let agentId: string | undefined;
         void (async () => {
           try {
-            const issue = await createIssueFromPrompt(cfg, cmd.scopeId, cmd.request, undefined, (id) => {
-              agentId = id;
-              reply({ t: 'creating', agentId: id });
-            });
-            if (agentId) updateSession(agentId, { result: { ok: true, summary: `created ${issue.identifier}` } });
-            broadcast({ t: 'toast', text: `created ${issue.identifier}`, kind: 'ok' });
+            const issue = await createIssueFromPrompt(
+              cfg,
+              { scopeId: cmd.scopeId, request: cmd.request, priority: cmd.priority },
+              undefined,
+              (id) => {
+                agentId = id;
+                reply({ t: 'creating', agentId: id });
+              },
+            );
+            // say where it went when the agent was the one who chose
+            const where = !cmd.scopeId && issue.team ? ` in ${issue.team}` : '';
+            if (agentId) updateSession(agentId, { result: { ok: true, summary: `created ${issue.identifier}${where}` } });
+            broadcast({ t: 'toast', text: `created ${issue.identifier}${where}`, kind: 'ok' });
           } catch (err) {
             if (agentId) updateSession(agentId, { result: { ok: false, summary: String(err).slice(0, 160) } });
             broadcast({ t: 'toast', text: `issue creation failed: ${String(err).slice(0, 80)}`, kind: 'err' });

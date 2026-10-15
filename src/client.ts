@@ -87,7 +87,8 @@ export interface DispatcherApi {
     startLine?: number,
     by?: 'you' | 'agent',
   ): void;
-  createIssue(scopeId: string, request: string): void;
+  /** scopeId / priority absent: the drafting agent decides */
+  createIssue(scopeId: string | undefined, request: string, priority?: number): void;
   createProject(brief: ProjectBrief): void;
   gcScan(olderThanDays: number): void;
   /** submit answers to a pending question set (used by the $EDITOR path) */
@@ -399,7 +400,7 @@ export async function connectToDaemon(): Promise<Connection> {
           sendFindings: (id) => command({ name: 'sendFindings', id }),
           editFinding: (id, file, line, comment, severity, startLine, by) =>
             command({ name: 'editFinding', id, file, line, comment, severity, startLine, by }),
-          createIssue: (scopeId, request) => command({ name: 'createIssue', scopeId, request }),
+          createIssue: (scopeId, request, priority) => command({ name: 'createIssue', scopeId, request, priority }),
           createProject: (brief) => command({ name: 'createProject', brief }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),
             answer: (id, answers) => command({ name: 'answer', id, answers }),

@@ -21,7 +21,8 @@
     "check:agent": "tsx src/core/agent.check.ts",
     "check:models": "tsx src/core/models.check.ts",
     "check:spend": "tsx src/core/spend.check.ts",
-    "check:todo": "tsx src/core/todo.check.ts"
+    "check:todo": "tsx src/core/todo.check.ts",
+    "check:newissue": "tsx src/core/newissue.check.ts"
   },
   "engines": {
     "node": ">=20"
