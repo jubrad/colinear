@@ -1855,7 +1855,15 @@ When even that is not enough, <strong><code>enter</code> reads the current one i
 <code>g</code>/<code>G</code> and page keys scroll it, it says where you are (<code>16/25</code>), <code>e</code> edits what you are reading,
 and anything else returns. A comment about the PR as a whole has no line to sit beside, so it gets
 its own line under both panes.</p>
-<p>The chat along the bottom is one line, so <strong>enter sends it</strong>.</p>
+<p>The chat along the bottom takes one line of input, so <strong>enter sends it</strong>. Its pane shows the
+conversation wrapped in full, not cut at the edge. A new reply is shown from its first line, with a
+marker saying how much more there is. <strong><code>tab</code> puts you in the chat</strong> and opens it to half the
+screen; <code>↑</code>/<code>↓</code> and the page keys scroll it, and <code>esc</code> or <code>tab</code> goes back to the diff. After you
+send, you stay in the chat so the answer lands where you are looking.</p>
+<p><strong>Anything you hand an agent shows that it is working.</strong> From the moment you press enter, the pane
+shows a spinner, how long the turn has taken, and the last thing the agent reported doing. It reads
+<code>sending</code> until the daemon picks the turn up, then <code>thinking</code> until the reply lands. <code>a</code> and <code>c</code>
+spin on the lines you asked about in the same way.</p>
 <p><strong>The right pane is editable</strong>, because the agent's comment is a draft of yours.</p>
 <p><code>e</code> on any line opens one pane with <strong>both</strong> the level and the comment in it — you start typing
 straight away, and <code>tab</code> moves the keyboard up to the level row (blocking · consider · nit · praise ·
@@ -1982,7 +1990,7 @@ says so.</p>
 <p>The choice applies to <strong>this ask only</strong>. The model starts on the review's own (the one set with
 <code>c</code> from the list, if any), and <code>default</code> means that one. Nothing is kept for the next ask.</p>
 <p><code>d</code> from the list opens the <strong>document</strong> itself instead — the agent's prose write-up with the same
-chat beside it (<code>tab</code> switches, <code>j/k</code> scrolls, <code>e</code> edits it in <code>$EDITOR</code>). Your turn resumes the
+chat beside it (<code>tab</code> switches, <code>j/k</code> scrolls the document and <code>↑</code>/<code>↓</code> or the page keys scroll the chat, <code>e</code> edits it in <code>$EDITOR</code>). Your turn resumes the
 reviewing session, so the PR is still in context; when the agent needs a decision it asks in the
 same pane.</p>
 <h3 id="the-checkout-is-disposable">The checkout is disposable<a class="headerlink" href="#the-checkout-is-disposable" title="Permanent link">&para;</a></h3>
