@@ -80,7 +80,6 @@ export function DiffView(props: { param?: string }) {
       diff={diffs[task.issue.id]}
       width={pane.width}
       height={Math.max(12, pane.height)}
-      now={ctx.now}
       busy={Boolean(task.reviewing)}
       // the chat here talks to the agent that wrote the code, because that is
       // the one you would tell something to

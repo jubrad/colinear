@@ -1,8 +1,9 @@
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { useEffect, useState } from 'react';
-import type { ChatTurn, Review } from '../core/types.js';
+import type { Review } from '../core/types.js';
 import { theme } from '../theme.js';
+import { ChatLog, useAwaitingReply } from './ChatLog.js';
 
 /**
  * Full-screen reader for a review: the agent's document on one side, a
@@ -59,14 +60,18 @@ export function ReviewDocModal(props: {
   });
 
   const chat = review.chat ?? [];
-  const chatLines: Array<{ role: ChatTurn['role']; line: string; first: boolean }> = chat.flatMap((turn) =>
-    wrap(`${turn.role === 'operator' ? 'you: ' : turn.role === 'note' ? '' : ''}${turn.text}`, chatWidth - 4).map(
-      (line, i) => ({ role: turn.role, line, first: i === 0 }),
-    ),
-  );
-  // borders (2) + title (1) + input and its margin (2) + the activity line
-  const chatRows = Math.max(1, paneHeight - (busy ? 6 : 5));
-  const chatBody = chatLines.slice(-chatRows);
+  const reply = useAwaitingReply(chat, busy);
+  // borders (2) + title (1) + input and its margin (2)
+  const chatRows = Math.max(1, paneHeight - 5);
+  // a question is waiting on you, not on it — the title says so instead
+  const working =
+    review.question || !(busy || reply.awaiting)
+      ? undefined
+      : {
+          label: busy ? 'thinking' : 'sending',
+          since: reply.since ?? lastAsked(chat),
+          detail: busy ? review.activity[review.activity.length - 1] : undefined,
+        };
 
   return (
     <Box flexDirection="column" width={width} height={height}>
@@ -116,38 +121,21 @@ export function ReviewDocModal(props: {
             discuss
             {review.question ? (
               <Text color={theme.info}> · it asked you something</Text>
-            ) : busy ? (
-              <Text color={theme.warn}> · thinking…</Text>
             ) : null}
           </Text>
-          {!chat.length &&
-            wrap(
+          <ChatLog
+            turns={chat}
+            width={chatWidth - 4}
+            rows={chatRows}
+            active={focus === 'chat'}
+            working={working}
+            empty={
               review.sessionId
                 ? 'It still has the whole PR in context. Ask why it flagged something, or tell it what to change — it rewrites the document.'
-                : 'No pre-review has run yet, so there is no session to talk to. Press esc, then r.',
-              chatWidth - 4,
-            )
-              .slice(0, chatRows)
-              .map((line, i) => (
-                <Text key={i} dimColor wrap="truncate">
-                  {line}
-                </Text>
-              ))}
-          {chatBody.map((entry, i) => (
-            <Text
-              key={i}
-              color={entry.role === 'operator' ? theme.accent : entry.role === 'note' ? theme.warn : undefined}
-              wrap="truncate"
-            >
-              {entry.line}
-            </Text>
-          ))}
-          {busy && review.activity.length ? (
-            <Text dimColor wrap="truncate">
-              ⋯ {review.activity[review.activity.length - 1]}
-            </Text>
-          ) : null}
-          <Box marginTop={busy ? 0 : 1}>
+                : 'No pre-review has run yet, so there is no session to talk to. Press esc, then r.'
+            }
+          />
+          <Box marginTop={1}>
             <Text color={focus === 'chat' ? theme.accent : theme.dim}>{'> '}</Text>
             <TextInput
               focus={focus === 'chat'}
@@ -174,6 +162,7 @@ export function ReviewDocModal(props: {
                   question.answer(question.questions.map((_, i) => (i === 0 ? chosen : text)));
                   return;
                 }
+                reply.sent();
                 onSend(text);
               }}
             />
@@ -181,10 +170,16 @@ export function ReviewDocModal(props: {
         </Box>
       </Box>
       <Text dimColor wrap="truncate">
-        tab: {focus === 'doc' ? 'discuss' : 'doc'} · j/k g/G: scroll · e: edit · p: post · esc: back
+        tab: {focus === 'doc' ? 'discuss' : 'doc'} · {focus === 'doc' ? 'j/k g/G' : '↑/↓ pgup/pgdn'}: scroll · e: edit · p: post · esc: back
       </Text>
     </Box>
   );
+}
+
+/** When the turn in flight started: the last thing you said. */
+function lastAsked(chat: NonNullable<Review['chat']>): number | undefined {
+  for (let i = chat.length - 1; i >= 0; i--) if (chat[i].role === 'operator') return chat[i].at;
+  return undefined;
 }
 
 /** Enough markdown to read by: headings stand out, code recedes. */

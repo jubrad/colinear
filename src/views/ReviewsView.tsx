@@ -319,7 +319,6 @@ export function ReviewsView(props: { param?: string }) {
         diff={diffs[selected.id]}
         width={pane.width}
         height={Math.max(12, pane.height)}
-        now={ctx.now}
       busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
         onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
         onEditFinding={(file, line, comment, severity, startLine, by) =>

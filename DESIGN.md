@@ -647,7 +647,7 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
 
 - **Ink full-clears every frame when output height ≥ terminal rows (equality included).** Root box renders `rows - 1` lines, `overflow="hidden"`, fixed heights on panes. Violate this and the app "vibrates".
 - **Identity stability is load-bearing.** useTasks memoizes per store.version; BoardView's cursor-clamp effect returns the same object when unchanged. A fresh-array-every-render regression once caused an infinite render loop that looked like terminal flicker (React "Maximum update depth" — found via the stderr diversion).
-- Frames are wrapped in DEC 2026 synchronized-output guards (index.tsx) so supporting terminals paint atomically; stderr is diverted to the log while the TUI owns the screen; the clock stops when nothing is timing. All three exist to kill flicker — keep them.
+- Frames are wrapped in DEC 2026 synchronized-output guards (index.tsx) so supporting terminals paint atomically; stderr is diverted to the log while the TUI owns the screen; the clock stops when nothing is timing. All three exist to kill flicker — keep them. A wait spinner (`Working` in ui/ChatLog.tsx) runs its own timer at four frames per tick, but only while it is mounted. The app clock ticks only for a running task or a review an agent is working on, so a spinner driven by it would freeze through exactly the wait it is meant to show.
 - Avoid ambiguous-width glyphs (⎈ ？ etc.) in always-visible chrome: terminals render them 2 cells, Ink counts 1, lines wrap, height overflows.
 - **An empty needle used to fuzzy-match everything.** `fuzzyMatch(x, '')` returned true on the first
   character (`i === needle.length` is `0 === 0`), so a bare `:plan` resolved to whatever project came

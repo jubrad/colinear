@@ -154,7 +154,16 @@ When even that is not enough, **`enter` reads the current one in full** in the r
 and anything else returns. A comment about the PR as a whole has no line to sit beside, so it gets
 its own line under both panes.
 
-The chat along the bottom is one line, so **enter sends it**.
+The chat along the bottom takes one line of input, so **enter sends it**. Its pane shows the
+conversation wrapped in full, not cut at the edge. A new reply is shown from its first line, with a
+marker saying how much more there is. **`tab` puts you in the chat** and opens it to half the
+screen; `↑`/`↓` and the page keys scroll it, and `esc` or `tab` goes back to the diff. After you
+send, you stay in the chat so the answer lands where you are looking.
+
+**Anything you hand an agent shows that it is working.** From the moment you press enter, the pane
+shows a spinner, how long the turn has taken, and the last thing the agent reported doing. It reads
+`sending` until the daemon picks the turn up, then `thinking` until the reply lands. `a` and `c`
+spin on the lines you asked about in the same way.
 
 **The right pane is editable**, because the agent's comment is a draft of yours.
 
@@ -253,7 +262,7 @@ The choice applies to **this ask only**. The model starts on the review's own (t
 `c` from the list, if any), and `default` means that one. Nothing is kept for the next ask.
 
 `d` from the list opens the **document** itself instead — the agent's prose write-up with the same
-chat beside it (`tab` switches, `j/k` scrolls, `e` edits it in `$EDITOR`). Your turn resumes the
+chat beside it (`tab` switches, `j/k` scrolls the document and `↑`/`↓` or the page keys scroll the chat, `e` edits it in `$EDITOR`). Your turn resumes the
 reviewing session, so the PR is still in context; when the agent needs a decision it asks in the
 same pane.
 
