@@ -9,7 +9,7 @@
 | A **Linear API key** | Settings → Security & access → API keys. Not needed if you start with the local `sqlite` tracker |
 | At least one **git repo** | agents work in worktrees cut from it, never in the checkout itself |
 
-macOS is the tested platform. Node 20 or newer.
+macOS is the tested platform. Node 22.23.4, 24.22.1 or 26.12.1 or newer: the October 2026 security releases, which fix a remote code execution bug in the Brotli decoder. Node 20 is past end of life and gets no fixes.
 
 ## Install
 
