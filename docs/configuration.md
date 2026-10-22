@@ -292,7 +292,7 @@ implementation that keeps the interface honest. Its one gap is `branchNames`: th
 supply one, so colinear derives a safe branch from the identifier (`LOC-2` → `loc-2`).
 
 It needs `node:sqlite` — Node 24+, or Node 22 with `--experimental-sqlite`. The module is required
-lazily inside the provider, so Node 20 keeps working for everyone else.
+lazily inside the provider, so nothing else in colinear depends on it.
 
 File issues into it from the shell:
 
