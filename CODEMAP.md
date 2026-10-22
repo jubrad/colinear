@@ -147,7 +147,7 @@ src/core/
   notify.ts          terminal-notifier (click-through URL) with osascript fallback
   log.ts             append log at ~/.local/state/colinear/colinear.log (also captures diverted stderr)
 src/ui/              presentation primitives: Table (generic sortable), CommandBar (prompt+ranked
-                     completion; rank = prefix>substring>subsequence), modals (Dispatch/EditTask/SubIssue/ReviewOptions — `c` in :reviews, NewIssue — `n` in :issues), and Form.tsx — the pieces new popup forms are built from (one label column, one-line choice rows, a fixed-height help area, key hints, the standard form's sizing),
+                     completion; rank = prefix>substring>subsequence), modals (Dispatch/EditTask/SubIssue/ReviewOptions — `c` in :reviews, NewIssue — `n` in :issues), and Form.tsx — the pieces new popup forms are built from (one label column, one-line choice rows, a fixed-height help area, key hints, the standard form's sizing), ChatLog.tsx (an agent conversation wrapped and scrollable, plus `Working`, the spinner shown while an agent has something of yours),
                      Header/Crumbs, format helpers, AppCtx definition (context.ts)
 src/views/           registry.ts maps names/aliases → components + hotkey help; issues/board/tasks/
                      task/projects/project/plan/reviews/costs/logs/gc/config/help; custom views wrap

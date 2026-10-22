@@ -2,8 +2,8 @@ import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
 import { anchorKey, expandTabs, filesIn, layoutMargin, parseDiff, toVisualRows, type DiffLine, type TokenKind, type VisualRow } from '../core/diff.js';
 import { highlightDiff } from '../core/highlight.js';
-import type { ChatTurn, Review, ReviewFinding, Severity } from '../core/types.js';
-import { spinner } from './format.js';
+import type { Review, ReviewFinding, Severity } from '../core/types.js';
+import { ChatLog, spinFrame, useAwaitingReply, useFrame } from './ChatLog.js';
 import { TextArea } from './TextArea.js';
 import { theme } from '../theme.js';
 import { useColinear } from './context.js';
@@ -85,8 +85,6 @@ export function AnnotatedDiff(props: {
   width: number;
   height: number;
   busy: boolean;
-  /** the app clock, for the spinner on an explanation in flight */
-  now: number;
   onSend: (text: string) => void;
   onEditFinding: (
     file: string,
@@ -118,7 +116,7 @@ export function AnnotatedDiff(props: {
   onReview?: () => void;
   onClose: () => void;
 }) {
-  const { review, diff, width, height, busy, now, onSend, onEditFinding, onExplain, onPost, onReview, onClose, signing } = props;
+  const { review, diff, width, height, busy, onSend, onEditFinding, onExplain, onPost, onReview, onClose, signing } = props;
   const { fullScreen, setFullScreen, cfg } = useColinear();
   // the annotated diff wants the room: claim the whole terminal while it is open,
   // and give it back on the way out. `f` toggles the header back if you want it.
@@ -151,6 +149,8 @@ export function AnnotatedDiff(props: {
   /** the `c` popup is open over these lines */
   const [asking, setAsking] = useState<{ file: string; start: number; end: number } | null>(null);
   const [chat, setChat] = useState('');
+  // the explain spinner's own clock: the app's is stopped unless a task runs
+  const frame = useFrame(pending.length > 0);
   /** how far into a finding being read in full we have scrolled */
   const [readScroll, setReadScroll] = useState(0);
 
@@ -195,7 +195,14 @@ export function AnnotatedDiff(props: {
     [lines, byLine],
   );
 
-  const chatRows = 6;
+  const chatTurns = review.chat ?? [];
+  const reply = useAwaitingReply(chatTurns, busy);
+  /**
+   * The conversation's pane: a few rows while you read the diff — enough for
+   * the start of an answer and the line saying more is there — and half the
+   * screen once tab puts you in it, because reading the reply is why you went.
+   */
+  const chatRows = focus === 'chat' ? Math.max(8, Math.floor(height / 2)) : 7;
   /** findings with no anchor: the lead, and anything about the PR as a whole */
   const unanchored = (review.findings ?? []).filter((f) => !f.file || typeof f.line !== 'number');
   /**
@@ -301,11 +308,11 @@ export function AnnotatedDiff(props: {
           key,
           comment: undefined,
           note:
-            now - asked.since > EXPLAIN_TIMEOUT
+            Date.now() - asked.since > EXPLAIN_TIMEOUT
               ? asked.custom
                 ? 'no answer came back — see :logs'
                 : 'no explanation came back — see :logs'
-              : `${spinner(now)} ${asked.custom ? 'asking about' : 'explaining'} these lines…`,
+              : `${spinFrame(frame)} ${asked.custom ? 'asking about' : 'explaining'} these lines…`,
           severity: 'info',
           line: row?.line.newLine,
         };
@@ -319,7 +326,7 @@ export function AnnotatedDiff(props: {
       };
     });
     return layoutMargin(annotated, marginText, wrapText, 14, focusedKey);
-  }, [visible, visibleRows, byLine, marginText, pending, now, focusedKey]);
+  }, [visible, visibleRows, byLine, marginText, pending, frame, focusedKey]);
 
   /**
    * Where a comment written now would land, spelled the way it is stored: a
@@ -372,7 +379,7 @@ export function AnnotatedDiff(props: {
     const was = byLine.get(anchorKey(at.file, at.end))?.comment;
     setPending((p) => [
       ...p.filter((r) => !(r.file === at.file && r.end === at.end)),
-      { ...at, was, since: now, custom: Boolean(opts) },
+      { ...at, was, since: Date.now(), custom: Boolean(opts) },
     ]);
     setMarkRow(null);
   };
@@ -707,7 +714,22 @@ export function AnnotatedDiff(props: {
         </Text>
       ))}
       <Box flexDirection="column" height={chatRows} borderStyle="single" borderColor={focus === 'chat' ? theme.borderFocus : theme.border} paddingX={1} overflow="hidden">
-        <Chat turns={review.chat ?? []} rows={chatRows - 4} busy={busy} />
+        <ChatLog
+          turns={chatTurns}
+          width={width - 4}
+          rows={chatRows - 3}
+          active={focus === 'chat'}
+          empty="tab to ask the agent about any of this"
+          working={
+            busy || reply.awaiting
+              ? {
+                  label: busy ? 'thinking' : 'sending',
+                  since: reply.since ?? [...chatTurns].reverse().find((t) => t.role === 'operator')?.at,
+                  detail: busy ? review.activity[review.activity.length - 1] : undefined,
+                }
+              : undefined
+          }
+        />
         <Box>
           <Text color={focus === 'chat' ? theme.accent : theme.dim}>{'> '}</Text>
           <TextArea
@@ -717,11 +739,13 @@ export function AnnotatedDiff(props: {
             width={width - 6}
             height={1}
             submitOnEnter
-            placeholder={focus === 'chat' ? 'ask the agent — enter sends' : 'tab to talk to the agent'}
+            placeholder={focus === 'chat' ? 'ask the agent — enter sends · ↑/↓ scroll · esc back' : 'tab to talk to the agent'}
             onSubmit={() => {
-              if (chat.trim()) onSend(chat.trim());
+              if (!chat.trim()) return;
+              reply.sent();
+              onSend(chat.trim());
               setChat('');
-              setFocus('diff');
+              // stay: the answer lands here, and the pane is open to read it
             }}
           />
         </Box>
@@ -864,26 +888,6 @@ function DiffRow(props: {
         </Text>
       ))}
     </Text>
-  );
-}
-
-function Chat(props: { turns: ChatTurn[]; rows: number; busy: boolean }) {
-  const { turns, rows, busy } = props;
-  const shown = turns.slice(-Math.max(1, rows));
-  if (!shown.length) {
-    return <Text dimColor>{busy ? 'the agent is thinking…' : 'tab to ask the agent about any of this'}</Text>;
-  }
-  return (
-    <>
-      {shown.map((turn, i) => (
-        <Text key={`${i}-${turn.at}`} wrap="truncate">
-          <Text color={turn.role === 'operator' ? theme.key : theme.accent}>
-            {turn.role === 'operator' ? 'you' : turn.role === 'note' ? '—' : 'agent'}{' '}
-          </Text>
-          <Text dimColor={turn.role === 'note'}>{turn.text.split('\n')[0]}</Text>
-        </Text>
-      ))}
-    </>
   );
 }
 

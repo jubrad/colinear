@@ -89,7 +89,10 @@ export function App(props: {
   const reviews = useReviews();
   // nothing on screen is timing/spinning -> stop ticking, so an idle board
   // writes zero frames (matters for unfocused panes)
-  const anyTicking = tasks.some((t) => t.startedAt && !t.endedAt);
+  // a review an agent is working on counts too: its elapsed time is on screen
+  const anyTicking =
+    tasks.some((t) => t.startedAt && !t.endedAt) ||
+    reviews.some((r) => r.chatting || r.status === 'reviewing' || r.status === 'posting');
   const now = useClock(cfg.tickMs, anyTicking);
 
   // the daemon owns the file; this is the local mirror so a preference
