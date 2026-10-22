@@ -189,6 +189,9 @@ const task = (i: Issue, patch: Partial<Task>): Task => ({
   expect('an untouched review still wants you', handledReason(reviewItem, live, cfg, NOW) === undefined);
   reviews.set(r.id, { ...r, requested: false, status: 'approved', posted: { at: NOW, event: 'APPROVE', url: '', comments: 0 } });
   expect('a posted review reads as reviewed', handledReason(reviewItem, live, cfg, NOW) === 'reviewed');
+  reviews.set(r.id, { ...r, hidden: true });
+  expect('a review you hid leaves the list at once', handledReason(reviewItem, live, cfg, NOW) === 'hidden');
+  expect('and is never a candidate again', !buildCandidates({ tasks: [], reviews: [{ ...r, hidden: true }], issues: [], projects: [], now: NOW, cfg }).length);
   expect('a waiting question still wants you', handledReason(taskItem, live, cfg, NOW) === undefined);
   tasks.set(asked.id, { ...t, status: 'working', question: undefined });
   expect('an answered question hands it back to the agent', handledReason(taskItem, live, cfg, NOW) === 'agent on it');

@@ -424,7 +424,7 @@ for (const [spec, repository, number] of SPECS) {
 {
   const id = 'o/r#77';
   store.upsertReview({
-    ...review, id, number: 77, repository: 'o/r', isDraft: true, requested: false, adopted: true,
+    ...review, id, number: 77, repository: 'o/r', isDraft: true, requested: false, adopted: true, hidden: true,
     title: 'Old title', updatedAt: '2026-01-01T00:00:00Z', headSha: 'aaa', activity: [],
   } as unknown as Review);
   const pr: CurrentPr = {
@@ -438,6 +438,7 @@ for (const [spec, repository, number] of SPECS) {
   check('and the rest of its description follows', after.title === 'New title' && after.headSha === 'bbb' && after.updatedAt === pr.updatedAt);
   check('the change is said, once', after.activity.at(-1) === 'PR marked ready for review', JSON.stringify(after.activity));
   check('nothing of the operator\'s is touched', after.adopted === true && after.requested === false);
+  check('a PR you hid stays hidden through its updates', after.hidden === true);
   const v = store.version;
   refreshMeta(store.getReview(id)!, pr);
   check('an unchanged PR writes nothing', store.version === v);
@@ -450,5 +451,5 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(
-  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, a half-initialised submodule cannot wedge a review checkout, and\n     the instructions given for a review reach every round ahead of standing guidance,\n     a plain comment posts with no label and no place in the count, and the signoff\n     goes only on what the agent wrote, and a review the search no longer returns\n     still follows its PR',
+  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, a half-initialised submodule cannot wedge a review checkout, and\n     the instructions given for a review reach every round ahead of standing guidance,\n     a plain comment posts with no label and no place in the count, and the signoff\n     goes only on what the agent wrote, and a review the search no longer returns\n     still follows its PR without coming out of hiding',
 );

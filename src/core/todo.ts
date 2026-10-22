@@ -121,6 +121,8 @@ const PRE_REVIEW_LIVE = new Set(['queued', 'reviewing', 'posting']);
  */
 export function reviewNeed(review: Review, cfg: TodoConfig, now: number): TodoItem | undefined {
   if (review.status === 'stale') return undefined;
+  // you hid it from :reviews, which is saying it is not yours to review
+  if (review.hidden) return undefined;
   // posted, or adopted without a request (your own PR): nothing is asked of you
   if (!review.requested) return undefined;
 
@@ -561,6 +563,7 @@ export function handledReason(
   if (kind === 'review') {
     const review = live.review(id);
     if (!review || review.status === 'stale') return 'settled';
+    if (review.hidden) return 'hidden';
     if (!review.requested) return review.posted ? 'reviewed' : 'no longer asked';
     return undefined;
   }

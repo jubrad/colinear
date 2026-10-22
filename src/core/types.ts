@@ -496,6 +496,13 @@ export interface Review {
    * with, so leaving it means nothing.
    */
   adopted?: boolean;
+  /**
+   * You took it off the list with `H`. It stays hidden until you bring it
+   * back, through new requests and pushes alike: hiding a PR means you are not
+   * going to review it, and a team re-requesting is not a reason to start.
+   * Being off the list also keeps it out of `:todo`.
+   */
+  hidden?: boolean;
   requested?: boolean;
   /**
    * Who it was asked of. GitHub's `review-requested:<you>` search returns both

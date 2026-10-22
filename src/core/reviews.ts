@@ -570,9 +570,10 @@ export async function adoptReview(cfg: Config, spec: string): Promise<Review> {
     // is not theirs. Naming a pull request is asking for it back, and a review
     // the sweep had already settled would otherwise take the flag and stay
     // invisible, with nothing left to revive it: the sweep skips `stale` rows
-    // for good.
+    // for good. A review you hid with `H` comes back for the same reason.
     const revived = revivedStatus(existing, pr.state);
-    store.updateReview(id, revived ? { ...meta, status: revived, error: undefined } : meta);
+    const shown = { ...meta, hidden: undefined };
+    store.updateReview(id, revived ? { ...shown, status: revived, error: undefined } : shown);
     store.addReviewActivity(
       id,
       revived
