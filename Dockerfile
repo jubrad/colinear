@@ -3,7 +3,7 @@
 # Agents run *inside this container* — colinear runs their sessions in-process —
 # so whatever your repos need to build and test has to be here too. Treat this
 # as a base to extend, not a finished environment: see docs/docker.md.
-FROM node:22-bookworm-slim
+FROM node:22.23.4-bookworm-slim
 
 # git for worktrees, openssh-client for git+ssh and agent forwarding,
 # gh for PRs and reviews, ripgrep because agents reach for it constantly

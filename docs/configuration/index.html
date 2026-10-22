@@ -2155,7 +2155,7 @@ how you try colinear in thirty seconds, it's what the demo board runs on, and it
 implementation that keeps the interface honest. Its one gap is <code>branchNames</code>: there's no upstream to
 supply one, so colinear derives a safe branch from the identifier (<code>LOC-2</code> → <code>loc-2</code>).</p>
 <p>It needs <code>node:sqlite</code> — Node 24+, or Node 22 with <code>--experimental-sqlite</code>. The module is required
-lazily inside the provider, so Node 20 keeps working for everyone else.</p>
+lazily inside the provider, so nothing else in colinear depends on it.</p>
 <p>File issues into it from the shell:</p>
 <div class="highlight"><pre><span></span><code>coli<span class="w"> </span>issue<span class="w"> </span>add<span class="w"> </span><span class="s2">"Add a rollback path"</span><span class="w">                  </span><span class="c1"># LOC-1</span>
 coli<span class="w"> </span>issue<span class="w"> </span>add<span class="w"> </span><span class="s2">"Write the down migration"</span><span class="w"> </span>--parent<span class="w"> </span>LOC-1
