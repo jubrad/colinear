@@ -2163,8 +2163,12 @@ the network) still just fails and says so, because re-anchoring cannot help with
 <td>open the PR</td>
 </tr>
 <tr>
+<td><code>H</code></td>
+<td>hide this PR from the list, or put a hidden one back</td>
+</tr>
+<tr>
 <td><code>h</code></td>
-<td>show the settled ones too, and hide them again</td>
+<td>show everything, settled and hidden, and go back to the live list</td>
 </tr>
 </tbody>
 </table>
@@ -2181,6 +2185,11 @@ reclaimed — not when it's posted, since the author may push again.</p>
 usually far more of them than live ones, and a list of everything would bury the work. The header
 always says how many are being held back, so a short list tells you what it is not showing, and
 <code>h</code> shows them. Filtering with <code>/</code> still narrows whichever set you are looking at.</p>
+<p><strong><code>H</code> hides a PR you are not going to review.</strong> It goes the way a settled one does: off the list,
+out of <code>:todo</code>, and counted in the header ("2 hidden by you"). <code>h</code> shows it again, dimmed and marked
+<code>-</code>, and <code>H</code> on it puts it back. Hiding lasts until you undo it. A new push or another review
+request does not bring it back, because a team re-requesting is not a reason to start. Naming it
+with <code>:reviews owner/repo#123</code> does.</p>
 <p>Reviews staled by the old behaviour recover on their own: once per daemon start, stale reviews whose
 PR is still open and carries a review of yours get their status back from GitHub's record.</p>
 
