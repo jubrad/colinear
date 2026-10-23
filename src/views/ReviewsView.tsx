@@ -32,6 +32,8 @@ const W = { flag: 4, status: 12, pr: 24, draft: 9, author: 18, size: 14 };
  * since you gave it?
  */
 export function freshness(r: Review): { glyph: string; color: string; why: string } | undefined {
+  // first: only shown at all because `h` is on, and it should say why it was off
+  if (r.hidden) return { glyph: '-', color: theme.dim, why: 'you hid this — H puts it back on the list' };
   const reviewed = r.posted?.sha ?? r.reviewedSha;
   if (reviewed && r.headSha && r.headSha !== reviewed) {
     return { glyph: '↻', color: theme.warn, why: 'pushed since your review — r re-reviews' };
@@ -118,7 +120,8 @@ export function ReviewsView(props: { param?: string }) {
       // that long — so the list is what is still live and `h` reveals the rest.
       // It used to be the filter text containing the word "stale", which found
       // them by accident as often as on purpose and told nobody they existed.
-      if (r.status === 'stale' && !showHidden) return false;
+      // Hidden with `H` is the same deal by your hand rather than GitHub's.
+      if ((r.status === 'stale' || r.hidden) && !showHidden) return false;
       if (!terms.length) return true;
       const hay = `${r.repository} ${r.number} ${r.title} ${r.author} ${r.status}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
@@ -126,6 +129,8 @@ export function ReviewsView(props: { param?: string }) {
     // needs-me-first: a review whose PR moved under it comes before everything,
     // because it is the one where what you already did no longer applies
     const rank = (r: Review) => {
+      // only listed at all because `h` is on: below everything that is live
+      if (r.hidden) return 5;
       const reviewed = r.posted?.sha ?? r.reviewedSha;
       if (reviewed && r.headSha && r.headSha !== reviewed) return -1;
       // a team request is not addressed to you in particular, so it sits below
@@ -290,6 +295,13 @@ export function ReviewsView(props: { param?: string }) {
         setShowHidden((v) => !v);
         setCursor(0);
       }
+      if (input === 'H') {
+        // a review write like the note: the mirror forwards it to the daemon
+        const hide = !selected.hidden;
+        store.updateReview(selected.id, { hidden: hide || undefined });
+        const pr = `${selected.repository}#${selected.number}`;
+        ctx.toast(hide ? `hid ${pr}${showHidden ? '' : ' — h shows hidden ones'}` : `${pr} is back on the list`, 'info');
+      }
       if (input === 'S') {
         // cycle the field; landing back on the current one flips direction
         const next = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length];
@@ -304,8 +316,13 @@ export function ReviewsView(props: { param?: string }) {
     { isActive: !filtering && !noting && !reading && !customizing && !ctx.cmdOpen },
   );
 
-  const ready = reviews.filter((r) => r.status === 'ready').length;
-  const hidden = reviews.filter((r) => r.status === 'stale').length;
+  const ready = reviews.filter((r) => r.status === 'ready' && !r.hidden).length;
+  const settled = reviews.filter((r) => r.status === 'stale').length;
+  // a hidden review that has since settled counts once, as settled
+  const dismissed = reviews.filter((r) => r.hidden && r.status !== 'stale').length;
+  const held = [settled ? `${settled} settled` : '', dismissed ? `${dismissed} hidden by you` : '']
+    .filter(Boolean)
+    .join(', ');
   const cols = layout(ctx.size.columns);
   // rows that fit: total height less the detail pane, header and chrome
   const visible = Math.max(3, ctx.size.rows - 16);
@@ -375,12 +392,12 @@ export function ReviewsView(props: { param?: string }) {
           reviews{' '}
         </Text>
         <Text dimColor>
-          {rows.length} {showHidden ? 'shown' : 'awaiting me'} ·{' '}
+          {rows.length} {showHidden ? 'shown' : 'awaiting me'}{' '}
         </Text>
-        {ready > 0 && <Text color={REVIEW_COLORS.ready}>{ready} pre-reviewed </Text>}
-        {hidden > 0 && (
+        {ready > 0 && <Text color={REVIEW_COLORS.ready}>· {ready} pre-reviewed </Text>}
+        {held && (
           <Text color={showHidden ? theme.accent : REVIEW_COLORS.stale}>
-            · {hidden} settled {showHidden ? 'shown (h hides)' : 'hidden (h shows)'}{' '}
+            · {held} {showHidden ? 'shown (h hides)' : 'not shown (h shows)'}{' '}
           </Text>
         )}
         <Text dimColor>· sort: </Text>
@@ -421,7 +438,7 @@ export function ReviewsView(props: { param?: string }) {
           const onCursor = start + i === cursor;
           const flag = freshness(r);
           return (
-            <Text key={r.id} wrap="truncate" inverse={onCursor}>
+            <Text key={r.id} wrap="truncate" inverse={onCursor} dimColor={r.hidden && !onCursor}>
               <Text color={onCursor ? undefined : flag?.color}>{cell(flag?.glyph ?? '', W.flag)}</Text>
               <Text color={onCursor ? undefined : REVIEW_COLORS[r.status] ?? theme.dim}>
                 {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)}{' '}
@@ -671,7 +688,8 @@ export const reviewsKeys: Array<[string, string]> = [
   ['o', 'open PR'],
   ['x', 'cancel'],
   ['S', 'sort'],
-  ['h', 'show settled'],
+  ['H', 'hide / unhide'],
+  ['h', 'show settled + hidden'],
   ['u', 'refresh'],
   ['/', 'filter'],
 ];

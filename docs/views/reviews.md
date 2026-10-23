@@ -416,7 +416,8 @@ the network) still just fails and says so, because re-anchoring cannot help with
 | `s` | hand the terminal to that review's claude session |
 | `S` | sort: needs-me / updated / size / repo / author / cost (again reverses) |
 | `o` | open the PR |
-| `h` | show the settled ones too, and hide them again |
+| `H` | hide this PR from the list, or put a hidden one back |
+| `h` | show everything, settled and hidden, and go back to the live list |
 
 **Every live review follows its PR**, on the same five-minute poll as the list: draft or ready,
 title, size, head, last update. The search for review requests refreshes the reviews it returns.
@@ -433,6 +434,12 @@ reclaimed — not when it's posted, since the author may push again.
 usually far more of them than live ones, and a list of everything would bury the work. The header
 always says how many are being held back, so a short list tells you what it is not showing, and
 `h` shows them. Filtering with `/` still narrows whichever set you are looking at.
+
+**`H` hides a PR you are not going to review.** It goes the way a settled one does: off the list,
+out of `:todo`, and counted in the header ("2 hidden by you"). `h` shows it again, dimmed and marked
+`-`, and `H` on it puts it back. Hiding lasts until you undo it. A new push or another review
+request does not bring it back, because a team re-requesting is not a reason to start. Naming it
+with `:reviews owner/repo#123` does.
 
 Reviews staled by the old behaviour recover on their own: once per daemon start, stale reviews whose
 PR is still open and carries a review of yours get their status back from GitHub's record.
