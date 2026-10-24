@@ -132,6 +132,16 @@ export function TextArea(props: {
   );
 }
 
+/**
+ * How many rows `value` takes at `width`, between `min` and `max` — for an
+ * input that grows as you type into it. A box shorter than its text shows the
+ * end and hides the start, which is the part you wrote first and are least
+ * likely to remember while you finish the sentence.
+ */
+export function rowsFor(value: string, width: number, min = 1, max = 4): number {
+  return Math.max(min, Math.min(max, wrap(sanitize(value), Math.max(1, width)).length));
+}
+
 /** `\r` renders as "jump to screen column 0"; tabs render as who-knows-what. Exported for the check. */
 export function sanitize(text: string): string {
   return text

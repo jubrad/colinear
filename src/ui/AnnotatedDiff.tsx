@@ -4,7 +4,7 @@ import { anchorKey, expandTabs, filesIn, layoutMargin, parseDiff, toVisualRows, 
 import { highlightDiff } from '../core/highlight.js';
 import type { Review, ReviewFinding, Severity } from '../core/types.js';
 import { ChatLog, spinFrame, useAwaitingReply, useFrame } from './ChatLog.js';
-import { TextArea } from './TextArea.js';
+import { TextArea, rowsFor } from './TextArea.js';
 import { theme } from '../theme.js';
 import { useColinear } from './context.js';
 import { pickableModels } from '../core/agent.js';
@@ -203,6 +203,8 @@ export function AnnotatedDiff(props: {
    * screen once tab puts you in it, because reading the reply is why you went.
    */
   const chatRows = focus === 'chat' ? Math.max(8, Math.floor(height / 2)) : 7;
+  /** the input grows with what you type, out of the conversation's rows */
+  const inputRows = focus === 'chat' ? rowsFor(chat, width - 6) : 1;
   /** findings with no anchor: the lead, and anything about the PR as a whole */
   const unanchored = (review.findings ?? []).filter((f) => !f.file || typeof f.line !== 'number');
   /**
@@ -717,8 +719,9 @@ export function AnnotatedDiff(props: {
         <ChatLog
           turns={chatTurns}
           width={width - 4}
-          rows={chatRows - 3}
+          rows={chatRows - 2 - inputRows}
           active={focus === 'chat'}
+          arrows={inputRows === 1}
           empty="tab to ask the agent about any of this"
           working={
             busy || reply.awaiting
@@ -737,7 +740,7 @@ export function AnnotatedDiff(props: {
             onChange={setChat}
             focus={focus === 'chat'}
             width={width - 6}
-            height={1}
+            height={inputRows}
             submitOnEnter
             placeholder={focus === 'chat' ? 'ask the agent — enter sends · ↑/↓ scroll · esc back' : 'tab to talk to the agent'}
             onSubmit={() => {
