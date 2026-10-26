@@ -1855,7 +1855,8 @@ When even that is not enough, <strong><code>enter</code> reads the current one i
 <code>g</code>/<code>G</code> and page keys scroll it, it says where you are (<code>16/25</code>), <code>e</code> edits what you are reading,
 and anything else returns. A comment about the PR as a whole has no line to sit beside, so it gets
 its own line under both panes.</p>
-<p>The chat along the bottom takes one line of input, so <strong>enter sends it</strong>. Its pane shows the
+<p>The chat along the bottom <strong>sends on enter</strong>. Its input grows as you type, up to four rows, so the
+start of a long question stays in view while you finish it. Its pane shows the
 conversation wrapped in full, not cut at the edge. A new reply is shown from its first line, with a
 marker saying how much more there is. <strong><code>tab</code> puts you in the chat</strong> and opens it to half the
 screen; <code>↑</code>/<code>↓</code> and the page keys scroll it, and <code>esc</code> or <code>tab</code> goes back to the diff. After you
