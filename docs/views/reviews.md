@@ -154,7 +154,8 @@ When even that is not enough, **`enter` reads the current one in full** in the r
 and anything else returns. A comment about the PR as a whole has no line to sit beside, so it gets
 its own line under both panes.
 
-The chat along the bottom takes one line of input, so **enter sends it**. Its pane shows the
+The chat along the bottom **sends on enter**. Its input grows as you type, up to four rows, so the
+start of a long question stays in view while you finish it. Its pane shows the
 conversation wrapped in full, not cut at the edge. A new reply is shown from its first line, with a
 marker saying how much more there is. **`tab` puts you in the chat** and opens it to half the
 screen; `↑`/`↓` and the page keys scroll it, and `esc` or `tab` goes back to the diff. After you

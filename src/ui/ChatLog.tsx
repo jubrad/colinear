@@ -104,28 +104,41 @@ export function ChatLog(props: {
   rows: number;
   /** takes the scroll keys — the pane has focus */
   active: boolean;
+  /**
+   * ↑/↓ scroll too. Off while the input below spans more than one row, where
+   * they move its cursor instead; pgup/pgdn always scroll.
+   */
+  arrows?: boolean;
   /** shown when there is no conversation yet */
   empty: string;
   /** what is in flight, if anything; it takes the last row */
   working?: { label: string; since?: number; detail?: string };
 }) {
-  const { turns, width, rows, active, empty, working } = props;
+  const { turns, width, rows, active, empty, working, arrows = true } = props;
   const textWidth = Math.max(10, width - GUTTER);
   const { lines, lastStart } = useMemo(() => layout(turns, textWidth), [turns, textWidth]);
   const body = Math.max(1, rows - (working ? 1 : 0));
-  const maxTop = Math.max(0, lines.length - body);
+  // The "↑ earlier" and "↓ more" markers take rows of their own. They used to
+  // be drawn over the window's first and last rows, and following a long new
+  // turn puts that turn's first line exactly on the first row — so a question
+  // of more than a few lines arrived with its opening line hidden behind
+  // "↑ 3 earlier lines".
+  const marks = body > 1;
+  // scrolled to the end, the up marker is showing, so the end needs one row less
+  const maxTop = lines.length <= body ? 0 : Math.max(0, lines.length - (marks ? body - 1 : body));
   // null follows the conversation; a number is where you scrolled to
   const [top, setTop] = useState<number | null>(null);
   useEffect(() => setTop(null), [turns.length]);
   // following: the newest turn from its start if it does not fit, else the bottom
-  const follow = Math.min(maxTop, lines.length - lastStart > body ? lastStart : maxTop);
+  const fitsBelowMark = lines.length - lastStart <= (marks ? body - 1 : body);
+  const follow = Math.min(maxTop, fitsBelowMark ? maxTop : lastStart);
   const at = Math.min(maxTop, top ?? follow);
 
   useInput(
     (_input, key) => {
       const step = key.pageUp || key.pageDown ? Math.max(1, body - 1) : 1;
-      if (key.upArrow || key.pageUp) setTop(Math.max(0, at - step));
-      if (key.downArrow || key.pageDown) setTop(Math.min(maxTop, at + step));
+      if ((arrows && key.upArrow) || key.pageUp) setTop(Math.max(0, at - step));
+      if ((arrows && key.downArrow) || key.pageDown) setTop(Math.min(maxTop, at + step));
     },
     { isActive: active },
   );
@@ -145,11 +158,16 @@ export function ChatLog(props: {
     );
   }
 
-  const view: Array<Line | { more: string }> = lines.slice(at, at + body);
   // the edges say there is more rather than letting the cut look like the end
-  const below = lines.length - (at + body);
-  if (at > 0 && view.length > 1) view[0] = { more: `↑ ${at} earlier line${at === 1 ? '' : 's'}${active ? ' · ↑/pgup' : ' · tab to scroll'}` };
-  if (below > 0 && view.length > 1) view[view.length - 1] = { more: `↓ ${below} more${active ? ' · ↓/pgdn' : ' · tab to scroll'}` };
+  const up = marks && at > 0;
+  let room = body - (up ? 1 : 0);
+  if (marks && room > 1 && at + room < lines.length) room -= 1;
+  const below = lines.length - (at + room);
+  const view: Array<Line | { more: string }> = [
+    ...(up ? [{ more: `↑ ${at} earlier line${at === 1 ? '' : 's'}${active ? ' · ↑/pgup' : ' · tab to scroll'}` }] : []),
+    ...lines.slice(at, at + room),
+    ...(marks && below > 0 ? [{ more: `↓ ${below} more${active ? ' · ↓/pgdn' : ' · tab to scroll'}` }] : []),
+  ];
 
   return (
     <>

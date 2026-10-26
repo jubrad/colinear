@@ -1,9 +1,9 @@
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
 import { useEffect, useState } from 'react';
 import type { Review } from '../core/types.js';
 import { theme } from '../theme.js';
 import { ChatLog, useAwaitingReply } from './ChatLog.js';
+import { TextArea, rowsFor } from './TextArea.js';
 
 /**
  * Full-screen reader for a review: the agent's document on one side, a
@@ -61,8 +61,11 @@ export function ReviewDocModal(props: {
 
   const chat = review.chat ?? [];
   const reply = useAwaitingReply(chat, busy);
-  // borders (2) + title (1) + input and its margin (2)
-  const chatRows = Math.max(1, paneHeight - 5);
+  // the input grows with what you type (up to a third of the pane), so the
+  // start of a long question stays on screen while you finish it
+  const inputRows = focus === 'chat' ? rowsFor(draft, chatWidth - 6, 1, Math.max(1, Math.floor(paneHeight / 3))) : 1;
+  // borders (2) + title (1) + the input's margin (1) + the input
+  const chatRows = Math.max(1, paneHeight - 4 - inputRows);
   // a question is waiting on you, not on it — the title says so instead
   const working =
     review.question || !(busy || reply.awaiting)
@@ -128,6 +131,7 @@ export function ReviewDocModal(props: {
             width={chatWidth - 4}
             rows={chatRows}
             active={focus === 'chat'}
+            arrows={inputRows === 1}
             working={working}
             empty={
               review.sessionId
@@ -137,8 +141,11 @@ export function ReviewDocModal(props: {
           />
           <Box marginTop={1}>
             <Text color={focus === 'chat' ? theme.accent : theme.dim}>{'> '}</Text>
-            <TextInput
+            <TextArea
               focus={focus === 'chat'}
+              width={chatWidth - 6}
+              height={inputRows}
+              submitOnEnter
               value={draft}
               placeholder={
                 focus !== 'chat'
@@ -148,8 +155,8 @@ export function ReviewDocModal(props: {
                     : 'ask or instruct…'
               }
               onChange={setDraft}
-              onSubmit={(value) => {
-                const text = value.trim();
+              onSubmit={() => {
+                const text = draft.trim();
                 if (!text) return;
                 setDraft('');
                 // a pending question takes the reply; a bare number picks an option
