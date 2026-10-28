@@ -76,7 +76,7 @@ export interface DispatcherApi {
     opts?: { model?: string; instructions?: string },
   ): void;
   reviewTask(id: string): void;
-  editTaskFinding(id: string, file: string, line: number, comment: string, severity?: string, startLine?: number): void;
+  editTaskFinding(id: string, file: string, line: number, comment: string, severity?: string, startLine?: number, nth?: number): void;
   sendFindings(id: string): void;
   editFinding(
     id: string,
@@ -86,6 +86,8 @@ export interface DispatcherApi {
     severity?: string,
     startLine?: number,
     by?: 'you' | 'agent',
+    /** which finding on that line; -1 adds one beside them */
+    nth?: number,
   ): void;
   /** scopeId / priority absent: the drafting agent decides */
   createIssue(scopeId: string | undefined, request: string, priority?: number): void;
@@ -395,11 +397,11 @@ export async function connectToDaemon(): Promise<Connection> {
           explainLines: (id, file, startLine, endLine, opts) =>
             command({ name: 'explainLines', id, file, startLine, endLine, opts }),
           reviewTask: (id) => command({ name: 'reviewTask', id }),
-          editTaskFinding: (id, file, line, comment, severity, startLine) =>
-            command({ name: 'editTaskFinding', id, file, line, comment, severity, startLine }),
+          editTaskFinding: (id, file, line, comment, severity, startLine, nth) =>
+            command({ name: 'editTaskFinding', id, file, line, comment, severity, startLine, nth }),
           sendFindings: (id) => command({ name: 'sendFindings', id }),
-          editFinding: (id, file, line, comment, severity, startLine, by) =>
-            command({ name: 'editFinding', id, file, line, comment, severity, startLine, by }),
+          editFinding: (id, file, line, comment, severity, startLine, by, nth) =>
+            command({ name: 'editFinding', id, file, line, comment, severity, startLine, by, nth }),
           createIssue: (scopeId, request, priority) => command({ name: 'createIssue', scopeId, request, priority }),
           createProject: (brief) => command({ name: 'createProject', brief }),
             gcScan: (olderThanDays) => command({ name: 'gcScan', olderThanDays }),

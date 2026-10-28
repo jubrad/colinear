@@ -220,11 +220,12 @@ export function editFinding(
   at: { file: string; line: number; startLine?: number },
   comment: string,
   severity?: Severity,
+  nth?: number,
 ): void {
   const path = docPath(task);
   if (!path) return;
   const before = existsSync(path) ? readFileSync(path, 'utf8') : '';
-  const after = upsertFinding(before, at, comment, severity);
+  const after = upsertFinding(before, at, comment, severity, undefined, nth);
   if (after === before) return;
   writeFileSync(path, after);
   absorb(task);

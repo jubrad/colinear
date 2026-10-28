@@ -181,8 +181,23 @@ export interface MarginRow {
  * the one being read, so it takes as many rows as it needs and may climb *up*
  * the pane to get them.
  */
+export interface MarginItem {
+  comment?: string;
+  note?: string;
+  severity?: string;
+  key?: string;
+  line?: number;
+}
+
+/**
+ * Several items on one row — a comment and a note on the same line, or two
+ * findings the agent anchored together — are laid out one after another as a
+ * single stack: the first starts on its line, the rest follow it directly, and
+ * they drift (or don't) together. Laid out one per row, the last one written
+ * simply replaced the others, and nothing said there had been more.
+ */
 export function layoutMargin(
-  visible: Array<{ comment?: string; note?: string; severity?: string; key?: string; line?: number }>,
+  visible: Array<MarginItem | MarginItem[]>,
   width: number,
   wrap: (text: string, width: number) => string[],
   /** a single enormous finding should not push every other one off the screen */
@@ -198,45 +213,52 @@ export function layoutMargin(
   const rows: MarginRow[] = visible.map(() => ({ text: '', kind: 'empty' as const }));
   let next = 0; // the first row not already spoken for
 
-  for (const [start, item] of visible.entries()) {
-    const body = item.comment ?? item.note;
-    if (!body) continue;
-    const mine = focused !== undefined && item.key === focused;
-    // measured unmarked first: whether it needs to move is what decides
-    // whether it carries a marker, and the marker costs a line of its own
-    const height = wrap(body, Math.max(4, width)).length;
-    // the one being read climbs toward its own end of the pane rather than
-    // hanging off its line and running out of rows — every line it gains this
-    // way is a line that was being thrown away
-    const wanted = mine ? Math.max(next, Math.min(start, visible.length - height)) : start;
-    const at = Math.max(wanted, next);
-    if (at >= visible.length) break; // below the fold; it appears once scrolled
-    const drifted = at !== start;
-    // the marker is wrapped WITH the text, not painted over it: a prefix the
-    // wrap width does not know about is a row that overflows and loses its end
-    const marked =
-      drifted && item.line !== undefined ? `${at > start ? '↑' : '↓'}${item.line} ${body}` : body;
-    const lines = wrap(marked, Math.max(4, width));
-    const room = Math.min(visible.length - at, mine ? visible.length : maxRows);
-    const shown = lines.slice(0, room);
-    // cut only against the bottom of the pane or the cap — never against the
-    // next finding, which is what used to eat the end of a sentence
-    if (lines.length > shown.length && shown.length) {
-      const last = shown[shown.length - 1];
-      shown[shown.length - 1] = `${last.slice(0, Math.max(0, width - 1)).trimEnd()}…`;
+  for (const [start, entry] of visible.entries()) {
+    const stack = (Array.isArray(entry) ? entry : [entry]).filter((item) => item.comment ?? item.note);
+    // a stack moves as one: whether its first item had to leave its line is
+    // whether the whole stack is somewhere else, and says so once
+    let stackDrifted: boolean | undefined;
+    for (const item of stack) {
+      const body = (item.comment ?? item.note)!;
+      const mine = focused !== undefined && item.key === focused;
+      // measured unmarked first: whether it needs to move is what decides
+      // whether it carries a marker, and the marker costs a line of its own
+      const height = wrap(body, Math.max(4, width)).length;
+      // the one being read climbs toward its own end of the pane rather than
+      // hanging off its line and running out of rows — every line it gains this
+      // way is a line that was being thrown away
+      const wanted = mine ? Math.max(next, Math.min(start, visible.length - height)) : start;
+      const at = Math.max(wanted, next);
+      if (at >= visible.length) break; // below the fold; it appears once scrolled
+      const drifted = stackDrifted ?? at !== start;
+      const first = stackDrifted === undefined;
+      stackDrifted = drifted;
+      // the marker is wrapped WITH the text, not painted over it: a prefix the
+      // wrap width does not know about is a row that overflows and loses its end
+      const marked =
+        drifted && first && item.line !== undefined ? `${at > start ? '↑' : '↓'}${item.line} ${body}` : body;
+      const lines = wrap(marked, Math.max(4, width));
+      const room = Math.min(visible.length - at, mine ? visible.length : maxRows);
+      const shown = lines.slice(0, room);
+      // cut only against the bottom of the pane or the cap — never against the
+      // next finding, which is what used to eat the end of a sentence
+      if (lines.length > shown.length && shown.length) {
+        const last = shown[shown.length - 1];
+        shown[shown.length - 1] = `${last.slice(0, Math.max(0, width - 1)).trimEnd()}…`;
+      }
+      shown.forEach((text, k) => {
+        rows[at + k] = {
+          text,
+          kind: item.comment ? 'comment' : 'note',
+          owner: item.key,
+          severity: item.severity,
+          head: k === 0,
+          drifted,
+          line: item.line,
+        };
+      });
+      next = at + shown.length;
     }
-    shown.forEach((text, k) => {
-      rows[at + k] = {
-        text,
-        kind: item.comment ? 'comment' : 'note',
-        owner: item.key,
-        severity: item.severity,
-        head: k === 0,
-        drifted,
-        line: item.line,
-      };
-    });
-    next = at + shown.length;
   }
   return rows;
 }

@@ -1,4 +1,4 @@
-import { expandTabs, parseDiff, sliceSpans, toVisualRows, type Span } from './diff.js';
+import { expandTabs, layoutMargin, parseDiff, sliceSpans, toVisualRows, type Span } from './diff.js';
 import { highlightDiff, highlightLine } from './highlight.js';
 
 /**
@@ -220,11 +220,37 @@ for (const paneWidth of [60, 80, 100, 120, 183, 300]) {
   check('no grammar yields one plain span', spans.length === 1 && spans[0].token === undefined, JSON.stringify(spans));
 }
 
+// ── a stack on one row ──
+// A comment and a note on the same line used to be one margin slot, so the
+// last one written was the only one drawn. Both must appear, in order, the
+// second right under the first, and neither may claim to have drifted.
+{
+  const wrapWords = (text: string, w: number) => {
+    const out: string[] = [];
+    let line = '';
+    for (const word of text.split(' ')) {
+      if (line && line.length + 1 + word.length > w) {
+        out.push(line);
+        line = word;
+      } else line = line ? `${line} ${word}` : word;
+    }
+    return [...out, line];
+  };
+  const rows = layoutMargin(
+    [[{ comment: 'consider · leaks', key: 'a', line: 4 }, { note: 'annotation · retries', key: 'b', line: 4 }], {}, {}, {}],
+    40,
+    wrapWords,
+  );
+  check('both items on a line are drawn', rows[0].owner === 'a' && rows[1].owner === 'b', JSON.stringify(rows));
+  check('the second follows the first, as a note', rows[1].kind === 'note' && rows[1].head === true);
+  check('a stack on its own line has not drifted', !rows[0].drifted && !rows[1].drifted && !rows[1].text.startsWith('↓'));
+}
+
 if (failures.length) {
   console.error(`diff layout: ${failures.length} failure(s)`);
   for (const f of failures) console.error(`  ✖ ${f}`);
   process.exit(1);
 }
 console.log(
-  'ok — diff rows fit the pane at every width, and syntax spans are lossless and classified',
+  'ok — diff rows fit the pane at every width, syntax spans are lossless and classified, and a\n     line with more than one finding shows them all',
 );

@@ -191,6 +191,15 @@ unfamiliar code — still one `tab` from any other level. Every edit rewrites th
 the review document, so what you post and what the agent sees never diverge — a later chat turn reads
 your wording, and `p` posts it.
 
+**A line can hold more than one finding.** A comment and a note on the same line, two findings from
+the agent, or a block that covers a line with its own comment are all normal. The margin draws
+everything anchored on a line as one stack, numbered `1/2`, `2/2`. The diff's marker column shows
+the count instead of `▍`, and the footer says `1/2 on this line`. `n`/`N` step through a line's
+findings before moving to the next line, and inside the reader (`enter`) they move between them
+without leaving it. `e`, `d` and `enter` act on the selected finding. `i` edits the line's note if
+there is one, and otherwise adds a new note beside what's there. Before, a note added to a commented
+line replaced the comment.
+
 ### The keys, in one place
 
 The flow above spread across a few pages; this is the whole of it. Everything except `p` and `tab`
@@ -199,15 +208,15 @@ acts on the line under the cursor, or on the marked block when there is one.
 | key | what |
 |---|---|
 | `j`/`k` arrows | move a line · `space`/`pageup` a page · `g`/`G` top and bottom |
-| `n` `N` | the next and previous line something is anchored to |
+| `n` `N` | the next and previous finding: each one on a line in turn, then the next line |
 | `]` `[` | hop to the next / previous changed file |
 | `enter` | read the current finding in full, scrolling inside it |
 | `v` | mark a block — move to grow it, `v` or `esc` to drop it |
 | `e` | write a finding — level and comment in one pane, `tab` between them |
-| `i` | the same pane, pre-set to an annotation |
+| `i` | the same pane, pre-set to an annotation: the line's note if it has one, otherwise a new one beside the rest |
 | `a` | ask an agent what the marked lines do — the answer lands as an annotation |
 | `c` | ask about the marked lines your own way — pick a model, write the request |
-| `d` | drop the finding here, block and all |
+| `d` | drop the selected finding, block and all |
 | `ctrl+d` | save what you are writing · an empty comment removes it |
 | `p` post · `A` approve · `X` request changes — the same as from the list |
 | `tab` | talk to the reviewing agent · in compose, switch level ⇄ comment · `esc` back to the diff, then out |

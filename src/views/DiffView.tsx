@@ -84,8 +84,8 @@ export function DiffView(props: { param?: string }) {
       // the chat here talks to the agent that wrote the code, because that is
       // the one you would tell something to
       onSend={(text) => ctx.dispatcher.message(task.issue.id, text, { wake: false })}
-      onEditFinding={(file, line, comment, severity, startLine) =>
-        ctx.dispatcher.editTaskFinding(task.issue.id, file, line, comment, severity, startLine)
+      onEditFinding={(file, line, comment, severity, startLine, _by, nth) =>
+        ctx.dispatcher.editTaskFinding(task.issue.id, file, line, comment, severity, startLine, nth)
       }
       onExplain={(file, startLine, endLine, opts) =>
         ctx.dispatcher.explainLines(task.issue.id, file, startLine, endLine, opts)
