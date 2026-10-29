@@ -1885,6 +1885,14 @@ outright. <strong><code>i</code></strong> opens the same pane pre-set to an anno
 unfamiliar code — still one <code>tab</code> from any other level. Every edit rewrites the <code>``findings fence in
 the review document, so what you post and what the agent sees never diverge — a later chat turn reads
 your wording, and</code>p` posts it.</p>
+<p><strong>A line can hold more than one finding.</strong> A comment and a note on the same line, two findings from
+the agent, or a block that covers a line with its own comment are all normal. The margin draws
+everything anchored on a line as one stack, numbered <code>1/2</code>, <code>2/2</code>. The diff's marker column shows
+the count instead of <code>▍</code>, and the footer says <code>1/2 on this line</code>. <code>n</code>/<code>N</code> step through a line's
+findings before moving to the next line, and inside the reader (<code>enter</code>) they move between them
+without leaving it. <code>e</code>, <code>d</code> and <code>enter</code> act on the selected finding. <code>i</code> edits the line's note if
+there is one, and otherwise adds a new note beside what's there. Before, a note added to a commented
+line replaced the comment.</p>
 <h3 id="the-keys-in-one-place">The keys, in one place<a class="headerlink" href="#the-keys-in-one-place" title="Permanent link">&para;</a></h3>
 <p>The flow above spread across a few pages; this is the whole of it. Everything except <code>p</code> and <code>tab</code>
 acts on the line under the cursor, or on the marked block when there is one.</p>
@@ -1902,7 +1910,7 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 </tr>
 <tr>
 <td><code>n</code> <code>N</code></td>
-<td>the next and previous line something is anchored to</td>
+<td>the next and previous finding: each one on a line in turn, then the next line</td>
 </tr>
 <tr>
 <td><code>]</code> <code>[</code></td>
@@ -1922,7 +1930,7 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 </tr>
 <tr>
 <td><code>i</code></td>
-<td>the same pane, pre-set to an annotation</td>
+<td>the same pane, pre-set to an annotation: the line's note if it has one, otherwise a new one beside the rest</td>
 </tr>
 <tr>
 <td><code>a</code></td>
@@ -1934,7 +1942,7 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 </tr>
 <tr>
 <td><code>d</code></td>
-<td>drop the finding here, block and all</td>
+<td>drop the selected finding, block and all</td>
 </tr>
 <tr>
 <td><code>ctrl+d</code></td>
