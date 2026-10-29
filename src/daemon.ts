@@ -280,9 +280,10 @@ export async function runDaemon(): Promise<void> {
         if (task) {
           selfreview.editFinding(
             task,
-            { file: cmd.file, line: cmd.line },
+            { file: cmd.file, line: cmd.line, startLine: cmd.startLine },
             cmd.comment,
             cmd.severity as Severity | undefined,
+            cmd.nth,
           );
         }
         break;
@@ -317,6 +318,7 @@ export async function runDaemon(): Promise<void> {
           cmd.comment,
           cmd.severity as Severity | undefined,
           cmd.by === 'you' || cmd.by === 'agent' ? cmd.by : undefined,
+          cmd.nth,
         );
         break;
       case 'listAgents':

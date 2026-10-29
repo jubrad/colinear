@@ -101,10 +101,20 @@ export function upsertFinding(
   severity?: Severity,
   /** who wrote it: a new finding written here is the operator's unless told otherwise */
   by?: 'you' | 'agent',
+  /**
+   * Which of the findings on this line, when there is more than one — a
+   * comment and a note on the same line is ordinary, and so is the agent
+   * flagging one line twice. Counted in document order among the findings
+   * anchored at `at.line`; `-1` adds a new one beside them. Left out, it is
+   * the first, which is what every caller meant before lines could stack —
+   * and how adding a note to a commented line used to overwrite the comment.
+   */
+  nth?: number,
 ): string {
   const { findings } = parseDoc(text);
   const mark = (who: 'you' | 'agent' | undefined) => (who === 'you' ? { by: 'you' as const } : {});
-  const idx = findings.findIndex((f) => f.file === at.file && f.line === at.line);
+  const here = findings.flatMap((f, i) => (f.file === at.file && f.line === at.line ? [i] : []));
+  const idx = nth === -1 ? -1 : (here[nth ?? 0] ?? -1);
   const trimmed = comment.trim();
   if (!trimmed) {
     if (idx === -1) return text;
@@ -924,13 +934,14 @@ export class Reviewer {
     comment: string,
     severity?: Severity,
     by?: 'you' | 'agent',
+    nth?: number,
   ): void {
     const review = store.getReview(id);
     if (!review?.worktree) return this.toast('no worktree for this review yet', 'err');
     const path = join(review.worktree, REVIEW_FILE);
     if (!existsSync(path)) return this.toast('no review document yet — press r first', 'err');
     const before = readFileSync(path, 'utf8');
-    const after = upsertFinding(before, at, comment, severity, by);
+    const after = upsertFinding(before, at, comment, severity, by, nth);
     if (after === before) return;
     writeFileSync(path, after);
     // the watcher would catch this too; absorbing directly means the card is

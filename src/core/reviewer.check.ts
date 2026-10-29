@@ -372,6 +372,25 @@ for (const [spec, repository, number] of SPECS) {
   check("and back to the agent's", back?.by === undefined, JSON.stringify(back));
 }
 
+// ── more than one finding on a line ──
+// A comment and a note on one line is ordinary. The edit used to name only the
+// line, so it always hit the first finding there: adding a note to a
+// commented line replaced the comment, and editing the second edited the first.
+{
+  const comment = { file: 'a.ts', line: 4, severity: 'consider', comment: 'Leaks on error.' } as ReviewFinding;
+  const doc = writeFindings('# R\n', [comment]);
+  const both = upsertFinding(doc, { file: 'a.ts', line: 4 }, 'Retries three times.', 'info', 'you', -1);
+  const pair = parseDoc(both).findings;
+  check('a note added to a commented line sits beside the comment', pair.length === 2 && pair[0].comment === 'Leaks on error.' && pair[1].severity === 'info', JSON.stringify(pair));
+  const second = parseDoc(upsertFinding(both, { file: 'a.ts', line: 4 }, 'Retries up to three times.', 'info', undefined, 1)).findings;
+  check('editing the second edits the second', second[0].comment === 'Leaks on error.' && second[1].comment === 'Retries up to three times.', JSON.stringify(second));
+  const dropped = parseDoc(upsertFinding(both, { file: 'a.ts', line: 4 }, '', undefined, undefined, 1)).findings;
+  check('and dropping it leaves the first', dropped.length === 1 && dropped[0].comment === 'Leaks on error.', JSON.stringify(dropped));
+  const legacy = parseDoc(upsertFinding(both, { file: 'a.ts', line: 4 }, 'Leaks.', 'consider')).findings;
+  check('with no place named it is the first, as before', legacy[0].comment === 'Leaks.' && legacy.length === 2);
+  check('an empty new one writes nothing', upsertFinding(both, { file: 'a.ts', line: 4 }, '  ', 'nit', undefined, -1) === both);
+}
+
 // ── instructions and a model picked with `c` ──
 {
   const cfg = { guidance: { review: 'HOUSE RULE' } } as unknown as Config;
@@ -451,5 +470,5 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(
-  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, a half-initialised submodule cannot wedge a review checkout, and\n     the instructions given for a review reach every round ahead of standing guidance,\n     a plain comment posts with no label and no place in the count, and the signoff\n     goes only on what the agent wrote, and a review the search no longer returns\n     still follows its PR without coming out of hiding',
+  'ok — no info finding and none of the document reaches a review body, the body opens\n     on one line, only a stale anchor is read as one, adopting a settled review brings it\n     back without touching a status the operator owns, a PR spec parses in every form\n     they write it, a half-initialised submodule cannot wedge a review checkout, and\n     the instructions given for a review reach every round ahead of standing guidance,\n     a plain comment posts with no label and no place in the count, and the signoff\n     goes only on what the agent wrote, and a review the search no longer returns\n     still follows its PR without coming out of hiding, and a line holds\n     more than one finding and an edit names which',
 );

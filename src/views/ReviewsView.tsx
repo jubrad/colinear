@@ -338,8 +338,8 @@ export function ReviewsView(props: { param?: string }) {
         height={Math.max(12, pane.height)}
       busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
         onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
-        onEditFinding={(file, line, comment, severity, startLine, by) =>
-          ctx.dispatcher.editFinding(selected.id, file, line, comment, severity, startLine, by)
+        onEditFinding={(file, line, comment, severity, startLine, by, nth) =>
+          ctx.dispatcher.editFinding(selected.id, file, line, comment, severity, startLine, by, nth)
         }
         signing={{ signoff: ctx.cfg.prSignoff, scope: ctx.cfg.prSignoffScope }}
         onExplain={(file, startLine, endLine, opts) =>

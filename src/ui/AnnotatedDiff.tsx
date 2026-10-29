@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
-import { anchorKey, expandTabs, filesIn, layoutMargin, parseDiff, toVisualRows, type DiffLine, type TokenKind, type VisualRow } from '../core/diff.js';
+import { anchorKey, expandTabs, filesIn, layoutMargin, parseDiff, toVisualRows, type DiffLine, type MarginItem, type TokenKind, type VisualRow } from '../core/diff.js';
 import { highlightDiff } from '../core/highlight.js';
 import type { Review, ReviewFinding, Severity } from '../core/types.js';
 import { ChatLog, spinFrame, useAwaitingReply, useFrame } from './ChatLog.js';
@@ -93,6 +93,8 @@ export function AnnotatedDiff(props: {
     severity?: Severity,
     startLine?: number,
     by?: 'you' | 'agent',
+    /** which finding on `line` (see upsertFinding); -1 adds one beside them */
+    nth?: number,
   ) => void;
   /**
    * Where findings get posted under the operator's signoff — :reviews. With it,
@@ -149,6 +151,14 @@ export function AnnotatedDiff(props: {
   /** the `c` popup is open over these lines */
   const [asking, setAsking] = useState<{ file: string; start: number; end: number } | null>(null);
   const [chat, setChat] = useState('');
+  /**
+   * Which of the findings on the cursor's line is the one in hand — read by
+   * enter, edited by e, dropped by d. Tied to the row it was chosen on, so
+   * moving the cursor starts again from the first.
+   */
+  const [pick, setPick] = useState<{ row: number; idx: number }>({ row: -1, idx: 0 });
+  /** what the compose pane writes: a finding by its line and place on it, or a new one (nth -1) */
+  const [writing, setWriting] = useState<{ file: string; line: number; startLine?: number; nth: number } | null>(null);
   // the explain spinner's own clock: the app's is stopped unless a task runs
   const frame = useFrame(pending.length > 0);
   /** how far into a finding being read in full we have scrolled */
@@ -164,23 +174,59 @@ export function AnnotatedDiff(props: {
   /** files changed, in diff order — the tabs across the top */
   const files = useMemo(() => filesIn(parsed), [parsed]);
 
-  /** file:line → what is anchored there. `info` entries are annotations, the rest are comments. */
+  /**
+   * Each finding's identity on screen, and its place among the findings
+   * anchored on the same line — which is how an edit names it, since a line
+   * can carry a comment and a note, or two of the agent's.
+   */
+  const { ids, slots } = useMemo(() => {
+    const ids = new Map<ReviewFinding, string>();
+    const slots = new Map<ReviewFinding, number>();
+    const count = new Map<string, number>();
+    (review.findings ?? []).forEach((f, i) => {
+      ids.set(f, `f${i}`);
+      if (!f.file || typeof f.line !== 'number') return;
+      const key = anchorKey(f.file, f.line);
+      const n = count.get(key) ?? 0;
+      slots.set(f, n);
+      count.set(key, n + 1);
+    });
+    return { ids, slots };
+  }, [review.findings]);
+
+  /**
+   * file:line → everything on that line: what is anchored there and every
+   * block that covers it. A list, not one finding: it used to be a map of one,
+   * so a note added to a commented line, or a range overlapping another,
+   * silently replaced what was there on screen. Comments come before notes.
+   */
   const byLine = useMemo(() => {
-    const map = new Map<string, ReviewFinding>();
+    const map = new Map<string, ReviewFinding[]>();
     for (const f of review.findings ?? []) {
       if (!f.file || typeof f.line !== 'number') continue;
       // a block is marked on every line it covers, so the diff shows its
       // extent; the text still hangs off the anchor row alone
       const from = f.startLine && f.startLine < f.line ? f.startLine : f.line;
-      for (let n = from; n <= f.line; n++) map.set(anchorKey(f.file, n), f);
+      for (let n = from; n <= f.line; n++) {
+        const key = anchorKey(f.file, n);
+        map.set(key, [...(map.get(key) ?? []), f]);
+      }
     }
+    for (const list of map.values()) list.sort((a, b) => Number(a.severity === 'info') - Number(b.severity === 'info'));
     return map;
   }, [review.findings]);
+  /** the findings whose text hangs off this line — the margin's stack for its row */
+  const anchoredAt = (file: string, line: number) => (byLine.get(anchorKey(file, line)) ?? []).filter((f) => f.line === line);
+  /** what is anchored on a line, as text — an explanation has landed when this changes */
+  const stampAt = (file: string, line: number) =>
+    anchoredAt(file, line)
+      .map((f) => `${f.severity}:${f.comment}`)
+      .join('\n');
 
   // the answer landed where we asked: stop spinning. Keyed on the findings the
   // store pushes back, so a row goes from spinner to text in one frame.
   useEffect(() => {
-    setPending((p) => p.filter((r) => byLine.get(anchorKey(r.file, r.end))?.comment === r.was));
+    setPending((p) => p.filter((r) => stampAt(r.file, r.end) === r.was));
   }, [byLine]);
 
   const annotatedRows = useMemo(
@@ -255,14 +301,24 @@ export function AnnotatedDiff(props: {
   const fileIdx = current ? Math.max(0, files.indexOf(current.file)) : 0;
   const anchor =
     current?.newLine !== undefined ? { file: current.file, line: current.newLine } : undefined;
-  const finding = anchor ? byLine.get(anchorKey(anchor.file, anchor.line)) : undefined;
   /**
-   * The block the cursor is in, by its anchor — which is not the cursor's own
-   * line when the finding covers a range. This is what gets read in full and
-   * what stays undimmed, so it has to survive standing anywhere inside it.
+   * Everything on the cursor's line, and which of it is in hand: what is
+   * anchored here first, in the order the margin draws it, then any block from
+   * further down that covers this line.
    */
-  const focusedKey =
-    finding?.file && typeof finding.line === 'number' ? anchorKey(finding.file, finding.line) : undefined;
+  const stack = useMemo(() => {
+    if (!anchor) return [];
+    const all = byLine.get(anchorKey(anchor.file, anchor.line)) ?? [];
+    return [...all.filter((f) => f.line === anchor.line), ...all.filter((f) => f.line !== anchor.line)];
+  }, [byLine, anchor?.file, anchor?.line]);
+  const pickIdx = pick.row === cursor ? Math.min(pick.idx, Math.max(0, stack.length - 1)) : 0;
+  const finding: ReviewFinding | undefined = stack[pickIdx];
+  /**
+   * The block in hand — which is not the cursor's own line when the finding
+   * covers a range. This is what gets read in full and what stays undimmed, so
+   * it has to survive standing anywhere inside it.
+   */
+  const focusedKey = finding ? ids.get(finding) : undefined;
 
   /**
    * The finding under the cursor, wrapped for the reading pane. Computed here
@@ -283,32 +339,35 @@ export function AnnotatedDiff(props: {
     // Lay out over the pane's rows rather than only the diff's: a comment
     // anchored near the end of a short file would otherwise be cut off with
     // blank screen underneath it, having no more code rows to flow into.
-    const slots = Math.max(visible.length, visibleRows);
-    const annotated = Array.from({ length: slots }, (_, i) => visible[i]).map((row) => {
+    const rowCount = Math.max(visible.length, visibleRows);
+    const annotated = Array.from({ length: rowCount }, (_, i) => visible[i]).map((row): MarginItem[] => {
       // a continuation carries no annotation of its own: the block already
       // started on the row above, and starting it again would double it
-      const key =
-        row?.first && row.line.newLine !== undefined ? anchorKey(row.line.file, row.line.newLine) : undefined;
-      const found = key ? byLine.get(key) : undefined;
-      // every line of a block maps to the same finding; only its anchor row
-      // opens the text, or a five-line comment would be drawn five times
-      const finding = found && found.line === row?.line.newLine ? found : undefined;
-      const asked =
-        row?.first && row.line.newLine !== undefined
-          ? pending.find((r) => r.file === row.line.file && r.end === row.line.newLine)
-          : undefined;
-      const info = finding?.severity === 'info';
-      const label = finding
-        ? `${KIND_WORD[finding.severity ?? 'consider'] ?? 'comment'}${signing && finding.by === 'you' ? ' (you)' : ''} · `
-        : '';
-      // an explanation is on its way and what is written here is still what was
-      // written when we asked: hold the row, so the answer lands where you
-      // asked for it. A session that dies leaves the row saying so rather than
-      // spinning for the rest of the day.
-      if (asked && (!finding || finding.comment === asked.was)) {
+      if (!row?.first || row.line.newLine === undefined) return [];
+      // only what is anchored on this row opens text here: a block's middle
+      // lines map to it too, and drawing it there would draw it five times
+      const here = anchoredAt(row.line.file, row.line.newLine);
+      const items: MarginItem[] = here.map((f, k) => {
+        const info = f.severity === 'info';
+        // a stack says how big it is on every item, so the second one never
+        // reads as a continuation of the first
+        const count = here.length > 1 ? `${k + 1}/${here.length} ` : '';
+        const label = `${count}${KIND_WORD[f.severity ?? 'consider'] ?? 'comment'}${signing && f.by === 'you' ? ' (you)' : ''} · `;
         return {
-          key,
-          comment: undefined,
+          key: ids.get(f),
+          comment: info ? undefined : `${label}${f.comment}`,
+          note: info ? `${label}${f.comment}` : undefined,
+          severity: f.severity,
+          line: row.line.newLine,
+        };
+      });
+      // an explanation is on its way and what is written here is still what
+      // was written when we asked: say so beneath it, where the answer will
+      // land. A session that dies leaves the row saying so rather than
+      // spinning for the rest of the day.
+      const asked = pending.find((r) => r.file === row.line.file && r.end === row.line.newLine);
+      if (asked && stampAt(asked.file, asked.end) === asked.was) {
+        items.push({
           note:
             Date.now() - asked.since > EXPLAIN_TIMEOUT
               ? asked.custom
@@ -316,27 +375,14 @@ export function AnnotatedDiff(props: {
                 : 'no explanation came back — see :logs'
               : `${spinFrame(frame)} ${asked.custom ? 'asking about' : 'explaining'} these lines…`,
           severity: 'info',
-          line: row?.line.newLine,
-        };
+          line: row.line.newLine,
+        });
       }
-      return {
-        key,
-        comment: info ? undefined : finding ? `${label}${finding.comment}` : undefined,
-        note: info ? `${label}${finding.comment}` : undefined,
-        severity: finding?.severity,
-        line: finding ? row?.line.newLine : undefined,
-      };
+      return items;
     });
     return layoutMargin(annotated, marginText, wrapText, 14, focusedKey);
-  }, [visible, visibleRows, byLine, marginText, pending, frame, focusedKey]);
+  }, [visible, visibleRows, byLine, ids, signing, marginText, pending, frame, focusedKey]);
 
-  /**
-   * Where a comment written now would land, spelled the way it is stored: a
-   * block hangs off its last line, which is not always where the cursor is —
-   * mark upward from 43 to 41 and the finding is still on 43.
-   */
-  const target = (sel?: { start: number; end: number }) =>
-    anchor ? `${anchor.file}:${sel && sel.end > sel.start ? `${sel.start}–${sel.end}` : anchor.line}` : '';
   /**
    * The lines a comment would land on: just the cursor's, or the block marked
    * with `v`. The anchor is always the LAST line, because that is what GitHub
@@ -367,18 +413,52 @@ export function AnnotatedDiff(props: {
   };
 
   const jump = (dir: 1 | -1) => {
+    // a line with more than one on it is walked item by item before moving on
+    if (dir === 1 && pickIdx < stack.length - 1) return setPick({ row: cursor, idx: pickIdx + 1 });
+    if (dir === -1 && pickIdx > 0) return setPick({ row: cursor, idx: pickIdx - 1 });
     if (!annotatedRows.length) return;
     const next =
       dir === 1
         ? annotatedRows.find((i) => i > cursor) ?? annotatedRows[0]
         : [...annotatedRows].reverse().find((i) => i < cursor) ?? annotatedRows.at(-1)!;
     setCursor(next);
+    // arriving backwards lands on the last of the line's stack, so N retraces n
+    const there = lines[next]?.line;
+    const size = there?.newLine !== undefined ? (byLine.get(anchorKey(there.file, there.newLine))?.length ?? 0) : 0;
+    setPick({ row: next, idx: dir === 1 ? 0 : Math.max(0, size - 1) });
+  };
+
+  /**
+   * Open the compose pane on a finding that exists, or on a new one at the
+   * cursor (or the marked block). Which it is decides what saving writes: an
+   * existing finding is named by its line and place on it, so editing the note
+   * on a commented line edits the note, and a new one is added beside whatever
+   * is there instead of replacing it.
+   */
+  const compose = (existing: ReviewFinding | undefined, as?: Severity) => {
+    if (!anchor) return;
+    if (existing?.file && typeof existing.line === 'number') {
+      setWriting({ file: existing.file, line: existing.line, startLine: existing.startLine, nth: slots.get(existing) ?? 0 });
+      setDraft(existing.comment);
+      const kind = KINDS.findIndex((k) => k.severity === existing.severity);
+      setKindIdx(kind === -1 ? 1 : kind);
+      setBy(authorOf(existing));
+    } else {
+      const at = selection ?? { file: anchor.file, start: anchor.line, end: anchor.line };
+      setWriting({ file: at.file, line: at.end, startLine: at.end > at.start ? at.start : undefined, nth: -1 });
+      setDraft('');
+      const kind = KINDS.findIndex((k) => k.severity === (as ?? 'consider'));
+      setKindIdx(kind === -1 ? 1 : kind);
+      setBy('you');
+    }
+    setComposeFocus('text');
+    setFocus('compose');
   };
 
   /** hand a range to the agent, and hold its row until the answer lands */
   const ask = (at: { file: string; start: number; end: number }, opts?: { model?: string; instructions?: string }) => {
     onExplain?.(at.file, at.start, at.end, opts);
-    const was = byLine.get(anchorKey(at.file, at.end))?.comment;
+    const was = stampAt(at.file, at.end);
     setPending((p) => [
       ...p.filter((r) => !(r.file === at.file && r.end === at.end)),
       { ...at, was, since: Date.now(), custom: Boolean(opts) },
@@ -424,15 +504,14 @@ export function AnnotatedDiff(props: {
       if (key.pageUp) return setReadScroll((r) => Math.max(0, r - readRows));
       if (input === 'G') return setReadScroll(last);
       if (input === 'g') return setReadScroll(0);
-      // the one thing the pane offers besides reading: rewrite what you just read
-      if (input === 'e' && anchor) {
-        setDraft(finding?.comment ?? '');
-        const existing = KINDS.findIndex((k) => k.severity === finding?.severity);
-        setKindIdx(existing === -1 ? 1 : existing);
-        setBy(authorOf(finding));
-        setComposeFocus('text');
-        return setFocus('compose');
+      // the others on this line, without leaving the reader
+      if ((input === 'n' || input === 'N') && stack.length > 1) {
+        setReadScroll(0);
+        const step = input === 'n' ? 1 : stack.length - 1;
+        return setPick({ row: cursor, idx: (pickIdx + step) % stack.length });
       }
+      // the one thing the pane offers besides reading: rewrite what you just read
+      if (input === 'e' && finding) return compose(finding);
       setFocus('diff');
       return;
     }
@@ -467,23 +546,23 @@ export function AnnotatedDiff(props: {
     if (input === 'a' && selection && onExplain) return ask(selection);
     // the same, with a model and a request of your own
     if (input === 'c' && selection && onExplain) return setAsking(selection);
-    if (input === 'e' && anchor) {
-      setDraft(finding?.comment ?? '');
-      const existing = KINDS.findIndex((k) => k.severity === finding?.severity);
-      setKindIdx(existing === -1 ? 1 : existing);
-      setBy(authorOf(finding));
-      setComposeFocus('text');
-      setFocus('compose');
-    }
-    // straight to an annotation: the common case when reading unfamiliar code
+    // e edits the one in hand; with a block marked it writes a new one there
+    if (input === 'e' && anchor) compose(markRow === null ? finding : undefined);
+    // straight to an annotation: the common case when reading unfamiliar code.
+    // The note already on this line if there is one — never the comment, which
+    // a note used to overwrite — and a new one beside it otherwise
     if (input === 'i' && anchor) {
-      setDraft(finding?.severity === 'info' ? finding.comment : '');
-      setBy(finding?.severity === 'info' ? authorOf(finding) : 'you');
-      setKindIdx(KINDS.findIndex((k) => k.severity === 'info'));
-      setComposeFocus('text');
-      setFocus('compose');
+      const note =
+        markRow !== null
+          ? undefined
+          : finding?.severity === 'info'
+            ? finding
+            : stack.find((f) => f.severity === 'info' && f.line === anchor.line);
+      compose(note, 'info');
     }
-    if (input === 'd' && anchor && finding) onEditFinding(anchor.file, anchor.line, '');
+    if (input === 'd' && finding?.file && typeof finding.line === 'number') {
+      onEditFinding(finding.file, finding.line, '', undefined, undefined, undefined, slots.get(finding));
+    }
     if (input === 'p') onPost();
     if (input === 'R' && onReview) onReview();
   });
@@ -559,17 +638,13 @@ export function AnnotatedDiff(props: {
               row={row}
               width={diffWidth - 4}
               onCursor={scroll + i === cursor}
-              annotated={row.line.newLine !== undefined && byLine.has(anchorKey(row.line.file, row.line.newLine))}
+              stacked={row.line.newLine !== undefined ? (byLine.get(anchorKey(row.line.file, row.line.newLine)) ?? []) : []}
               selected={
                 Boolean(markRow !== null && selection) &&
                 row.line.file === selection?.file &&
                 row.line.newLine !== undefined &&
                 row.line.newLine >= (selection?.start ?? 0) &&
                 row.line.newLine <= (selection?.end ?? 0)
-              }
-              info={
-                row.line.newLine !== undefined &&
-                byLine.get(anchorKey(row.line.file, row.line.newLine))?.severity === 'info'
               }
             />
           ))}
@@ -579,6 +654,7 @@ export function AnnotatedDiff(props: {
           {focus === 'read' && finding && anchor ? (
             <Box flexDirection="column">
               <Text bold color={SEVERITY_COLOR[finding.severity ?? 'consider']} wrap="truncate">
+                {stack.length > 1 ? `${pickIdx + 1}/${stack.length} · ` : ''}
                 {KIND_WORD[finding.severity ?? 'consider'] ?? 'comment'} · {finding.file}:
                 {finding.startLine && finding.startLine < (finding.line ?? 0)
                   ? `${finding.startLine}–${finding.line}`
@@ -593,14 +669,15 @@ export function AnnotatedDiff(props: {
                 {readLines.length > readRows
                   ? `j/k scrolls · ${Math.min(readScroll + readRows, readLines.length)}/${readLines.length} · `
                   : ''}
-                any other key returns · e edits it
+                {stack.length > 1 ? 'n/N the others here · ' : ''}any other key returns · e edits it
               </Text>
             </Box>
-          ) : focus === 'compose' && anchor ? (
+          ) : focus === 'compose' && writing ? (
             <Box flexDirection="column">
               <Text bold color={SEVERITY_COLOR[editAs]} wrap="truncate">
                 {editAs === 'info' ? 'annotation on ' : `${editAs} on `}
-                {target(selection)}
+                {writing.file}:{writing.startLine && writing.startLine < writing.line ? `${writing.startLine}–${writing.line}` : writing.line}
+                {writing.nth === -1 && anchoredAt(writing.file, writing.line).length ? ' · added beside what is there' : ''}
               </Text>
               {/* the consequence, said plainly */}
               <Text dimColor wrap="truncate">
@@ -660,12 +737,13 @@ export function AnnotatedDiff(props: {
                 }
                 onSubmit={() => {
                   onEditFinding(
-                    anchor.file,
-                    selection?.end ?? anchor.line,
+                    writing.file,
+                    writing.line,
                     draft,
                     editAs,
-                    selection && selection.end > selection.start ? selection.start : undefined,
+                    writing.startLine,
                     signing ? by : undefined,
+                    writing.nth,
                   );
                   setFocus('diff');
                   setDraft('');
@@ -755,6 +833,12 @@ export function AnnotatedDiff(props: {
       </Box>
 
       <Text dimColor wrap="truncate">
+        {/* a line with more than one finding says so where the keys are */}
+        {stack.length > 1 && focus === 'diff' ? (
+          <Text color={theme.key} bold>
+            {pickIdx + 1}/{stack.length} on this line · n/N steps through them ·{' '}
+          </Text>
+        ) : null}
         j/k move · n/N next · ]/[ file · enter reads · v select · a explain · c ask · e finding · i annotate · d drop ·{' '}
         {onReview ? 'R review · p hand back' : 'p post'} · f {fullScreen ? 'header' : 'full'} · esc
       </Text>
@@ -838,11 +922,13 @@ function DiffRow(props: {
   row: VisualRow;
   width: number;
   onCursor: boolean;
-  annotated: boolean;
-  info?: boolean;
+  /** the findings on this line — the marker shows how many when it is more than one */
+  stacked: ReviewFinding[];
   selected?: boolean;
 }) {
-  const { row, width, onCursor, annotated, info, selected } = props;
+  const { row, width, onCursor, stacked, selected } = props;
+  const annotated = stacked.length > 0;
+  const info = annotated && stacked.every((f) => f.severity === 'info');
   const line = { ...row.line, text: row.text };
   if (line.kind === 'file') {
     return (
@@ -872,7 +958,7 @@ function DiffRow(props: {
           while a block is marked, its extent instead, which is the thing you
           are looking at right then */}
       <Text color={selected ? theme.selection : annotated ? (info ? theme.annotation : theme.key) : undefined}>
-        {selected ? '▏' : annotated ? (info ? '│' : '▍') : ' '}
+        {selected ? '▏' : stacked.length > 1 ? String(Math.min(9, stacked.length)) : annotated ? (info ? '│' : '▍') : ' '}
       </Text>
       {/* the +/- sits left of the number: that gutter has the room, and it puts
           "what changed" closest to the eye scanning down the margin */}
