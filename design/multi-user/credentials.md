@@ -110,25 +110,58 @@ What gets shipped is **the access token alone**:
 | a `claude setup-token` token | about a year | a year of the subscription |
 | **the current access token** | hours | hours |
 
-The design assumes the CLI keeps its login as `claudeAiOauth.{accessToken, refreshToken,
-expiresAt}` in `.credentials.json` on Linux; the spike records the real shape.
-
 **The daemon renews by running the real CLI**, in its own config directory (`CLAUDE_CONFIG_DIR`,
 `CODEX_HOME`), and copies the access token out of the file the CLI writes. That avoids building on
 the CLIs' OAuth endpoints, which aren't documented APIs.
 
-This rests on three things the first spike has to establish
-([WORK-ORDER.md](WORK-ORDER.md#m0-spikes)):
+### What the spike found
 
-1. **Does the CLI run with an access token and no refresh token?**
-2. **Does it re-read a replaced credentials file during a session?** If it does, token sync is
-   invisible. If it keeps the token in memory, a session can't outlive its token: the daemon waits
-   for a gap between turns, restarts the CLI with a fresh token, and resumes the session by id.
-3. **Is there a CLI command that forces a renewal** without starting a session?
+Spike 0.1 ran on 2026-10-30 against Claude Code 2.1.314 on Linux, with a throwaway login
+([the script](spikes/claude-credentials.md)). Every point below was observed, not assumed.
 
-If (1) fails, the fallback is the full credentials file with the refresh token stripped on every
-push, which may or may not work. If nothing works, a long-lived token is the last resort, and the
-threat-model table in the [README](README.md#threat-model) has to say so.
+- **The file.** `$CLAUDE_CONFIG_DIR/.credentials.json` holds `claudeAiOauth` with `accessToken`,
+  `refreshToken`, `expiresAt`, `refreshTokenExpiresAt`, `scopes`, `subscriptionType` and
+  `rateLimitTier`.
+- **Lifetimes.** An access token lasts **8 hours**. The refresh token lasts about 29 days beyond
+  that.
+- **An access token alone works.** With `refreshToken` removed from the file, the CLI runs, and it
+  doesn't put one back. This is what pods get.
+- **A stale `expiresAt` doesn't stop it.** Without a refresh token, the CLI sends the access token
+  whatever `expiresAt` says, and the server decides. A late push costs nothing until the token is
+  actually dead.
+- **The file is re-read every turn.** In one long-lived process, a token corrupted between turns
+  failed the next turn, and a good token put back made the following turn succeed. **A failed turn
+  doesn't end the process.** So token sync is just replacing the file: no restart, no resume.
+- **`claude auth status` renews.** Given a refresh token and a past `expiresAt`, it renews without
+  starting a session: new access token, `expiresAt` 8 hours out. That's how the daemon renews.
+  But **`auth status` is not a health check**: it reports `loggedIn: true` even when renewal failed.
+  A renewal is confirmed by `expiresAt` moving, nothing else.
+- **Renewal replaces the refresh token, and the old one stops working.** The old one then fails with
+  "OAuth session expired and could not be refreshed". This confirms rule 2: one renewer.
+- **Renewal revokes the previous access token.** That's immediate: a session holding it fails its
+  next turn with "OAuth token revoked", and a new session can't even start ("couldn't verify your
+  sign-in"; an org that manages settings checks them at start). See
+  [the renewal window](#the-renewal-window).
+- **`claude auth logout` revokes server-side.** A copied access token dies with it, so signing out
+  in `:connections` actually takes the access away.
+
+### The renewal window
+
+Because renewing revokes the token every pod holds, there's a moment between the daemon renewing
+and each runner acknowledging the new set when a turn can fail. In the spike, a turn that landed
+in that moment failed with "OAuth token revoked", and the next turn after the push succeeded in
+the same session.
+
+So:
+
+1. **Push straight after renewing.** The daemon renews, reads the new file, and pushes to every
+   runner in the same step. The window is a round trip.
+2. **The runner retries a turn the window broke.** If a turn ends in "OAuth token revoked" or a 401,
+   and a newer credential set is on disk (or arrives within ten seconds), the runner sends the same
+   turn again rather than reporting a failure. The process survives a failed turn, so this is a
+   resend, not a restart. One retry; a second failure is real.
+3. **Renew at three-quarters of the token's life**, as already planned, which with 8-hour tokens
+   is about every 6 hours. The window opens a handful of times a day per user.
 
 ## Token sync
 

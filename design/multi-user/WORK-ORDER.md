@@ -26,8 +26,8 @@ flowchart LR
   M1 --> M7[M7 web UI]
   M4 --> M7
   M6 --> M8[M8 later]
-  M0 -. 0.1, 0.2 .-> M2
-  M0 -. 0.1, 0.2 .-> M5
+  M0 -. 0.2 .-> M2
+  M0 -. 0.2 .-> M5
   M0 -. 0.3 .-> M4
 ```
 
@@ -41,7 +41,7 @@ Answers that change the design. Nothing here merges as product code.
 
 | | step | why first | needs |
 |---|---|---|---|
-| ☐ | **0.1 Claude credential behaviour.** In a scratch `CLAUDE_CONFIG_DIR` with its own login, find out: does the CLI run with an access token and no refresh token? Does it re-read a replaced credentials file mid-session? Is there a command that forces a renewal without a session? Script: [spikes/claude-credentials.md](spikes/claude-credentials.md) | Decides how token sync works for agents ([credentials.md](credentials.md#claude-and-codex)) | **you**: a fresh `claude` login |
+| ☑ | **0.1 Claude credential behaviour.** In a scratch `CLAUDE_CONFIG_DIR` with its own login, find out: does the CLI run with an access token and no refresh token? Does it re-read a replaced credentials file mid-session? Is there a command that forces a renewal without a session? Script: [spikes/claude-credentials.md](spikes/claude-credentials.md) | Done 2026-10-30: all three yes, plus renewal revokes the old token ([what it found](credentials.md#what-the-spike-found)) | — |
 | ☐ | **0.2 Codex, the same three questions** | Same, for Codex | **you**: a fresh `codex` login |
 | ☐ | **0.3 Tailscale identity headers.** Confirm `tailscale serve` in a sidecar passes `Tailscale-User-Login` to a loopback backend, and doesn't for tagged devices | The gateway's whole identity story ([gateway.md](gateway.md#identity)) | a tailnet |
 | ☑ | **0.4 Subscription terms.** Confirm the Claude and Codex terms allow each user's own login in a cluster daemon | Confirmed 2026-10-30: personal subscriptions are fine | — |
@@ -69,7 +69,8 @@ Refactors with no behaviour change, then the thin client. These would be good fo
 | ◐ | **2.1 Protocol types, `coli runner` over stdio, and `RunnerBackend`.** `"runner": "process"` runs each session in a child. A runner that dies mid-session fails it (`error`, resumable with `r`) | [#153](https://github.com/jubrad/colinear/pull/153). `runner.check.ts` |
 | ◐ | **2.2 Workspace operations through the runner** | [#154](https://github.com/jubrad/colinear/pull/154). The contract runs against a local worktree and through a runner, identically. `prepare` (cloning inside the runner) moves to 3.5, the first place that needs it |
 | ☐ | **2.3 Transcripts streamed to the daemon**; `transcriptDir`, `sessionExists` and backup answered from the daemon's copies | [runner.md](runner.md#the-two-synchronous-questions). Needed only once a runner has no shared disk (pods): the container runner mounts the worktree's transcript dir instead |
-| ◐ | **2.4 The `credentials` frame and token sync**, with a test credential source; real logins arrive in M5 | [#155](https://github.com/jubrad/colinear/pull/155). Which files the agent CLIs read still waits on 0.1 and 0.2 |
+| ◐ | **2.4 The `credentials` frame and token sync**, with a test credential source; real logins arrive in M5 | [#155](https://github.com/jubrad/colinear/pull/155). For Claude, 0.1 settled the files: `.credentials.json` with the refresh token removed |
+| ☐ | **2.4b Retry a turn the renewal window broke**: one resend when a turn fails as revoked and a newer set is on disk | [credentials.md](credentials.md#the-renewal-window) |
 | ☐ | **2.5 Attach over a pty stream** | Replaces the `ssh -t` handoff in remote mode too. Not needed for the container runner, whose transcripts are on the host, so `s` resumes there |
 | ◐ | **2.6 Container runner**: `"runner": { "container": "image" }`, one container per session seeing only its worktree, git dir and transcripts | [#157](https://github.com/jubrad/colinear/pull/157). `bin/check-container` checks the sandbox against real Docker. Over `docker run -i`'s stdio, not a socket. Real agent sessions can't log in until M5 |
 

@@ -149,8 +149,6 @@ read and audited, not impossible to read.
 
 Each document ends with its own. The ones that cut across everything:
 
-1. **Does the Claude CLI pick up a refreshed credentials file mid-session?** This decides whether a
-   session can outlive one access token without a restart. It is the first spike in the work order.
-2. **Is a daemon per user affordable?** v1 keeps every user's daemon running. That's one small
+1. **Is a daemon per user affordable?** v1 keeps every user's daemon running. That's one small
    process each, which is fine for tens of users. If it isn't for hundreds, daemons need to sleep,
    and the gateway has to wake them ([operator.md](operator.md#open-questions)).
