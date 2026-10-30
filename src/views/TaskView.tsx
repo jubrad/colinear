@@ -136,10 +136,9 @@ export function TaskView(props: { param?: string }) {
           );
           return;
         }
-        execFile('gh', ['pr', 'ready', String(task.prs[0].number)], { cwd: task.repo?.path ?? ctx.cfg.repo }, (err) => {
-          if (err) ctx.toast(`gh pr ready failed`, 'err');
-          else ctx.toast(`#${task.prs[0].number} marked ready`, 'ok');
-        });
+        // a GitHub action: the daemon makes it, and toasts how it went
+        ctx.dispatcher.promotePr(task.issue.id);
+        ctx.toast(`marking #${task.prs[0].number} ready…`, 'info');
         if (holding.length) store.addActivity(task.issue.id, `promoted ahead of ${holding.map((b) => b.identifier).join(', ')}`);
       }
       if (input === 'f' && task.status === 'blocked') {

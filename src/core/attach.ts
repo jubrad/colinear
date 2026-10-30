@@ -153,10 +153,10 @@ export type PendingAction =
       primer?: string;
     }
   | { kind: 'edit-config'; path: string }
-  /** open a file in $EDITOR, then tell the daemon to re-read it */
-  | { kind: 'edit-file'; path: string; reviewId: string }
-  /** open a plan draft in $EDITOR, then tell the daemon to re-absorb it */
-  | { kind: 'edit-plan'; path: string; projectId: string }
+  /** edit a review's document in $EDITOR, on a local copy the daemon sends */
+  | { kind: 'edit-file'; reviewId: string }
+  /** edit a plan draft in $EDITOR, the same way */
+  | { kind: 'edit-plan'; projectId: string }
   /** answer a question set in $EDITOR, then submit what came back */
   | { kind: 'edit-answers'; path: string; issueId: string; count: number }
   /** restart the TUI process on new code; the daemon and its agents stay up */

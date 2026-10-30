@@ -715,6 +715,20 @@ export class Reviewer {
     if (await this.absorbDoc(id)) store.addReviewActivity(id, 'review doc reloaded from disk');
   }
 
+  /** The review document as it stands in the worktree, for editing elsewhere. */
+  async readDoc(id: string): Promise<string | undefined> {
+    const worktree = store.getReview(id)?.worktree;
+    return worktree ? this.workspaces.open(worktree).readFile(REVIEW_FILE).catch(() => undefined) : undefined;
+  }
+
+  /** An edited review document, put back and taken in. */
+  async writeDoc(id: string, text: string): Promise<void> {
+    const worktree = store.getReview(id)?.worktree;
+    if (!worktree) return this.toast('no worktree for this review yet', 'err');
+    await this.workspaces.open(worktree).writeFile(REVIEW_FILE, text);
+    if (await this.absorbDoc(id)) store.addReviewActivity(id, 'you edited the review doc');
+  }
+
   /** Pull the doc out of the worktree into the store, where the UI mirrors it. */
   private async absorbDoc(id: string): Promise<boolean> {
     const review = store.getReview(id);

@@ -13,6 +13,7 @@ import {
   SOCKET_PATH,
   type ClientMsg,
   type Command,
+  type DocRef,
   type ServerMsg,
 } from './core/protocol.js';
 import type { ChannelMessage } from './core/channel.js';
@@ -106,6 +107,8 @@ export interface DispatcherApi {
   requestChannels(): void;
   requestChannelHistory(channel: string): void;
   gcRemove(paths: string[]): void;
+  /** mark a task's draft PR ready for review; the daemon runs it and toasts the outcome */
+  promotePr(id: string): void;
 }
 
 export interface GcItem {
@@ -160,6 +163,10 @@ export interface Connection {
   /** persist one — the daemon owns the file; nothing here writes it locally */
   setUi(patch: Partial<UiState>): void;
   daemonPid: number;
+  /** a document the daemon holds, whole; undefined when there isn't one yet */
+  readDoc(doc: DocRef): Promise<string | undefined>;
+  /** put an edited document back; the daemon writes it and re-reads it */
+  writeDoc(doc: DocRef, text: string): void;
   close(): void;
 }
 
@@ -283,6 +290,7 @@ export async function connectToDaemon(): Promise<Connection> {
   // tracker calls in flight, answered by providerResult
   const pendingCalls = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   let nextRid = 0;
+  const pendingDocs = new Map<number, (text: string | undefined) => void>();
 
   return await new Promise<Connection>((resolve, reject) => {
     let ready = false;
@@ -322,6 +330,13 @@ export async function connectToDaemon(): Promise<Connection> {
           ui: msg.ui,
           setUi: (patch) => command({ name: 'setUi', patch }),
           daemonPid: msg.pid,
+          readDoc: (doc) =>
+            new Promise((resolve) => {
+              const rid = ++nextRid;
+              pendingDocs.set(rid, resolve);
+              command({ name: 'readDoc', rid, doc });
+            }),
+          writeDoc: (doc, text) => command({ name: 'writeDoc', doc, text }),
           close: () => {
             socket?.destroy();
             // a forward we opened outlives the socket otherwise, leaving a
@@ -430,8 +445,12 @@ export async function connectToDaemon(): Promise<Connection> {
             requestChannels: () => command({ name: 'channelList' }),
             requestChannelHistory: (channel) => command({ name: 'channelHistory', channel }),
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),
+            promotePr: (id) => command({ name: 'promotePr', id }),
           },
         });
+      } else if (msg.t === 'docText') {
+        pendingDocs.get(msg.rid)?.(msg.text);
+        pendingDocs.delete(msg.rid);
       } else if (msg.t === 'providerResult') {
         const call = pendingCalls.get(msg.rid);
         pendingCalls.delete(msg.rid);
@@ -479,6 +498,8 @@ export async function connectToDaemon(): Promise<Connection> {
       // nothing will answer these now; a view waiting on one must hear so
       for (const call of pendingCalls.values()) call.reject(new Error('lost the connection to the daemon'));
       pendingCalls.clear();
+      for (const answer of pendingDocs.values()) answer(undefined);
+      pendingDocs.clear();
       if (!ready) reject(new Error('daemon closed the connection during handshake'));
     });
     socket?.on('error', (err) => {

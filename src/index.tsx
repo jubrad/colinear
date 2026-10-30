@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 import { agentFor, agentNamed } from './core/agent.js';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { render } from 'ink';
 import { App, VERSION } from './app.js';
-import { connectToDaemon } from './client.js';
+import { connectToDaemon, type Connection } from './client.js';
 import { consumePendingAction } from './core/attach.js';
 import { parseAnswerDoc } from './core/answers.js';
 import { runInit } from './core/init.js';
@@ -34,7 +35,7 @@ import { isEncryptedBackup } from './core/backupcrypt.js';
 import { findReclaimable, findSettled, formatSize, removeWorktree } from './core/gc.js';
 import { loadState } from './core/persist.js';
 import { log } from './core/log.js';
-import { SOCKET_PATH } from './core/protocol.js';
+import { SOCKET_PATH, type DocRef } from './core/protocol.js';
 import { store } from './core/store.js';
 
 /** exit code the TUI uses to ask the supervisor for a fresh process */
@@ -80,6 +81,31 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 function openEditor(cfg: Config, path: string): void {
   const editor = cfg.editor ?? process.env.EDITOR ?? 'vi';
   spawnSync('/bin/sh', ['-c', `${editor} "$1"`, 'sh', path], { stdio: 'inherit' });
+}
+
+/**
+ * Edit a document the daemon holds — a review's, a plan's draft — in your own
+ * editor, on this machine. The daemon sends it whole, you edit a local copy,
+ * and it goes back only if you changed it. Where the daemon runs, and whether
+ * its paths exist here, stops mattering.
+ */
+async function editHeldDoc(conn: Connection, cfg: Config, doc: DocRef, name: string): Promise<void> {
+  const before = await conn.readDoc(doc);
+  if (before === undefined) {
+    console.log(`no ${doc.kind === 'review' ? 'review document' : 'plan draft'} yet — nothing to edit`);
+    return;
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'coli-edit-'));
+  try {
+    const file = join(dir, name);
+    writeFileSync(file, before);
+    openEditor(cfg, file);
+    const after = readFileSync(file, 'utf8');
+    if (after !== before) conn.writeDoc(doc, after);
+    else console.log('no changes');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /** Single-quote for a remote shell: the only escape inside '' is '\''. */
@@ -439,22 +465,9 @@ async function runTui(): Promise<void> {
       conn.dispatcher.answer(action.issueId, answers);
       console.log(`sent ${answers.length} answer${answers.length > 1 ? 's' : ''}`);
     } else if (action.kind === 'edit-file') {
-      if (cfg.remote) {
-        // the review doc lives in the review worktree, on the daemon's host —
-        // the configured editor still applies, since the config is shared
-        runThere(cfg.remote, `${cfg.editor ?? '\${EDITOR:-vi}'} ${shq(action.path)}`);
-      } else {
-        openEditor(cfg, action.path);
-      }
-      conn.dispatcher.reloadReviewDoc(action.reviewId);
+      await editHeldDoc(conn, cfg, { kind: 'review', id: action.reviewId }, '.colinear-review.md');
     } else if (action.kind === 'edit-plan') {
-      if (cfg.remote) {
-        // the draft lives in the daemon's state dir, on its host
-        runThere(cfg.remote, `${cfg.editor ?? '\${EDITOR:-vi}'} ${shq(action.path)}`);
-      } else {
-        openEditor(cfg, action.path);
-      }
-      conn.dispatcher.reloadPlanDoc(action.projectId);
+      await editHeldDoc(conn, cfg, { kind: 'plan', id: action.projectId }, 'plan.md');
     } else if (action.kind === 'edit-config') {
       const editPath = ensureConfigFile(cfg);
       openEditor(cfg, editPath);

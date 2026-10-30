@@ -122,15 +122,38 @@ try {
     answers.join(' | '),
   );
 
+  // documents the operator edits travel whole, so their paths never need to exist here
+  check('a document that does not exist yet reads as nothing', (await conn.readDoc({ kind: 'plan', id: 'no-such-project' })) === undefined);
+  conn.writeDoc({ kind: 'plan', id: 'thin-check' }, '# edited here\n');
+  let roundTrip: string | undefined;
+  for (let i = 0; i < 30 && roundTrip === undefined; i++) {
+    roundTrip = await conn.readDoc({ kind: 'plan', id: 'thin-check' });
+    if (roundTrip === undefined) await new Promise((r) => setTimeout(r, 50));
+  }
+  check('an edited document goes back and reads back', roundTrip === '# edited here\n', String(roundTrip));
+  const toasts: string[] = [];
+  const stopToasts = conn.onToast((text) => toasts.push(text));
+  const withPr = (await import('./store.js')).store.list().find((t) => t.prs[0]);
+  check('the demo board has a PR to promote', Boolean(withPr));
+  if (withPr) {
+    conn.dispatcher.promotePr(withPr.issue.id);
+    for (let i = 0; i < 30 && !toasts.length; i++) await new Promise((r) => setTimeout(r, 50));
+    check('promoting a demo PR reaches no GitHub, and says so', toasts.some((t) => t.includes('demo mode')), toasts.join(' | '));
+  }
+  stopToasts();
+
   // the connection going away must not leave a view waiting for ever
   const pending = provider.scopes();
   process.kill(daemonPid, 'SIGTERM');
   daemonPid = undefined;
+  const docAfter = conn.readDoc({ kind: 'plan', id: 'thin-check' });
   const outcome = await Promise.race([
     pending.then(() => 'answered', (e: unknown) => `rejected: ${String(e)}`),
     new Promise<string>((r) => setTimeout(() => r('hung'), 5_000)),
   ]);
   check('a call in flight when the daemon goes is answered or rejected, never left hanging', outcome !== 'hung', outcome);
+  const docOutcome = await Promise.race([docAfter.then(() => 'answered'), new Promise<string>((r) => setTimeout(() => r('hung'), 5_000))]);
+  check('so is a document read', docOutcome === 'answered', docOutcome);
   conn.close();
 } catch (err) {
   failures.push(`threw: ${String(err)}`);

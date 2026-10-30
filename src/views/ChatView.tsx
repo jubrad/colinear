@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { rememberView, setPendingAction, shellIn } from '../core/attach.js';
 import { usePlans } from '../core/hooks.js';
 import { providerFor } from '../core/provider.js';
-import { STATE_DIR } from '../core/log.js';
 import type { PlanIssue, Project, ProjectPlan } from '../core/types.js';
 import { fuzzyMatch } from '../ui/CommandBar.js';
 import { CreationProgress, creationHeight } from '../ui/CreationProgress.js';
@@ -12,7 +11,6 @@ import { spinner } from '../ui/format.js';
 import { TextArea } from '../ui/TextArea.js';
 import { Popup, popupPlacement } from '../ui/Popup.js';
 import { theme } from '../theme.js';
-import { join } from 'node:path';
 import { projectCache } from './ProjectsView.js';
 
 /**
@@ -128,11 +126,7 @@ export function ChatView(props: { param?: string }) {
       if (input === 'g') setScroll(0);
       if (input === 'G') setScroll(maxScroll);
       if (input === 'e' && plan && project) {
-        setPendingAction({
-          kind: 'edit-plan',
-          path: join(STATE_DIR, 'plans', `${project.id.replace(/[^\w.-]/g, '-')}.md`),
-          projectId: project.id,
-        });
+        setPendingAction({ kind: 'edit-plan', projectId: project.id });
         ctx.quit();
       }
       // hand the terminal to a real session in a worktree: thinking out loud
