@@ -211,8 +211,8 @@ export interface AgentBackend {
    * in ways that leave the operator stuck: an id minted for a session that
    * never started, or one created somewhere else entirely.
    *
-   * Async because the transcript may be on another machine: a runner answers
-   * it from the workspace (design/multi-user/runner.md).
+   * Async because the transcript may be on another machine; with a runner the
+   * daemon answers it from its own copy (design/multi-user/runner.md).
    */
   sessionExists(cwd: string, sessionId: string): Promise<boolean>;
 
