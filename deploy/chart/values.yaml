@@ -9,6 +9,16 @@ operator:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { memory: 256Mi }
 
+# Every user's daemon: one StatefulSet per user, made by the operator.
+daemon:
+  image:
+    repository: ghcr.io/jubrad/colinear
+    tag: "0.1.0"
+  cpu: 100m
+  memory: 512Mi
+  # its state directory: config, the logins vault, transcripts it keeps
+  disk: 5Gi
+
 # The org config (design/multi-user/config.md): rendered as the install's one
 # ColiOrg. Empty renders none, so a cluster can be set up before it is decided.
 org: {}

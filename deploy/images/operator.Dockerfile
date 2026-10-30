@@ -8,5 +8,6 @@ RUN cargo build --release -p coli-operator
 # no shell, no package manager, not root: it only talks to the Kubernetes API
 FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --from=build /src/target/release/coli-operator /coli-operator
-USER nonroot
+# numeric: runAsNonRoot can only check a uid, and distroless names its user "nonroot"
+USER 65532:65532
 ENTRYPOINT ["/coli-operator"]

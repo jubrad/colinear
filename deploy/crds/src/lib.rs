@@ -125,12 +125,25 @@ pub struct OrgModels {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct OrgLimits {
     /// the most sessions one user's daemon runs at once. i32, not u32: Kubernetes
     /// validates int32 and warns about any format it doesn't know
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(range(min = 1))]
     pub concurrency: Option<i32>,
+    /// the most workspace pods one user has awake at once
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(range(min = 1))]
+    pub awake_workspaces: Option<i32>,
+    /// one user's total CPU and memory requests, daemon included, e.g. "16" and "64Gi"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory: Option<String>,
+    /// one user's total volume size, every sleeping workspace included, e.g. "500Gi"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage: Option<String>,
 }
 
 /// One person. The gateway creates it at first sign-in for anyone the org
@@ -168,6 +181,9 @@ pub struct ColiUserStatus {
     pub namespace: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub daemon: Option<DaemonStatus>,
+    /// why the operator can't serve this user, when it can't
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, JsonSchema, PartialEq)]
