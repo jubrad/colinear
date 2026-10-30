@@ -723,9 +723,18 @@ function stripContextFlags(args: string[]): string[] {
  * frames to it over stdin and stdout, so nothing else may write to stdout.
  */
 function runnerCommand(): void {
+  // pushed credentials live here, readable by this runner and its sessions
+  // only, and go when it does; COLINEAR_RUNNER_CREDENTIALS names a fixed place
+  // (an in-memory volume in a pod) instead
+  const credentialsDir = process.env.COLINEAR_RUNNER_CREDENTIALS || mkdtempSync(join(tmpdir(), 'coli-creds-'));
+  const temporary = !process.env.COLINEAR_RUNNER_CREDENTIALS;
+  process.env.COLINEAR_CREDENTIALS_DIR = credentialsDir;
   const link = streamLink<ToRunner, FromRunner>(process.stdin, process.stdout);
-  link.onClose(() => process.exit(0));
-  serveRunner(link, rawAgent, { version: VERSION, runtimes: knownAgents() });
+  link.onClose(() => {
+    if (temporary) rmSync(credentialsDir, { recursive: true, force: true });
+    process.exit(0);
+  });
+  serveRunner(link, rawAgent, { version: VERSION, runtimes: knownAgents(), credentialsDir });
 }
 
 async function cleanly(run: () => Promise<void>): Promise<void> {

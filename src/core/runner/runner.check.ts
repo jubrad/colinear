@@ -9,7 +9,7 @@
  *
  * Run with `npx tsx src/core/runner/runner.check.ts`. `bin/check` runs it.
  */
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -17,7 +17,8 @@ import { SessionInbox, type AgentBackend, type RunSessionOpts, type SessionResul
 import { CLAUDE_CAPABILITIES } from '../agents/claude.js';
 import type { CoordinatorTools } from '../coordinator.js';
 import type { Config } from '../types.js';
-import { handshake, runnerBackend, spawnRunner, type RunnerLink } from './backend.js';
+import { handshake, pushCredentials, runnerBackend, spawnRunner, type RunnerLink } from './backend.js';
+import { settableCredentials, type CredentialSource } from './credentials.js';
 import type { FromRunner, ToRunner } from './frames.js';
 import { serveRunner } from './host.js';
 import { streamLink } from './link.js';
@@ -83,17 +84,17 @@ const scripted: AgentBackend = {
 };
 
 /** A runner in this process, on the other end of two pipes, speaking real frames. */
-async function pipedRunner(workspace?: string): Promise<{ link: RunnerLink; kill: () => void }> {
+async function pipedRunner(workspace?: string, creds?: { dir: string; source: CredentialSource }): Promise<{ link: RunnerLink; kill: () => void }> {
   const toRunner = new PassThrough();
   const fromRunner = new PassThrough();
   const runnerSide = streamLink<ToRunner, FromRunner>(toRunner, fromRunner);
   runnerSide.onFrame((frame) => {
     if (frame.t === 'hello') runnerCfg = frame.cfg;
   });
-  serveRunner(runnerSide, () => scripted, { version: 'check', runtimes: ['scripted'] });
+  serveRunner(runnerSide, () => scripted, { version: 'check', runtimes: ['scripted'], credentialsDir: creds?.dir });
   const daemonSide = streamLink<FromRunner, ToRunner>(fromRunner, toRunner);
   return {
-    link: await handshake(daemonSide, cfg, { workspace }),
+    link: await handshake(daemonSide, cfg, { workspace, credentials: creds?.source }),
     kill: () => {
       fromRunner.end();
       toRunner.end();
@@ -213,6 +214,57 @@ const run = async (): Promise<void> => {
     check('and so is one asked afterwards', after.includes('went away'), after);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+
+  // ── credentials: pushed, written whole, renewed, and before any work ──────
+  const credsRoot = realpathSync(mkdtempSync(join(tmpdir(), 'coli-runner-creds-')));
+  try {
+    const dir = join(credsRoot, 'creds');
+    const source = settableCredentials({ files: [{ path: 'claude/.credentials.json', content: '{"token":"one"}' }, { path: 'gh/hosts.yml', content: 'gh: one' }] });
+    const withCreds = await pipedRunner(credsRoot, { dir, source });
+    const file = join(dir, 'claude/.credentials.json');
+    check('credentials are on disk before the link is handed over', readFileSync(file, 'utf8') === '{"token":"one"}');
+    check('readable by the owner only', (statSync(file).mode & 0o077) === 0, (statSync(file).mode & 0o777).toString(8));
+
+    source.set({ files: [{ path: 'claude/.credentials.json', content: '{"token":"two"}' }] });
+    for (let i = 0; i < 40 && readFileSync(file, 'utf8') !== '{"token":"two"}'; i++) await new Promise((r) => setTimeout(r, 25));
+    check('a renewal reaches a live runner', readFileSync(file, 'utf8') === '{"token":"two"}');
+    check('and a file the new set leaves out is removed', !existsSync(join(dir, 'gh/hosts.yml')));
+
+    await pushCredentials(withCreds.link, { version: 1, files: [{ path: 'claude/.credentials.json', content: '{"token":"stale"}' }] });
+    check('an older set arriving late changes nothing', readFileSync(file, 'utf8') === '{"token":"two"}');
+
+    const escaping = await pushCredentials(withCreds.link, { version: 99, files: [{ path: '../outside', content: 'x' }] }).then(
+      () => 'written',
+      (e: unknown) => String(e),
+    );
+    check('a credential path outside the directory is refused, and says so', escaping.includes('outside'), escaping);
+    check('and nothing lands outside it', !existsSync(join(credsRoot, 'outside')));
+    withCreds.kill();
+
+    const empty = await pipedRunner(credsRoot, { dir, source: settableCredentials() }).then(
+      () => 'handed over',
+      (e: unknown) => String(e),
+    );
+    check('a runner is not handed work when there are no credentials to give it', empty.includes('no credentials'), empty);
+
+    // the runner's own guard, for a daemon that skips the order
+    const toRunner = new PassThrough();
+    const fromRunner = new PassThrough();
+    serveRunner(streamLink<ToRunner, FromRunner>(toRunner, fromRunner), () => scripted, { version: 'check', runtimes: ['scripted'], credentialsDir: dir });
+    const raw = streamLink<FromRunner, ToRunner>(fromRunner, toRunner);
+    const refusal = new Promise<string>((resolve) =>
+      raw.onFrame((f) => {
+        if (f.t === 'session.result' && !f.ok) resolve(f.error);
+        if (f.t === 'reply' && !f.ok) resolve(f.error);
+      }),
+    );
+    raw.send({ t: 'hello', protocol: 3, cfg, workspace: credsRoot, credentials: true });
+    raw.send({ t: 'session.start', sid: 'early', runtime: 'scripted', opts: { prompt: 'x', cwd: credsRoot, inbox: false }, tools: [] });
+    check('a runner refuses a session before its credentials', (await refusal).includes('before its credentials'));
+    raw.close();
+  } finally {
+    rmSync(credsRoot, { recursive: true, force: true });
   }
 
   // ── a real child ───────────────────────────────────────────────────────────

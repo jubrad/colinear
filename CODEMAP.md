@@ -149,7 +149,9 @@ src/core/
                      (`coli runner`), backend.ts the daemon's: runnerBackend wraps a runtime so
                      only runSession crosses, and spawnRunner starts a child. workspace.ts is a
                      Workspace whose every operation is a frame the runner answers with its own
-                     local Workspace. runner.check.ts runs the Workspace contract through it
+                     local Workspace. credentials.ts: complete, versioned credential sets, pushed
+                     to a runner before any work and on every renewal, written whole and
+                     owner-only there. runner.check.ts runs the Workspace contract through it
   repos.ts           repoSlug: a repo as owner/name, from `github` in its config or its upstream remote's
                      URL, so gh is asked by name rather than run inside a checkout. repos.check.ts
   workspace.contract.ts  the Workspace contract as a script both workspace.check and runner.check run
