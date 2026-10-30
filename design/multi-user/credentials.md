@@ -157,9 +157,12 @@ So:
 1. **Push straight after renewing.** The daemon renews, reads the new file, and pushes to every
    runner in the same step. The window is a round trip.
 2. **The runner retries a turn the window broke.** If a turn ends in "OAuth token revoked" or a 401,
-   and a newer credential set is on disk (or arrives within ten seconds), the runner sends the same
-   turn again rather than reporting a failure. The process survives a failed turn, so this is a
-   resend, not a restart. One retry; a second failure is real.
+   and a new credential set replaced the old one in the last 30 seconds (or does within ten), the
+   runner resumes the conversation by its id and sends that turn again, rather than reporting a
+   failure. The turn sent again is the one that broke: the opening prompt, or the operator's
+   messages since the last completed turn. One retry; a second failure is real. A resume rather
+   than a resend in the same process, because a one-shot session's process ends with its failed
+   turn.
 3. **Renew at three-quarters of the token's life**, as already planned, which with 8-hour tokens
    is about every 6 hours. The window opens a handful of times a day per user.
 
