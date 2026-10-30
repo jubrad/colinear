@@ -187,9 +187,15 @@ export interface WorkspaceProvider {
   ensureTask(spec: TaskWorktreeSpec, note?: (line: string) => void): Promise<{ workspace: Workspace; branch: string }>;
   /** a review's checkout of a pull request, made or brought up to its head; `note` narrates it */
   ensureReview(spec: ReviewWorktreeSpec, note?: (line: string) => void): Promise<Workspace>;
+  /** a plan's design checkout: its own branch off the default one, never pushed */
+  ensurePlan(spec: { slug: string; repo: { path: string; defaultBranch: string; remote?: string; worktreeRoot: string } }): Promise<Workspace>;
   /** one that already exists, by the path a task recorded */
   open(path: string): Workspace;
-  /** gone for good, with the branch colinear made for it, if any */
+  /**
+   * Gone for good, with the branch colinear made for it, if any. Throws if it
+   * is still there afterwards: callers report per-item success, and counting
+   * a failure as reclaimed is a lie.
+   */
   remove(spec: { repoPath: string; path: string; branch?: string }): Promise<void>;
 }
 
@@ -205,9 +211,29 @@ export function workspacesFor(_cfg: Config): WorkspaceProvider {
 export const localWorkspaces: WorkspaceProvider = {
   open: localWorkspace,
   async remove({ repoPath, path, branch }) {
-    if (existsSync(path)) await exec('git', ['-C', repoPath, 'worktree', 'remove', '--force', path]);
+    if (existsSync(path)) {
+      await exec('git', ['-C', repoPath, 'worktree', 'remove', '--force', path], { maxBuffer: 4 * 1024 * 1024 }).catch(async () => {
+        // not a registered worktree (a stale directory): drop it directly
+        await exec('rm', ['-rf', path]);
+      });
+    }
     await exec('git', ['-C', repoPath, 'worktree', 'prune']).catch(() => {});
     if (branch) await exec('git', ['-C', repoPath, 'branch', '-D', branch]).catch(() => {});
+    if (existsSync(path)) throw new Error(`${path} is still present after removal`);
+  },
+  async ensurePlan({ slug, repo }) {
+    const worktree = join(repo.worktreeRoot, `plan-${slug}`);
+    if (existsSync(worktree)) return localWorkspace(worktree);
+    const remote = repo.remote ?? 'origin';
+    mkdirSync(repo.worktreeRoot, { recursive: true });
+    await exec('git', ['-C', repo.path, 'fetch', remote, repo.defaultBranch]).catch(() => {});
+    try {
+      await exec('git', ['-C', repo.path, 'worktree', 'add', worktree, '-b', `plan/${slug}`, `${remote}/${repo.defaultBranch}`]);
+    } catch {
+      // the branch already exists (a previous plan chat) — attach to it
+      await exec('git', ['-C', repo.path, 'worktree', 'add', worktree, `plan/${slug}`]);
+    }
+    return localWorkspace(worktree);
   },
   async ensureReview(spec, note = () => {}) {
     const { repo } = spec;

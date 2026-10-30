@@ -199,6 +199,23 @@ try {
   check('removing a worktree removes it', !(await byName.exists('.')));
   check('and the branch made for it', !git(repo, 'branch', '--list', 'review/8'));
 
+  // a plan's design checkout: its own branch, made once and found again
+  const plan = await localWorkspaces.ensurePlan({ slug: 'billing', repo: repoCfg });
+  check('a plan gets its own worktree', plan.path === join(root, 'trees', 'plan-billing'));
+  check('on its own branch', git(plan.path, 'rev-parse', '--abbrev-ref', 'HEAD') === 'plan/billing');
+  check('asking again finds it', (await localWorkspaces.ensurePlan({ slug: 'billing', repo: repoCfg })).path === plan.path);
+  await localWorkspaces.remove({ repoPath: repo, path: plan.path });
+  const replanned = await localWorkspaces.ensurePlan({ slug: 'billing', repo: repoCfg });
+  check('a plan whose branch outlived its worktree reattaches to it', git(replanned.path, 'rev-parse', '--abbrev-ref', 'HEAD') === 'plan/billing');
+
+  // removal: a directory git never registered still goes, and a failure says so
+  mkdirSync(join(root, 'trees', 'stray'));
+  writeFileSync(join(root, 'trees', 'stray', 'leftover.txt'), 'x');
+  await localWorkspaces.remove({ repoPath: repo, path: join(root, 'trees', 'stray') });
+  check('an unregistered directory is removed directly', !(await localWorkspace(join(root, 'trees', 'stray')).exists('.')));
+  await localWorkspaces.remove({ repoPath: repo, path: join(root, 'trees', 'never-existed') });
+  check('removing nothing is not an error', true);
+
   mkdirSync(join(root, 'empty'));
   await contract('a bare directory', localWorkspace(join(root, 'empty')));
 } finally {

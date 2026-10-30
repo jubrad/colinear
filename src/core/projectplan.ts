@@ -1,9 +1,7 @@
 import { modelsFor } from './models.js';
-import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { agentFor, type SessionCallbacks, runtimeFor } from './agent.js';
 import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { experimentOn } from './config.js';
@@ -15,10 +13,10 @@ import { STATE_DIR, log } from './log.js';
 import { notify } from './notify.js';
 import { providerFor } from './provider.js';
 import { store } from './store.js';
+import { workspacesFor } from './workspace.js';
 
 import type { ChatTurn, Config, Issue, PlanIssue, PlanMilestone, Project, ProjectPlan } from './types.js';
 
-const exec = promisify(execFile);
 
 const PLANS_DIR = join(STATE_DIR, 'plans');
 const FENCE_NAMES = ['plan'];
@@ -418,18 +416,7 @@ export class PlanManager {
     repo: { path: string; defaultBranch: string; remote?: string; worktreeRoot: string },
   ): Promise<string> {
     const slug = project.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'project';
-    const worktree = join(repo.worktreeRoot, `plan-${slug}`);
-    if (existsSync(worktree)) return worktree;
-    const remote = repo.remote ?? 'origin';
-    mkdirSync(repo.worktreeRoot, { recursive: true });
-    await exec('git', ['-C', repo.path, 'fetch', remote, repo.defaultBranch]).catch(() => {});
-    try {
-      await exec('git', ['-C', repo.path, 'worktree', 'add', worktree, '-b', `plan/${slug}`, `${remote}/${repo.defaultBranch}`]);
-    } catch {
-      // the branch already exists (a previous plan chat) — attach to it
-      await exec('git', ['-C', repo.path, 'worktree', 'add', worktree, `plan/${slug}`]);
-    }
-    return worktree;
+    return (await workspacesFor(this.cfg).ensurePlan({ slug, repo })).path;
   }
 
   /**
