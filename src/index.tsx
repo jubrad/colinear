@@ -321,7 +321,7 @@ async function gcCommand(args: string[]): Promise<void> {
   }
   for (const item of items) {
     process.stdout.write(`removing ${item.path} … `);
-    await removeWorktree(item);
+    await removeWorktree(cfg, item);
     console.log('done');
   }
   console.log(`\nreclaimed ${formatSize(total)}`);

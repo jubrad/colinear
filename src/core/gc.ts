@@ -3,6 +3,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { Config, ProjectPlan, Review, Task } from './types.js';
+import { workspacesFor } from './workspace.js';
 
 const exec = promisify(execFile);
 
@@ -180,15 +181,8 @@ export async function findReclaimable(
  * Throws if the directory is still there afterwards — the caller reports
  * per-item success, and counting a failure as reclaimed space is a lie.
  */
-export async function removeWorktree(item: Reclaimable): Promise<void> {
-  await exec('git', ['-C', item.repoPath, 'worktree', 'remove', '--force', item.path], {
-    maxBuffer: 4 * 1024 * 1024,
-  }).catch(async () => {
-    // not a registered worktree (a stale directory): drop it directly
-    await exec('rm', ['-rf', item.path]);
-  });
-  await exec('git', ['-C', item.repoPath, 'worktree', 'prune']).catch(() => {});
-  if (existsSync(item.path)) throw new Error(`${item.path} is still present after removal`);
+export async function removeWorktree(cfg: Config, item: Reclaimable): Promise<void> {
+  await workspacesFor(cfg).remove({ repoPath: item.repoPath, path: item.path });
 }
 
 export const formatSize = (kb: number): string =>

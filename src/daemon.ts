@@ -409,7 +409,7 @@ export async function runDaemon(): Promise<void> {
           let failed = 0;
           for (const [index, item] of targets.entries()) {
             broadcast({ t: 'gcProgress', done: index, total: targets.length, path: item.path, ok: true, finished: false });
-            const ok = await removeWorktree(item).then(
+            const ok = await removeWorktree(cfg, item).then(
               () => true,
               (err) => {
                 log(`gc: ${item.path}: ${err}`);
