@@ -1933,8 +1933,9 @@ dependency clearing doesn't wait out the minute.</p>
 as each finishes. There is no priority queue — the board's ordering is a view concern.</p>
 <p>Three states sit outside that flow:</p>
 <ul>
-<li><strong><code>tracking</code></strong> — a parent whose work happens in its sub-issues. It never runs a work session; the
-  60s sweep rolls its children up, and <code>M</code> or <code>r</code> starts a <em>coordinator</em> session instead (no
+<li><strong><code>tracking</code></strong> — a parent whose work happens in its sub-issues. A task enters it when its split
+  plan is filed — by <code>A</code>/<code>D</code> in plan review, or straight from triage with <code>autoSplit</code>. It never
+  runs a work session; the 60s sweep rolls its children up, and <code>M</code> or <code>r</code> starts a <em>coordinator</em> session instead (no
   worktree, no checks, no PR).</li>
 <li><strong>Manual dispatch</strong> — <code>awaitingStart</code>. The worktree exists and the card sits in Working with
   nothing running, waiting for you to lay a skeleton down. <code>r</code> hands that same worktree to an agent.</li>
@@ -1988,7 +1989,10 @@ than taking a fifth.</p>
   it to <code>merge</code>, which dispatches the work in parallel but keeps it on the task — the agent's
   prompt says what it is building ahead of, and <code>d</code> refuses to promote the PR until the blocker
   lands. Deployment is outside what colinear can see, so <code>D</code> overrides.
-- <code>needs_input</code> (agent AskUserQuestion, or too_big/needs_info triage verdicts — split-plan review lives here)
+- <code>needs_input</code> (agent AskUserQuestion, or too_big/needs_info triage verdicts — split-plan review lives here).
+  With <code>autoSplit</code> a too_big plan skips it: the dispatcher files the plan, the parent goes to
+  <code>tracking</code>, and the children are enqueued with triage skipped. <code>autoSplitDecision()</code> is the
+  whole rule and is pure; it refuses an issue that is already a sub-issue, so it is one level deep
 - <code>interrupted</code> (restart/suspend/attach; <code>r</code> resumes the SDK session by id)
 - <code>error</code> (failures; auto-unfails if a live PR turns up), <code>escalated</code> (legacy; verdicts now park as needs_input)
 - new sub-issues: the tracking sweep dispatches ones nobody has started when <code>autoDispatchSubs</code>
