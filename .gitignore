@@ -22,3 +22,4 @@ coli-backup-*.tar.gz
 # An unset variable expands to nothing, so "${DIR}/tmp/x" writes ./undefined/…
 # right here. bin/no-strays fails on these too, in case one is force-added.
 undefined/
+/deploy/target/

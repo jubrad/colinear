@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# The cluster side's gate: what CI runs for deploy/, and what to run by hand.
+#
+#   bin/check-deploy
+#
+# Rust formatting and tests, the CRDs in the chart current with the types,
+# and the chart linting and rendering. Needs cargo and helm.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root/deploy"
+
+echo '── cargo fmt'
+cargo fmt --all --check
+
+echo
+echo '── cargo test'
+cargo test --quiet --workspace
+
+echo
+echo '── crds'
+"$root/bin/gen-crds" --check
+
+echo
+echo '── chart'
+helm lint --quiet "$root/deploy/chart"
+helm template coli "$root/deploy/chart" --namespace coli-system >/dev/null
+
+echo
+echo 'ok'

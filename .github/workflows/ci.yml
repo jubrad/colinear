@@ -28,6 +28,22 @@ jobs:
       # It picks its own throwaway state dir, so no runner state is touched.
       - run: bin/check
 
+  # The cluster side (deploy/): Rust tests, the chart's CRDs current with the
+  # types, and the chart linting. bin/check-deploy is the same command by hand.
+  deploy:
+    name: verify deploy/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: deploy
+      - uses: azure/setup-helm@v4
+      - run: bin/check-deploy
+
   # One stable name for branch protection to require. The ruleset asks for a
   # check called "ci"; check names come from job names, so without this there
   # is nothing by that name to wait for and a pull request never goes green.
@@ -41,10 +57,11 @@ jobs:
     # always(): a skipped job counts as satisfied, so it has to run and fail
     # rather than be skipped when the matrix fails
     if: always()
-    needs: check
+    needs: [check, deploy]
     runs-on: ubuntu-latest
     steps:
-      - name: the matrix must have passed
+      - name: the matrix and deploy/ must have passed
         run: |
-          echo "check: ${{ needs.check.result }}"
+          echo "check: ${{ needs.check.result }}  deploy: ${{ needs.deploy.result }}"
           [ "${{ needs.check.result }}" = success ] || exit 1
+          [ "${{ needs.deploy.result }}" = success ] || exit 1

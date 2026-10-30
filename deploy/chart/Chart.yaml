@@ -1,0 +1,6 @@
+apiVersion: v2
+name: colinear
+description: Multi-user colinear — the operator, its CRDs, and (later) the gateway. See design/multi-user/.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
