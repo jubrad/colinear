@@ -90,4 +90,9 @@ echo '── repo names'
 npm run check:repos
 
 echo
+echo '── thin client'
+# a real daemon in demo mode under a throwaway HOME: no key reaches a client, tracker calls go through the daemon
+npm run check:thin
+
+echo
 echo 'ok'

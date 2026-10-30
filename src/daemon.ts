@@ -1,7 +1,7 @@
 import { createServer, type Socket } from 'node:net';
 import { closeSync, existsSync, mkdirSync, openSync, readSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadConfig } from './core/config.js';
+import { loadConfig, redactConfig } from './core/config.js';
 import { channels } from './core/channel.js';
 import { isDemo, seedDemoBoard, seedDemoIssues } from './core/demo.js';
 import { Dispatcher } from './core/dispatcher.js';
@@ -11,7 +11,7 @@ import { getUiState, loadState, setUiState, startPersistence } from './core/pers
 import { startPrPolling } from './core/prs.js';
 import { Reviewer } from './core/reviewer.js';
 import { PlanManager } from './core/projectplan.js';
-import { providerFor } from './core/provider.js';
+import { PROVIDER_CALLS, providerFor, providerInfo, type ProviderCall } from './core/provider.js';
 import type { Project, Severity } from './core/types.js';
 import { adoptReview, pollReviewRequests, startReviewPolling } from './core/reviews.js';
 import {
@@ -123,6 +123,23 @@ export async function runDaemon(): Promise<void> {
   /** `reply` answers just the client that asked; `broadcast` tells everyone. */
   const run = (cmd: Command, reply: (msg: ServerMsg) => void) => {
     switch (cmd.name) {
+      case 'provider': {
+        const { rid, method, args } = cmd;
+        // the allowlist, not the object: a client names a call, it doesn't get to pick any method
+        if (!(PROVIDER_CALLS as readonly string[]).includes(method)) {
+          reply({ t: 'providerResult', rid, ok: false, error: `not a tracker call: ${String(method)}` });
+          break;
+        }
+        const provider = providerFor(cfg);
+        const fn = provider[method as ProviderCall] as (...a: unknown[]) => Promise<unknown>;
+        void Promise.resolve()
+          .then(() => fn.apply(provider, Array.isArray(args) ? args : []))
+          .then(
+            (value) => reply({ t: 'providerResult', rid, ok: true, value }),
+            (err: unknown) => reply({ t: 'providerResult', rid, ok: false, error: err instanceof Error ? err.message : String(err) }),
+          );
+        break;
+      }
       case 'enqueue':
         dispatcher.enqueue(cmd.issues, cmd.opts);
         break;
@@ -468,7 +485,15 @@ export async function runDaemon(): Promise<void> {
     clients.add(socket);
     socket.setNoDelay(true);
     socket.write(
-      encode({ t: 'hello', protocol: PROTOCOL_VERSION, pid: process.pid, cfg, snapshot: store.snapshot(), ui: getUiState() }),
+      encode({
+        t: 'hello',
+        protocol: PROTOCOL_VERSION,
+        pid: process.pid,
+        cfg: redactConfig(cfg),
+        provider: providerInfo(providerFor(cfg)),
+        snapshot: store.snapshot(),
+        ui: getUiState(),
+      }),
     );
     const decode = createDecoder<ClientMsg>((msg) => {
       if (msg.t === 'cmd') run(msg.cmd, (out) => socket.write(encode(out)));

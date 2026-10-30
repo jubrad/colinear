@@ -79,7 +79,7 @@ matters.
 | secret | where it lives | who reads it |
 |---|---|---|
 | Claude subscription | the logged-in `claude` CLI | the agent SDK. **Leave `ANTHROPIC_API_KEY` unset** — setting it bills the API instead of your subscription |
-| Linear API key | `LINEAR_API_KEY`, or `linearApiKey` in the config file | colinear only |
+| Linear API key | `LINEAR_API_KEY`, or `linearApiKey` in the config file | the daemon only. The TUI is sent the config with the key blanked, and asks the daemon to make every tracker call |
 | GitHub | your existing `gh` auth | `gh` calls colinear makes |
 
 `coli init` prefers the environment variable and won't write a key it found there into the file. If you do put it in the config, that file is plain JSON in your home directory — protect it accordingly.

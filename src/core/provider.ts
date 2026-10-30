@@ -198,3 +198,53 @@ export function providerFor(cfg: Config): IssueProvider {
   cache.set(cfg, provider);
   return provider;
 }
+
+/**
+ * Every call on a provider that goes to the tracker. A client of the daemon
+ * forwards exactly these, and the daemon runs nothing else: a name that isn't
+ * on this list is refused rather than looked up on the object.
+ */
+export const PROVIDER_CALLS = [
+  'issues', 'filteredIssues', 'issuesByIds', 'subIssues', 'blockers',
+  'scopes', 'projects', 'projectIssues',
+  'create', 'createProject',
+  'projectDocuments', 'saveProjectDocument', 'projectMilestones', 'createMilestone', 'postProjectUpdate',
+  'blockIssue', 'assign', 'comment',
+  'workflowStates', 'setState', 'viewer',
+] as const satisfies ReadonlyArray<keyof IssueProvider>;
+
+export type ProviderCall = (typeof PROVIDER_CALLS)[number];
+
+/** What a client needs to know about the provider without asking: no credential in it. */
+export interface ProviderInfo {
+  name: string;
+  capabilities: ProviderCapabilities;
+  scopeLabel: string;
+}
+
+export function providerInfo(p: IssueProvider): ProviderInfo {
+  return { name: p.name, capabilities: p.capabilities, scopeLabel: p.scopeLabel };
+}
+
+/**
+ * A provider that is really the daemon's: every tracker call goes over the
+ * connection and the daemon makes it with the credentials it holds. This is
+ * what lets the daemon stop sending the tracker key to every client — the
+ * views keep calling `providerFor(cfg)` and never learn the difference.
+ */
+export function remoteProvider(info: ProviderInfo, call: (method: ProviderCall, args: unknown[]) => Promise<unknown>): IssueProvider {
+  const forward = Object.fromEntries(PROVIDER_CALLS.map((m) => [m, (...args: unknown[]) => call(m, args)]));
+  return {
+    ...(forward as unknown as Pick<IssueProvider, ProviderCall>),
+    name: info.name,
+    capabilities: info.capabilities,
+    scopeLabel: info.scopeLabel,
+    // the one synchronous call: the same rule both adapters use, so no round trip
+    branchFor: (issue) => (info.capabilities.branchNames && issue.branchName) || safeBranch(issue),
+  };
+}
+
+/** Make `providerFor(cfg)` answer with this one: how a client installs the daemon's. */
+export function useProvider(cfg: Config, provider: IssueProvider): void {
+  cache.set(cfg, provider);
+}

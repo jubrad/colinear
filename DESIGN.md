@@ -545,6 +545,13 @@ Everything above `core/provider.ts` is tracker-agnostic; everything below it is 
 `reloadConfig` that mutates in place keeps working), and nothing outside `providers/` imports a
 tracker's client.
 
+**A client never holds the tracker key.** The daemon sends its config redacted (`redactConfig`), and
+on `hello` the client installs `remoteProvider` for that config (`useProvider`): views still call
+`providerFor(cfg)`, and every tracker call goes over the socket as a `provider` command, which the
+daemon runs only if the method is on `PROVIDER_CALLS`. `branchFor` is the one synchronous call and is
+answered locally by the rule both adapters share. `thinclient.check.ts` runs a real demo-mode daemon
+to hold this.
+
 Features ask `capabilities` rather than assuming: `workflowStates` gates stateSync, `blockers`
 gates the blocked column and `f`, `subIssues` gates tracking parents and `u`, `priority` gates the
 PRI column, `projects` gates `:projects`, `createProjects` gates its `n`, `comments` gates escalation, and `branchNames` decides

@@ -36,7 +36,8 @@ export function ConfigView(_props: { param?: string }) {
 
   const masked = {
     ...cfg,
-    linearApiKey: `${cfg.linearApiKey.slice(0, 12)}…`,
+    // the daemon keeps the key and makes the calls; a client is never sent it
+    linearApiKey: cfg.linearApiKey ? `${cfg.linearApiKey.slice(0, 12)}…` : (cfg.provider ?? 'linear') === 'linear' ? 'held by the daemon' : 'unused',
   };
 
   return (
