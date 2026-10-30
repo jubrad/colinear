@@ -39,7 +39,7 @@ spec:
       description: The public API service
       image: ghcr.io/example/coli-workspace-api:2026-10
       class: large
-      checks: [{ name: lint, run: bin/lint }]
+      checks: [{ name: lint, cmd: bin/lint }]
   workspaceClasses:
     small: { cpu: "2", memory: 8Gi, disk: 50Gi }
     large: { cpu: "8", memory: 32Gi, disk: 200Gi }
@@ -80,9 +80,11 @@ more:
 
 ## Seeing it
 
-`:config` shows each value with where it came from (`default`, `org`, `you`) and a lock beside
-locked keys, and lists the user keys being ignored with the reason. Editing a locked key is refused in the editor with the reason, not silently dropped
-on save.
+`:config` shows each value with where it came from (`default`, `org`, `yours`, or `org+yours` for a
+union or a concatenation) and marks locked keys. A **set but not applied** list gives every value
+either layer set that the merge refused, with the reason. That's the answer to editing a locked key:
+`$EDITOR` can't be refused from outside, so the refusal is listed where you land after the edit
+instead of being dropped silently.
 
 ## Daemons outside the cluster
 
@@ -94,10 +96,15 @@ user's paths rather than replace them. That's a later step in the work order.
 
 ## Implementation notes
 
-- `loadConfig` gains an `orgLayer` argument and a `lockedKeys` set. The merge is a pure function,
-  `mergeLayers(defaults, org, user, locked) → { config, sources }`, so it can be checked on its own.
-- `config.check.ts` covers each row of the table above, including that a locked key edited by the
+- `loadConfig` reads the file `COLINEAR_ORG_CONFIG` names. The merge is a pure function over the
+  two raw layers, `mergeLayers(org, user, stateDir) → { raw, layers }` in `core/orglayer.ts`.
+  Defaults still come from `loadConfig`'s normalization afterwards, so a key neither layer set is
+  `default`. `layers` (sources, locks, refusals) travels in the redacted config to clients.
+- `orglayer.check.ts` covers each row of the table above, including that a locked key edited by the
   user keeps the org's value and records the refusal.
+- A missing or unparseable org file is fatal, not skipped: running without it would drop the locks.
+- The daemon watches the file's directory, since a mounted ConfigMap changes by a symlink swap,
+  and on a content change reloads and sends clients a `config` message.
 - The org layer arrives through a file in both cluster and future laptop mode, so the daemon has one
   code path for it.
 
