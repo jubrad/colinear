@@ -2,7 +2,6 @@ import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentBackend, AgentCapabilities, RunSessionOpts, SessionResult } from './shared.js';
-import { endSession, startSession, updateSession } from '../sessions.js';
 
 /**
  * OpenAI Codex, through `@openai/codex-sdk`.
@@ -157,7 +156,7 @@ export function codexBackend(): AgentBackend {
     },
     // cwd is ignored on purpose: Codex does not file by directory, so a
     // session started anywhere is resumable from anywhere
-    sessionExists: (_cwd, sessionId) => findRollout(sessionId) !== undefined,
+    sessionExists: async (_cwd, sessionId) => findRollout(sessionId) !== undefined,
     transcriptDir: () => undefined,
     attachArgv: ({ sessionId }) => ['resume', sessionId],
     resumeHint: (sessionId) => `codex resume ${sessionId}`,
@@ -173,150 +172,140 @@ async function runSession(opts: RunSessionOpts): Promise<SessionResult> {
   const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   const result: SessionResult = { text: '', costUsd: 0, isError: false, errors: [], assistantTurns: 0 };
   const startedAt = Date.now();
-  const registered = opts.agent ? startSession({ ...opts.agent, cwd, model, runtime: 'codex' }) : undefined;
-  if (registered) opts.agent?.onRegistered?.(registered);
 
-  try {
-    const codex = new Codex({});
-    const threadOptions = {
-      ...(model ? { model } : {}),
-      workingDirectory: cwd,
-      // colinear owns the worktree and hands it over; Codex must not cut one
-      // of its own, and a worktree is a git repo so the check is satisfied
-      skipGitRepoCheck: true,
-      // the agent is expected to edit the worktree it was given and nothing else
-      sandboxMode: 'workspace-write' as const,
-      // exec mode rejects approval requests anyway; asking for them would only
-      // produce a turn that fails on the first command
-      approvalPolicy: 'never' as const,
-      networkAccessEnabled: true,
-    };
-    const thread = resume ? codex.resumeThread(resume, threadOptions) : codex.startThread(threadOptions);
+  const codex = new Codex({});
+  const threadOptions = {
+    ...(model ? { model } : {}),
+    workingDirectory: cwd,
+    // colinear owns the worktree and hands it over; Codex must not cut one
+    // of its own, and a worktree is a git repo so the check is satisfied
+    skipGitRepoCheck: true,
+    // the agent is expected to edit the worktree it was given and nothing else
+    sandboxMode: 'workspace-write' as const,
+    // exec mode rejects approval requests anyway; asking for them would only
+    // produce a turn that fails on the first command
+    approvalPolicy: 'never' as const,
+    networkAccessEnabled: true,
+  };
+  const thread = resume ? codex.resumeThread(resume, threadOptions) : codex.startThread(threadOptions);
 
-    /** One turn: everything Codex emits while it works on a single prompt. */
-    const runTurn = async (input: string): Promise<void> => {
-      const turn = await thread.runStreamed(input, {
-        ...(outputSchema ? { outputSchema } : {}),
-        ...(abortController ? { signal: abortController.signal } : {}),
-      });
-      for await (const event of turn.events) {
-        switch (event.type) {
-          case 'thread.started':
-            callbacks.onSessionId(event.thread_id);
-            if (registered) updateSession(registered, { sessionId: event.thread_id });
-            break;
-          case 'item.completed': {
-            const item = event.item as { type: string; text?: string } & Record<string, unknown>;
-            if (item.type === 'agent_message') {
-              result.assistantTurns++;
-              result.text = String(item.text ?? '');
-            }
-            const line = activityFor(item);
-            if (line) {
-              callbacks.onActivity(line);
-              if (registered) updateSession(registered, { activity: line });
-            }
-            break;
+  /** One turn: everything Codex emits while it works on a single prompt. */
+  const runTurn = async (input: string): Promise<void> => {
+    const turn = await thread.runStreamed(input, {
+      ...(outputSchema ? { outputSchema } : {}),
+      ...(abortController ? { signal: abortController.signal } : {}),
+    });
+    for await (const event of turn.events) {
+      switch (event.type) {
+        case 'thread.started':
+          callbacks.onSessionId(event.thread_id);
+          break;
+        case 'item.completed': {
+          const item = event.item as { type: string; text?: string } & Record<string, unknown>;
+          if (item.type === 'agent_message') {
+            result.assistantTurns++;
+            result.text = String(item.text ?? '');
           }
-          case 'turn.completed': {
-            // Codex reports per-turn usage, so this accumulates — unlike the
-            // Claude adapter, where the figure is cumulative and is assigned
-            const u = event.usage;
-            const live = {
-              input: u.input_tokens ?? 0,
-              output: u.output_tokens ?? 0,
-              cacheRead: u.cached_input_tokens ?? 0,
-              cacheWrite: u.cache_write_input_tokens ?? 0,
-            };
-            callbacks.onUsage?.(live);
-            for (const key of Object.keys(live) as Array<keyof typeof live>) totals[key] += live[key];
-            break;
+          const line = activityFor(item);
+          if (line) {
+            callbacks.onActivity(line);
           }
-          case 'turn.failed':
-            result.isError = true;
-            result.errors.push(String(event.error?.message ?? 'turn failed'));
-            break;
-          case 'error':
-            result.isError = true;
-            result.errors.push(String(event.message ?? 'codex error'));
-            break;
-          default:
-            break;
+          break;
         }
+        case 'turn.completed': {
+          // Codex reports per-turn usage, so this accumulates — unlike the
+          // Claude adapter, where the figure is cumulative and is assigned
+          const u = event.usage;
+          const live = {
+            input: u.input_tokens ?? 0,
+            output: u.output_tokens ?? 0,
+            cacheRead: u.cached_input_tokens ?? 0,
+            cacheWrite: u.cache_write_input_tokens ?? 0,
+          };
+          callbacks.onUsage?.(live);
+          for (const key of Object.keys(live) as Array<keyof typeof live>) totals[key] += live[key];
+          break;
+        }
+        case 'turn.failed':
+          result.isError = true;
+          result.errors.push(String(event.error?.message ?? 'turn failed'));
+          break;
+        case 'error':
+          result.isError = true;
+          result.errors.push(String(event.message ?? 'codex error'));
+          break;
+        default:
+          break;
       }
-    };
+    }
+  };
 
-    /**
-     * A turn that ended by asking. The operator's answer becomes the next turn,
-     * which is the same shape a message takes — Codex has one way in, and a
-     * question is just a turn colinear started rather than the operator.
-     */
-    const answerIfAsked = async (): Promise<boolean> => {
-      const question = askedIn(result.text);
-      if (!question) return false;
-      const answer = await new Promise<string>((resolve) => {
-        callbacks.onQuestion({
-          kind: 'ask',
-          questions: [{ text: question, options: [] }],
-          answer: (answers) => resolve(answers[0] ?? ''),
-        });
+  /**
+   * A turn that ended by asking. The operator's answer becomes the next turn,
+   * which is the same shape a message takes — Codex has one way in, and a
+   * question is just a turn colinear started rather than the operator.
+   */
+  const answerIfAsked = async (): Promise<boolean> => {
+    const question = askedIn(result.text);
+    if (!question) return false;
+    const answer = await new Promise<string>((resolve) => {
+      callbacks.onQuestion({
+        kind: 'ask',
+        questions: [{ text: question, options: [] }],
+        answer: (answers) => resolve(answers[0] ?? ''),
       });
-      await runTurn(answer.trim() || 'Use your best judgement and say what you assumed.');
-      return true;
-    };
+    });
+    await runTurn(answer.trim() || 'Use your best judgement and say what you assumed.');
+    return true;
+  };
 
-    // Bounded, because an agent that re-asks after every answer would otherwise
-    // loop forever on the operator's attention rather than on tokens.
-    const MAX_ASKS = 8;
-    const settle = async (): Promise<void> => {
-      for (let i = 0; i < MAX_ASKS; i++) if (!(await answerIfAsked())) return;
-    };
+  // Bounded, because an agent that re-asks after every answer would otherwise
+  // loop forever on the operator's attention rather than on tokens.
+  const MAX_ASKS = 8;
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < MAX_ASKS; i++) if (!(await answerIfAsked())) return;
+  };
 
-    if (inbox) {
-      // The mailbox drives the turns: its first yield is the opening prompt and
-      // each later one is an operator message, which becomes the next turn.
-      // That is colinear's delivery promise already — at the next turn boundary
-      // — rather than an approximation of it.
-      let opening = true;
-      for await (const text of inbox.stream(prompt)) {
-        await runTurn(opening ? ASK_PREAMBLE + text : text);
-        opening = false;
-        await settle();
-        inbox.markDelivered();
-        if (result.isError || inbox.pending === 0) inbox.close();
-      }
-    } else {
-      await runTurn(ASK_PREAMBLE + prompt);
+  if (inbox) {
+    // The mailbox drives the turns: its first yield is the opening prompt and
+    // each later one is an operator message, which becomes the next turn.
+    // That is colinear's delivery promise already — at the next turn boundary
+    // — rather than an approximation of it.
+    let opening = true;
+    for await (const text of inbox.stream(prompt)) {
+      await runTurn(opening ? ASK_PREAMBLE + text : text);
+      opening = false;
       await settle();
+      inbox.markDelivered();
+      if (result.isError || inbox.pending === 0) inbox.close();
     }
-
-    if (outputSchema && result.text.trim()) {
-      try {
-        result.structured = JSON.parse(result.text);
-      } catch {
-        // a schema was asked for and something else came back: the caller
-        // checks `structured`, and a parse failure is not worth a throw
-        result.errors.push('structured output did not parse as JSON');
-      }
-    }
-
-    if (registered) endSession(registered, result.isError ? 'error' : 'done', { tokens: totals });
-    if (opts.agent) {
-      result.spend = {
-        kind: opts.agent.kind,
-        runtime: 'codex',
-        model,
-        ...(model ? { ran: [model] } : {}),
-        startedAt,
-        endedAt: Date.now(),
-        tokens: { ...totals },
-        // deliberately absent: Codex reports tokens and never a price, and
-        // writing 0 here would be counted as a run that cost nothing
-      };
-    }
-    return result;
-  } catch (err) {
-    if (registered) endSession(registered, 'error', { activity: String(err).slice(0, 120) });
-    throw err;
+  } else {
+    await runTurn(ASK_PREAMBLE + prompt);
+    await settle();
   }
+
+  if (outputSchema && result.text.trim()) {
+    try {
+      result.structured = JSON.parse(result.text);
+    } catch {
+      // a schema was asked for and something else came back: the caller
+      // checks `structured`, and a parse failure is not worth a throw
+      result.errors.push('structured output did not parse as JSON');
+    }
+  }
+
+  if (opts.agent) {
+    result.spend = {
+      kind: opts.agent.kind,
+      runtime: 'codex',
+      model,
+      ...(model ? { ran: [model] } : {}),
+      startedAt,
+      endedAt: Date.now(),
+      tokens: { ...totals },
+      // deliberately absent: Codex reports tokens and never a price, and
+      // writing 0 here would be counted as a run that cost nothing
+    };
+  }
+  return result;
 }

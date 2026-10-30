@@ -475,7 +475,7 @@ read the runtime, but the in-place handoff (`PendingAction` → index.tsx) alway
 config's, and `:reviews` built its target without one. A review moved to a Codex model with `c`
 therefore handed its Codex id to `claude --resume`, which found nothing and exited. Now every
 attach target is built from the ledger (`sessionRuntime`): tasks, reviews, and the session
-registry, which each adapter stamps. The handoff carries the runtime through, and the resume hints
+registry, which the registry wrapper stamps with the runtime's name. The handoff carries the runtime through, and the resume hints
 in `:task`, `:reviews` and `:agents` follow the same answer. The plan chat resolves on the `plan`
 scope, which is what runs plan sessions.
 
@@ -687,8 +687,9 @@ Every `~/.local/state/colinear/` path above moves under `contexts/<name>/` in a 
   nothing stops daemon-only code from being imported into the client and silently mutating a mirror.
 - Snapshots are whole-store; fine at this scale (activity is capped at 200 lines/task) but a diffed
   snapshot is the obvious next move if boards get big.
-- Every session registers in `core/sessions.ts` from inside `runSession`, which is what `:agents`
-  reads. It is a plain in-memory registry rather than a CDC entity: the client asks for the list
+- Every session registers in `core/sessions.ts` through `withRegistry` (agent.ts), one wrapper
+  around every runtime's `runSession`, fed by its callbacks; that is what `:agents` reads. The
+  adapters don't register themselves, so a session run in another process still lands here. It is a plain in-memory registry rather than a CDC entity: the client asks for the list
   while the view is open instead of following deltas, because it is a "what is happening now"
   question and nothing persists it across a daemon restart.
 - `escalated` status is vestigial (verdicts now park as needs_input) but kept for old persisted state.

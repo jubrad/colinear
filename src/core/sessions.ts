@@ -8,8 +8,10 @@ import { log } from './log.js';
  * in its own shape, so the only way to see "what is running right now" was to
  * visit three views and know that drafting sessions appeared in none of them.
  *
- * Registration happens inside `runSession`, which every agent goes through, so
- * a new caller cannot forget to be visible.
+ * Registration happens in one wrapper around every runtime's `runSession`
+ * (`withRegistry` in agent.ts), which every agent goes through, so neither a
+ * new caller nor a new runtime can forget to be visible — and a session
+ * running in another process is still registered in this one.
  */
 export type AgentKind =
   | 'triage'

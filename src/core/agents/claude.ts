@@ -8,7 +8,6 @@ import {
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { endSession, startSession, updateSession } from '../sessions.js';
 import type { SessionChannels } from '../channel.js';
 import type { CoordinatorTools } from '../coordinator.js';
 import type { AskedQuestion, SessionSpend } from '../types.js';
@@ -66,7 +65,7 @@ export function claudeBackend(): AgentBackend {
       versionArgs: ['--version'],
       install: 'install Claude Code and run `claude login`',
     },
-    sessionExists,
+    sessionExists: async (cwd, sessionId) => sessionExists(cwd, sessionId),
     transcriptDir,
     attachArgv: ({ sessionId, permissionMode, fresh, primer }) =>
       fresh
@@ -298,16 +297,12 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
   // counts the message twice; measured, that inflated cache traffic exactly 2x.
   const counted = new Set<string>();
   const result: SessionResult = { text: '', costUsd: 0, isError: false, errors: [], assistantTurns: 0 };
-  const registered = opts.agent ? startSession({ ...opts.agent, cwd, model, runtime: 'claude' }) : undefined;
-  if (registered) opts.agent?.onRegistered?.(registered);
 
-  try {
   for await (const msg of q) {
     switch (msg.type) {
       case 'system':
         if (msg.subtype === 'init') {
           callbacks.onSessionId(msg.session_id);
-          if (registered) updateSession(registered, { sessionId: msg.session_id });
         }
         break;
       case 'assistant': {
@@ -339,7 +334,6 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
                 : undefined;
           if (!line) continue;
           callbacks.onActivity(line);
-          if (registered) updateSession(registered, { activity: line });
         }
         break;
       }
@@ -404,21 +398,8 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
       default:
         break;
     }
-    if (registered) {
-      updateSession(registered, {
-        costUsd: result.costUsd,
-        // the session's own totals, so the list agrees with the card
-        tokens: totals,
-      });
-    }
   }
 
-  if (registered) {
-    endSession(registered, result.isError ? 'error' : 'done', {
-      costUsd: result.costUsd,
-      tokens: totals,
-    });
-  }
   if (opts.agent) {
     result.spend = {
       kind: opts.agent.kind,
@@ -432,12 +413,6 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
     };
   }
   return result;
-  } catch (err) {
-    // a throw here is still an ended session: leaving it "running" forever is
-    // how a list of agents becomes a list of ghosts
-    if (registered) endSession(registered, 'error', { activity: String(err).slice(0, 120) });
-    throw err;
-  }
 }
 
 function firstLine(text: string): string {
