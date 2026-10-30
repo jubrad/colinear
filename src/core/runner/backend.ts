@@ -8,6 +8,7 @@ import { log } from '../log.js';
 import type { Config } from '../types.js';
 import { RUNNER_PROTOCOL, type FromRunner, type ToRunner } from './frames.js';
 import { streamLink, type Link } from './link.js';
+import type { CredentialSet, CredentialSource } from './credentials.js';
 
 export type RunnerLink = Link<FromRunner, ToRunner>;
 
@@ -145,12 +146,16 @@ export function spawnRunner(cfg: Config): Promise<RunnerLink> {
 }
 
 /** Wait for the runner's hello, check it speaks our protocol, and send ours. */
-export function handshake(link: RunnerLink, cfg: Config, opts: { workspace?: string; timeoutMs?: number } = {}): Promise<RunnerLink> {
+export function handshake(
+  link: RunnerLink,
+  cfg: Config,
+  opts: { workspace?: string; credentials?: CredentialSource; timeoutMs?: number } = {},
+): Promise<RunnerLink> {
   const timeoutMs = opts.timeoutMs ?? 15_000;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      link.close();
       reject(new Error('the runner did not say hello'));
+      link.close();
     }, timeoutMs);
     link.onClose((reason) => {
       clearTimeout(timer);
@@ -160,13 +165,63 @@ export function handshake(link: RunnerLink, cfg: Config, opts: { workspace?: str
       if (frame.t !== 'hello') return;
       clearTimeout(timer);
       if (frame.protocol !== RUNNER_PROTOCOL) {
-        link.close();
         reject(new Error(`the runner speaks protocol ${frame.protocol}, this daemon ${RUNNER_PROTOCOL}`));
+        link.close();
         return;
       }
       // a runner never needs the tracker's key: it runs sessions, the daemon talks to the tracker
-      link.send({ t: 'hello', protocol: RUNNER_PROTOCOL, cfg: redactConfig(cfg), ...(opts.workspace ? { workspace: opts.workspace } : {}) });
-      resolve(link);
+      link.send({
+        t: 'hello',
+        protocol: RUNNER_PROTOCOL,
+        cfg: redactConfig(cfg),
+        ...(opts.workspace ? { workspace: opts.workspace } : {}),
+        ...(opts.credentials ? { credentials: true } : {}),
+      });
+      if (!opts.credentials) return resolve(link);
+      // credentials before work: the link is only handed over once a set is on disk there
+      const source = opts.credentials;
+      const first = source.current();
+      if (!first) {
+        // reject first: closing fires the close handler, whose reason would be wrong here
+        reject(new Error('there are no credentials to give the runner'));
+        link.close();
+        return;
+      }
+      void pushCredentials(link, first).then(
+        () => {
+          clearTimeout(timer);
+          // and every renewal after, for as long as the runner is there
+          const stop = source.onChange((set) => void pushCredentials(link, set).catch((err) => log(`credentials v${set.version}: ${err}`)));
+          link.onClose(() => stop());
+          resolve(link);
+        },
+        (err: unknown) => {
+          reject(err instanceof Error ? err : new Error(String(err)));
+          link.close();
+        },
+      );
     });
+  });
+}
+
+/** Send a set and wait for the runner to say it's on disk. */
+export function pushCredentials(link: RunnerLink, set: CredentialSet): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // renewals run for as long as a runner lives: each push stops listening once answered
+    const done = () => {
+      stopFrames();
+      stopClose();
+    };
+    const stopFrames = link.onFrame((frame) => {
+      if (frame.t !== 'credentials.ack' || frame.version !== set.version) return;
+      done();
+      if (frame.ok) resolve();
+      else reject(new Error(`the runner could not write credentials: ${frame.error ?? 'no reason given'}`));
+    });
+    const stopClose = link.onClose(() => {
+      done();
+      reject(new Error('the runner went away before taking its credentials'));
+    });
+    link.send({ t: 'credentials', set });
   });
 }

@@ -3,9 +3,10 @@ import type { AskedQuestion, Config } from '../types.js';
 import type { RunSessionOpts, SessionResult } from '../agents/shared.js';
 import type { WireTool } from '../agents/tools.js';
 import type { ExecOpts } from '../workspace.js';
+import type { CredentialSet } from './credentials.js';
 
 /** Bumped when a frame changes shape; a mismatched pair refuses to talk. */
-export const RUNNER_PROTOCOL = 2;
+export const RUNNER_PROTOCOL = 3;
 
 /** RunSessionOpts as data: what crosses, with what can't cross replaced by frames. */
 export type WireOpts = Pick<
@@ -18,13 +19,18 @@ export type WireOpts = Pick<
 };
 
 export type ToRunner =
-  /** workspace: the one worktree this runner serves; workspace operations are refused without it */
-  | { t: 'hello'; protocol: number; cfg: Config; workspace?: string }
+  /**
+   * workspace: the one worktree this runner serves; workspace operations are refused without it.
+   * credentials: a set will follow, and no work is done until it is on disk.
+   */
+  | { t: 'hello'; protocol: number; cfg: Config; workspace?: string; credentials?: boolean }
   | { t: 'session.start'; sid: string; runtime: string; opts: WireOpts; tools: WireTool[] }
   | { t: 'session.message'; sid: string; text: string }
   | { t: 'session.answer'; sid: string; qid: number; answers: string[] }
   | { t: 'session.abort'; sid: string }
   | { t: 'tool.result'; cid: number; ok: boolean; text: string }
+  /** replace the runner's credentials with this complete set (design/multi-user/credentials.md, "Token sync") */
+  | { t: 'credentials'; set: CredentialSet }
   // ── the workspace: Workspace's operations, relative to its root ──
   | { t: 'exec'; id: number; argv: string[]; opts: Omit<ExecOpts, 'signal'> }
   | { t: 'exec.cancel'; id: number }
@@ -47,4 +53,6 @@ export type FromRunner =
   /** the answer to a workspace request: `value` on success, `error` (with its message) on failure */
   | { t: 'reply'; id: number; ok: true; value: unknown }
   | { t: 'reply'; id: number; ok: false; error: string }
-  | { t: 'watch.changed'; id: number };
+  | { t: 'watch.changed'; id: number }
+  /** the set is on disk; ok false says why it isn't */
+  | { t: 'credentials.ack'; version: number; ok: boolean; error?: string };

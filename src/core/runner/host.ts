@@ -2,6 +2,7 @@ import { SessionInbox, type AgentBackend } from '../agents/shared.js';
 import { fromWire } from '../agents/tools.js';
 import type { Config } from '../types.js';
 import { localWorkspace, type Workspace } from '../workspace.js';
+import { writeCredentials, type CredentialSet } from './credentials.js';
 import { RUNNER_PROTOCOL, type FromRunner, type ToRunner } from './frames.js';
 import type { Link } from './link.js';
 
@@ -18,8 +19,13 @@ export function serveRunner(
   link: Link<ToRunner, FromRunner>,
   /** the runtime adapter by name, without the daemon's registry around it */
   runtime: (cfg: Config, name: string) => AgentBackend,
-  info: { version: string; runtimes: string[] },
+  info: { version: string; runtimes: string[]; credentialsDir?: string },
 ): void {
+  const { credentialsDir, ...hello } = info;
+  // set by hello: work waits until a credential set is on disk
+  let needsCredentials = false;
+  let held: CredentialSet | undefined;
+  const ready = () => !needsCredentials || held !== undefined;
   let cfg: Config | undefined;
   // the worktree this runner serves, on this side: Workspace's local answer is
   // the runner's answer, including its refusal of paths that climb out
@@ -29,6 +35,7 @@ export function serveRunner(
   const answer = (id: number, work: () => Promise<unknown>) => {
     void (async () => {
       if (!workspace) throw new Error('this runner serves no workspace');
+      if (!ready()) throw new Error('no credentials yet');
       return work();
     })().then(
       (value) => link.send({ t: 'reply', id, ok: true, value: value ?? null }),
@@ -42,7 +49,7 @@ export function serveRunner(
   const toolCalls = new Map<number, (r: { ok: boolean; text: string }) => void>();
   let nextCall = 0;
 
-  link.send({ t: 'hello', protocol: RUNNER_PROTOCOL, ...info });
+  link.send({ t: 'hello', protocol: RUNNER_PROTOCOL, ...hello });
 
   link.onFrame((frame) => {
     switch (frame.t) {
@@ -53,7 +60,25 @@ export function serveRunner(
         }
         cfg = frame.cfg;
         if (frame.workspace) workspace = localWorkspace(frame.workspace);
+        needsCredentials = Boolean(frame.credentials);
         break;
+      case 'credentials': {
+        const { set } = frame;
+        // newer is all that matters; a late, older push is not a reason to go back
+        if (held && set.version <= held.version) {
+          link.send({ t: 'credentials.ack', version: set.version, ok: true });
+          break;
+        }
+        try {
+          if (!credentialsDir) throw new Error('this runner has nowhere to put credentials');
+          writeCredentials(credentialsDir, set, held);
+          held = set;
+          link.send({ t: 'credentials.ack', version: set.version, ok: true });
+        } catch (err) {
+          link.send({ t: 'credentials.ack', version: set.version, ok: false, error: err instanceof Error ? err.message : String(err) });
+        }
+        break;
+      }
       case 'exec': {
         const controller = new AbortController();
         running.set(frame.id, controller);
@@ -119,6 +144,10 @@ export function serveRunner(
     const { sid } = frame;
     if (!cfg) {
       link.send({ t: 'session.result', sid, ok: false, error: 'session started before hello' });
+      return;
+    }
+    if (!ready()) {
+      link.send({ t: 'session.result', sid, ok: false, error: 'session started before its credentials arrived' });
       return;
     }
     const abort = new AbortController();
