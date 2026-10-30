@@ -201,7 +201,11 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     autoRebase: raw.autoRebase ?? false,
     autoDispatchSubs: raw.autoDispatchSubs ?? false,
     autoSplit: raw.autoSplit ?? true,
-    ...(raw.runner === 'process' ? { runner: 'process' as const } : {}),
+    ...(raw.runner === 'process'
+      ? { runner: 'process' as const }
+      : typeof raw.runner === 'object' && raw.runner && typeof raw.runner.container === 'string' && raw.runner.container.trim()
+        ? { runner: { container: raw.runner.container.trim() } }
+        : {}),
     retentionDays: raw.retentionDays ?? 30,
     worktreeRetentionDays: raw.worktreeRetentionDays ?? 7,
     todo: normalizeTodo(raw.todo),

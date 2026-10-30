@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# The container runner, against real Docker: builds an image from this
+# checkout, then runs src/core/runner/container.check.ts with it.
+#
+#   bin/check-container
+#
+# Not part of bin/check: it needs a Docker daemon and an image build. Run it
+# when you change anything under src/core/runner/ or the Dockerfile.
+# COLI_RUNNER_IMAGE skips the build and uses that image instead.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+
+image="${COLI_RUNNER_IMAGE:-}"
+if [[ -z "$image" ]]; then
+  image="colinear-runner:check"
+  echo "── building $image"
+  # as you, so files the container makes in a worktree stay yours
+  docker build -q --build-arg "UID=$(id -u)" --build-arg "GID=$(id -g)" -t "$image" . >/dev/null
+fi
+
+echo '── container runner'
+COLI_RUNNER_IMAGE="$image" npx tsx src/core/runner/container.check.ts

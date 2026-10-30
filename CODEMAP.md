@@ -151,7 +151,10 @@ src/core/
                      Workspace whose every operation is a frame the runner answers with its own
                      local Workspace. credentials.ts: complete, versioned credential sets, pushed
                      to a runner before any work and on every renewal, written whole and
-                     owner-only there. runner.check.ts runs the Workspace contract through it
+                     owner-only there. container.ts: one container per session (`docker run -i`),
+                     mounting only the worktree, its git dir and its transcripts; container.check.ts
+                     runs against real Docker via bin/check-container. runner.check.ts runs the
+                     Workspace contract through it
   repos.ts           repoSlug: a repo as owner/name, from `github` in its config or its upstream remote's
                      URL, so gh is asked by name rather than run inside a checkout. repos.check.ts
   workspace.contract.ts  the Workspace contract as a script both workspace.check and runner.check run
