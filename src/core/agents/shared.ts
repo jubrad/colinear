@@ -210,8 +210,11 @@ export interface AgentBackend {
    * Asked of the runtime rather than of a stored id, because the two disagree
    * in ways that leave the operator stuck: an id minted for a session that
    * never started, or one created somewhere else entirely.
+   *
+   * Async because the transcript may be on another machine: a runner answers
+   * it from the workspace (design/multi-user/runner.md).
    */
-  sessionExists(cwd: string, sessionId: string): boolean;
+  sessionExists(cwd: string, sessionId: string): Promise<boolean>;
 
   /**
    * Where this runtime files a session's transcript, if it files them per

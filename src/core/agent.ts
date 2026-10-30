@@ -1,7 +1,8 @@
 import { claudeBackend } from './agents/claude.js';
 import { codexBackend } from './agents/codex.js';
-import type { AgentBackend } from './agents/shared.js';
+import type { AgentBackend, RunSessionOpts, SessionResult } from './agents/shared.js';
 import { modelFor } from './models.js';
+import { endSession, startSession, updateSession } from './sessions.js';
 import type { Config, ModelScope } from './types.js';
 
 export type {
@@ -155,7 +156,63 @@ export function agentNamed(cfg: Config, name: string): AgentBackend {
   if (!factory) {
     throw new Error(`unknown agent runtime "${name}" — known: ${knownAgents().join(', ') || 'none'}`);
   }
-  const backend = factory(cfg);
+  const backend = withRegistry(factory(cfg));
   byName.set(name, backend);
   return backend;
+}
+
+/**
+ * Every session in the `:agents` registry, whichever runtime runs it.
+ *
+ * The adapters used to register themselves, which put the registry wherever
+ * the adapter ran. Here it is one wrapper around every runtime, fed by the
+ * same callbacks the caller gets, so a session running in another process
+ * still appears in this one — and a new runtime cannot forget to be visible.
+ */
+export function withRegistry(backend: AgentBackend): AgentBackend {
+  return { ...backend, runSession: (opts) => registeredRun(backend, opts) };
+}
+
+async function registeredRun(backend: AgentBackend, opts: RunSessionOpts): Promise<SessionResult> {
+  const agent = opts.agent;
+  if (!agent) return backend.runSession(opts);
+  const id = startSession({ kind: agent.kind, label: agent.label, origin: agent.origin, cwd: opts.cwd, model: opts.model, runtime: backend.name });
+  agent.onRegistered?.(id);
+  const tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const { callbacks } = opts;
+  try {
+    const result = await backend.runSession({
+      ...opts,
+      callbacks: {
+        ...callbacks,
+        onSessionId: (sessionId) => {
+          updateSession(id, { sessionId });
+          callbacks.onSessionId(sessionId);
+        },
+        onActivity: (line) => {
+          updateSession(id, { activity: line });
+          callbacks.onActivity(line);
+        },
+        // incremental, so the running total is ours to keep
+        onUsage: (u) => {
+          for (const key of Object.keys(tokens) as Array<keyof typeof tokens>) tokens[key] += u[key];
+          updateSession(id, { tokens: { ...tokens } });
+          callbacks.onUsage?.(u);
+        },
+      },
+    });
+    // what actually answered, which a demotion may have changed
+    const ran = result.spend?.ran;
+    endSession(id, result.isError ? 'error' : 'done', {
+      costUsd: result.costUsd,
+      tokens: result.spend?.tokens ?? tokens,
+      ...(ran?.length ? { model: ran[ran.length - 1] } : {}),
+    });
+    return result;
+  } catch (err) {
+    // a throw here is still an ended session: leaving it "running" forever is
+    // how a list of agents becomes a list of ghosts
+    endSession(id, 'error', { activity: String(err).slice(0, 120) });
+    throw err;
+  }
 }

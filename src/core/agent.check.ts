@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { attachTo, consumePendingAction, reviewAttachable } from './attach.js';
+import { listSessions } from './sessions.js';
 import type { Config, Review } from './types.js';
 
 /**
@@ -141,7 +142,7 @@ for (const text of UNRELATED) {
     },
     claims: (m) => m.startsWith('fake-'),
     cli: { command: 'fake', versionArgs: ['-v'], install: 'install the fake' },
-    sessionExists: () => false,
+    sessionExists: async () => false,
     // a runtime that does not file per directory: a real answer, not a gap
     transcriptDir: () => undefined,
     // attach is false above, so there is nothing to hand a terminal
@@ -210,6 +211,74 @@ for (const text of UNRELATED) {
 }
 
 /**
+ * The `:agents` registry sits above the runtimes, not inside them.
+ *
+ * Each adapter used to register itself, which only works while the adapter
+ * runs in the daemon. Now one wrapper does it for every runtime, from the
+ * callbacks — so this drives a fake runtime that never touches the registry
+ * and requires the registry to have the whole story anyway.
+ */
+{
+  let fail = false;
+  const reporting: AgentBackend = {
+    name: 'reporting',
+    capabilities: { ...CLAUDE_CAPABILITIES },
+    models: ['reporting-1'],
+    async runSession(opts) {
+      if (fail) throw new Error('the runtime fell over');
+      opts.callbacks.onSessionId('conv-1');
+      opts.callbacks.onActivity('reading the code');
+      opts.callbacks.onUsage?.({ input: 100, output: 10, cacheRead: 0, cacheWrite: 0 });
+      opts.callbacks.onUsage?.({ input: 50, output: 5, cacheRead: 7, cacheWrite: 0 });
+      return {
+        text: 'done', costUsd: 0.25, isError: false, errors: [], assistantTurns: 2,
+        spend: { kind: 'work', runtime: 'reporting', model: 'reporting-1', ran: ['reporting-1', 'reporting-small'], startedAt: 0, endedAt: 1, tokens: { input: 150, output: 15, cacheRead: 7, cacheWrite: 0 }, costUsd: 0.25 },
+      };
+    },
+    claims: (m) => m.startsWith('reporting-'),
+    cli: { command: 'reporting', versionArgs: ['-v'], install: '' },
+    sessionExists: async () => false,
+    transcriptDir: () => undefined,
+    attachArgv: () => undefined,
+    resumeHint: () => undefined,
+  };
+  registerAgent('reporting', () => reporting);
+  const cfg = { agent: 'reporting' } as unknown as Config;
+  let registeredAs: string | undefined;
+  const seen: string[] = [];
+  await agentFor(cfg).runSession({
+    prompt: 'x', cwd: '/w/ENG-9', model: 'reporting-1',
+    callbacks: { onActivity: (l) => seen.push(l), onSessionId: (id) => seen.push(id), onQuestion: () => {}, onUsage: () => seen.push('usage') },
+    agent: { kind: 'work', label: 'ENG-9', origin: 'dispatch', onRegistered: (id) => (registeredAs = id) },
+  });
+  const entry = listSessions().find((a) => a.id === registeredAs);
+  check('a session is registered without its runtime doing it', Boolean(entry), JSON.stringify(listSessions()));
+  check('under its runtime and label', entry?.runtime === 'reporting' && entry.label === 'ENG-9' && entry.kind === 'work');
+  check('with the conversation id it reported', entry?.sessionId === 'conv-1');
+  check('and its last activity', entry?.activity === 'reading the code');
+  check('ended done, with its cost and totals', entry?.status === 'done' && entry.costUsd === 0.25 && entry.tokens.input === 150 && entry.tokens.cacheRead === 7);
+  check('on the model that actually answered', entry?.model === 'reporting-small', String(entry?.model));
+  check('and the caller still got every callback', seen.join() === 'conv-1,reading the code,usage,usage', seen.join());
+
+  fail = true;
+  let failedAs: string | undefined;
+  const threw = await agentFor(cfg)
+    .runSession({
+      prompt: 'x', cwd: '/w', callbacks: { onActivity: () => {}, onSessionId: () => {}, onQuestion: () => {} },
+      agent: { kind: 'work', label: 'ENG-10', origin: 'dispatch', onRegistered: (id) => (failedAs = id) },
+    })
+    .then(() => false, () => true);
+  const ghost = listSessions().find((a) => a.id === failedAs);
+  check('a runtime that throws still throws', threw);
+  check('and its session ends as an error, not a ghost', ghost?.status === 'error' && Boolean(ghost.activity?.includes('fell over')), JSON.stringify(ghost));
+
+  const unregistered = listSessions().length;
+  fail = false;
+  await agentFor(cfg).runSession({ prompt: 'x', cwd: '/w', callbacks: { onActivity: () => {}, onSessionId: () => {}, onQuestion: () => {} } });
+  check('a session with no agent label is not registered', listSessions().length === unregistered);
+}
+
+/**
  * The lifecycle around a session, not just the session.
  *
  * A runtime that cannot hand a conversation to a terminal has to say so, and
@@ -235,7 +304,7 @@ for (const text of UNRELATED) {
   check('a primer rides the fresh session', (claude.attachArgv({ sessionId: 'abc', permissionMode: 'auto', fresh: true, primer: 'hello' }) ?? []).includes('hello'));
   check('and the resume hint names the command', /claude --resume abc/.test(claude.resumeHint('abc') ?? ''), String(claude.resumeHint('abc')));
   check('transcripts are filed per working directory', (claude.transcriptDir('/tmp/x') ?? '').includes('projects'), String(claude.transcriptDir('/tmp/x')));
-  check('a session with no transcript cannot be resumed', !claude.sessionExists('/tmp/definitely-not-here', 'nope'));
+  check('a session with no transcript cannot be resumed', !(await claude.sessionExists('/tmp/definitely-not-here', 'nope')));
 }
 
 /**
@@ -273,7 +342,7 @@ for (const text of UNRELATED) {
   );
   // Codex files rollouts by date, not by the directory the work happened in
   check('it files no per-directory transcript', codex.transcriptDir('/tmp/anywhere') === undefined);
-  check('and an id it has never seen is not resumable', !codex.sessionExists('/tmp/anywhere', 'not-a-real-thread-id'));
+  check('and an id it has never seen is not resumable', !(await codex.sessionExists('/tmp/anywhere', 'not-a-real-thread-id')));
 }
 
 /**
