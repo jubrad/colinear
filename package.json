@@ -28,7 +28,8 @@
     "check:workspace": "tsx src/core/workspace.check.ts",
     "check:repos": "tsx src/core/repos.check.ts",
     "check:thin": "tsx src/core/thinclient.check.ts",
-    "check:runner": "tsx src/core/runner/runner.check.ts"
+    "check:runner": "tsx src/core/runner/runner.check.ts",
+    "check:org": "tsx src/core/orglayer.check.ts"
   },
   "engines": {
     "node": "^22.23.4 || ^24.22.1 || >=26.12.1"
