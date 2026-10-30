@@ -68,17 +68,17 @@ Refactors with no behaviour change, then the thin client. These would be good fo
 | | step | notes |
 |---|---|---|
 | ◐ | **2.1 Protocol types, `coli runner` over stdio, and `RunnerBackend`.** `"runner": "process"` runs each session in a child. A runner that dies mid-session fails it (`error`, resumable with `r`) | [#153](https://github.com/jubrad/colinear/pull/153). `runner.check.ts` |
-| ☐ | **2.2 Workspace operations and `prepare` through the runner** | `workspace.check.ts` runs its `contract()` against the runner too, with identical results |
-| ☐ | **2.3 Transcripts streamed to the daemon**; `transcriptDir`, `sessionExists` and backup answered from the daemon's copies | [runner.md](runner.md#the-two-synchronous-questions) |
-| ☐ | **2.4 The `credentials` frame and token sync**, with a test credential source; real logins arrive in M5 | Waits on 0.1 and 0.2 for the file layout |
-| ☐ | **2.5 Attach over a pty stream** | Replaces the `ssh -t` handoff in remote mode too |
-| ☐ | **2.6 Container runner**: `"runner": { "container": "image" }`, one container per workspace with only its worktree mounted | Single-user sandboxing. Docs: a new section in `docs/security.md`, a row in `docs/configuration.md` |
+| ◐ | **2.2 Workspace operations through the runner** | [#154](https://github.com/jubrad/colinear/pull/154). The contract runs against a local worktree and through a runner, identically. `prepare` (cloning inside the runner) moves to 3.5, the first place that needs it |
+| ☐ | **2.3 Transcripts streamed to the daemon**; `transcriptDir`, `sessionExists` and backup answered from the daemon's copies | [runner.md](runner.md#the-two-synchronous-questions). Needed only once a runner has no shared disk (pods): the container runner mounts the worktree's transcript dir instead |
+| ◐ | **2.4 The `credentials` frame and token sync**, with a test credential source; real logins arrive in M5 | [#155](https://github.com/jubrad/colinear/pull/155). Which files the agent CLIs read still waits on 0.1 and 0.2 |
+| ☐ | **2.5 Attach over a pty stream** | Replaces the `ssh -t` handoff in remote mode too. Not needed for the container runner, whose transcripts are on the host, so `s` resumes there |
+| ◐ | **2.6 Container runner**: `"runner": { "container": "image" }`, one container per session seeing only its worktree, git dir and transcripts | [#157](https://github.com/jubrad/colinear/pull/157). `bin/check-container` checks the sandbox against real Docker. Over `docker run -i`'s stdio, not a socket. Real agent sessions can't log in until M5 |
 
 ## M3: the cluster
 
 | | step | notes |
 |---|---|---|
-| ☐ | **3.1 The Rust workspace**: `deploy/` with the four CRD types, `bin/gen-crds --check`, a chart skeleton, CI for `cargo test`, a Dependabot entry for Cargo | [operator.md](operator.md#layout) |
+| ◐ | **3.1 The Rust workspace**: `deploy/` with the four CRD types, `bin/gen-crds --check`, a chart skeleton, CI for `cargo test`, a Dependabot entry for Cargo | [#158](https://github.com/jubrad/colinear/pull/158). Checked on kind: the API server refuses a workspace asking for an image or privileges |
 | ☐ | **3.2 `ColiUser` reconcile**: namespace, service accounts, the RBAC rows for daemon, workspace, gateway and operator, the daemon StatefulSet, NetworkPolicy, quota, the OAuth Secret copy | Pure "desired objects" functions, unit tested for the security properties |
 | ☐ | **3.3 The org config layer**: `ColiOrg` → `ConfigMap` → the daemon's `mergeLayers`; `:config` shows sources, locks and ignored keys | [config.md](config.md). `config.check.ts` |
 | ☐ | **3.0 `:gc` from the provider**: candidates listed by the provider rather than by reading worktree roots off disk, so a cluster can answer with its `ColiWorkspace`s | |
