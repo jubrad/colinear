@@ -63,6 +63,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `stateSync` | `true` | move Linear states automatically: dispatch → In Progress, first PR → In Review |
 | `ciAutofix` | `true` | dispatch a fix session when a task's PR checks go red (one per red rollup, re-armed when it goes green) |
 | `autoRebase` | `false` | default for [auto-rebase on conflict](#auto-rebase); the `m` modal overrides it per task |
+| `runner` | unset | where agent sessions run. Unset: inside the daemon, as always. `"process"`: each session in its own child `coli runner`, talking to the daemon over a pipe — the same protocol a sandbox container will use. Sessions behave the same; if the child dies mid-session the task fails and `r` resumes it |
 | `autoSplit` | `true` | when triage judges an issue too big, file its split plan as sub-issues and dispatch them instead of parking it for review. [Details](#new-sub-issues) |
 | `autoDispatchSubs` | `false` | when a tracking parent gains a sub-issue nobody has started, dispatch it. [Details](#new-sub-issues) |
 | `todo` | on | [`:todo`](views/todo.md): `false` switches it off; an object sets how it ranks: the policy its agent is given, the review turnaround, what counts as stale, and an optional refresh clock. [Details](#todo) |

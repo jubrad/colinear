@@ -3,6 +3,7 @@ import { codexBackend } from './agents/codex.js';
 import type { AgentBackend, RunSessionOpts, SessionResult } from './agents/shared.js';
 import { modelFor } from './models.js';
 import { endSession, startSession, updateSession } from './sessions.js';
+import { runnerBackend, spawnRunner } from './runner/backend.js';
 import type { Config, ModelScope } from './types.js';
 
 export type {
@@ -156,9 +157,23 @@ export function agentNamed(cfg: Config, name: string): AgentBackend {
   if (!factory) {
     throw new Error(`unknown agent runtime "${name}" — known: ${knownAgents().join(', ') || 'none'}`);
   }
-  const backend = withRegistry(factory(cfg));
+  const inner = factory(cfg);
+  // `"runner": "process"`: the same adapter, its sessions run in a child
+  const placed = cfg.runner === 'process' ? runnerBackend(inner, () => spawnRunner(cfg)) : inner;
+  const backend = withRegistry(placed);
   byName.set(name, backend);
   return backend;
+}
+
+/**
+ * The adapter itself, with nothing around it: no registry, no runner. What a
+ * runner runs on its side of the pipe — the registry belongs to the daemon,
+ * and the runner is the far end, not another hop.
+ */
+export function rawAgent(cfg: Config, name: string): AgentBackend {
+  const factory = registry.get(name);
+  if (!factory) throw new Error(`unknown agent runtime "${name}" — known: ${knownAgents().join(', ') || 'none'}`);
+  return factory(cfg);
 }
 
 /**

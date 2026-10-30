@@ -16,6 +16,7 @@ Agents therefore outlive the UI. Close the terminal, quit with `q`, or hit `R` t
 | `coli contexts` | list contexts: config path, state dir, and which have a daemon running |
 | `coli backup [--out FILE]` | one encrypted archive holding conversations, work in progress, state and config — [below](#coli-backup-and-coli-restore) |
 | `coli restore FILE` | put it back on another machine (`--dry-run`, `--list`, `--clone`) |
+| `coli runner` | not for typing: the far end of a daemon's session pipe when `runner` is `"process"` ([configuration](configuration.md)) |
 | `npm run doctor` | env sanity: `claude` CLI, `gh` auth, Linear key, repos |
 
 Only the daemon dispatches agents, so stopping it is the one thing that interrupts work.

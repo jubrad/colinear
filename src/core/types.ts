@@ -807,6 +807,12 @@ export interface Config {
   linearApiKey: string;
   /** repos agents may work on; first entry is the default */
   repos: RepoConfig[];
+  /**
+   * Where agent sessions run. Absent: in the daemon's own process, as always.
+   * "process": each session in a child `coli runner`, over stdio — the same
+   * protocol a container or a pod will speak (design/multi-user/runner.md).
+   */
+  runner?: 'process';
   /** absolute path to the default repo (mirror of repos[0].path) */
   repo: string;
   defaultBranch: string;

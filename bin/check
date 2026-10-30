@@ -95,4 +95,9 @@ echo '── thin client'
 npm run check:thin
 
 echo
+echo '── runner'
+# a session in a runner gets the same callbacks, questions, messages and tools; no agent CLI runs
+npm run check:runner
+
+echo
 echo 'ok'

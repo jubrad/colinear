@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import type { SessionChannels } from '../channel.js';
 import type { CoordinatorTools } from '../coordinator.js';
 import type { AskedQuestion, SessionSpend } from '../types.js';
-import { colinearTools } from './tools.js';
+import { colinearTools, type ToolSpec } from './tools.js';
 import type {
   AgentBackend,
   AgentCapabilities,
@@ -82,8 +82,8 @@ const COLINEAR_TOOL_PREFIX = 'mcp__colinear__';
  * The in-process tool server a session gets, if any, built from colinear's
  * tool specs (`tools.ts`), where identity and scope are closed over.
  */
-function colinearServer(opts: { channels?: SessionChannels; coordinator?: CoordinatorTools }) {
-  const tools = colinearTools(opts).map((spec) =>
+function colinearServer(opts: { channels?: SessionChannels; coordinator?: CoordinatorTools; tools?: ToolSpec[] }) {
+  const tools = (opts.tools ?? colinearTools(opts)).map((spec) =>
     tool(spec.name, spec.description, spec.input, async (args) => ({
       content: [{ type: 'text' as const, text: await spec.handler(args as Record<string, unknown>) }],
     })),
@@ -193,9 +193,9 @@ export async function runSession(opts: RunSessionOpts): Promise<SessionResult> {
 async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
   const {
     prompt, cwd, callbacks, outputSchema, model, fallbackModel, maxTurns, resume, abortController,
-    channels: membership, inbox, coordinator, permissions,
+    channels: membership, inbox, coordinator, permissions, tools: built,
   } = opts;
-  const mcp = colinearServer({ channels: membership, coordinator });
+  const mcp = colinearServer({ channels: membership, coordinator, tools: built });
 
   const q = query({
     prompt: inbox ? asUserMessages(inbox.stream(prompt)) : prompt,
