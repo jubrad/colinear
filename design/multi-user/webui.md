@@ -25,7 +25,7 @@ TUI. It exists for:
 
 1. **Board**: the columns, cards and statuses.
 2. **Task**: activity, the agent's conversation in full, questions answered with a form, `M`.
-3. **Shared with me**: the `ColiShare` index, opening into a read or write view.
+3. **Shared with me**: the `ColiShare` index, opening into a read-only view with a fork button.
 4. **Reviews**: the diff with findings in the margin, and the review chat. The data is the same as
    the TUI's `AnnotatedDiff`; the browser just has room for it.
 5. **Connections**: sign in to each service ([credentials.md](credentials.md#connections)).

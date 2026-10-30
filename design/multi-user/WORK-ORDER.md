@@ -29,7 +29,7 @@ flowchart LR
   M0 -. 0.1, 0.2 .-> M2
   M0 -. 0.1, 0.2 .-> M5
   M0 -. 0.3 .-> M4
-  M0 -. 0.4 .-> M6
+  M0 -. 0.4 .-> M4
 ```
 
 M0 and M1 start in parallel. M0 is mostly questions only a person can answer. M1 is code that
@@ -45,7 +45,7 @@ Answers that change the design. Nothing here merges as product code.
 | ☐ | **0.1 Claude credential behaviour.** In a scratch `CLAUDE_CONFIG_DIR` with its own login, find out: does the CLI run with an access token and no refresh token? Does it re-read a replaced credentials file mid-session? Is there a command that forces a renewal without a session? Script: [spikes/claude-credentials.md](spikes/claude-credentials.md) | Decides how token sync works for agents ([credentials.md](credentials.md#claude-and-codex)) | **you**: a fresh `claude` login |
 | ☐ | **0.2 Codex, the same three questions** | Same, for Codex | **you**: a fresh `codex` login |
 | ☐ | **0.3 Tailscale identity headers.** Confirm `tailscale serve` in a sidecar passes `Tailscale-User-Login` to a loopback backend, and doesn't for tagged devices | The gateway's whole identity story ([gateway.md](gateway.md#identity)) | a tailnet |
-| ☐ | **0.4 Subscription terms.** Confirm the Claude and Codex terms allow each user's own login in a cluster daemon, and say whether write-mode sharing changes that | Write mode is designed around the answer | **you** |
+| ☐ | **0.4 Subscription terms.** Confirm the Claude and Codex terms allow each user's own login in a cluster daemon | Before anyone signs in to a shared install | **you** |
 
 ## M1: seams
 
@@ -66,7 +66,7 @@ Refactors with no behaviour change, then the thin client. These would be good fo
 
 | | step | notes |
 |---|---|---|
-| ☐ | **2.1 Protocol types, `coli runner` over stdio, and `RunnerBackend`.** `"runner": "process"` runs sessions in a child. Inbox messages carry a sender. A dropped runner leaves the task `interrupted` | `runner.check.ts`. Needs 1.1 and 1.3 |
+| ☐ | **2.1 Protocol types, `coli runner` over stdio, and `RunnerBackend`.** `"runner": "process"` runs sessions in a child. A dropped runner leaves the task `interrupted` | `runner.check.ts`. Needs 1.1 and 1.3 |
 | ☐ | **2.2 Workspace operations and `prepare` through the runner** | `workspace.check.ts` runs its `contract()` against the runner too, with identical results |
 | ☐ | **2.3 Transcripts streamed to the daemon**; `transcriptDir`, `sessionExists` and backup answered from the daemon's copies | [runner.md](runner.md#the-two-synchronous-questions) |
 | ☐ | **2.4 The `credentials` frame and token sync**, with a test credential source; real logins arrive in M5 | Waits on 0.1 and 0.2 for the file layout |
@@ -89,7 +89,7 @@ Refactors with no behaviour change, then the thin client. These would be good fo
 | | step | notes |
 |---|---|---|
 | ☐ | **4.1 The gateway**: development identity, `ColiUser` on first sign-in, the `/v1/connect` relay, the `viewer` frame, the `Origin` check. The daemon's WebSocket listener, which trusts only the gateway's token | [gateway.md](gateway.md) |
-| ☐ | **4.2 Tailscale in the chart** | Waits on 0.3 |
+| ☐ | **4.2 Tailscale in the chart** | Waits on 0.3, and on 0.4 before a real install |
 | ☐ | **4.3 `remote.gateway` contexts in the TUI**, and reconnecting with a fresh snapshot when a relay drops | `bin/e2e` connects a real TUI through the gateway |
 
 ## M5: credentials
@@ -105,10 +105,9 @@ Refactors with no behaviour change, then the thin client. These would be good fo
 
 | | step | notes |
 |---|---|---|
-| ☐ | **6.1 Read-only sharing**: the share model, owner-side enforcement, viewer snapshots, `ColiShare` written by the daemon, `:shared`, and `:agents` keeping finished sessions as long as their item | [sharing.md](sharing.md). New view: `docs/views/shared.md` |
-| ☐ | **6.2 Write mode**, with every message attributed | Waits on 0.4 |
-| ☐ | **6.3 Forks**: `/v1/fork`, `prepare` from a branch or a bundle, a `fork` capability on runtimes | |
-| ☐ | **6.4 Org costs** (`/v1/costs`) | |
+| ☐ | **6.1 Read-only sharing**: the share model, owner-side enforcement, viewer snapshots that accept only `fork`, the viewer's repo-access check, `ColiShare` written by the daemon, `:shared`, and `:agents` keeping finished sessions as long as their item | [sharing.md](sharing.md). New view: `docs/views/shared.md` |
+| ☐ | **6.2 Forks**: `/v1/fork`, `prepare` from a branch or a bundle, a `fork` capability on runtimes | |
+| ☐ | **6.3 Org costs** (`/v1/costs`) | |
 
 ## M7: web UI
 
@@ -118,7 +117,7 @@ Refactors with no behaviour change, then the thin client. These would be good fo
 | ☐ | **7.2 Board and task** | Needs 4.1 |
 | ☐ | **7.3 Shared with me** | Needs 6.1 |
 | ☐ | **7.4 Reviews** | |
-| ☐ | **7.5 Connections, costs, agents** | Needs 5.1 and 6.4 |
+| ☐ | **7.5 Connections, costs, agents** | Needs 5.1 and 6.3 |
 | ☐ | **7.6 Terminal (attach)** | Needs 2.5 |
 
 ## M8: later
@@ -133,6 +132,8 @@ Worth doing, not needed for the first real use:
 - **OIDC sign-in**
 - **Daemons outside the cluster following the org config** ([config.md](config.md#daemons-outside-the-cluster))
 - **Daemon sleep**
+- **Collaboration** that keeps every turn on the right person's logins: suggestions, or taking the
+  wheel ([sharing.md](sharing.md#why-sharing-isnt-collaborative))
 
 ## Rules for this branch
 

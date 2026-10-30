@@ -1,8 +1,10 @@
 # Sharing, forks and costs
 
 By default nobody sees anything of yours. You can share a piece of work with named people or with
-everyone signed in, read-only or read-write. Anyone who can see it can fork it into their own
-account.
+everyone signed in. **Sharing is read-only, and forkable.** Someone you share with can read it and
+can fork it into their own account, where it runs on their own logins. Nobody ever talks to an agent
+running on someone else's credentials. Why, and what collaboration might look like later, is
+[below](#why-sharing-isnt-collaborative).
 
 ## What gets shared
 
@@ -16,7 +18,6 @@ interface Share {
   /** 'users' needs at least one login; 'everyone' means every signed-in user */
   audience: 'private' | 'users' | 'everyone';
   users?: string[];               // tailnet logins
-  mode: 'read' | 'write';
   sharedAt: number;
 }
 // on Task, Review and Plan: share?: Share
@@ -41,7 +42,6 @@ spec:
   item: { kind: task, id: "...", title: "ENG-142 Retry uploads", status: working }
   audience: users
   users: [bob@example.com]
-  mode: read
 ```
 
 The gateway watches `ColiShare` across namespaces and answers `/v1/shared` from that, filtered to the
@@ -61,30 +61,28 @@ usually one that finished a while ago.
 
 A viewer connection gets a snapshot with the one item in it, and its changes as they happen.
 
-| | read | write | owner |
-|---|---|---|---|
-| see the card, activity, diff, review doc, plan | yes | yes | yes |
-| read every session's transcript | yes | yes | yes |
-| message the agent (`M`), answer its questions | | yes | yes |
-| chat in a review or plan, ask for explanations | | yes | yes |
-| fork | yes | yes | yes |
-| cancel, resume, re-dispatch, rebase | | | yes |
-| post a review, publish or approve a plan, anything that reaches GitHub or the tracker | | | yes |
-| change the share | | | yes |
+| | viewer | owner |
+|---|---|---|
+| see the card, activity, diff, review doc, plan | yes | yes |
+| read every session's transcript | yes | yes |
+| fork | yes | yes |
+| message the agent, answer its questions, chat in a review or plan | | yes |
+| cancel, resume, re-dispatch, rebase | | yes |
+| post a review, publish or approve a plan, anything that reaches GitHub or the tracker | | yes |
+| change the share | | yes |
 
-**Write means talking to the agent, not controlling the work.** Anything that reaches GitHub or the
-tracker stays with the owner, because it happens with the owner's credentials under the owner's
-name.
+A viewer connection accepts one command, `fork`. Everything else is refused by the owner's daemon.
 
-**Write mode spends the owner's subscription.** The session runs in the owner's workspace on the
-owner's login, so a viewer's message is the owner's usage. The share popup says so before you choose
-`write`.
+### Sharing doesn't get around repo permissions
 
-**Every message says who sent it.** A message from a viewer reaches the agent as
-"Message from Bob (shared with write access):" rather than "Message from the operator:". The daemon
-fills the sender from the connection the message came in on, and the inbox stamps it
-([runner.md](runner.md#the-protocol)). It's stored with `by` on the activity line and on the chat
-turn, and shown that way to everyone.
+An item carries its repo's code: the diff, the transcripts, and for a fork, any unpushed commits.
+If Alice shares a task on a private repo that Bob can't read, showing it to him would leak that repo.
+
+So **a viewer must be able to read the item's repo with their own GitHub login.** Before opening a
+view or carrying a fork, the gateway asks the *viewer's* daemon whether their GitHub connection can
+read the repo, and puts the verified answer in the `viewer` frame
+([gateway.md](gateway.md#protocol)). The owner's daemon refuses an item whose repo isn't in it. A
+viewer with no GitHub connection sees nothing that carries code.
 
 ### Transcripts without waking pods
 
@@ -96,13 +94,14 @@ as it's written (`session.transcript`), and the daemon keeps a copy in its state
 ## Forks
 
 Forking makes a copy of someone's item that **you** own: in your namespace, with your credentials,
-on your subscription. The original is untouched.
+on your subscription. The original is untouched. It's how you build on someone else's work.
 
 1. You press fork on a shared item (or one of your own).
 2. Your client (TUI or browser) asks the gateway to fork it (`POST /v1/fork/<user>/<item>`).
    Daemons can't reach each other, and never call the gateway, so the gateway does the carrying:
    it asks the owner's daemon for a **fork bundle** over a viewer connection as you, and the owner's
-   daemon checks that the share lets you see the item before it builds one. The gateway then hands
+   daemon checks that the share lets you see the item, and that you can read its repo, before it
+   builds one. The gateway then hands
    the bundle to your daemon as a `fork` command on your own connection.
 3. The bundle holds:
    - the item's metadata: the issue, instructions, model
@@ -131,8 +130,38 @@ accounting.
 - **An org admin** (`ColiOrg.users.admins`) sees every user's totals through `/v1/costs`. The gateway asks
   each daemon for a summary: totals per day, per model and per kind of work. The admin doesn't see
   items or transcripts.
-- **Write-mode usage** is the owner's spend, as it actually was. Each ledger entry made from a
-  viewer's message also records `by`, so the owner can see who spent it.
+- **A fork's usage is the forker's**, because it runs on their subscription. Sharing never moves
+  spend from one person to another.
+
+## Why sharing isn't collaborative
+
+Letting a viewer talk to the owner's agent, a "write mode", was designed and dropped:
+
+- **It shares the owner's credentials, not just their authority.** The agent can read the token
+  files in its own pod, so a viewer could ask it to print them.
+- **It spends the owner's subscription** on someone else's say-so.
+- **Claude can't be routed through a proxy**, so a turn runs on whichever login the agent process
+  holds. There's no way to make one turn of a shared session run on the viewer's account.
+
+Three other approaches were rejected:
+
+- **A shared content volume with per-user credential volumes.** One agent process runs on one
+  subscription and can read everything mounted into its pod, so mounting a second user's
+  credentials hands them to whoever is driving. Sharing a volume across namespaces also breaks the
+  namespace boundary, and the cloud volumes in use attach to one node at a time.
+- **A tool the agent calls to fetch the current speaker's credentials.** The model would be choosing
+  whose credentials to use, which a prompt injection could steer, and the token would land in its
+  context. Credentials are chosen by code, never by the model.
+- **Routing each turn through the speaker's own daemon.** Possible for GitHub actions, which the
+  daemon could make, but not for the model calls themselves, for the proxy reason above.
+
+If collaboration is wanted later, two shapes keep every turn on the right person's logins:
+
+- **Suggestions.** A viewer's message lands in the item's discussion as "Bob suggests: …", and the
+  owner decides whether to send it to their agent.
+- **Taking the wheel.** The conversation and branch move to the other person's own workspace and
+  logins, and the original pauses. One driver at a time, handed back and forth. It's forks plus a
+  hand-back.
 
 ## Open questions
 

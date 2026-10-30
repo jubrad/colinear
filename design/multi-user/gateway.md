@@ -72,14 +72,16 @@ What changes:
 - **Transport.** The daemon also listens on a WebSocket. Each WebSocket message is one of today's
   frames. The unix socket stays for single-user mode.
 - **Identity.** On every connection the gateway sends a first frame of its own,
-  `{ t: 'viewer', login, displayName, role: 'owner' | 'viewer', item?, admin }`, before relaying
-  anything from the client. `admin` is true for logins in `ColiOrg.users.admins`. The daemon
+  `{ t: 'viewer', login, displayName, role: 'owner' | 'viewer', item?, repos?, admin }`, before
+  relaying anything from the client. `admin` is true for logins in `ColiOrg.users.admins`. For a
+  viewer, `repos` lists the repos the viewer's own GitHub login can read, which the gateway asked the
+  viewer's daemon before connecting ([sharing.md](sharing.md#sharing-doesnt-get-around-repo-permissions)). The daemon
   trusts the frame only from the gateway: the connection presents the gateway's projected
   service-account token (audience `coli-daemon`), and the daemon's `TokenReview` must name the
   gateway's service account in `coli-system`. A runner's token, with the same audience, names a
   different account and gets the runner protocol instead.
-- **Scope.** A `viewer` connection gets a snapshot containing only the shared item, and only the
-  commands its share allows ([sharing.md](sharing.md#what-a-viewer-gets)). The daemon enforces
+- **Scope.** A `viewer` connection gets a snapshot containing only the shared item, and accepts
+  one command, `fork` ([sharing.md](sharing.md#what-a-viewer-gets)). The daemon enforces
   that. The gateway doesn't, because the gateway shouldn't need to understand commands.
 - **No secrets in `hello`.** It sends the config **redacted**: no tracker key, no token, nothing from
   the credential store. See [below](#the-thin-client).

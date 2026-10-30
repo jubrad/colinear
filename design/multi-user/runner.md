@@ -175,7 +175,7 @@ Every frame carries `t` (its type). Requests carry `id`, and their reply carries
 | `credentials` | `version`, `files[]`, `expiresAt` | replace the credential files; see [credentials.md](credentials.md#token-sync). Always sent before `prepare` |
 | `prepare` | `id`, `repo`, `branch`, `source` | make the worktree; idempotent. `source` is `{ from: 'remote', base }`, `{ from: 'branch' }` (adopt a pushed branch), or `{ from: 'bundle', data }` (a fork's unpushed commits) |
 | `session.start` | `sid`, `runtime`, `opts`, `tools[]` | `opts` is `RunSessionOpts` minus what can't cross; `tools` are `WireTool`s |
-| `session.message` | `sid`, `text`, `from` | push to the session's inbox; `from` says who sent it |
+| `session.message` | `sid`, `text` | push to the session's inbox |
 | `session.answer` | `sid`, `qid`, `answers[]` | answer a question |
 | `session.abort` | `sid` | cancel |
 | `tool.result` | `cid`, `ok`, `text` | the answer to a `tool.call` |
@@ -202,11 +202,6 @@ Every frame carries `t` (its type). Requests carry `id`, and their reply carries
 `exec` output is capped at `maxOutput` per stream (1 MB by default, the tail) and says so when it
 truncates. Long commands
 stream nothing until they finish; checks don't need more.
-
-**Who sent a message.** `SessionInbox` stamps every message "Message from the operator:" today. It
-gains a sender: `push(text, from?)`, stamped "Message from {from}:". The daemon fills `from` from the
-connection the message arrived on, so a shared item's viewer is named
-([sharing.md](sharing.md#what-a-viewer-gets)).
 
 ### Authentication in a cluster
 
@@ -288,7 +283,7 @@ The runner arrives in single-user mode first, in three steps. Each is shippable 
   temp repos. When the runner provider exists, the same `contract()` runs against it over stdio and
   must give identical results.
 - **`runner.check.ts`** drives a fake runtime through `RunnerBackend` → stdio → runner, then
-  asserts what comes out: callbacks, questions answered, inbox delivery with senders, undelivered
+  asserts what comes out: callbacks, questions answered, inbox delivery, undelivered
   messages on abort, tool calls round-tripped to daemon-side handlers, transcripts streamed, a
   credentials push acknowledged before `prepare`, and a dropped connection leaving the task
   `interrupted`. That's the same shape as `agent.check.ts`, one process boundary further.

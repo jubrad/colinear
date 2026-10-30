@@ -19,8 +19,9 @@ all, make single-user mode better on their own.
 - **Many users, isolated by default.** Nobody sees another user's sessions or work unless it was
   shared with them.
 - **Sharing.** A piece of work (a task, review or plan, with every agent session it has had) can
-  be shared with named people or with everyone signed in, read-only or read-write. Anyone who can
-  see it can **fork** it and own the fork.
+  be shared with named people or with everyone signed in. Sharing is **read-only and forkable**:
+  anyone who can see it can **fork** it and own the fork, on their own logins. It isn't
+  collaborative, so nobody drives an agent holding someone else's credentials.
 - **Every user's own credentials.** Nothing in the cluster acts as a shared user. Agents run on the
   user's own Claude or Codex subscription, and tracker and GitHub actions are attributed to the user.
 - **Short-lived credentials wherever an agent can reach them.** Long-lived secrets stay in the
@@ -126,6 +127,7 @@ changes.
 | **Session pods get short-lived access tokens, pushed by the daemon** | A compromised agent, or a curious admin reading a pod, gets hours of access rather than a login. |
 | **Claude credentials are shipped, not proxied** | A subscription-backed CLI routes through a proxy only with `ANTHROPIC_API_KEY` set, which moves billing off the subscription. |
 | **The daemon uses its own login**, separate from your laptop's | Two processes renewing one login invalidate each other's refresh token. |
+| **Sharing is read-only and forkable, not collaborative** | Talking to someone else's agent would use their credentials, which the agent can read, and their subscription. A fork runs on your own. See [sharing.md](sharing.md#why-sharing-isnt-collaborative). |
 | **One workspace pod per worktree**, sleeping when idle | Every session for a task runs in the same checkout. A pod per session would re-clone or reattach a volume every time. |
 
 ## Threat model
@@ -134,7 +136,7 @@ What the design defends against, and what it doesn't.
 
 | actor | can | cannot |
 |---|---|---|
-| **another user** | see what you shared with them, and talk to the agents in an item you shared read-write | see anything else of yours: your namespace, sessions, transcripts, costs |
+| **another user** | read what you shared with them, if they can read its repo themselves, and fork it onto their own logins | talk to your agents, use your credentials, or see anything else of yours: your namespace, sessions, transcripts, costs |
 | **an agent** (or a prompt injection steering one) | use the short-lived tokens in its own pod; act through the MCP tools its session was given | reach your refresh tokens, your other workspaces, or another user's namespace |
 | **a cluster admin** | read a running pod's memory or files, with `exec` or node access; that is audited | read your tokens from `kubectl get secret`, because they aren't in Secrets |
 | **someone off the tailnet** | nothing | reach the gateway at all |
@@ -149,8 +151,7 @@ Each document ends with its own. The ones that cut across everything:
 1. **Does the Claude CLI pick up a refreshed credentials file mid-session?** This decides whether a
    session can outlive one access token without a restart. It is the first spike in the work order.
 2. **Do the Claude and Codex subscription terms allow this deployment?** Each user on their own
-   login in their own daemon is likely fine. Write-mode sharing means one user's input drives
-   another user's subscription; confirm before building it.
+   login in their own daemon is likely fine; confirm before anyone signs in.
 3. **Is a daemon per user affordable?** v1 keeps every user's daemon running. That's one small
    process each, which is fine for tens of users. If it isn't for hundreds, daemons need to sleep,
    and the gateway has to wake them ([operator.md](operator.md#open-questions)).
