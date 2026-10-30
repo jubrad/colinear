@@ -144,6 +144,9 @@ src/core/
   newissue.ts        `n`: one-off structured-output session drafts an issue from a description;
                      with team `auto` it picks one of the tracker's teams by key (an enum in the
                      schema, refused if it names anything else). newissue.check.ts holds that
+  split.ts           a too_big plan → sub-issues: fileSplit (blocks relations, drops, partial-failure
+                     message) shared by plan review's A/D and the dispatcher's autoSplit, and
+                     autoSplitDecision (when the daemon splits on its own). split.check.ts holds it
   notify.ts          terminal-notifier (click-through URL) with osascript fallback
   log.ts             append log at ~/.local/state/colinear/colinear.log (also captures diverted stderr)
 src/ui/              presentation primitives: Table (generic sortable), CommandBar (prompt+ranked

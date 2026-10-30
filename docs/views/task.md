@@ -36,6 +36,7 @@ Permission prompts (a classifier blocking a command) use the same form with allo
 
 ## Plan review
 
-A `too_big` triage verdict returns a **split plan**: single-repo sub-issues with dependencies. `P`
-reviews it — `space` drops an item, `A` creates them as sub-issues with the right blocking relations,
+A `too_big` triage verdict returns a **split plan**: single-repo sub-issues with dependencies. With
+[`autoSplit`](../configuration.md#new-sub-issues) on (the default) colinear files and dispatches it
+itself; you see a plan here when it is off or couldn't. `P` reviews it — `space` drops an item, `A` creates them as sub-issues with the right blocking relations,
 `D` creates and dispatches. A coordinator's proposals review the same way.

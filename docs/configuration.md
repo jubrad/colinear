@@ -63,6 +63,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `stateSync` | `true` | move Linear states automatically: dispatch → In Progress, first PR → In Review |
 | `ciAutofix` | `true` | dispatch a fix session when a task's PR checks go red (one per red rollup, re-armed when it goes green) |
 | `autoRebase` | `false` | default for [auto-rebase on conflict](#auto-rebase); the `m` modal overrides it per task |
+| `autoSplit` | `true` | when triage judges an issue too big, file its split plan as sub-issues and dispatch them instead of parking it for review. [Details](#new-sub-issues) |
 | `autoDispatchSubs` | `false` | when a tracking parent gains a sub-issue nobody has started, dispatch it. [Details](#new-sub-issues) |
 | `todo` | on | [`:todo`](views/todo.md): `false` switches it off; an object sets how it ranks: the policy its agent is given, the review turnaround, what counts as stale, and an optional refresh clock. [Details](#todo) |
 | `retentionDays` | `30` | how long finished work stays on the board. [Details](#retention-and-disk) |
@@ -264,6 +265,15 @@ Neither window has to be waited out: [`:gc`](views/gc.md) lists finished cards b
 ### New sub-issues
 
 Creating a sub-issue and spending an agent on it are separate statements, so by default they stay separate: `A` on a proposal or split plan creates the issues, `D` creates **and** dispatches, and `u` on the parent dispatches whatever is sitting there. A sub-issue you make in Linear yourself appears on the parent within a minute and waits.
+
+The exception is an issue triage judges **too big** — more than one PR's worth, or work spread over several repos. With `autoSplit` (on unless you set it to `false`) colinear does what `D` would have: it files the split plan as sub-issues of the issue, with `blocks` relations for its dependencies, makes the issue a tracking parent, and dispatches each sub-issue into the repo the plan named, skipping triage. A sub-issue waits on its blockers like any other blocked issue. Triage is told its plan will be filed without review, so it writes each item to stand on its own. You get a notification naming what was filed. Turning it off parks the plan in Needs Input for `A`/`D`, as before.
+
+Its limits:
+
+- **One level.** An issue that is already a sub-issue is never split again automatically — a child judged too big parks with its plan, because a plan that needs splitting twice wants a person.
+- **Triage plans only.** A coordinator's proposals still wait for your `A`.
+- **A failure parks the plan.** If the tracker refuses part way, the issue parks with its plan and the activity log names what was already filed, so approving it again doesn't file those twice.
+- A plan item naming a repo that isn't on the allowlist is triaged rather than guessed at.
 
 `autoDispatchSubs` changes that for tracking parents: any sub-issue that colinear has no task for **and** that nobody has started in Linear gets dispatched on the next sweep. The `m` modal sets it per parent (`config default` / `auto-dispatch` / `leave them`), which is the useful granularity — one family running itself while the rest don't.
 
