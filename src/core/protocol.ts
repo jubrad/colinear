@@ -22,7 +22,7 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 21;
+export const PROTOCOL_VERSION = 22;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -101,7 +101,15 @@ export type Command =
   /** store writes the UI makes directly (escalation flags, task edits, …) */
   | { name: 'change'; change: Change }
   /** a tracker call, made by the daemon with the credentials only it holds; answered by providerResult */
-  | { name: 'provider'; rid: number; method: ProviderCall; args: unknown[] };
+  | { name: 'provider'; rid: number; method: ProviderCall; args: unknown[] }
+  /** a document the operator edits, sent whole: the TUI edits a local copy, wherever the daemon is */
+  | { name: 'readDoc'; rid: number; doc: DocRef }
+  | { name: 'writeDoc'; doc: DocRef; text: string }
+  /** mark a task's draft PR ready for review: a GitHub action, so the daemon makes it */
+  | { name: 'promotePr'; id: string };
+
+/** A document the operator can edit: a review's, or a plan's draft. */
+export type DocRef = { kind: 'review' | 'plan'; id: string };
 
 export type ClientMsg = { t: 'sync'; version: number } | { t: 'cmd'; cmd: Command };
 
@@ -112,6 +120,8 @@ export type ServerMsg =
   /** cfg is redacted (redactConfig): a client never receives a credential */
   | { t: 'hello'; protocol: number; pid: number; cfg: Config; provider: ProviderInfo; snapshot: Snapshot; ui: UiState }
   | { t: 'providerResult'; rid: number; ok: boolean; value?: unknown; error?: string }
+  /** the answer to readDoc; text absent when there is no document yet */
+  | { t: 'docText'; rid: number; text?: string }
   | { t: 'delta'; delta: Delta }
   | { t: 'snapshot'; snapshot: Snapshot }
   | { t: 'toast'; text: string; kind: 'info' | 'ok' | 'err' }

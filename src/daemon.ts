@@ -1,4 +1,6 @@
+import { execFile } from 'node:child_process';
 import { createServer, type Socket } from 'node:net';
+import { promisify } from 'node:util';
 import { closeSync, existsSync, mkdirSync, openSync, readSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig, redactConfig } from './core/config.js';
@@ -12,7 +14,10 @@ import { startPrPolling } from './core/prs.js';
 import { Reviewer } from './core/reviewer.js';
 import { PlanManager } from './core/projectplan.js';
 import { PROVIDER_CALLS, providerFor, providerInfo, type ProviderCall } from './core/provider.js';
-import type { Project, Severity } from './core/types.js';
+import type { Config, Project, Severity, Task } from './core/types.js';
+import { repoSlug } from './core/repos.js';
+
+const execFileAsync = promisify(execFile);
 import { adoptReview, pollReviewRequests, startReviewPolling } from './core/reviews.js';
 import {
   createDecoder,
@@ -417,6 +422,33 @@ export async function runDaemon(): Promise<void> {
           }),
         );
         break;
+      case 'readDoc': {
+        const { rid, doc } = cmd;
+        void (doc.kind === 'review' ? reviewer.readDoc(doc.id) : Promise.resolve(plans.readDraft(doc.id))).then(
+          (text) => reply({ t: 'docText', rid, text }),
+          () => reply({ t: 'docText', rid }),
+        );
+        break;
+      }
+      case 'writeDoc':
+        if (cmd.doc.kind === 'review') void reviewer.writeDoc(cmd.doc.id, cmd.text);
+        else plans.writeDraft(cmd.doc.id, cmd.text);
+        break;
+      case 'promotePr': {
+        const task = store.get(cmd.id);
+        const pr = task?.prs[0];
+        if (!task || !pr) break;
+        // demo PRs are made up; nothing may reach GitHub on their behalf
+        if (isDemo(cfg)) {
+          reply({ t: 'toast', text: `demo mode — #${pr.number} was not touched`, kind: 'info' });
+          break;
+        }
+        void promotePr(cfg, task, pr.number).then(
+          () => reply({ t: 'toast', text: `#${pr.number} marked ready`, kind: 'ok' }),
+          (err: unknown) => reply({ t: 'toast', text: `gh pr ready failed: ${String(err).slice(0, 100)}`, kind: 'err' }),
+        );
+        break;
+      }
       case 'gcRemove':
         void (async () => {
           // re-check what's reclaimable, but skip du: the sizes came with the
@@ -550,4 +582,15 @@ async function withProject(projectId: string, run: (project: Project) => Promise
     return;
   }
   await run(project);
+}
+
+/**
+ * `gh pr ready`, by repo name: promoting a PR out of draft is a GitHub action,
+ * so it is made by the daemon with its credentials rather than from whichever
+ * terminal pressed the key.
+ */
+async function promotePr(cfg: Config, task: Task, number: number): Promise<void> {
+  const repo = cfg.repos.find((r) => r.name === task.repo?.name) ?? cfg.repos[0];
+  const slug = await repoSlug(repo);
+  await execFileAsync('gh', ['pr', 'ready', String(number), ...(slug ? ['--repo', slug] : [])], slug ? {} : { cwd: repo.path });
 }

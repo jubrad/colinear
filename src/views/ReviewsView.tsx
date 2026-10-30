@@ -373,11 +373,7 @@ export function ReviewsView(props: { param?: string }) {
           }
           rememberView('reviews', `doc:${selected.id}`);
           // hand the terminal to $EDITOR, then re-read what came back
-          setPendingAction({
-            kind: 'edit-file',
-            path: `${selected.worktree}/.colinear-review.md`,
-            reviewId: selected.id,
-          });
+          setPendingAction({ kind: 'edit-file', reviewId: selected.id });
           ctx.quit();
         }}
         onClose={() => setReading(false)}

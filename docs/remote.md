@@ -97,7 +97,7 @@ Almost nothing, deliberately — but five things had to stop assuming the daemon
 |---|---|
 | `s` attach | `ssh -t <host> cd <worktree> && claude --resume …` — the transcript lives on the daemon's host |
 | `S` shell | `ssh -t <host> cd <worktree> && exec $SHELL -l` |
-| review doc `e` | `ssh -t <host> $EDITOR <path>` |
+| review doc `e`, plan draft `e` | the daemon sends the document; your local `$EDITOR` edits a temporary copy, and it goes back only if you changed it |
 | `:logs` | the daemon's tail comes over the socket. The header also shows your **local** client log, which is where this process's diverted stderr (React warnings) still goes |
 | `:chan` | channel history comes over the socket |
 | notifications | raised on the machine with a screen, not on the VM |

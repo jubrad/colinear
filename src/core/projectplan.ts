@@ -434,6 +434,18 @@ export class PlanManager {
   }
 
   /** Re-read the draft after an $EDITOR edit; also re-establishes the watch. */
+  /** The plan draft, whole, for editing elsewhere; undefined before there is one. */
+  readDraft(id: string): string | undefined {
+    const path = this.draftPath(id);
+    return existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+  }
+
+  /** An edited draft, put back and taken in. */
+  writeDraft(id: string, text: string) {
+    writeFileSync(this.draftPath(id), text);
+    this.reloadDraft(id);
+  }
+
   reloadDraft(id: string) {
     this.watchDraft(id);
     if (this.absorbDraft(id)) store.addPlanActivity(id, 'draft reloaded from disk');
