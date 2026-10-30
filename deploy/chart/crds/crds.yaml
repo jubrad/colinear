@@ -44,6 +44,12 @@ spec:
               limits:
                 nullable: true
                 properties:
+                  awakeWorkspaces:
+                    description: the most workspace pods one user has awake at once
+                    format: int32
+                    minimum: 1.0
+                    nullable: true
+                    type: integer
                   concurrency:
                     description: |-
                       the most sessions one user's daemon runs at once. i32, not u32: Kubernetes
@@ -52,6 +58,17 @@ spec:
                     minimum: 1.0
                     nullable: true
                     type: integer
+                  cpu:
+                    description: one user's total CPU and memory requests, daemon included, e.g. "16" and "64Gi"
+                    nullable: true
+                    type: string
+                  memory:
+                    nullable: true
+                    type: string
+                  storage:
+                    description: one user's total volume size, every sleeping workspace included, e.g. "500Gi"
+                    nullable: true
+                    type: string
                 type: object
               locked:
                 default: []
@@ -221,6 +238,10 @@ spec:
                 required:
                 - ready
                 type: object
+              message:
+                description: why the operator can't serve this user, when it can't
+                nullable: true
+                type: string
               namespace:
                 nullable: true
                 type: string

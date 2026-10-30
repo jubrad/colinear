@@ -19,7 +19,7 @@ rules:
     verbs: ["get", "patch", "update"]
   - apiGroups: ["colinear.dev"]
     resources: ["coliworkspaces"]
-    verbs: ["patch", "update"]  # its finalizer
+    verbs: ["patch", "update"]  # its finalizer, and putting a disabled user's workspaces to sleep
   - apiGroups: [""]
     resources: ["namespaces", "serviceaccounts", "services", "configmaps", "pods", "persistentvolumeclaims", "resourcequotas", "secrets"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
@@ -28,7 +28,19 @@ rules:
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["roles", "rolebindings", "clusterrolebindings"]
-    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "bind", "escalate"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  # Kubernetes refuses a Role or binding that grants what its writer doesn't
+  # hold. The daemon's Role grants creating workspaces, which the operator
+  # never does itself, so it may escalate a Role, and bind exactly the two
+  # roles it hands out: the daemon's own, and checking tokens
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles"]
+    verbs: ["escalate", "bind"]
+    resourceNames: ["coli-daemon"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles"]
+    verbs: ["bind"]
+    resourceNames: ["coli-tokenreview"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
@@ -62,6 +74,14 @@ spec:
           image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag }}"
           imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
           resources: {{- toYaml .Values.operator.resources | nindent 12 }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            # what every user's daemon runs (operator.md, "ColiUser")
+            - { name: COLI_DAEMON_IMAGE, value: "{{ .Values.daemon.image.repository }}:{{ .Values.daemon.image.tag }}" }
+            - { name: COLI_DAEMON_CPU, value: {{ .Values.daemon.cpu | quote }} }
+            - { name: COLI_DAEMON_MEMORY, value: {{ .Values.daemon.memory | quote }} }
+            - { name: COLI_DAEMON_DISK, value: {{ .Values.daemon.disk | quote }} }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -77,3 +97,31 @@ rules:
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]
+---
+# The gateway (gateway.md): it creates a ColiUser on first sign-in and lists
+# what's shared. It never touches workspaces, pods or secrets.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: coli-gateway
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: coli-gateway
+rules:
+  - apiGroups: ["colinear.dev"]
+    resources: ["coliusers"]
+    verbs: ["get", "list", "watch", "create"]
+  - apiGroups: ["colinear.dev"]
+    resources: ["colishares", "coliorgs"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: coli-gateway
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: coli-gateway }
+subjects:
+  - { kind: ServiceAccount, name: coli-gateway, namespace: {{ .Release.Namespace }} }

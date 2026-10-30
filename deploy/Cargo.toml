@@ -23,4 +23,7 @@ anyhow = "1.0"
 futures = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# the reconcile loop around kube-runtime: finalizers, backoff, events, metrics
+k8s-controller = "0.14"
+async-trait = "0.1"
 coli-crds = { path = "crds" }
