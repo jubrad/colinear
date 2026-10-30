@@ -81,6 +81,7 @@ interface RawRepo {
   remote?: string;
   pushRemote?: string;
   prBase?: string;
+  github?: string;
   worktreeRoot?: string;
   checks?: CheckConfig[];
 }
@@ -142,6 +143,8 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
       remote: r.remote ?? 'origin',
       pushRemote: r.pushRemote ?? r.remote ?? 'origin',
       prBase: r.prBase ?? defaultBranch,
+      // owner/name or nothing: anything else would send gh to a repo that isn't there
+      ...(typeof r.github === 'string' && /^[^/\s]+\/[^/\s]+$/.test(r.github) ? { github: r.github } : {}),
       worktreeRoot: expandHome(r.worktreeRoot ?? `${path}-worktrees`),
       checks: r.checks ?? [],
     };

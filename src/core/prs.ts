@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { repoSlug } from './repos.js';
 import { promisify } from 'node:util';
 import type { Config, PrInfo } from './types.js';
 import { log } from './log.js';
@@ -48,6 +49,11 @@ export async function pollPrs(cfg: Config, fixer?: CiFixer): Promise<void> {
 }
 
 async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise<void> {
+  // by name where we can: the daemon will not always have a checkout to run
+  // gh in, and the upstream remote is the repo PRs land in anyway
+  const repoCfg = cfg.repos.find((r) => r.path === repoPath);
+  const slug = repoCfg ? await repoSlug(repoCfg) : undefined;
+  const where = slug ? { args: ['--repo', slug], opts: {} } : { args: [], opts: { cwd: repoPath } };
   let prs: GhPr[];
   try {
     // LIGHT fields only: statusCheckRollup/reviewDecision over a 200-PR list
@@ -64,8 +70,9 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
         '--author', '@me',
         '--limit', '200',
         '--json', 'number,title,url,state,isDraft,headRefName,baseRefName',
+        ...where.args,
       ],
-      { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
+      { ...where.opts, maxBuffer: 10 * 1024 * 1024 },
     );
     prs = JSON.parse(stdout);
   } catch (err) {
@@ -80,8 +87,8 @@ async function pollRepo(cfg: Config, repoPath: string, fixer?: CiFixer): Promise
     try {
       const { stdout } = await exec(
         'gh',
-        ['pr', 'view', String(pr.number), '--json', 'reviewDecision,statusCheckRollup,mergeable'],
-        { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 },
+        ['pr', 'view', String(pr.number), '--json', 'reviewDecision,statusCheckRollup,mergeable', ...where.args],
+        { ...where.opts, maxBuffer: 10 * 1024 * 1024 },
       );
       const d = JSON.parse(stdout) as GhPrDetails;
       details.set(pr.number, d);

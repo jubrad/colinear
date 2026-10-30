@@ -786,6 +786,8 @@ export interface RepoConfig {
   pushRemote: string;
   /** branch PRs are opened against (default: defaultBranch, i.e. "main") */
   prBase: string;
+  /** the GitHub repo PRs land in, as owner/name (default: read from `remote`'s URL) */
+  github?: string;
   worktreeRoot: string;
   checks: CheckConfig[];
 }

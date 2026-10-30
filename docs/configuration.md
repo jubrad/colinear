@@ -96,6 +96,7 @@ Agents only ever touch repos on this list, and only through worktrees under each
 | `remote` | `"origin"` | upstream **git remote name** — worktree base, and the repo PRs land in |
 | `pushRemote` | = `remote` | remote branches are pushed to. Set your fork here for a fork workflow (`"jubrad"`) |
 | `prBase` | = `defaultBranch` | branch PRs are opened against |
+| `github` | from `remote`'s URL | the GitHub repo PRs land in, as `owner/name`. colinear polls PRs there by name rather than running `gh` inside your checkout. Only needed when the remote's URL doesn't name the repo |
 | `worktreeRoot` | `<path>-worktrees` | where per-issue worktrees are created |
 | `checks` | none | commands run in the worktree after the work pass: `[{ "name": "fmt", "cmd": "bin/fmt --check" }]`. Output lands on the task detail view |
 
