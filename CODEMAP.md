@@ -53,6 +53,10 @@ src/core/
                      SessionInbox turns the prompt into an async iterable so the operator can push a
                      message into a live session (`M`); the session closes on `result` unless one is
                      pending, which is what keeps a normal run from hanging open
+  agents/tools.ts     colinear's own MCP tools (channels, coordinator) as ToolSpec data, with
+                     identity and scope closed over; adapters build their server from these.
+                     toWire/fromWire send them across a process boundary without handlers, so a
+                     remote runner forwards each call back to the daemon. tools.check.ts holds it
   provider.ts        the IssueProvider interface + ProviderCapabilities: the only thing the app
                      knows about issue trackers. Adapters are registered in the map here rather
                      than by import side-effect, so a refactor can't silently unregister one

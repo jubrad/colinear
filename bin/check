@@ -75,4 +75,9 @@ echo '── split'
 npm run check:split
 
 echo
+echo '── agent tools'
+# colinear's tools keep their scope rules as data, and across a process boundary
+npm run check:tools
+
+echo
 echo 'ok'

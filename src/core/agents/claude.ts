@@ -8,12 +8,11 @@ import {
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { z } from 'zod';
-import { channels, formatMessages } from '../channel.js';
 import { endSession, startSession, updateSession } from '../sessions.js';
 import type { SessionChannels } from '../channel.js';
 import type { CoordinatorTools } from '../coordinator.js';
-import type { AskedQuestion, PlannedSubtask, SessionSpend } from '../types.js';
+import type { AskedQuestion, SessionSpend } from '../types.js';
+import { colinearTools } from './tools.js';
 import type {
   AgentBackend,
   AgentCapabilities,
@@ -81,101 +80,17 @@ export function claudeBackend(): AgentBackend {
 const COLINEAR_TOOL_PREFIX = 'mcp__colinear__';
 
 /**
- * The in-process tool server a session gets, if any. Both surfaces are built
- * per session with their subject closed over — the channel and username for
- * coordination, the family for a coordinator — so identity and scope are
- * enforced by construction and there is no parameter for an agent to lie in.
+ * The in-process tool server a session gets, if any, built from colinear's
+ * tool specs (`tools.ts`), where identity and scope are closed over.
  */
-function colinearServer(opts: {
-  channels?: SessionChannels;
-  coordinator?: CoordinatorTools;
-}) {
-  const tools = [];
-  const membership = opts.channels;
-  if (membership && membership.scopes.length) {
-    const { username, scopes } = membership;
-    const byScope = new Map(scopes.map((s) => [s.scope, s.id]));
-    const only = scopes[0].id;
-    // the scope is an enum of the channels this session is actually in, so an
-    // agent still cannot address one it doesn't belong to — the parameter
-    // picks among memberships, it doesn't name a channel
-    const scopeArg = z
-      .enum(scopes.map((s) => s.scope) as [string, ...string[]])
-      .optional()
-      .describe(scopes.map((s) => `${s.scope} = ${s.id}`).join(', '));
-    const resolve = (scope?: string) => byScope.get(scope as 'family' | 'project') ?? only;
-    const list = scopes.map((s) => `${s.id} (${s.scope})`).join(' and ');
-    tools.push(
-      tool(
-        'channel_read',
-        `Read new messages on your coordination channel(s): ${list}. Only what you haven't seen; you never get the same message twice.`,
-        { scope: scopeArg },
-        async ({ scope }) => {
-          const channel = resolve(scope as string | undefined);
-          return {
-            content: [{ type: 'text' as const, text: formatMessages(channels.readSince(channel, username)) }],
-          };
-        },
-      ),
-      tool(
-        'channel_post',
-        `Post a short message (max ~2 lines) to a channel you are in: ${list}. Your name is stamped automatically.`,
-        { message: z.string().min(1).max(500), scope: scopeArg },
-        async ({ message, scope }) => {
-          const channel = resolve(scope as string | undefined);
-          channels.post(channel, username, 'agent', message);
-          return { content: [{ type: 'text' as const, text: `posted to ${channel}` }] };
-        },
-      ),
-    );
-  }
-  const co = opts.coordinator;
-  if (co) {
-    tools.push(
-      tool('family_status', 'The live state of every sub-issue in this family.', {}, async () => ({
-        content: [{ type: 'text' as const, text: co.status() }],
-      })),
-      tool(
-        'family_message',
-        "Send a sub-issue's agent an instruction. A running agent reads it at its next turn; an idle one is woken to read it.",
-        { identifier: z.string().min(1), text: z.string().min(1).max(2000) },
-        async ({ identifier, text }) => ({
-          content: [{ type: 'text' as const, text: co.message(identifier, text) }],
-        }),
-      ),
-      tool(
-        'family_cancel',
-        "Stop a sub-issue's agent. The operator can resume it later; say why.",
-        { identifier: z.string().min(1), reason: z.string().min(1).max(500) },
-        async ({ identifier, reason }) => ({
-          content: [{ type: 'text' as const, text: co.cancel(identifier, reason) }],
-        }),
-      ),
-      tool(
-        'family_propose',
-        'Propose new sub-issues. This does NOT create them — the operator reviews and approves. Tell them what you proposed and that it is waiting on them.',
-        {
-          subtasks: z
-            .array(
-              z.object({
-                title: z.string().min(1),
-                description: z.string().min(1),
-                repo: z.string().optional(),
-                blockedBy: z.array(z.number()).optional(),
-              }),
-            )
-            .min(1)
-            .max(10),
-        },
-        async ({ subtasks }) => ({
-          content: [{ type: 'text' as const, text: co.propose(subtasks as PlannedSubtask[]) }],
-        }),
-      ),
-    );
-  }
+function colinearServer(opts: { channels?: SessionChannels; coordinator?: CoordinatorTools }) {
+  const tools = colinearTools(opts).map((spec) =>
+    tool(spec.name, spec.description, spec.input, async (args) => ({
+      content: [{ type: 'text' as const, text: await spec.handler(args as Record<string, unknown>) }],
+    })),
+  );
   return tools.length ? createSdkMcpServer({ name: 'colinear', tools }) : undefined;
 }
-
 
 function userMessage(text: string): SDKUserMessage {
   return { type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null, session_id: '' };
