@@ -1,6 +1,7 @@
 import { SessionInbox, type AgentBackend } from '../agents/shared.js';
 import { fromWire } from '../agents/tools.js';
 import type { Config } from '../types.js';
+import { localWorkspace, type Workspace } from '../workspace.js';
 import { RUNNER_PROTOCOL, type FromRunner, type ToRunner } from './frames.js';
 import type { Link } from './link.js';
 
@@ -20,6 +21,20 @@ export function serveRunner(
   info: { version: string; runtimes: string[] },
 ): void {
   let cfg: Config | undefined;
+  // the worktree this runner serves, on this side: Workspace's local answer is
+  // the runner's answer, including its refusal of paths that climb out
+  let workspace: Workspace | undefined;
+  const running = new Map<number, AbortController>();
+  const watches = new Map<number, () => void>();
+  const answer = (id: number, work: () => Promise<unknown>) => {
+    void (async () => {
+      if (!workspace) throw new Error('this runner serves no workspace');
+      return work();
+    })().then(
+      (value) => link.send({ t: 'reply', id, ok: true, value: value ?? null }),
+      (err: unknown) => link.send({ t: 'reply', id, ok: false, error: err instanceof Error ? err.message : String(err) }),
+    );
+  };
   const sessions = new Map<
     string,
     { inbox?: SessionInbox; abort: AbortController; answers: Map<number, (answers: string[]) => void> }
@@ -37,6 +52,39 @@ export function serveRunner(
           return;
         }
         cfg = frame.cfg;
+        if (frame.workspace) workspace = localWorkspace(frame.workspace);
+        break;
+      case 'exec': {
+        const controller = new AbortController();
+        running.set(frame.id, controller);
+        answer(frame.id, () => workspace!.exec(frame.argv, { ...frame.opts, signal: controller.signal }).finally(() => running.delete(frame.id)));
+        break;
+      }
+      case 'exec.cancel':
+        running.get(frame.id)?.abort();
+        break;
+      case 'fs.read':
+        answer(frame.id, () => workspace!.readFile(frame.path));
+        break;
+      case 'fs.write':
+        answer(frame.id, () => workspace!.writeFile(frame.path, frame.content));
+        break;
+      case 'fs.exists':
+        answer(frame.id, () => workspace!.exists(frame.path));
+        break;
+      case 'watch':
+        try {
+          if (!workspace) throw new Error('this runner serves no workspace');
+          const id = frame.id;
+          watches.set(id, workspace.watch(frame.path, () => link.send({ t: 'watch.changed', id })));
+          link.send({ t: 'reply', id, ok: true, value: null });
+        } catch (err) {
+          link.send({ t: 'reply', id: frame.id, ok: false, error: err instanceof Error ? err.message : String(err) });
+        }
+        break;
+      case 'unwatch':
+        watches.get(frame.id)?.();
+        watches.delete(frame.id);
         break;
       case 'session.start':
         void start(frame);
@@ -63,6 +111,8 @@ export function serveRunner(
   // the daemon is gone: nothing will answer a question or take a result, so stop
   link.onClose(() => {
     for (const s of sessions.values()) s.abort.abort();
+    for (const c of running.values()) c.abort();
+    for (const stop of watches.values()) stop();
   });
 
   async function start(frame: Extract<ToRunner, { t: 'session.start' }>) {

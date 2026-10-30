@@ -145,7 +145,8 @@ export function spawnRunner(cfg: Config): Promise<RunnerLink> {
 }
 
 /** Wait for the runner's hello, check it speaks our protocol, and send ours. */
-export function handshake(link: RunnerLink, cfg: Config, timeoutMs = 15_000): Promise<RunnerLink> {
+export function handshake(link: RunnerLink, cfg: Config, opts: { workspace?: string; timeoutMs?: number } = {}): Promise<RunnerLink> {
+  const timeoutMs = opts.timeoutMs ?? 15_000;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       link.close();
@@ -164,7 +165,7 @@ export function handshake(link: RunnerLink, cfg: Config, timeoutMs = 15_000): Pr
         return;
       }
       // a runner never needs the tracker's key: it runs sessions, the daemon talks to the tracker
-      link.send({ t: 'hello', protocol: RUNNER_PROTOCOL, cfg: redactConfig(cfg) });
+      link.send({ t: 'hello', protocol: RUNNER_PROTOCOL, cfg: redactConfig(cfg), ...(opts.workspace ? { workspace: opts.workspace } : {}) });
       resolve(link);
     });
   });

@@ -147,9 +147,12 @@ src/core/
   runner/            sessions run outside the daemon (design/multi-user/runner.md). frames.ts is the
                      protocol, link.ts carries it over any stream, host.ts is the runner's side
                      (`coli runner`), backend.ts the daemon's: runnerBackend wraps a runtime so
-                     only runSession crosses, and spawnRunner starts a child. runner.check.ts
+                     only runSession crosses, and spawnRunner starts a child. workspace.ts is a
+                     Workspace whose every operation is a frame the runner answers with its own
+                     local Workspace. runner.check.ts runs the Workspace contract through it
   repos.ts           repoSlug: a repo as owner/name, from `github` in its config or its upstream remote's
                      URL, so gh is asked by name rather than run inside a checkout. repos.check.ts
+  workspace.contract.ts  the Workspace contract as a script both workspace.check and runner.check run
   subtasks.ts        the agent's .colinear-subtasks.md checklist: parse it, and follow it through
                      the task's Workspace while a session runs (one read at a time, a last read on stop)
   workspace.ts       Workspace: the daemon's only way into a worktree (exec, read/write/exists/watch,
