@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { agentFor, agentNamed } from './core/agent.js';
+import { agentFor, agentNamed, knownAgents, rawAgent } from './core/agent.js';
+import type { FromRunner, ToRunner } from './core/runner/frames.js';
+import { serveRunner } from './core/runner/host.js';
+import { streamLink } from './core/runner/link.js';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -714,6 +717,17 @@ function stripContextFlags(args: string[]): string[] {
  * message. Backup and restore fail this way more than they fail any other,
  * so they say what went wrong and exit 1.
  */
+/**
+ * `coli runner` — the far end of a daemon's session pipe. Not for typing:
+ * a daemon with `"runner": "process"` starts one per session and speaks
+ * frames to it over stdin and stdout, so nothing else may write to stdout.
+ */
+function runnerCommand(): void {
+  const link = streamLink<ToRunner, FromRunner>(process.stdin, process.stdout);
+  link.onClose(() => process.exit(0));
+  serveRunner(link, rawAgent, { version: VERSION, runtimes: knownAgents() });
+}
+
 async function cleanly(run: () => Promise<void>): Promise<void> {
   try {
     await run();
@@ -733,5 +747,6 @@ else if (command === 'issue') await issueCommand(argv.slice(1));
 else if (command === 'backup') await cleanly(() => backupCommand(argv.slice(1)));
 else if (command === 'restore') await cleanly(() => restoreCommand(argv.slice(1)));
 else if (command === 'demo') demoCommand();
+else if (command === 'runner') runnerCommand();
 else if (command === '--tui') await runTui();
 else supervise();

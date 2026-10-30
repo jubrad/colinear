@@ -2,6 +2,7 @@ import type { SessionChannels } from '../channel.js';
 import type { CoordinatorTools } from '../coordinator.js';
 import type { AgentKind } from '../sessions.js';
 import type { PendingQuestion, SessionSpend } from '../types.js';
+import type { ToolSpec } from './tools.js';
 
 /**
  * What an agent runtime can do, asked rather than assumed.
@@ -46,6 +47,14 @@ export interface AgentCapabilities {
  * the UI lie.
  */
 export class SessionInbox {
+  /**
+   * stamp: wrap each pushed message as coming from the operator. A runner's
+   * inbox is fed text the daemon's inbox already stamped, so it must not
+   * stamp it twice. onDelivered: told when a turn completes, which a runner
+   * passes back so the daemon's inbox can let go of what it sent.
+   */
+  constructor(private readonly opts: { stamp?: boolean; onDelivered?: () => void } = {}) {}
+
   private queue: string[] = [];
   /** yielded to the runtime, but no turn has completed behind it yet */
   private inFlight: string[] = [];
@@ -89,6 +98,7 @@ export class SessionInbox {
   /** A turn completed: whatever was in flight is now part of the conversation. */
   markDelivered(): void {
     this.inFlight = [];
+    this.opts.onDelivered?.();
   }
 
   /**
@@ -106,7 +116,7 @@ export class SessionInbox {
         this.inFlight.push(next);
         // stamped here, not by the caller, so what drain() returns is the raw
         // text and a re-queued message can't collect a second prefix
-        yield `Message from the operator: ${next}`;
+        yield this.opts.stamp === false ? next : `Message from the operator: ${next}`;
         continue;
       }
       await new Promise<void>((resolve) => {
@@ -160,6 +170,12 @@ export interface RunSessionOpts {
   inbox?: SessionInbox;
   /** EXPERIMENTAL: family-management tools for a tracking parent */
   coordinator?: CoordinatorTools;
+  /**
+   * colinear's tools, already built. Set when the session runs somewhere
+   * other than where `channels` and `coordinator` live: a runner gets these
+   * rebuilt from the wire, with every call forwarded back (agents/tools.ts).
+   */
+  tools?: ToolSpec[];
   /** how much the agent may do on its own, and the operator's deny list */
   permissions?: { mode?: string; deny?: string[] };
   /**

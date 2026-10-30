@@ -144,6 +144,10 @@ src/core/
   attach.ts          `s`/`S`: in-place terminal handoff (pending-action consumed by index.tsx loop)
                      or external window via script file (Ghostty/Terminal); suspend-first for live agents
   checks.ts          per-repo shell checks, run through the task's Workspace
+  runner/            sessions run outside the daemon (design/multi-user/runner.md). frames.ts is the
+                     protocol, link.ts carries it over any stream, host.ts is the runner's side
+                     (`coli runner`), backend.ts the daemon's: runnerBackend wraps a runtime so
+                     only runSession crosses, and spawnRunner starts a child. runner.check.ts
   repos.ts           repoSlug: a repo as owner/name, from `github` in its config or its upstream remote's
                      URL, so gh is asked by name rather than run inside a checkout. repos.check.ts
   subtasks.ts        the agent's .colinear-subtasks.md checklist: parse it, and follow it through
