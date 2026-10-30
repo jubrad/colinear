@@ -65,16 +65,35 @@ loopback redirect.
 
 ### GitHub
 
-A GitHub App, registered by the org and installed on the repos colinear may touch. Users sign in
-with the device flow (the same "type this code at github.com/login/device" `gh` uses), which gives a
-user access token. That token acts as the user, but can do no more than the app's permissions
-allow, and only on repos where the app is installed. That intersection is the scope:
+**Every user signs in to GitHub themselves, from `:connections`, the same way as Linear.** Nothing
+in colinear pushes, opens a PR or posts a review as anyone but the person whose work it is, and no
+user's token is ever used for another user's work.
+
+The sign-in is the device flow, the same "type this code at github.com/login/device" that
+`gh auth login` uses. What it signs in to is a **GitHub App the org registers once**. The app is
+not an identity. It acts as nobody on its own, and it doesn't hold anyone's access. It sets the
+**ceiling** on what a user's token can do: the token acts as the user, but only within the app's
+permissions, and only on repos where the app is installed.
 
 - `contents: write`: push branches
 - `pull_requests: write`: open draft PRs, post reviews
 - `checks: read`, `actions: read`: CI status and logs
 
-Single-user mode keeps using `gh`'s own login.
+**Why not `gh auth login`'s own token.** It's the same per-user login, but through GitHub CLI's
+OAuth app, and that gives a different token:
+
+| | `gh auth login` | the org's GitHub App |
+|---|---|---|
+| whose token | yours | yours |
+| lasts | until revoked | 8 hours, renewed by the daemon |
+| reaches | every repo you can reach, with the classic `repo` scope | only the repos the app is installed on, within its permissions |
+| in a workspace pod, if an agent leaks it | your GitHub, indefinitely | those repos, for hours |
+
+Same user, much smaller blast radius. The cost is one app registration for the org.
+
+**Single-user mode** keeps using `gh`'s own login by default, as now. `:connections` shows it (which
+account, which host) so all your logins are in one place. Signing in to the org's app there instead
+is optional, and only worth it with the container runner, where tokens go into containers.
 
 ### Claude and Codex
 
