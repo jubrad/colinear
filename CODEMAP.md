@@ -146,10 +146,12 @@ src/core/
   checks.ts          per-repo shell checks, run through the task's Workspace
   subtasks.ts        the agent's .colinear-subtasks.md checklist: parse it, and follow it through
                      the task's Workspace while a session runs (one read at a time, a last read on stop)
-  workspace.ts       Workspace: the daemon's only way into a worktree (exec, read/write/exists,
-                     refusing paths outside it), and WorkspaceProvider, where worktrees come from.
-                     localWorkspaces is today's `git worktree add`; a runner implements the same
-                     contract elsewhere (design/multi-user/runner.md). workspace.check.ts holds it
+  workspace.ts       Workspace: the daemon's only way into a worktree (exec, read/write/exists/watch,
+                     refusing paths outside it), and WorkspaceProvider, where worktrees come from:
+                     tasks' and reviews' (refs/pull/<n>/head, submodule cleanup), and removal.
+                     workspacesFor(cfg) is the one answer to which provider; localWorkspaces is
+                     today's `git worktree add`, and a runner implements the same contract elsewhere
+                     (design/multi-user/runner.md). workspace.check.ts holds it
   customviews.ts     ~/.config/colinear/views/*.json → declarative issue filters
   newissue.ts        `n`: one-off structured-output session drafts an issue from a description;
                      with team `auto` it picks one of the tracker's teams by key (an enum in the

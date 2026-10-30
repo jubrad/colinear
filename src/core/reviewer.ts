@@ -1,8 +1,4 @@
 import { modelsFor } from './models.js';
-import { execFile } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, type FSWatcher, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { promisify } from 'node:util';
 import { agentFor, type SessionCallbacks, runtimeFor } from './agent.js';
 import { guidanceFor } from './guidance.js';
 import { log } from './log.js';
@@ -20,11 +16,11 @@ import {
 import { demoDiff, isDemo } from './demo.js';
 import { askedLine, explainPrompt, type AskOptions } from './selfreview.js';
 import { store } from './store.js';
+import { remoteFor, workspacesFor, type WorkspaceProvider } from './workspace.js';
 import { extractFencedJson, hasFenceOpening } from './fence.js';
 import { questionSummary } from './types.js';
 import type { ChatTurn, Config, Review, ReviewFinding, Severity } from './types.js';
 
-const exec = promisify(execFile);
 
 /** Also the self-review's document: a task's worktree carries the same file. */
 export const REVIEW_FILE = '.colinear-review.md';
@@ -174,7 +170,11 @@ export function parseDoc(text: string): { summary: string; findings: ReviewFindi
 export class Reviewer {
   private aborts = new Map<string, AbortController>();
   /** one per review with a worktree: the doc is live while anything writes it */
-  private watchers = new Map<string, FSWatcher>();
+  private watchers = new Map<string, () => void>();
+  /** where review checkouts come from and how the daemon reaches into them */
+  private get workspaces(): WorkspaceProvider {
+    return workspacesFor(this.cfg);
+  }
 
   constructor(private cfg: Config) {}
 
@@ -189,7 +189,7 @@ export class Reviewer {
       store.addReviewActivity(id, 'colinear quit — review stopped');
       controller.abort();
     }
-    for (const watcher of this.watchers.values()) watcher.close();
+    for (const stop of this.watchers.values()) stop();
     this.watchers.clear();
   }
 
@@ -199,18 +199,15 @@ export class Reviewer {
    * when a turn ends, so a review appears all at once or not at all.
    */
   private watchDoc(id: string, worktree: string) {
-    this.watchers.get(id)?.close();
+    this.watchers.get(id)?.();
     try {
       let timer: NodeJS.Timeout | undefined;
-      // watch the directory: the file doesn't exist until the agent writes it
-      const watcher = watch(worktree, (_event, filename) => {
-        if (filename !== REVIEW_FILE) return;
+      const stop = this.workspaces.open(worktree).watch(REVIEW_FILE, () => {
         clearTimeout(timer);
-        timer = setTimeout(() => this.absorbDoc(id), 300); // editors write in bursts
+        timer = setTimeout(() => void this.absorbDoc(id), 300); // editors write in bursts
         timer.unref();
       });
-      watcher.unref();
-      this.watchers.set(id, watcher);
+      this.watchers.set(id, stop);
     } catch (err) {
       log(`review ${id}: cannot watch ${worktree}: ${String(err).slice(0, 80)}`);
     }
@@ -326,7 +323,6 @@ export class Reviewer {
       this.watchDoc(id, worktree);
       store.addReviewActivity(id, `reading the diff (${details.changedFiles} files, +${details.additions}/-${details.deletions})`);
 
-      await this.excludeReviewFile(worktree);
       const { backend, ...models } = this.session(review);
       // round two resumes the conversation that wrote the document: it knows
       // what it said and why, which is the whole point of not starting over.
@@ -373,7 +369,7 @@ export class Reviewer {
 
       if (result.spend) store.addReviewSpend(id, result.spend);
       store.updateReview(id, { status: 'ready', endedAt: Date.now() });
-      if (!this.absorbDoc(id)) {
+      if (!(await this.absorbDoc(id))) {
         // no doc written: keep the reply rather than losing the work
         store.updateReview(id, { doc: result.text, summary: result.text.slice(0, 2000), findings: [] });
       }
@@ -532,9 +528,7 @@ export class Reviewer {
       const worktree = await this.checkout(review, id, review.headRefName, review.baseRefName).catch(() => review.worktree!);
       const since = review.reviewedSha;
       const moved = since
-        ? (await exec('git', ['-C', worktree, 'log', '--oneline', `${since}..HEAD`], { maxBuffer: 4 * 1024 * 1024 }).catch(
-            () => ({ stdout: '' }),
-          )).stdout.trim()
+        ? (await this.workspaces.open(worktree).exec(['git', 'log', '--oneline', `${since}..HEAD`], { maxOutput: 4 * 1024 * 1024 })).stdout.trim()
         : '';
       const { backend, ...models } = this.session(review);
       const result = await backend.runSession({
@@ -555,7 +549,7 @@ export class Reviewer {
         chat: [...(current?.chat ?? []), { role: 'agent', text: reply, at: Date.now() }],
       });
       if (result.spend) store.addReviewSpend(id, result.spend);
-      this.absorbDoc(id);
+      await this.absorbDoc(id);
       store.updateReview(id, { error: 'anchors were re-checked — read them, then p posts again' });
       this.toast(`${review.repository}#${review.number}: anchors re-checked — p posts again`, 'ok');
     } finally {
@@ -626,7 +620,7 @@ export class Reviewer {
       });
       if (result.spend) store.addReviewSpend(id, result.spend);
       // the turn may have rewritten the doc; findings ride along inside it
-      this.absorbDoc(id);
+      await this.absorbDoc(id);
     } finally {
       this.aborts.delete(id);
       store.updateReview(id, { chatting: false });
@@ -692,16 +686,11 @@ export class Reviewer {
   async removeWorktree(id: string) {
     const review = store.getReview(id);
     if (!review?.worktree || !review.repo) return;
-    this.watchers.get(id)?.close();
+    this.watchers.get(id)?.();
     this.watchers.delete(id);
-    const { path } = review.repo;
     const worktree = review.worktree;
     try {
-      if (existsSync(worktree)) {
-        await exec('git', ['-C', path, 'worktree', 'remove', '--force', worktree]);
-      }
-      await exec('git', ['-C', path, 'worktree', 'prune']).catch(() => {});
-      await exec('git', ['-C', path, 'branch', '-D', `review/${review.number}`]).catch(() => {});
+      await this.workspaces.remove({ repoPath: review.repo.path, path: worktree, branch: `review/${review.number}` });
       store.updateReview(id, { worktree: undefined });
       store.addReviewActivity(id, 'review worktree removed');
       log(`review ${id}: removed worktree ${worktree}`);
@@ -711,44 +700,31 @@ export class Reviewer {
   }
 
   /** After a restart, pick the watches back up for reviews already checked out. */
-  resumeWatching() {
+  async resumeWatching() {
     for (const review of store.listReviews()) {
-      if (review.worktree && existsSync(review.worktree)) this.watchDoc(review.id, review.worktree);
+      if (review.worktree && (await this.workspaces.open(review.worktree).exists('.'))) this.watchDoc(review.id, review.worktree);
     }
   }
 
   /** Re-read the doc after the operator edited it in $EDITOR. */
-  reloadDoc(id: string) {
+  async reloadDoc(id: string) {
     // also (re)establish the watch: this is the other way a review learns it
     // has a worktree, and an unwatched doc silently stops being live
     const worktree = store.getReview(id)?.worktree;
-    if (worktree && existsSync(worktree)) this.watchDoc(id, worktree);
-    if (this.absorbDoc(id)) store.addReviewActivity(id, 'review doc reloaded from disk');
+    if (worktree && (await this.workspaces.open(worktree).exists('.'))) this.watchDoc(id, worktree);
+    if (await this.absorbDoc(id)) store.addReviewActivity(id, 'review doc reloaded from disk');
   }
 
-  /** Pull the doc off disk into the store, where the UI mirrors it. */
-  private absorbDoc(id: string): boolean {
+  /** Pull the doc out of the worktree into the store, where the UI mirrors it. */
+  private async absorbDoc(id: string): Promise<boolean> {
     const review = store.getReview(id);
     if (!review?.worktree) return false;
-    const path = join(review.worktree, REVIEW_FILE);
-    if (!existsSync(path)) return false;
-    const doc = readFileSync(path, 'utf8').slice(0, DOC_LIMIT);
+    const text = await this.workspaces.open(review.worktree).readFile(REVIEW_FILE).catch(() => undefined);
+    if (text === undefined) return false;
+    const doc = text.slice(0, DOC_LIMIT);
     const { summary, findings } = parseDoc(doc);
     store.updateReview(id, { doc, summary, findings });
     return true;
-  }
-
-  /** Keep the review doc out of the PR's own git status. */
-  private async excludeReviewFile(worktree: string) {
-    try {
-      const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', '--absolute-git-dir']);
-      const excludePath = join(stdout.trim(), 'info', 'exclude');
-      mkdirSync(dirname(excludePath), { recursive: true });
-      const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : '';
-      if (!existing.includes(REVIEW_FILE)) appendFileSync(excludePath, `${REVIEW_FILE}\n`);
-    } catch {
-      // non-fatal; the prompt also tells the agent never to commit it
-    }
   }
 
   private callbacks(id: string): SessionCallbacks {
@@ -804,66 +780,12 @@ export class Reviewer {
   /** A worktree on the PR's head branch, reused across re-reviews. */
   private async checkout(review: Review, id: string, head: string, base: string): Promise<string> {
     const repo = review.repo!;
-    const worktree = join(repo.worktreeRoot, `review-${review.number}`);
-    const remote = await this.remoteFor(repo.path, review.repository);
-
-    // The head branch of a fork's PR does not exist on the base repository, so
-    // fetching `<remote>/<branch>` fails and takes the whole review with it —
-    // and no amount of adding the contributor's remote helps, because the
-    // branch is then under *their* name, not the one the PR reports. GitHub
-    // publishes every PR's head on the BASE repo as refs/pull/<n>/head, fork
-    // or not, so that is what colinear fetches: one ref, one code path, no
-    // remotes to keep in step with whoever opened the PR.
-    const prRef = `refs/remotes/${remote}/pr/${review.number}`;
-    store.addReviewActivity(id, `fetching pull/${review.number}/head from ${remote}…`);
-    const viaPullRef = await exec('git', [
-      '-C', repo.path,
-      'fetch', remote,
-      `+refs/pull/${review.number}/head:${prRef}`,
-    ]).then(
-      () => true,
-      () => false,
+    const workspace = await this.workspaces.ensureReview(
+      { number: review.number, repository: review.repository, head, base, repo, scratch: [REVIEW_FILE] },
+      (line: string) => store.addReviewActivity(id, line),
     );
-
-    let source = prRef;
-    if (!viaPullRef) {
-      // not GitHub, or the ref is not published: fall back to the branch name,
-      // which is right for a same-repo PR and the best available guess otherwise
-      store.addReviewActivity(id, `pull/${review.number}/head unavailable — trying the branch ${head}`);
-      await exec('git', ['-C', repo.path, 'fetch', remote, `${head}:refs/remotes/${remote}/${head}`]).catch(
-        () => exec('git', ['-C', repo.path, 'fetch', remote]).catch(() => {}),
-      );
-      source = `${remote}/${head}`;
-    }
-    // the base is needed too: it is what the diff is taken against
-    await exec('git', ['-C', repo.path, 'fetch', remote, base]).catch(() => {});
-
-    if (existsSync(worktree)) {
-      store.addReviewActivity(id, `reusing worktree ${worktree}`);
-      const cleared = clearBrokenSubmodules(worktree);
-      for (const path of cleared) {
-        store.addReviewActivity(id, `cleared a half-initialised submodule at ${path}`);
-      }
-      // --force because a review checkout is scratch: it tracks the pull
-      // request and holds nothing of the operator's. Without it, a run that
-      // died partway through updating the tree leaves modifications that
-      // refuse every later checkout, and the review is wedged for good.
-      await exec('git', [...NO_SUBMODULES, '-C', worktree, 'checkout', '--force', '-B', `review/${review.number}`, source]);
-      await this.recordSha(id, worktree);
-      return worktree;
-    }
-    store.addReviewActivity(id, `creating worktree ${worktree}…`);
-    mkdirSync(repo.worktreeRoot, { recursive: true });
-    await exec('git', [
-      ...NO_SUBMODULES,
-      '-C', repo.path,
-      'worktree', 'add',
-      '-B', `review/${review.number}`,
-      worktree,
-      source,
-    ]);
-    await this.recordSha(id, worktree);
-    return worktree;
+    await this.recordSha(id, workspace.path);
+    return workspace.path;
   }
 
   /**
@@ -876,9 +798,9 @@ export class Reviewer {
     const since = review.posted?.sha ?? review.reviewedSha;
     let delta = '';
     if (since && review.worktree) {
-      const { stdout } = await exec('git', ['-C', review.worktree, 'log', '--oneline', `${since}..HEAD`], {
-        maxBuffer: 4 * 1024 * 1024,
-      }).catch(() => ({ stdout: '' }));
+      const { stdout } = await this.workspaces.open(review.worktree).exec(['git', 'log', '--oneline', `${since}..HEAD`], {
+        maxOutput: 4 * 1024 * 1024,
+      });
       delta = stdout.trim();
     }
     const viewer = await viewerLogin().catch(() => undefined);
@@ -888,8 +810,8 @@ export class Reviewer {
 
   /** What HEAD the document about to be written describes — a later round's anchor. */
   private async recordSha(id: string, worktree: string) {
-    const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', 'HEAD']).catch(() => ({ stdout: '' }));
-    const sha = stdout.trim();
+    const { code, stdout } = await this.workspaces.open(worktree).exec(['git', 'rev-parse', 'HEAD']);
+    const sha = code === 0 ? stdout.trim() : '';
     if (sha) store.updateReview(id, { reviewedSha: sha });
   }
 
@@ -905,21 +827,17 @@ export class Reviewer {
     // leaves the annotated view loading for ever
     if (isDemo(this.cfg)) return demoDiff();
     if (!review?.worktree) return '';
-    const remote = review.repo ? await this.remoteFor(review.repo.path, review.repository) : 'origin';
+    const remote = review.repo ? await remoteFor(review.repo.path, review.repository) : 'origin';
+    const workspace = this.workspaces.open(review.worktree);
     // three dots: what this branch added since it left the base, which is the
     // diff GitHub shows and the one the review is about
-    const { stdout } = await exec(
-      'git',
-      ['-C', review.worktree, 'diff', `${remote}/${review.baseRefName}...HEAD`],
-      { maxBuffer: 32 * 1024 * 1024 },
-    ).catch(async () => {
+    let { code, stdout } = await workspace.exec(['git', 'diff', `${remote}/${review.baseRefName}...HEAD`], { maxOutput: 32 * 1024 * 1024 });
+    if (code !== 0) {
       // the base ref may not be fetched (an old worktree, a renamed default);
       // the merge base with HEAD's own history is the next best anchor
-      const fallback = await exec('git', ['-C', review.worktree!, 'diff', 'HEAD~1...HEAD'], {
-        maxBuffer: 32 * 1024 * 1024,
-      }).catch(() => ({ stdout: '' }));
-      return fallback;
-    });
+      const fallback = await workspace.exec(['git', 'diff', 'HEAD~1...HEAD'], { maxOutput: 32 * 1024 * 1024 });
+      stdout = fallback.code === 0 ? fallback.stdout : '';
+    }
     return stdout.length > DIFF_LIMIT ? `${stdout.slice(0, DIFF_LIMIT)}\n\n[diff truncated at ${DIFF_LIMIT} bytes]` : stdout;
   }
 
@@ -928,25 +846,25 @@ export class Reviewer {
    * document's fence. The operator's words land in the same artifact the agent
    * writes, so a later chat turn sees them and `p` posts them.
    */
-  editFinding(
+  async editFinding(
     id: string,
     at: { file: string; line: number; startLine?: number },
     comment: string,
     severity?: Severity,
     by?: 'you' | 'agent',
     nth?: number,
-  ): void {
+  ): Promise<void> {
     const review = store.getReview(id);
     if (!review?.worktree) return this.toast('no worktree for this review yet', 'err');
-    const path = join(review.worktree, REVIEW_FILE);
-    if (!existsSync(path)) return this.toast('no review document yet — press r first', 'err');
-    const before = readFileSync(path, 'utf8');
+    const workspace = this.workspaces.open(review.worktree);
+    const before = await workspace.readFile(REVIEW_FILE);
+    if (before === undefined) return this.toast('no review document yet — press r first', 'err');
     const after = upsertFinding(before, at, comment, severity, by, nth);
     if (after === before) return;
-    writeFileSync(path, after);
+    await workspace.writeFile(REVIEW_FILE, after);
     // the watcher would catch this too; absorbing directly means the card is
-    // right by the time the keystroke returns
-    this.absorbDoc(id);
+    // right as soon as the write lands
+    await this.absorbDoc(id);
     store.addReviewActivity(id, comment.trim() ? `you edited the comment on ${at.file}:${at.line}` : `you removed the comment on ${at.file}:${at.line}`);
   }
 
@@ -986,17 +904,8 @@ export class Reviewer {
     } finally {
       // the watcher usually catches the write; absorbing here means the margin
       // is right the moment the session ends rather than a beat later
-      this.absorbDoc(id);
+      await this.absorbDoc(id);
     }
-  }
-
-  private async remoteFor(path: string, repository: string): Promise<string> {
-    const { stdout } = await exec('git', ['-C', path, 'remote', '-v']).catch(() => ({ stdout: '' }));
-    for (const line of stdout.split('\n')) {
-      const [name, url] = line.split(/\s+/);
-      if (name && url?.toLowerCase().includes(repository.toLowerCase())) return name;
-    }
-    return 'origin';
   }
 }
 
@@ -1007,53 +916,8 @@ export class Reviewer {
  * permission problem, it is a review whose anchors have gone stale — nearly
  * always because the author pushed after it was written.
  */
-/**
- * Never let git recurse into submodules on colinear's behalf.
- *
- * `submodule.recurse = true` is a perfectly reasonable thing to have in your
- * own git config, and it is not ours to change — but it turns every checkout
- * colinear runs into one that also tries to set up submodules, and git's
- * support for that inside a *linked worktree* is incomplete. What it leaves
- * behind is described on clearBrokenSubmodules below.
- *
- * Passed as `-c` rather than written into the repo's config: this is about
- * what colinear's own commands do, not about the operator's repository.
- */
-const NO_SUBMODULES = ['-c', 'submodule.recurse=false'];
-
-/**
- * Put half-initialised submodules in a review checkout back to uninitialised.
- *
- * With submodule recursion on, a checkout in a linked worktree writes a `.git`
- * pointer into the submodule directory and a stub gitdir holding nothing but a
- * `config`, then gives up. Every later git command in that worktree — not just
- * checkout, but `status` and `diff` too — then dies with `not a git
- * repository`, and the review can never be refreshed again.
- *
- * Uninitialised is what a fresh worktree has anyway: colinear reads the pull
- * request's own diff and never wants submodule contents. So a pointer whose
- * gitdir is not a repository is removed rather than repaired.
- */
-export function clearBrokenSubmodules(worktree: string): string[] {
-  const modules = join(worktree, '.gitmodules');
-  if (!existsSync(modules)) return [];
-  const cleared: string[] = [];
-  const text = readFileSync(modules, 'utf8');
-  for (const m of text.matchAll(/^\s*path\s*=\s*(.+?)\s*$/gm)) {
-    const path = m[1];
-    const pointer = join(worktree, path, '.git');
-    if (!existsSync(pointer) || statSync(pointer).isDirectory()) continue;
-    const target = readFileSync(pointer, 'utf8').replace(/^gitdir:\s*/, '').trim();
-    if (!target) continue;
-    const gitdir = target.startsWith('/') ? target : join(worktree, path, target);
-    // a real submodule checkout has a HEAD; the stub has only a config
-    if (existsSync(join(gitdir, 'HEAD'))) continue;
-    rmSync(pointer, { force: true });
-    rmSync(gitdir, { recursive: true, force: true });
-    cleared.push(path);
-  }
-  return cleared;
-}
+// moved to workspace.ts with the checkout that needs it; re-exported for the checks
+export { clearBrokenSubmodules } from './workspace.js';
 
 const STALE_ANCHOR = /must be part of the diff|not part of the diff|pull_request_review_thread\.(line|start_line|path)/i;
 

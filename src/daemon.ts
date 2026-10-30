@@ -71,7 +71,7 @@ export async function runDaemon(): Promise<void> {
   });
   const todo = new TodoManager(cfg);
   loadState(cfg);
-  reviewer.resumeWatching(); // reviews restored from disk keep their live doc
+  void reviewer.resumeWatching(); // reviews restored from disk keep their live doc
   plans.resumeWatching();
   const stopPersistence = startPersistence();
 
@@ -193,7 +193,7 @@ export async function runDaemon(): Promise<void> {
         void reviewer.chat(cmd.id, cmd.text);
         break;
       case 'reloadReviewDoc':
-        reviewer.reloadDoc(cmd.id);
+        void reviewer.reloadDoc(cmd.id);
         break;
       case 'postReview':
         void reviewer.post(cmd.id);
@@ -278,7 +278,8 @@ export async function runDaemon(): Promise<void> {
       case 'editTaskFinding': {
         const task = store.get(cmd.id);
         if (task) {
-          selfreview.editFinding(
+          void selfreview.editFinding(
+            cfg,
             task,
             { file: cmd.file, line: cmd.line, startLine: cmd.startLine },
             cmd.comment,
@@ -312,7 +313,7 @@ export async function runDaemon(): Promise<void> {
         void reviewer.diff(cmd.id).then((diff) => reply({ t: 'reviewDiff', id: cmd.id, diff }));
         break;
       case 'editFinding':
-        reviewer.editFinding(
+        void reviewer.editFinding(
           cmd.id,
           { file: cmd.file, line: cmd.line, startLine: cmd.startLine },
           cmd.comment,

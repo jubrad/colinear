@@ -159,6 +159,46 @@ try {
   await (watchSubtasks(made.workspace, 'no-such-file.md', (s) => quiet.push(s), 50))();
   check('a missing checklist reads as nothing, not an error', quiet.length === 0);
 
+  // a review's checkout: the PR's head, published as refs/pull/<n>/head, on a branch of ours
+  git(seed, 'checkout', '-q', '-b', 'contributor');
+  writeFileSync(join(seed, 'review.txt'), 'version one\n');
+  git(seed, 'add', '-A');
+  git(seed, 'commit', '-qm', 'pr 7, first push');
+  git(seed, 'push', '-q', 'origin', 'HEAD:refs/pull/7/head');
+  git(repo, 'remote', 'set-url', 'origin', origin);
+  const reviewNotes: string[] = [];
+  const reviewSpec = { number: 7, repository: 'origin.git', head: 'contributor', base: 'main', repo: repoCfg, scratch: ['.colinear-review.md'] };
+  const review = await localWorkspaces.ensureReview(reviewSpec, (l) => reviewNotes.push(l));
+  check('a review is checked out from the pull ref', (await review.readFile('review.txt')) === 'version one\n');
+  check('on a branch of ours', git(review.path, 'rev-parse', '--abbrev-ref', 'HEAD') === 'review/7');
+  check('and says what it did', reviewNotes.some((l) => l.includes('pull/7/head')) && reviewNotes.some((l) => l.includes('creating')), reviewNotes.join(' | '));
+  await review.writeFile('.colinear-review.md', '# review\n');
+  check('its review doc never shows as a change', (await review.exec(['git', 'status', '--porcelain'])).stdout === '');
+
+  writeFileSync(join(seed, 'review.txt'), 'version two\n');
+  git(seed, 'commit', '-qam', 'pr 7, second push');
+  git(seed, 'push', '-q', '-f', 'origin', 'HEAD:refs/pull/7/head');
+  const again7 = await localWorkspaces.ensureReview(reviewSpec);
+  check('a re-review reuses the checkout', again7.path === review.path);
+  check('at the new head', (await again7.readFile('review.txt')) === 'version two\n');
+  check('keeping its review doc', (await again7.readFile('.colinear-review.md')) === '# review\n');
+
+  git(seed, 'push', '-q', 'origin', 'contributor');
+  const byName = await localWorkspaces.ensureReview({ ...reviewSpec, number: 8 }, (l) => reviewNotes.push(l));
+  check('without a pull ref, the branch name is used', (await byName.readFile('review.txt')) === 'version two\n');
+  check('and says so', reviewNotes.some((l) => l.includes('unavailable')));
+
+  let changes = 0;
+  const stopWatching = again7.watch('.colinear-review.md', () => changes++);
+  await again7.writeFile('.colinear-review.md', '# review, edited\n');
+  await new Promise((r) => setTimeout(r, 300));
+  stopWatching();
+  check('a watched file reports a change', changes > 0);
+
+  await localWorkspaces.remove({ repoPath: repo, path: byName.path, branch: 'review/8' });
+  check('removing a worktree removes it', !(await byName.exists('.')));
+  check('and the branch made for it', !git(repo, 'branch', '--list', 'review/8'));
+
   mkdirSync(join(root, 'empty'));
   await contract('a bare directory', localWorkspace(join(root, 'empty')));
 } finally {
