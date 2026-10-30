@@ -863,6 +863,12 @@ export interface Config {
    */
   autoDispatchSubs: boolean;
   /**
+   * When triage judges an issue too big and returns a split plan, file the
+   * plan as sub-issues and dispatch them instead of parking the issue for
+   * review (default true). Off, the plan waits in Needs Input for `A`/`D`.
+   */
+  autoSplit: boolean;
+  /**
    * How long finished work stays on the board, in days. Past this a done,
    * cancelled or settled review is dropped from the store — which is also the
    * window the header's token and cost figures cover. 0 keeps everything.

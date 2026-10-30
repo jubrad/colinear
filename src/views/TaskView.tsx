@@ -1,6 +1,6 @@
 import { agentFor, agentNamed } from '../core/agent.js';
 import { Box, Text, useInput } from 'ink';
-import { providerFor } from '../core/provider.js';
+import { childIssues, fileSplit, trackingFields } from '../core/split.js';
 import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useState } from 'react';
 import { attachSession, attachShell, sessionRuntime, setPendingAction } from '../core/attach.js';
@@ -44,59 +44,19 @@ export function TaskView(props: { param?: string }) {
 
   const approvePlan = (dispatchAfter: boolean) => {
     const subtasks = planned;
-    const teamId = task?.issue.teamId;
     if (!task || !subtasks.length || creating) return;
-    if (!teamId) return ctx.toast('parent issue has no team id — refresh issues', 'err');
     setCreating(true);
     void (async () => {
       try {
-        const created = new Map<number, { id: string; identifier: string }>();
-        for (let i = 0; i < subtasks.length; i++) {
-          if (dropped.has(i)) continue;
-          const st = subtasks[i];
-          created.set(
-            i,
-            await providerFor(ctx.cfg).create({
-              scopeId: teamId,
-              title: st.title,
-              description: `${st.description}\n\n_Split from ${task.issue.identifier} by colinear._`,
-              priority: st.priority,
-              parentId: task.issue.id,
-            }),
-          );
-        }
-        for (const [i, child] of created) {
-          for (const dep of subtasks[i].blockedBy ?? []) {
-            const blocker = created.get(dep);
-            if (blocker) await providerFor(ctx.cfg).blockIssue(blocker.id, child.id);
-          }
-        }
-        const names = [...created.values()].map((c) => c.identifier);
+        const children = await fileSplit(ctx.cfg, task, subtasks, (i) => !dropped.has(i));
+        const names = children.map((c) => c.identifier);
         store.addActivity(task.issue.id, `split into ${names.join(', ')}`);
         // the parent's work now lives in its sub-issues: track them and
         // auto-complete when they all land (refreshTracking keeps this fresh)
-        store.update(task.issue.id, {
-          status: 'tracking',
-          // a coordinator adds to a family that already exists — replacing the
-          // list here would drop every sibling until the next Linear sweep
-          subIssues: [
-            ...(task.subIssues ?? []),
-            ...[...created.entries()].map(([i, c]) => ({
-              id: c.id,
-              identifier: c.identifier,
-              title: subtasks[i].title,
-              done: false,
-            })),
-          ],
-          proposals: undefined,
-        });
+        store.update(task.issue.id, trackingFields(task, children));
         ctx.toast(`created ${names.join(', ')}`, 'ok');
         if (dispatchAfter) {
-          const issues = await providerFor(ctx.cfg).issuesByIds([...created.values()].map((c) => c.id));
-          for (const [i, child] of created) {
-            const issue = issues.find((x) => x.id === child.id);
-            if (!issue) continue;
-            const repo = ctx.cfg.repos.find((r) => r.name === subtasks[i].repo);
+          for (const { issue, repo } of await childIssues(ctx.cfg, children)) {
             ctx.dispatcher.enqueue([issue], { repo, skipTriage: true });
           }
           ctx.toast(`created + dispatched ${names.length} (dependencies queue automatically)`, 'ok');

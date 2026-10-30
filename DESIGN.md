@@ -119,8 +119,9 @@ as each finishes. There is no priority queue — the board's ordering is a view 
 
 Three states sit outside that flow:
 
-- **`tracking`** — a parent whose work happens in its sub-issues. It never runs a work session; the
-  60s sweep rolls its children up, and `M` or `r` starts a *coordinator* session instead (no
+- **`tracking`** — a parent whose work happens in its sub-issues. A task enters it when its split
+  plan is filed — by `A`/`D` in plan review, or straight from triage with `autoSplit`. It never
+  runs a work session; the 60s sweep rolls its children up, and `M` or `r` starts a *coordinator* session instead (no
   worktree, no checks, no PR).
 - **Manual dispatch** — `awaitingStart`. The worktree exists and the card sits in Working with
   nothing running, waiting for you to lay a skeleton down. `r` hands that same worktree to an agent.
@@ -183,7 +184,10 @@ The diagram above is the shape. These are the parts that surprise people:
   it to `merge`, which dispatches the work in parallel but keeps it on the task — the agent's
   prompt says what it is building ahead of, and `d` refuses to promote the PR until the blocker
   lands. Deployment is outside what colinear can see, so `D` overrides.
-- `needs_input` (agent AskUserQuestion, or too_big/needs_info triage verdicts — split-plan review lives here)
+- `needs_input` (agent AskUserQuestion, or too_big/needs_info triage verdicts — split-plan review lives here).
+  With `autoSplit` a too_big plan skips it: the dispatcher files the plan, the parent goes to
+  `tracking`, and the children are enqueued with triage skipped. `autoSplitDecision()` is the
+  whole rule and is pure; it refuses an issue that is already a sub-issue, so it is one level deep
 - `interrupted` (restart/suspend/attach; `r` resumes the SDK session by id)
 - `error` (failures; auto-unfails if a live PR turns up), `escalated` (legacy; verdicts now park as needs_input)
 - new sub-issues: the tracking sweep dispatches ones nobody has started when `autoDispatchSubs`

@@ -18,6 +18,7 @@ import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
 import { guidanceFor } from './guidance.js';
+import { autoSplitDecision, childIssues, fileSplit, trackingFields, type SplitChild } from './split.js';
 import { store } from './store.js';
 import { questionSummary, type Config, type Issue, type PrInfo, type RepoConfig, type Subtask, type Task, type TaskEdits, type TaskStatus, type TriageVerdict, type Verification } from './types.js';
 
@@ -280,6 +281,57 @@ export class Dispatcher {
         return `proposed ${subtasks.length}; they are NOT created — the operator reviews them on the parent card and approves with A`;
       },
     };
+  }
+
+  /**
+   * Act on a too_big verdict instead of parking it (`autoSplit`): file the
+   * plan as sub-issues, make the parent track them, and dispatch each into
+   * the repo the plan named, with triage skipped — triage is what wrote the
+   * plan, and a child that could be judged too big again would split forever.
+   * Dependents wait on their blockers the way any blocked issue does.
+   *
+   * False leaves the verdict to park for the operator as before: the option
+   * off, no plan, a tracker without sub-issues, an issue that is already a
+   * sub-issue, or filing failed. Coordinator
+   * proposals never come through here — those still wait for `A`.
+   */
+  private async autoSplit(id: string, verdict: TriageVerdict): Promise<boolean> {
+    const task = store.get(id);
+    if (!task || isDemo(this.cfg)) return false;
+    const decision = autoSplitDecision(this.cfg, task, verdict, providerFor(this.cfg).capabilities.subIssues);
+    if (!decision.split) {
+      if (decision.note) store.addActivity(id, decision.note);
+      return false;
+    }
+    const plan = verdict.subtasks ?? [];
+    store.addActivity(id, `too big: ${verdict.reason.slice(0, 100)}`);
+    store.addActivity(id, `splitting into ${plan.length} sub-issue${plan.length === 1 ? '' : 's'} (autoSplit)`);
+    let children: SplitChild[];
+    try {
+      children = await fileSplit(this.cfg, task, plan);
+    } catch (err) {
+      // whatever was filed before the failure is named in the message; the
+      // parent parks with the plan so the operator can finish it by hand
+      store.addActivity(id, `auto-split failed: ${String(err).slice(0, 160)}`);
+      log(`auto-split of ${task.issue.identifier} failed: ${err}`);
+      return false;
+    }
+    const names = children.map((c) => c.identifier);
+    store.addActivity(id, `split into ${names.join(', ')}`);
+    store.update(id, trackingFields(store.get(id) ?? task, children));
+    // filed is filed: from here a failure leaves a tracking parent, never a
+    // parked plan that a second approval would file twice
+    try {
+      const issues = await childIssues(this.cfg, children);
+      for (const { issue, repo } of issues) this.enqueue([issue], { repo, skipTriage: true });
+      store.addActivity(id, `dispatched ${issues.length}; dependents wait for their blockers`);
+      notify(this.cfg, task.issue.identifier, `split into ${names.length}: ${names.join(', ')}`, task.issue.url);
+      this.toast(`${task.issue.identifier} was too big — split into ${names.join(', ')} and dispatched`, 'info');
+    } catch (err) {
+      store.addActivity(id, `split into ${names.join(', ')} but could not dispatch them: ${String(err).slice(0, 120)} — u dispatches them`);
+      log(`auto-split of ${task.issue.identifier}: dispatch failed: ${err}`);
+    }
+    return true;
   }
 
   /** A session can die between a push and the next turn; don't eat the message. */
@@ -985,7 +1037,7 @@ export class Dispatcher {
         const triageChannels = issue.parent ? sessionChannels : undefined;
         const triage = await this.session({
           agent: { kind: 'triage', label: task.issue.identifier, origin: mode === 'fixci' ? 'CI failing' : mode === 'rebase' ? 'PR conflicted' : 'dispatch' },
-          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, guidanceFor(this.cfg.guidance, 'triage'))}\n${familyBlock(issue, family)}${triageChannels ? channelBlock(triageChannels) : ''}`,
+          prompt: `${triagePrompt(issue, this.cfg.repos, store.get(id)?.instructions, guidanceFor(this.cfg.guidance, 'triage'), this.cfg.autoSplit && !issue.parent)}\n${familyBlock(issue, family)}${triageChannels ? channelBlock(triageChannels) : ''}`,
           cwd: worktree,
           callbacks: this.callbacks(id),
           outputSchema: triageSchema(this.cfg.repos.map((r) => r.name)),
@@ -1021,6 +1073,7 @@ export class Dispatcher {
             repo: { name: chosen.name, path: chosen.path, defaultBranch: chosen.defaultBranch, remote: chosen.remote, pushRemote: chosen.pushRemote, prBase: chosen.prBase, worktreeRoot: chosen.worktreeRoot },
           });
         }
+        if (await this.autoSplit(id, verdict)) return;
         if (verdict.verdict !== 'do') {
           // a too_big / needs_info verdict is a human decision — park it with
           // the questions, not the failures
@@ -1571,6 +1624,7 @@ function triagePrompt(
   repos: RepoConfig[],
   instructions?: string,
   guidance?: string,
+  autoSplit = false,
 ): string {
   const roster = repos
     .map((r) => `- ${r.name} (${r.path}): ${r.description ?? '(no description)'}`)
@@ -1586,7 +1640,11 @@ FIRST decide which repository this issue's work belongs in — return it as "rep
 
 Decide one of:
 - "do": clearly scoped, a single agent can complete it with one PR (or a small stack). Include a short implementation plan.
-- "too_big": needs to be broken up into multiple issues. Explain why — AND include "subtasks": an ordered array of proposed sub-issues, each completable by one agent with one PR in ONE repository. Per subtask: title (actionable, self-contained), description (context + acceptance criteria, markdown — assume the reader has not seen this issue), optional priority (1 urgent … 4 low), repo (one of: ${repos.map((r) => r.name).join(', ')}), and blockedBy (array of zero-based indices of subtasks that must land first). The user will review, edit selection, and approve these into Linear.
+- "too_big": needs to be broken up into multiple issues. Explain why — AND include "subtasks": an ordered array of proposed sub-issues, each completable by one agent with one PR in ONE repository. Per subtask: title (actionable, self-contained), description (context + acceptance criteria, markdown — assume the reader has not seen this issue), optional priority (1 urgent … 4 low), repo (one of: ${repos.map((r) => r.name).join(', ')}), and blockedBy (array of zero-based indices of subtasks that must land first). ${
+    autoSplit
+      ? 'These are created in Linear and dispatched to agents as written, with no human review in between, and those agents skip triage — so each must stand on its own, name its repo correctly, and declare every dependency in blockedBy.'
+      : 'The user will review, edit selection, and approve these into Linear.'
+  }
 - "needs_info": the issue is ambiguous or missing decisions only a human can make. State exactly what's missing.
 
 Also decide HOW the change should be verified ("verification") — this repo may have expensive, contended local environments (shared clusters, personal cloud stacks, fixed local ports), so prefer the cheapest sufficient tier:

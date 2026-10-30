@@ -70,4 +70,9 @@ echo '── new issue'
 npm run check:newissue
 
 echo
+echo '── split'
+# a too_big plan filed with its dependencies intact, and split automatically only one level deep
+npm run check:split
+
+echo
 echo 'ok'
