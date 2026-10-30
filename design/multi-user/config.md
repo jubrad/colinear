@@ -52,7 +52,7 @@ spec:
     guidance: { general: "..." }
     autoSplit: true
   locked: [agentPermissionMode, denyTools]
-  limits: { concurrency: 4 }
+  limits: { concurrency: 4, awakeWorkspaces: 5, cpu: "16", memory: 64Gi, storage: 500Gi }
 ```
 
 ## What belongs where

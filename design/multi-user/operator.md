@@ -59,10 +59,19 @@ The operator reconciles it into:
 | `StatefulSet coli-daemon` (1 replica) | the user's daemon, with a volume for its state dir |
 | `Service coli-daemon` | what the gateway and the user's runners connect to |
 | `NetworkPolicy` | see [network](#network) |
-| `ResourceQuota` | caps on awake workspaces, CPU and storage per user |
+| `ResourceQuota` | caps on awake workspaces, CPU, memory and storage per user, from `ColiOrg.limits` (`awakeWorkspaces`, default 10; `cpu`, `memory` and `storage` only when set) |
 | `ConfigMap coli-org` | the org config layer, rendered for the daemon ([config.md](config.md)) |
 | `Secret coli-linear-oauth` | a copy of the org's Linear OAuth client secret, from `coli-system/coli-linear-oauth` (set by Helm values). It identifies the app and can't act as anyone ([credentials.md](credentials.md#linear)) |
-| an EKS Pod Identity association | binds `coli-daemon` to the install's one vault role, so it can use the KMS key for its own namespace only ([credentials.md](credentials.md#storage)). AWS only; the operator's own AWS rights are below |
+| an EKS Pod Identity association | binds `coli-daemon` to the install's one vault role, so it can use the KMS key for its own namespace only ([credentials.md](credentials.md#storage)). AWS only; the operator's own AWS rights are below Not built yet: it arrives with the vault |
+
+**Two ports on the daemon.** Clients (the gateway) connect on 7419 and runners on 7420, so
+`NetworkPolicy` can let each in to only its own: a workspace pod can reach its daemon's runner
+port and nothing else of it.
+
+**Everything a user has is owned by their `ColiUser`**, the namespace and the cluster-scoped
+binding included. So the garbage collector does the deleting, and the operator needs no finalizer
+on users. The operator applies with server-side apply, so a field changed by hand comes back on the
+next pass.
 
 **The daemon is always running** once its `ColiUser` exists. It's one small Node process, and a
 daemon that slept would need the gateway to wake it and to know when stopping it was safe. Daemon
