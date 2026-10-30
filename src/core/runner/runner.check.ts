@@ -84,14 +84,18 @@ const scripted: AgentBackend = {
 };
 
 /** A runner in this process, on the other end of two pipes, speaking real frames. */
-async function pipedRunner(workspace?: string, creds?: { dir: string; source: CredentialSource }): Promise<{ link: RunnerLink; kill: () => void }> {
+async function pipedRunner(
+  workspace?: string,
+  creds?: { dir: string; source: CredentialSource },
+  backend: AgentBackend = scripted,
+): Promise<{ link: RunnerLink; kill: () => void }> {
   const toRunner = new PassThrough();
   const fromRunner = new PassThrough();
   const runnerSide = streamLink<ToRunner, FromRunner>(toRunner, fromRunner);
   runnerSide.onFrame((frame) => {
     if (frame.t === 'hello') runnerCfg = frame.cfg;
   });
-  serveRunner(runnerSide, () => scripted, { version: 'check', runtimes: ['scripted'], credentialsDir: creds?.dir });
+  serveRunner(runnerSide, () => backend, { version: 'check', runtimes: ['scripted'], credentialsDir: creds?.dir, renewalWaitMs: 300 });
   const daemonSide = streamLink<FromRunner, ToRunner>(fromRunner, toRunner);
   return {
     link: await handshake(daemonSide, cfg, { workspace, credentials: creds?.source }),
@@ -267,6 +271,97 @@ const run = async (): Promise<void> => {
     rmSync(credsRoot, { recursive: true, force: true });
   }
 
+  // ── the renewal window: a turn a renewal broke is sent again, once ────────
+  const windowRoot = realpathSync(mkdtempSync(join(tmpdir(), 'coli-runner-window-')));
+  try {
+    const source = settableCredentials({ files: [{ path: 'claude/.credentials.json', content: '{"token":"one"}' }] });
+    const renew = () => source.set({ files: [{ path: 'claude/.credentials.json', content: `{"token":"${Date.now()}"}` }] });
+    const REVOKED = 'Failed to authenticate: OAuth token revoked. Please log in again or contact your administrator.';
+    const calls: Array<{ prompt: string; resume?: string }> = [];
+    const result = (text: string): SessionResult => ({ text, costUsd: 0, isError: false, errors: [], assistantTurns: 1 });
+    // fails the first call per scenario, as the CLI does when its token was revoked mid-turn
+    const revoking: AgentBackend = {
+      ...scripted,
+      async runSession(opts) {
+        calls.push({ prompt: opts.prompt, resume: opts.resume });
+        opts.callbacks.onSessionId('conv-r');
+        const [scenario] = (calls[0]?.prompt ?? opts.prompt).split(':');
+        const first = calls.length === 1;
+        if (scenario === 'renewed') {
+          if (first) {
+            renew();
+            return result(REVOKED);
+          }
+          return result('done');
+        }
+        if (scenario === 'unrenewed') return result(REVOKED);
+        if (scenario === 'twice') {
+          renew();
+          throw new Error(`API Error: 401 ${REVOKED}`);
+        }
+        if (scenario === 'talking') {
+          if (!first) return result(`answered ${opts.prompt}`);
+          // turn one completes; turn two, the operator's message, is the one the renewal breaks
+          for await (const text of opts.inbox!.stream(opts.prompt)) {
+            opts.inbox!.markDelivered();
+            if (text !== opts.prompt) {
+              renew();
+              opts.inbox!.close();
+            }
+          }
+          return result(REVOKED);
+        }
+        if (scenario === 'mentions') {
+          return result(`I fixed the bug where "${REVOKED}" was shown twice.`);
+        }
+        throw new Error(`unknown scenario ${scenario}`);
+      },
+    };
+    // each session closes its link; a fresh one per scenario
+    let reopen: Awaited<ReturnType<typeof pipedRunner>> | undefined;
+    const fresh = async (prompt: string, extra?: Partial<RunSessionOpts>) => {
+      calls.length = 0;
+      const piped = await pipedRunner(windowRoot, { dir: join(windowRoot, 'creds'), source }, revoking);
+      reopen = piped;
+      return runnerBackend(scripted, async () => piped.link)
+        .runSession({
+          prompt,
+          cwd: windowRoot,
+          callbacks: { onActivity: () => {}, onSessionId: () => {}, onQuestion: () => {} },
+          ...extra,
+        })
+        .then((r) => r.text, (e: unknown) => `threw: ${String(e)}`);
+    };
+
+    const renewed = await fresh('renewed: fix it');
+    check('a turn the renewal broke is sent again, and its answer is what comes back', renewed === 'done', renewed);
+    check('resuming the same conversation, with the same prompt', calls[1]?.resume === 'conv-r' && calls[1]?.prompt === 'renewed: fix it', JSON.stringify(calls));
+
+    const unrenewed = await fresh('unrenewed: fix it');
+    check('without a renewal, a revoked token is a real failure, reported as one', unrenewed === REVOKED && calls.length === 1, `${unrenewed} after ${calls.length}`);
+
+    const twice = await fresh('twice: fix it');
+    check('a second failure is a real one: one retry only', twice.includes('401') && calls.length === 2, `${twice} after ${calls.length}`);
+
+    const inbox = new SessionInbox();
+    const talking = fresh('talking: start', { inbox });
+    for (let i = 0; i < 40 && calls.length === 0; i++) await new Promise((r) => setTimeout(r, 10));
+    inbox.push('use the other branch');
+    const talked = await talking;
+    check(
+      "a later turn sends the operator's message again, not the opening prompt",
+      calls[1]?.prompt === 'Message from the operator: use the other branch' && talked.startsWith('answered'),
+      `${talked} ${JSON.stringify(calls)}`,
+    );
+
+    renew();
+    const mentions = await fresh('mentions: x');
+    check('an answer that only mentions the words is not a failure', calls.length === 1 && mentions.startsWith('I fixed'), `${calls.length}`);
+    reopen?.kill();
+  } finally {
+    rmSync(windowRoot, { recursive: true, force: true });
+  }
+
   // ── a real child ───────────────────────────────────────────────────────────
   const child = await spawnRunner(cfg).then(
     (link) => link,
@@ -281,5 +376,5 @@ if (failures.length) {
   console.error(`runner: ${failures.length} failed\n  ${failures.join('\n  ')}`);
   process.exit(1);
 }
-console.log('ok — a session in a runner gets the same callbacks, questions, messages and tools, and\n     cancelling it or losing the runner ends it rather than hanging it');
+console.log('ok — a session in a runner gets the same callbacks, questions, messages and tools, and\n     cancelling it or losing the runner ends it rather than hanging it; a turn a token\n     renewal broke is sent again, once');
 process.exit(0);
