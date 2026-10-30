@@ -550,7 +550,16 @@ on `hello` the client installs `remoteProvider` for that config (`useProvider`):
 `providerFor(cfg)`, and every tracker call goes over the socket as a `provider` command, which the
 daemon runs only if the method is on `PROVIDER_CALLS`. `branchFor` is the one synchronous call and is
 answered locally by the rule both adapters share. `thinclient.check.ts` runs a real demo-mode daemon
-to hold this.
+to hold this. When the daemon reloads its config it sends a `config` message, redacted the same way,
+and the client assigns it into the object it got at `hello`: the views hold that object, and in a
+cluster the TUI has no config file of its own to reread.
+
+**The org layer.** With `COLINEAR_ORG_CONFIG` set, `loadConfig` merges that file under the user's
+config with `mergeLayers` (`core/orglayer.ts`, pure, checked by `orglayer.check.ts`), and records in
+`cfg.layers` where each key came from and what was refused. The daemon watches the file's directory,
+because a mounted ConfigMap changes by a symlink swap there, and reloads only when the content
+changed. A missing or broken org file is fatal rather than skipped: running without it would drop the
+org's locks, which can only widen what agents may do.
 
 Features ask `capabilities` rather than assuming: `workflowStates` gates stateSync, `blockers`
 gates the blocked column and `f`, `subIssues` gates tracking parents and `u`, `priority` gates the

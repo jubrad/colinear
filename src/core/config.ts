@@ -1,14 +1,16 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, watch, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import {
   BASE_CONFIG_PATHS,
   CONTEXT,
   DEFAULT_CONTEXT,
+  STATE_DIR,
   contextConfigPath,
   listContexts,
 } from './context.js';
 import { log } from './log.js';
+import { DEFAULT_CONCURRENCY, mergeLayers, type OrgSpec } from './orglayer.js';
 import {
   EXPERIMENTS,
   type CheckConfig,
@@ -82,6 +84,7 @@ interface RawRepo {
   pushRemote?: string;
   prBase?: string;
   github?: string;
+  url?: string;
   worktreeRoot?: string;
   checks?: CheckConfig[];
 }
@@ -108,6 +111,55 @@ function readConfigFile(path: string): RawConfig | undefined {
   }
 }
 
+/**
+ * The org layer, when this daemon follows one: `COLINEAR_ORG_CONFIG` names the
+ * file the operator mounts. Set and unreadable is fatal, like a broken config
+ * file and for a stronger reason: running without it would drop the org's
+ * locks, and that only ever widens what agents may do.
+ */
+export function orgConfigPath(): string | undefined {
+  return process.env.COLINEAR_ORG_CONFIG || undefined;
+}
+
+/**
+ * Call `onChange` when the org file's content changes. Kubernetes updates a
+ * mounted ConfigMap by swapping a symlink in its directory, so the directory
+ * is what's watched, and the content is compared so a swap that changed
+ * nothing doesn't reload.
+ */
+export function watchOrgConfig(onChange: () => void): () => void {
+  const path = orgConfigPath();
+  if (!path) return () => {};
+  const read = () => (existsSync(path) ? readFileSync(path, 'utf8') : '');
+  let last = read();
+  let timer: NodeJS.Timeout | undefined;
+  const watcher = watch(dirname(path), () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const now = read();
+      if (now === last) return;
+      last = now;
+      onChange();
+    }, 300);
+  });
+  return () => {
+    clearTimeout(timer);
+    watcher.close();
+  };
+}
+
+function readOrgLayer(path: string): OrgSpec {
+  if (!existsSync(path)) fatal(`the org config should be at ${path} (COLINEAR_ORG_CONFIG), and isn't`);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (err) {
+    fatal(`${path} is not valid JSON: ${err instanceof Error ? err.message : err}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) fatal(`${path} is not an org config object`);
+  return parsed as OrgSpec;
+}
+
 export function loadConfig(opts?: { requireKey?: boolean }): Config {
   // guidance is normalized below: a string, a list of lines, or a scope map
   const base = BASE_CONFIG_PATHS.map(readConfigFile).find(Boolean) ?? {};
@@ -124,10 +176,20 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     raw = { ...base, ...layer };
   }
 
+  const orgPath = orgConfigPath();
+  const merged = mergeLayers(orgPath ? readOrgLayer(orgPath) : undefined, raw, STATE_DIR);
+  raw = merged.raw as RawConfig;
+  const layers = { ...merged.layers, ...(orgPath ? { org: orgPath } : {}) };
+  // the single-repo keys mirror repos[0], so they come from wherever repos did
+  if (layers.sources.repos) {
+    for (const key of ['repo', 'defaultBranch', 'worktreeRoot', 'checks']) layers.sources[key] ??= layers.sources.repos;
+  }
+
   const linearApiKey = raw.linearApiKey ?? process.env.LINEAR_API_KEY ?? '';
   // chores that never touch Linear (gc) shouldn't demand a key to run — nor
   // should a provider that has no Linear to talk to
-  if (!linearApiKey && opts?.requireKey !== false && (raw.provider ?? 'linear') === 'linear') {
+  // under an org the key comes from the Linear connection, not a file (work order 5.1)
+  if (!linearApiKey && !orgPath && opts?.requireKey !== false && (raw.provider ?? 'linear') === 'linear') {
     fatal(`No Linear API key. Set LINEAR_API_KEY or add "linearApiKey" to ${configPath()}`);
   }
 
@@ -145,6 +207,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
       prBase: r.prBase ?? defaultBranch,
       // owner/name or nothing: anything else would send gh to a repo that isn't there
       ...(typeof r.github === 'string' && /^[^/\s]+\/[^/\s]+$/.test(r.github) ? { github: r.github } : {}),
+      ...(typeof r.url === 'string' && r.url ? { url: r.url } : {}),
       worktreeRoot: expandHome(r.worktreeRoot ?? `${path}-worktrees`),
       checks: r.checks ?? [],
     };
@@ -186,7 +249,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     defaultBranch: repos[0].defaultBranch,
     worktreeRoot: repos[0].worktreeRoot,
     checks: repos[0].checks,
-    concurrency: raw.concurrency ?? 3,
+    concurrency: raw.concurrency ?? DEFAULT_CONCURRENCY,
     agent: typeof raw.agent === 'string' && raw.agent.trim() ? raw.agent.trim() : undefined,
     model: normalizeModel(raw.model, undefined),
     fallbackModel: normalizeModel(raw.fallbackModel, 'default'),
@@ -217,6 +280,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     editor: typeof raw.editor === 'string' && raw.editor.trim() ? raw.editor.trim() : undefined,
     autoDispatchLabels: autoDispatchLabels(raw.autoDispatchLabels),
     remote: normalizeRemote(raw.remote),
+    layers,
   };
 }
 

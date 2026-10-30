@@ -82,7 +82,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 
 Legacy single-repo keys still work in place of `repos`: `repo`, `defaultBranch`, `worktreeRoot`, `checks`.
 
-Environment: `LINEAR_API_KEY`, `COLINEAR_CONTEXT` ([contexts](#contexts)), `COLINEAR_STATE_DIR` (points state, socket, pidfile and log somewhere else — used to isolate test runs), `EDITOR`, `SHELL`.
+Environment: `LINEAR_API_KEY`, `COLINEAR_CONTEXT` ([contexts](#contexts)), `COLINEAR_STATE_DIR` (points state, socket, pidfile and log somewhere else — used to isolate test runs), `COLINEAR_ORG_CONFIG` ([org config](#org-config)), `EDITOR`, `SHELL`.
 
 ### Repos
 
@@ -356,6 +356,31 @@ coli contexts               # what exists, where, and which have a daemon up
 A context **layers over the default config**: keys it doesn't set are inherited, so shared settings (key, guidance, signoff) get written once. Top-level keys replace wholesale rather than merging — a context that sets `repos` gets exactly those repos.
 
 Everything downstream follows the context: the daemon it starts or attaches to, `state.json`, the debug log, `coli gc`, and `:config`'s `e`. The board's header shows `(ctx oss)` next to the repo whenever you aren't in the default one, and `coli daemon status` names it — "no daemon running" is otherwise confusing when the real reason is that you're pointed at a different context. Naming a context with no config file is an error, not a quiet fallback to the default: dispatching into the wrong workspace is not a recoverable mistake.
+
+### Org config
+
+In a colinear cluster every user's daemon also follows the **org's config**: defaults for everyone,
+the repos the cluster can build workspaces for, and locks on keys only the org may set. The cluster's
+operator writes it into each user's namespace, and the daemon reads it from the file
+`COLINEAR_ORG_CONFIG` names, reloading when it changes. Without that variable, which is to say on
+your own machine, there is no org layer and nothing below applies.
+
+Your config sits on top of the org's, key by key, with these exceptions:
+
+| key | rule |
+|---|---|
+| `repos`, `provider`, `runner` | the org's; yours is ignored |
+| `linearApiKey`, `remote`, a repo's `path` and `worktreeRoot` | ignored: the daemon doesn't hold a key file, isn't on your machine, and has no checkouts of its own |
+| `model`, `fallbackModel` | yours, scope by scope, as long as the org allows the model |
+| `agentPermissionMode` | yours only if it is stricter than the org's |
+| `denyTools` | both: you can add rules and can't remove the org's |
+| `guidance` | both: the org's text, then yours, per scope |
+| `concurrency` | yours, capped by the org's limit |
+| `editor`, `terminal`, `notifications` | yours only |
+| anything the org locks | the org's |
+
+`:config` says which layer every value came from and lists what was set but not applied, with the
+reason. The design is in `design/multi-user/config.md`.
 
 ## Where the config lives
 

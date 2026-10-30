@@ -100,4 +100,9 @@ echo '── runner'
 npm run check:runner
 
 echo
+echo '── org config'
+# the org layer under a user's config: locks hold, modes only tighten, deny rules only grow
+npm run check:org
+
+echo
 echo 'ok'

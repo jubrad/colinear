@@ -22,7 +22,7 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 22;
+export const PROTOCOL_VERSION = 23;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -119,6 +119,8 @@ export type ServerMsg =
   | { t: 'gcProgress'; done: number; total: number; path: string; ok: boolean; finished: boolean }
   /** cfg is redacted (redactConfig): a client never receives a credential */
   | { t: 'hello'; protocol: number; pid: number; cfg: Config; provider: ProviderInfo; snapshot: Snapshot; ui: UiState }
+  /** the config changed under a connected client (an `R`, or the org layer); redacted like hello's */
+  | { t: 'config'; cfg: Config }
   | { t: 'providerResult'; rid: number; ok: boolean; value?: unknown; error?: string }
   /** the answer to readDoc; text absent when there is no document yet */
   | { t: 'docText'; rid: number; text?: string }

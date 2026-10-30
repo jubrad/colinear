@@ -294,6 +294,8 @@ export async function connectToDaemon(): Promise<Connection> {
 
   return await new Promise<Connection>((resolve, reject) => {
     let ready = false;
+    // the object the views hold: a reload updates it in place
+    let cfg: Config | undefined;
     const decode = createDecoder<ServerMsg>((msg) => {
       if (msg.t === 'hello') {
         if (msg.protocol !== PROTOCOL_VERSION) {
@@ -306,6 +308,7 @@ export async function connectToDaemon(): Promise<Connection> {
           return;
         }
         store.hydrate(msg.snapshot);
+        cfg = msg.cfg;
         // the daemon holds the tracker credentials and makes every call; the
         // views keep using providerFor(cfg) and get this instead
         useProvider(
@@ -469,6 +472,8 @@ export async function connectToDaemon(): Promise<Connection> {
         for (const fn of gcProgressListeners) fn(msg);
       } else if (msg.t === 'gc') {
         for (const fn of gcListeners) fn(msg.items);
+      } else if (msg.t === 'config') {
+        if (cfg) Object.assign(cfg, msg.cfg);
       } else if (msg.t === 'toast') {
         for (const fn of toastListeners) fn(msg.text, msg.kind);
       } else if (msg.t === 'logTail') {

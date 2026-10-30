@@ -3,7 +3,7 @@ import { createServer, type Socket } from 'node:net';
 import { promisify } from 'node:util';
 import { closeSync, existsSync, mkdirSync, openSync, readSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadConfig, redactConfig } from './core/config.js';
+import { loadConfig, redactConfig, watchOrgConfig } from './core/config.js';
 import { channels } from './core/channel.js';
 import { isDemo, seedDemoBoard, seedDemoIssues } from './core/demo.js';
 import { Dispatcher } from './core/dispatcher.js';
@@ -110,6 +110,18 @@ export async function runDaemon(): Promise<void> {
   todo.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
   todo.startClock();
 
+  // a client shows the config it was sent at hello, so a reload is sent on
+  const reload = (why: string) => {
+    Object.assign(cfg, loadConfig());
+    todo.startClock(); // refreshMinutes may have changed
+    broadcast({ t: 'config', cfg: redactConfig(cfg) });
+    log(`config reloaded: ${why}`);
+  };
+  const stopOrgWatch = watchOrgConfig(() => {
+    reload('the org config changed');
+    broadcast({ t: 'toast', text: 'the org config changed — see :config', kind: 'info' });
+  });
+
   // every store mutation fans out to attached clients as a delta
   let sent = store.version;
   store.subscribe(() => {
@@ -188,9 +200,7 @@ export async function runDaemon(): Promise<void> {
         dispatcher.setViewer(cmd.viewer);
         break;
       case 'reloadConfig':
-        Object.assign(cfg, loadConfig());
-        todo.startClock(); // refreshMinutes may have changed
-        log('config reloaded');
+        reload('asked by a client');
         break;
       case 'change':
         store.applyChange(cmd.change);
@@ -561,6 +571,7 @@ export async function runDaemon(): Promise<void> {
     todo.shutdown();
     stopPrPolling();
     stopReviewPolling();
+    stopOrgWatch();
     setTimeout(() => {
       stopPersistence();
       server.close();

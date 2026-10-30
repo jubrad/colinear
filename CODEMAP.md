@@ -26,6 +26,7 @@ src/core/
                      COLINEAR_STATE_DIR). A leaf module evaluated before anything derives a path
                      from it; re-exports STATE_DIR through log.ts
   config.ts          ~/.config/colinear/config.json (legacy ~/.colinear.json), the context layer
+  orglayer.ts        the org layer under a user's config: locks, stricter-only modes, unions, caps (mergeLayers)
                      over it, repos allowlist normalization (remote/pushRemote/prBase are GIT
                      REMOTE NAMES), --team flag
   store.ts           observable Map<issueId, Task> + version counter. Two modes: the daemon's is the

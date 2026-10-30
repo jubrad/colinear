@@ -788,6 +788,8 @@ export interface RepoConfig {
   prBase: string;
   /** the GitHub repo PRs land in, as owner/name (default: read from `remote`'s URL) */
   github?: string;
+  /** where to clone it from, for a repo the org layer listed: a cluster has no checkout to read */
+  url?: string;
   worktreeRoot: string;
   checks: CheckConfig[];
 }
@@ -970,4 +972,19 @@ export interface Config {
     /** the daemon's socket path on that machine; discovered when omitted */
     socket?: string;
   };
+  /** where each value came from, and what was set but not applied (design/multi-user/config.md) */
+  layers?: ConfigLayers;
+}
+
+/** Which layer a top-level key's value came from; `both` is a union or a concatenation. */
+export type ConfigSource = 'default' | 'org' | 'you' | 'both';
+
+export interface ConfigLayers {
+  /** the org layer's file, when this daemon follows one */
+  org?: string;
+  sources: Record<string, ConfigSource>;
+  /** keys only the org may set */
+  locked: string[];
+  /** a value one layer set that the merge didn't apply, and why */
+  ignored: Array<{ key: string; from: 'org' | 'you'; reason: string }>;
 }
