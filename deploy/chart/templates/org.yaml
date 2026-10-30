@@ -1,0 +1,8 @@
+{{- if .Values.org }}
+# The install's one ColiOrg, from values.org (config.md, "The org layer").
+apiVersion: colinear.dev/v1alpha1
+kind: ColiOrg
+metadata:
+  name: org
+spec: {{- toYaml .Values.org | nindent 2 }}
+{{- end }}

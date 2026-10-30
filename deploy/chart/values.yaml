@@ -1,0 +1,21 @@
+# Multi-user colinear. design/multi-user/operator.md is what each piece is for.
+
+operator:
+  image:
+    repository: ghcr.io/jubrad/coli-operator
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
+
+# The org config (design/multi-user/config.md): rendered as the install's one
+# ColiOrg. Empty renders none, so a cluster can be set up before it is decided.
+org: {}
+#  users: { allow: ["*@example.com"], admins: ["alice@example.com"] }
+#  repos:
+#    - name: api
+#      url: https://github.com/example/api
+#      image: ghcr.io/example/coli-workspace-api:2026-10
+#  workspaceClasses:
+#    small: { cpu: "2", memory: 8Gi, disk: 50Gi }

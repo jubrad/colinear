@@ -1,0 +1,79 @@
+# The operator: the only thing that creates pods. What it may do is exactly
+# what reconciling users and workspaces needs (operator.md, "RBAC and admission").
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: coli-operator
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: coli-operator
+rules:
+  - apiGroups: ["colinear.dev"]
+    resources: ["coliorgs", "coliusers", "coliworkspaces", "colishares"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["colinear.dev"]
+    resources: ["coliusers/status", "coliworkspaces/status"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: ["colinear.dev"]
+    resources: ["coliworkspaces"]
+    verbs: ["patch", "update"]  # its finalizer
+  - apiGroups: [""]
+    resources: ["namespaces", "serviceaccounts", "services", "configmaps", "pods", "persistentvolumeclaims", "resourcequotas", "secrets"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings", "clusterrolebindings"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete", "bind", "escalate"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: coli-operator
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: coli-operator }
+subjects:
+  - { kind: ServiceAccount, name: coli-operator, namespace: {{ .Release.Namespace }} }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coli-operator
+  namespace: {{ .Release.Namespace }}
+  labels: { app.kubernetes.io/name: coli-operator }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: coli-operator }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: coli-operator }
+    spec:
+      serviceAccountName: coli-operator
+      securityContext: { runAsNonRoot: true, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: operator
+          image: "{{ .Values.operator.image.repository }}:{{ .Values.operator.image.tag }}"
+          imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+          resources: {{- toYaml .Values.operator.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+# Daemons check their runners' tokens, and the gateway's, with TokenReviews
+# (runner.md, "Authentication in a cluster"); each user's daemon is bound to this.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: coli-tokenreview
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]

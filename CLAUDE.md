@@ -8,6 +8,8 @@ Read DESIGN.md first — how it works (processes, CDC sync, the task state machi
 bin/check            # the gate CI runs: lint, build, CDC replay
 bin/lint             # typecheck + docs lint (fast; what a pre-commit hook runs)
 bin/check-container  # the container runner against real Docker (builds an image; not in bin/check)
+bin/check-deploy     # deploy/ (operator, CRDs, chart): cargo fmt + test, CRDs current, helm lint
+bin/gen-crds         # the chart's CRDs from the Rust types (--check to verify)
 bin/gen-docs --serve # regenerate the views table, build the docs site, browse it
 npm run dev          # run from source (tsx)
 npm run build        # rebuild dist (the linked `coli` bin runs dist, not src)
