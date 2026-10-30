@@ -23,7 +23,8 @@
     "check:spend": "tsx src/core/spend.check.ts",
     "check:todo": "tsx src/core/todo.check.ts",
     "check:newissue": "tsx src/core/newissue.check.ts",
-    "check:split": "tsx src/core/split.check.ts"
+    "check:split": "tsx src/core/split.check.ts",
+    "check:tools": "tsx src/core/agents/tools.check.ts"
   },
   "engines": {
     "node": "^22.23.4 || ^24.22.1 || >=26.12.1"
