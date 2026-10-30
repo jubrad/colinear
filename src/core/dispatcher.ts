@@ -1,6 +1,6 @@
 import { providerFor } from './provider.js';
+import { watchSubtasks } from './subtasks.js';
 import { localWorkspaces, type WorkspaceProvider } from './workspace.js';
-import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { agentFor, SessionInbox, type AgentBackend, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
@@ -957,7 +957,7 @@ export class Dispatcher {
     const task = store.get(id);
     if (!task) return;
     let issue = task.issue;
-    let stopSubtaskPoll: (() => void) | undefined;
+    let stopSubtaskPoll: (() => Promise<void>) | undefined;
     const controller = new AbortController();
     this.aborts.set(id, controller);
     const mode = this.modes.get(id);
@@ -977,7 +977,8 @@ export class Dispatcher {
       void this.recheckBlocked();
       return;
     }
-    const resumeSession = task.sessionId && task.worktree && existsSync(task.worktree) ? task.sessionId : undefined;
+    const resumeSession =
+      task.sessionId && task.worktree && (await this.workspaces.open(task.worktree).exists('.')) ? task.sessionId : undefined;
     try {
       store.update(id, {
         // maintenance runs against a PR that already exists: moving the card
@@ -1277,7 +1278,7 @@ export class Dispatcher {
         orphaned.close();
         this.requeueUndelivered(id, orphaned);
       }
-      stopSubtaskPoll?.();
+      await stopSubtaskPoll?.();
       // however a rebase ends — done, failed, aborted — it is no longer running
       // however it ended — done, failed, aborted — nothing is running now
       store.update(id, { endedAt: Date.now(), ...(store.get(id)?.maintenance ? { maintenance: undefined } : {}) });
@@ -1285,31 +1286,11 @@ export class Dispatcher {
   }
 
   /** Agents maintain a checkbox list in .colinear-subtasks.md; poll and mirror it onto the card. */
-  private pollSubtasks(id: string, worktree: string): () => void {
-    const file = join(worktree, SUBTASKS_FILE);
-    const read = () => {
-      let content: string;
-      try {
-        content = readFileSync(file, 'utf8');
-      } catch {
-        return;
-      }
-      const subtasks: Subtask[] = [];
-      for (const line of content.split('\n')) {
-        const m = line.match(/^\s*[-*]\s*\[([ xX])\]\s*(.+)$/);
-        if (m) subtasks.push({ done: m[1] !== ' ', text: m[2].trim() });
-      }
+  private pollSubtasks(id: string, worktree: string): () => Promise<void> {
+    return watchSubtasks(this.workspaces.open(worktree), SUBTASKS_FILE, (subtasks) => {
       const task = store.get(id);
-      if (task && JSON.stringify(subtasks) !== JSON.stringify(task.subtasks)) {
-        store.update(id, { subtasks });
-      }
-    };
-    read();
-    const timer = setInterval(read, 2_000);
-    return () => {
-      clearInterval(timer);
-      read();
-    };
+      if (task && JSON.stringify(subtasks) !== JSON.stringify(task.subtasks)) store.update(id, { subtasks });
+    });
   }
 
   /**

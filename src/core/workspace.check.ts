@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runChecks } from './checks.js';
+import { parseSubtasks, watchSubtasks } from './subtasks.js';
+import type { Subtask } from './types.js';
 import { localWorkspace, localWorkspaces, type Workspace } from './workspace.js';
 
 /**
@@ -116,6 +118,9 @@ try {
   check("with the PR's commits", (await adopted.workspace.readFile('pr.txt')) === 'from the PR\n');
 
   check('open names an existing one by path', localWorkspaces.open(made.workspace.path).path === made.workspace.path);
+  // a resume asks whether the worktree is still there before it reuses a session
+  check('a live worktree exists', await localWorkspaces.open(made.workspace.path).exists('.'));
+  check('a vanished one does not', !(await localWorkspaces.open(join(root, 'trees', 'GONE-1')).exists('.')));
 
   await contract('local', made.workspace);
 
@@ -134,6 +139,25 @@ try {
   cancelled.abort();
   const none = await runChecks([{ name: 'never', cmd: 'echo ran' }], made.workspace, cancelled.signal);
   check('a cancelled task runs no checks', !none[0].ok && none[0].output === 'cancelled');
+
+  // the agent's checklist, followed through the workspace while it works
+  check(
+    'a checklist parses, and nothing else does',
+    JSON.stringify(parseSubtasks('# plan\n- [ ] one\n* [x] two\nnot a box\n  - [X]  three  ')) ===
+      JSON.stringify([{ done: false, text: 'one' }, { done: true, text: 'two' }, { done: true, text: 'three' }]),
+  );
+  const seen: Subtask[][] = [];
+  await made.workspace.writeFile('.colinear-subtasks.md', '- [ ] one\n');
+  const stop = watchSubtasks(made.workspace, '.colinear-subtasks.md', (s) => seen.push(s), 50);
+  await new Promise((r) => setTimeout(r, 120));
+  await made.workspace.writeFile('.colinear-subtasks.md', '- [x] one\n- [x] two\n');
+  await stop();
+  const last = seen[seen.length - 1];
+  check('the checklist is read while the agent works', seen.length >= 2 && seen[0][0]?.done === false, JSON.stringify(seen));
+  check('and stopping reads it one last time', last?.length === 2 && last.every((s) => s.done), JSON.stringify(last));
+  const quiet: Subtask[][] = [];
+  await (watchSubtasks(made.workspace, 'no-such-file.md', (s) => quiet.push(s), 50))();
+  check('a missing checklist reads as nothing, not an error', quiet.length === 0);
 
   mkdirSync(join(root, 'empty'));
   await contract('a bare directory', localWorkspace(join(root, 'empty')));
