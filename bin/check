@@ -80,4 +80,9 @@ echo '── agent tools'
 npm run check:tools
 
 echo
+echo '── workspaces'
+# commands, files and new worktrees through Workspace, and nothing outside the worktree; temp repos only
+npm run check:workspace
+
+echo
 echo 'ok'
