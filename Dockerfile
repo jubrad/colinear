@@ -31,7 +31,8 @@ RUN set -eux; \
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# --ignore-scripts: `prepare` builds, and src isn't here yet; the build runs below
+RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build && npm link

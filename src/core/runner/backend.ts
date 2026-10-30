@@ -22,12 +22,12 @@ export type RunnerLink = Link<FromRunner, ToRunner>;
  * colinear's tools, whose handlers stay here (design/multi-user/runner.md,
  * "What can't cross as data").
  */
-export function runnerBackend(inner: AgentBackend, open: () => Promise<RunnerLink>): AgentBackend {
+export function runnerBackend(inner: AgentBackend, open: (opts: RunSessionOpts) => Promise<RunnerLink>): AgentBackend {
   return { ...inner, runSession: (opts) => runRemote(inner.name, opts, open) };
 }
 
-async function runRemote(runtime: string, opts: RunSessionOpts, open: () => Promise<RunnerLink>): Promise<SessionResult> {
-  const link = await open();
+async function runRemote(runtime: string, opts: RunSessionOpts, open: (opts: RunSessionOpts) => Promise<RunnerLink>): Promise<SessionResult> {
+  const link = await open(opts);
   const sid = randomUUID();
   const specs = opts.tools ?? colinearTools({ channels: opts.channels, coordinator: opts.coordinator });
   const handlers = new Map(specs.map((s) => [s.name, s.handler]));

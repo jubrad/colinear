@@ -1,9 +1,11 @@
+import { basename } from 'node:path';
 import { claudeBackend } from './agents/claude.js';
 import { codexBackend } from './agents/codex.js';
 import type { AgentBackend, RunSessionOpts, SessionResult } from './agents/shared.js';
 import { modelFor } from './models.js';
 import { endSession, startSession, updateSession } from './sessions.js';
 import { runnerBackend, spawnRunner } from './runner/backend.js';
+import { spawnContainerRunner } from './runner/container.js';
 import type { Config, ModelScope } from './types.js';
 
 export type {
@@ -158,11 +160,32 @@ export function agentNamed(cfg: Config, name: string): AgentBackend {
     throw new Error(`unknown agent runtime "${name}" — known: ${knownAgents().join(', ') || 'none'}`);
   }
   const inner = factory(cfg);
-  // `"runner": "process"`: the same adapter, its sessions run in a child
-  const placed = cfg.runner === 'process' ? runnerBackend(inner, () => spawnRunner(cfg)) : inner;
+  const placed = placeSessions(cfg, inner);
   const backend = withRegistry(placed);
   byName.set(name, backend);
   return backend;
+}
+
+/**
+ * Where this runtime's sessions run, by the config's `runner`: here, in a
+ * child process, or in a container that sees only the session's worktree.
+ * The same adapter in every case; only `runSession` moves.
+ */
+function placeSessions(cfg: Config, inner: AgentBackend): AgentBackend {
+  const runner = cfg.runner;
+  if (runner === 'process') return runnerBackend(inner, () => spawnRunner(cfg));
+  if (runner && typeof runner === 'object') {
+    return runnerBackend(inner, (opts) => {
+      const dir = inner.transcriptDir(opts.cwd);
+      return spawnContainerRunner(cfg, {
+        image: runner.container,
+        worktree: opts.cwd,
+        // this worktree's transcripts only, so resume and `s` keep working from outside
+        transcripts: dir ? { host: dir, name: basename(dir) } : undefined,
+      });
+    });
+  }
+  return inner;
 }
 
 /**

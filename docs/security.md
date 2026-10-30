@@ -139,6 +139,33 @@ With `remote` set, colinear will not start a local daemon for that context, and
 `coli daemon stop` refuses to signal a pid from another machine's namespace rather than risk killing
 an unrelated local process that happens to share the number.
 
+## Running agents in containers
+
+`"runner": { "container": "image" }` runs each agent session in its own container, started for
+that session and removed after it. Build the image from this repository's `Dockerfile` (with your
+`UID` and `GID`, as [docker](docker.md) describes) or one based on it with your repos' toolchains.
+
+What the container can see:
+
+- **its worktree**, at the same path as on your machine
+- **the repository's shared git directory**, because a linked worktree's commits live there
+- **that worktree's own transcript directory**, so resume and `s` keep working from outside
+
+What it can't: your home directory, other worktrees, your credentials and the Docker socket. It
+runs as you, with every capability dropped and `no-new-privileges`. Its home directory and its
+credentials live in memory and go with it.
+
+**Credentials are pushed, not mounted.** The daemon writes the set the session needs into the
+container's in-memory credentials directory before any work starts, and replaces it on every
+renewal. Until colinear can sign you in to each service itself (`:connections`, in the multi-user
+work), nothing pushes an agent login, so a container session can't reach Claude or Codex yet.
+That is the next piece, not an oversight.
+
+**The network is not restricted.** A container can reach anything your machine can. If
+containment is the point, add an egress policy around Docker.
+
+`bin/check-container` builds the image and checks all of the above against real Docker.
+
 ## Multi-tenancy and isolation
 
 A **context** (`coli --context work`) is a separate config, daemon, store, log and state directory — the clean way to keep a work tracker and a personal one from sharing anything. `COLINEAR_STATE_DIR` overrides the lot, which is what the test suite uses so it can never touch a live daemon.

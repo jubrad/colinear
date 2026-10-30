@@ -811,8 +811,10 @@ export interface Config {
    * Where agent sessions run. Absent: in the daemon's own process, as always.
    * "process": each session in a child `coli runner`, over stdio — the same
    * protocol a container or a pod will speak (design/multi-user/runner.md).
+   * { container: image }: each session in a container of that image, which
+   * sees only the session's worktree and receives pushed credentials.
    */
-  runner?: 'process';
+  runner?: 'process' | { container: string };
   /** absolute path to the default repo (mirror of repos[0].path) */
   repo: string;
   defaultBranch: string;
