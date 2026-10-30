@@ -85,4 +85,9 @@ echo '── workspaces'
 npm run check:workspace
 
 echo
+echo '── repo names'
+# a repo is owner/name from its config or its upstream remote, never guessed
+npm run check:repos
+
+echo
 echo 'ok'

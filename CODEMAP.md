@@ -144,6 +144,8 @@ src/core/
   attach.ts          `s`/`S`: in-place terminal handoff (pending-action consumed by index.tsx loop)
                      or external window via script file (Ghostty/Terminal); suspend-first for live agents
   checks.ts          per-repo shell checks, run through the task's Workspace
+  repos.ts           repoSlug: a repo as owner/name, from `github` in its config or its upstream remote's
+                     URL, so gh is asked by name rather than run inside a checkout. repos.check.ts
   subtasks.ts        the agent's .colinear-subtasks.md checklist: parse it, and follow it through
                      the task's Workspace while a session runs (one read at a time, a last read on stop)
   workspace.ts       Workspace: the daemon's only way into a worktree (exec, read/write/exists/watch,
