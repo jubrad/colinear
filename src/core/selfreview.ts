@@ -1,8 +1,4 @@
 import { modelsFor } from './models.js';
-import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { runtimeFor } from './agent.js';
 import { demoDiff, isDemo } from './demo.js';
 import { guidanceFor } from './guidance.js';
@@ -10,8 +6,8 @@ import { log } from './log.js';
 import { parseDoc, upsertFinding, REVIEW_FILE } from './reviewer.js';
 import { store } from './store.js';
 import type { Config, Severity, Task } from './types.js';
+import { workspacesFor } from './workspace.js';
 
-const exec = promisify(execFile);
 const DIFF_LIMIT = 2_000_000;
 
 /**
@@ -27,9 +23,7 @@ const DIFF_LIMIT = 2_000_000;
  * still: the agent is idle and everything it wrote is committed.
  */
 
-/** The document lives in the task's worktree, exactly as a review's does. */
-export const docPath = (task: Task): string | undefined =>
-  task.worktree ? join(task.worktree, REVIEW_FILE) : undefined;
+// The document lives in the task's worktree as REVIEW_FILE, exactly as a review's does.
 
 /**
  * What the agent has written, against the branch it started from. Read from
@@ -40,32 +34,31 @@ export async function taskDiff(cfg: Config, task: Task): Promise<string> {
   // same reason as the review side: no repository, so nothing to read
   if (isDemo(cfg)) return demoDiff();
   if (!task.worktree) return '';
-  // both git calls below swallow their errors, so a missing checkout would
+  const workspace = workspacesFor(cfg).open(task.worktree);
+  // a failed git call reads as an empty diff, so a missing checkout would
   // read as "this branch changed nothing" — which is the one wrong answer
-  if (!existsSync(task.worktree)) {
+  if (!(await workspace.exists('.'))) {
     return `the worktree at ${task.worktree} is gone — press r to rebuild it from the branch, then read it again
 `;
   }
   const base = task.repo ? cfg.repos.find((r) => r.name === task.repo?.name)?.defaultBranch : undefined;
   const remote = 'origin';
   const against = base ? `${remote}/${base}` : 'HEAD~1';
-  const { stdout } = await exec('git', ['-C', task.worktree, 'diff', `${against}...HEAD`], {
-    maxBuffer: 32 * 1024 * 1024,
-  }).catch(async () => {
+  let { code, stdout } = await workspace.exec(['git', 'diff', `${against}...HEAD`], { maxOutput: 32 * 1024 * 1024 });
+  if (code !== 0) {
     // an unfetched base, or a branch with no merge base yet
-    const fallback = await exec('git', ['-C', task.worktree!, 'diff', 'HEAD~1...HEAD'], {
-      maxBuffer: 32 * 1024 * 1024,
-    }).catch(() => ({ stdout: '' }));
-    return fallback;
-  });
+    const fallback = await workspace.exec(['git', 'diff', 'HEAD~1...HEAD'], { maxOutput: 32 * 1024 * 1024 });
+    stdout = fallback.code === 0 ? fallback.stdout : '';
+  }
   return stdout.length > DIFF_LIMIT ? `${stdout.slice(0, DIFF_LIMIT)}\n\n[diff truncated]` : stdout;
 }
 
-/** Pull findings out of the document on disk and onto the card. */
-export function absorb(task: Task): void {
-  const path = docPath(task);
-  if (!path || !existsSync(path)) return;
-  const { findings } = parseDoc(readFileSync(path, 'utf8').slice(0, 200_000));
+/** Pull findings out of the document in the worktree and onto the card. */
+export async function absorb(cfg: Config, task: Task): Promise<void> {
+  if (!task.worktree) return;
+  const doc = await workspacesFor(cfg).open(task.worktree).readFile(REVIEW_FILE).catch(() => undefined);
+  if (doc === undefined) return;
+  const { findings } = parseDoc(doc.slice(0, 200_000));
   store.update(task.issue.id, { findings });
 }
 
@@ -87,7 +80,7 @@ export async function reviewTask(cfg: Config, task: Task): Promise<void> {
   store.update(id, { reviewing: true });
   store.addActivity(id, 'reading its own work');
   try {
-    const sha = await headSha(task.worktree);
+    const sha = await headSha(cfg, task.worktree);
     const result = await runtimeFor(cfg, 'review').backend.runSession({
       permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
       agent: { kind: 'review', label: task.issue.identifier, origin: 'you asked for a self-review' },
@@ -100,7 +93,7 @@ export async function reviewTask(cfg: Config, task: Task): Promise<void> {
         onQuestion: (q) => q.answer(q.questions.map(() => 'use your best judgment and note it in the review')),
       },
     });
-    absorb(store.get(id) ?? task);
+    await absorb(cfg, store.get(id) ?? task);
     const count = store.get(id)?.findings?.length ?? 0;
     store.update(id, { reviewing: false, reviewedSha: sha });
     store.addActivity(
@@ -132,8 +125,7 @@ export async function explainLines(
   opts: AskOptions = {},
 ): Promise<void> {
   const id = task.issue.id;
-  const path = docPath(task);
-  if (!path || !task.worktree) return;
+  if (!task.worktree) return;
   if (isDemo(cfg)) {
     store.addActivity(id, 'demo mode — nothing was explained');
     return;
@@ -159,7 +151,7 @@ export async function explainLines(
   } finally {
     // whatever happened, read the document back: a partial answer is worth
     // more than a spinner that never stops
-    absorb(store.get(id) ?? task);
+    await absorb(cfg, store.get(id) ?? task);
   }
 }
 
@@ -215,20 +207,21 @@ Change nothing else. Reply with one sentence.${guidanceFor(cfg.guidance, 'review
 }
 
 /** Edit, add or drop a finding — the same rewrite a PR review does. */
-export function editFinding(
+export async function editFinding(
+  cfg: Config,
   task: Task,
   at: { file: string; line: number; startLine?: number },
   comment: string,
   severity?: Severity,
   nth?: number,
-): void {
-  const path = docPath(task);
-  if (!path) return;
-  const before = existsSync(path) ? readFileSync(path, 'utf8') : '';
+): Promise<void> {
+  if (!task.worktree) return;
+  const workspace = workspacesFor(cfg).open(task.worktree);
+  const before = (await workspace.readFile(REVIEW_FILE)) ?? '';
   const after = upsertFinding(before, at, comment, severity, undefined, nth);
   if (after === before) return;
-  writeFileSync(path, after);
-  absorb(task);
+  await workspace.writeFile(REVIEW_FILE, after);
+  await absorb(cfg, task);
 }
 
 /**
@@ -259,9 +252,9 @@ export function handBack(task: Task): { text: string; count: number } | undefine
   return { text, count: actionable.length };
 }
 
-async function headSha(worktree: string): Promise<string | undefined> {
-  const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', 'HEAD']).catch(() => ({ stdout: '' }));
-  return stdout.trim() || undefined;
+async function headSha(cfg: Config, worktree: string): Promise<string | undefined> {
+  const { code, stdout } = await workspacesFor(cfg).open(worktree).exec(['git', 'rev-parse', 'HEAD']);
+  return (code === 0 && stdout.trim()) || undefined;
 }
 
 function selfReviewPrompt(cfg: Config, task: Task): string {

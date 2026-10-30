@@ -1,6 +1,6 @@
 import { providerFor } from './provider.js';
 import { watchSubtasks } from './subtasks.js';
-import { localWorkspaces, type WorkspaceProvider } from './workspace.js';
+import { workspacesFor, type WorkspaceProvider } from './workspace.js';
 import { join } from 'node:path';
 import { agentFor, SessionInbox, type AgentBackend, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
@@ -118,7 +118,9 @@ export class Dispatcher {
   private inboxes = new Map<string, SessionInbox>();
   private viewer?: { id: string; displayName: string };
   /** where worktrees come from and how the daemon reaches into them */
-  private workspaces: WorkspaceProvider = localWorkspaces;
+  private get workspaces(): WorkspaceProvider {
+    return workspacesFor(this.cfg);
+  }
 
   constructor(private cfg: Config) {
     // unref: a pending timer must never keep the process alive after quit

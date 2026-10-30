@@ -1,8 +1,9 @@
 import { execFile, spawn } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, watch as watchFs } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import type { Config } from './types.js';
 import { recoveryNote, worktreeForBranch } from './worktrees.js';
 
 const exec = promisify(execFile);
@@ -31,6 +32,12 @@ export interface Workspace {
   /** atomic: written beside the target, then renamed over it */
   writeFile(rel: string, content: string): Promise<void>;
   exists(rel: string): Promise<boolean>;
+  /**
+   * Call `onChange` when the file changes, including when it first appears.
+   * Returns the way to stop. Bursts are the caller's to smooth over: editors
+   * and agents write in several steps.
+   */
+  watch(rel: string, onChange: () => void): () => void;
 }
 
 export interface ExecOpts {
@@ -82,6 +89,15 @@ export function localWorkspace(path: string): Workspace {
       await rename(tmp, file);
     },
     exists: async (rel) => existsSync(inside(path, rel)),
+    watch: (rel, onChange) => {
+      const file = inside(path, rel);
+      // the directory, not the file: the file may not exist until something writes it
+      const watcher = watchFs(dirname(file), (_event, name) => {
+        if (name === basename(file)) onChange();
+      });
+      watcher.unref();
+      return () => watcher.close();
+    },
   };
 }
 
@@ -135,6 +151,17 @@ function localExec(root: string, argv: string[], opts: ExecOpts): Promise<ExecRe
   });
 }
 
+/** What a review's worktree is cut from: the pull request's head, on a branch of ours. */
+export interface ReviewWorktreeSpec {
+  number: number;
+  /** owner/name, to find the right remote */
+  repository: string;
+  head: string;
+  base: string;
+  repo: { path: string; worktreeRoot: string };
+  scratch: string[];
+}
+
 /** What a task's worktree is cut from. */
 export interface TaskWorktreeSpec {
   /** the identifier the worktree directory is named after */
@@ -158,12 +185,78 @@ export interface TaskWorktreeSpec {
 export interface WorkspaceProvider {
   /** a task's worktree, created or found; `note` says what had to be repaired on the way */
   ensureTask(spec: TaskWorktreeSpec, note?: (line: string) => void): Promise<{ workspace: Workspace; branch: string }>;
+  /** a review's checkout of a pull request, made or brought up to its head; `note` narrates it */
+  ensureReview(spec: ReviewWorktreeSpec, note?: (line: string) => void): Promise<Workspace>;
   /** one that already exists, by the path a task recorded */
   open(path: string): Workspace;
+  /** gone for good, with the branch colinear made for it, if any */
+  remove(spec: { repoPath: string; path: string; branch?: string }): Promise<void>;
+}
+
+/**
+ * The provider a config's daemon uses. One place to answer it, so the module-level
+ * code (self-review, gc) and the long-lived classes (dispatcher, reviewer)
+ * can't disagree about where a worktree lives. Local until a runner exists.
+ */
+export function workspacesFor(_cfg: Config): WorkspaceProvider {
+  return localWorkspaces;
 }
 
 export const localWorkspaces: WorkspaceProvider = {
   open: localWorkspace,
+  async remove({ repoPath, path, branch }) {
+    if (existsSync(path)) await exec('git', ['-C', repoPath, 'worktree', 'remove', '--force', path]);
+    await exec('git', ['-C', repoPath, 'worktree', 'prune']).catch(() => {});
+    if (branch) await exec('git', ['-C', repoPath, 'branch', '-D', branch]).catch(() => {});
+  },
+  async ensureReview(spec, note = () => {}) {
+    const { repo } = spec;
+    const worktree = join(repo.worktreeRoot, `review-${spec.number}`);
+    const branch = `review/${spec.number}`;
+    const remote = await remoteFor(repo.path, spec.repository);
+
+    // The head branch of a fork's PR does not exist on the base repository, so
+    // fetching `<remote>/<branch>` fails and takes the whole review with it —
+    // and no amount of adding the contributor's remote helps, because the
+    // branch is then under *their* name, not the one the PR reports. GitHub
+    // publishes every PR's head on the BASE repo as refs/pull/<n>/head, fork
+    // or not, so that is what colinear fetches: one ref, one code path, no
+    // remotes to keep in step with whoever opened the PR.
+    const prRef = `refs/remotes/${remote}/pr/${spec.number}`;
+    note(`fetching pull/${spec.number}/head from ${remote}…`);
+    const viaPullRef = await exec('git', ['-C', repo.path, 'fetch', remote, `+refs/pull/${spec.number}/head:${prRef}`]).then(
+      () => true,
+      () => false,
+    );
+    let source = prRef;
+    if (!viaPullRef) {
+      // not GitHub, or the ref is not published: fall back to the branch name,
+      // which is right for a same-repo PR and the best available guess otherwise
+      note(`pull/${spec.number}/head unavailable — trying the branch ${spec.head}`);
+      await exec('git', ['-C', repo.path, 'fetch', remote, `${spec.head}:refs/remotes/${remote}/${spec.head}`]).catch(() =>
+        exec('git', ['-C', repo.path, 'fetch', remote]).catch(() => {}),
+      );
+      source = `${remote}/${spec.head}`;
+    }
+    // the base is needed too: it is what the diff is taken against
+    await exec('git', ['-C', repo.path, 'fetch', remote, spec.base]).catch(() => {});
+
+    if (existsSync(worktree)) {
+      note(`reusing worktree ${worktree}`);
+      for (const path of clearBrokenSubmodules(worktree)) note(`cleared a half-initialised submodule at ${path}`);
+      // --force because a review checkout is scratch: it tracks the pull
+      // request and holds nothing of the operator's. Without it, a run that
+      // died partway through updating the tree leaves modifications that
+      // refuse every later checkout, and the review is wedged for good.
+      await exec('git', [...NO_SUBMODULES, '-C', worktree, 'checkout', '--force', '-B', branch, source]);
+    } else {
+      note(`creating worktree ${worktree}…`);
+      mkdirSync(repo.worktreeRoot, { recursive: true });
+      await exec('git', [...NO_SUBMODULES, '-C', repo.path, 'worktree', 'add', '-B', branch, worktree, source]);
+    }
+    await excludeScratch(worktree, spec.scratch);
+    return localWorkspace(worktree);
+  },
   async ensureTask(spec, note = () => {}) {
     const { path: repo, defaultBranch, worktreeRoot } = spec.repo;
     const remote = spec.repo.remote ?? 'origin';
@@ -246,4 +339,62 @@ async function excludeScratch(worktree: string, files: string[]) {
   } catch {
     // non-fatal; the prompt also tells the agent not to commit it
   }
+}
+
+/** The remote whose URL names this repository: forks push elsewhere, so `origin` is only a guess. */
+export async function remoteFor(repoPath: string, repository: string): Promise<string> {
+  const { stdout } = await exec('git', ['-C', repoPath, 'remote', '-v']).catch(() => ({ stdout: '' }));
+  for (const line of stdout.split('\n')) {
+    const [name, url] = line.split(/\s+/);
+    if (name && url?.toLowerCase().includes(repository.toLowerCase())) return name;
+  }
+  return 'origin';
+}
+
+/**
+ * Never let git recurse into submodules on colinear's behalf.
+ *
+ * `submodule.recurse = true` is a perfectly reasonable thing to have in your
+ * own git config, and it is not ours to change — but it turns every checkout
+ * colinear runs into one that also tries to set up submodules, and git's
+ * support for that inside a *linked worktree* is incomplete. What it leaves
+ * behind is described on clearBrokenSubmodules below.
+ *
+ * Passed as `-c` rather than written into the repo's config: this is about
+ * what colinear's own commands do, not about the operator's repository.
+ */
+export const NO_SUBMODULES = ['-c', 'submodule.recurse=false'];
+
+/**
+ * Put half-initialised submodules in a review checkout back to uninitialised.
+ *
+ * With submodule recursion on, a checkout in a linked worktree writes a `.git`
+ * pointer into the submodule directory and a stub gitdir holding nothing but a
+ * `config`, then gives up. Every later git command in that worktree — not just
+ * checkout, but `status` and `diff` too — then dies with `not a git
+ * repository`, and the review can never be refreshed again.
+ *
+ * Uninitialised is what a fresh worktree has anyway: colinear reads the pull
+ * request's own diff and never wants submodule contents. So a pointer whose
+ * gitdir is not a repository is removed rather than repaired.
+ */
+export function clearBrokenSubmodules(worktree: string): string[] {
+  const modules = join(worktree, '.gitmodules');
+  if (!existsSync(modules)) return [];
+  const cleared: string[] = [];
+  const text = readFileSync(modules, 'utf8');
+  for (const m of text.matchAll(/^\s*path\s*=\s*(.+?)\s*$/gm)) {
+    const path = m[1];
+    const pointer = join(worktree, path, '.git');
+    if (!existsSync(pointer) || statSync(pointer).isDirectory()) continue;
+    const target = readFileSync(pointer, 'utf8').replace(/^gitdir:\s*/, '').trim();
+    if (!target) continue;
+    const gitdir = target.startsWith('/') ? target : join(worktree, path, target);
+    // a real submodule checkout has a HEAD; the stub has only a config
+    if (existsSync(join(gitdir, 'HEAD'))) continue;
+    rmSync(pointer, { force: true });
+    rmSync(gitdir, { recursive: true, force: true });
+    cleared.push(path);
+  }
+  return cleared;
 }
