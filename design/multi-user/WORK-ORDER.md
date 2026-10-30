@@ -29,7 +29,6 @@ flowchart LR
   M0 -. 0.1, 0.2 .-> M2
   M0 -. 0.1, 0.2 .-> M5
   M0 -. 0.3 .-> M4
-  M0 -. 0.4 .-> M4
 ```
 
 M0 and M1 start in parallel. M0 is mostly questions only a person can answer. M1 is code that
@@ -45,7 +44,7 @@ Answers that change the design. Nothing here merges as product code.
 | ☐ | **0.1 Claude credential behaviour.** In a scratch `CLAUDE_CONFIG_DIR` with its own login, find out: does the CLI run with an access token and no refresh token? Does it re-read a replaced credentials file mid-session? Is there a command that forces a renewal without a session? Script: [spikes/claude-credentials.md](spikes/claude-credentials.md) | Decides how token sync works for agents ([credentials.md](credentials.md#claude-and-codex)) | **you**: a fresh `claude` login |
 | ☐ | **0.2 Codex, the same three questions** | Same, for Codex | **you**: a fresh `codex` login |
 | ☐ | **0.3 Tailscale identity headers.** Confirm `tailscale serve` in a sidecar passes `Tailscale-User-Login` to a loopback backend, and doesn't for tagged devices | The gateway's whole identity story ([gateway.md](gateway.md#identity)) | a tailnet |
-| ☐ | **0.4 Subscription terms.** Confirm the Claude and Codex terms allow each user's own login in a cluster daemon | Before anyone signs in to a shared install | **you** |
+| ☑ | **0.4 Subscription terms.** Confirm the Claude and Codex terms allow each user's own login in a cluster daemon | Confirmed 2026-10-30: personal subscriptions are fine | — |
 
 ## M1: seams
 
@@ -91,7 +90,7 @@ Refactors with no behaviour change, then the thin client. These would be good fo
 | | step | notes |
 |---|---|---|
 | ☐ | **4.1 The gateway**: development identity, `ColiUser` on first sign-in, the `/v1/connect` relay, the `viewer` frame, the `Origin` check. The daemon's WebSocket listener, which trusts only the gateway's token | [gateway.md](gateway.md) |
-| ☐ | **4.2 Tailscale in the chart** | Waits on 0.3, and on 0.4 before a real install |
+| ☐ | **4.2 Tailscale in the chart** | Waits on 0.3 |
 | ☐ | **4.3 `remote.gateway` contexts in the TUI**, and reconnecting with a fresh snapshot when a relay drops | `bin/e2e` connects a real TUI through the gateway |
 
 ## M5: credentials

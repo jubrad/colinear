@@ -125,6 +125,7 @@ changes.
 | **Every user's own Linear, GitHub and Claude/Codex logins** | Nothing acts as a shared user, and actions are attributed to whoever asked. |
 | **Resident credentials**: refresh tokens live in the user's daemon, never in Kubernetes Secrets | Agents keep working while your laptop is closed. Secrets are the most widely readable thing on a cluster. |
 | **Session pods get short-lived access tokens, pushed by the daemon** | A compromised agent, or a curious admin reading a pod, gets hours of access rather than a login. |
+| **Personal subscriptions are fine** for this deployment (confirmed 2026-10-30): each user's own Claude or Codex login, used unattended by their daemon on shared infrastructure | Settles spike 0.4. The design keeps each user on their own login and never lets one user drive another's |
 | **Claude credentials are shipped, not proxied** | A subscription-backed CLI routes through a proxy only with `ANTHROPIC_API_KEY` set, which moves billing off the subscription. |
 | **The daemon uses its own login**, separate from your laptop's | Two processes renewing one login invalidate each other's refresh token. |
 | **Sharing is read-only and forkable, not collaborative** | Talking to someone else's agent would use their credentials, which the agent can read, and their subscription. A fork runs on your own. See [sharing.md](sharing.md#why-sharing-isnt-collaborative). |
@@ -150,8 +151,6 @@ Each document ends with its own. The ones that cut across everything:
 
 1. **Does the Claude CLI pick up a refreshed credentials file mid-session?** This decides whether a
    session can outlive one access token without a restart. It is the first spike in the work order.
-2. **Do the Claude and Codex subscription terms allow this deployment?** Each user on their own
-   login in their own daemon is likely fine; confirm before anyone signs in.
-3. **Is a daemon per user affordable?** v1 keeps every user's daemon running. That's one small
+2. **Is a daemon per user affordable?** v1 keeps every user's daemon running. That's one small
    process each, which is fine for tens of users. If it isn't for hundreds, daemons need to sleep,
    and the gateway has to wake them ([operator.md](operator.md#open-questions)).
