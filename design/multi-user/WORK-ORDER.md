@@ -56,17 +56,18 @@ Refactors with no behaviour change, then the thin client. These would be good fo
 | ◐ | **1.1 Tools as data.** colinear's MCP tools become `ToolSpec`s in `agents/tools.ts`; `toWire`/`fromWire` carry them across a process boundary without handlers | [#143](https://github.com/jubrad/colinear/pull/143). [runner.md](runner.md#what-cant-cross-as-data) |
 | ◐ | **1.2 `Workspace` and `localWorkspaces`**: the interface, worktree creation moved out of the dispatcher, checks through `Workspace.exec` | [#144](https://github.com/jubrad/colinear/pull/144). [runner.md](runner.md#workspaces) |
 | ◐ | **1.3 The registry above the adapters, and an async `sessionExists`.** One wrapper in `agent.ts` registers every session; the adapters stop calling `sessions.ts` | [#145](https://github.com/jubrad/colinear/pull/145). [runner.md](runner.md#the-registry-moves-above-the-adapters) |
-| ☐ | **1.4 The rest of the dispatcher onto `Workspace`**: the subtask file, the worktree-exists check before a resume | |
-| ☐ | **1.5 Reviews, plans and scratch sessions onto `Workspace`**: `reviewer.ts`, `selfreview.ts`, `projectplan.ts`, `gc.ts`; the provider gains `ensureReview`, `ensurePlan` and `ensureScratch` | [runner.md](runner.md#plans-and-sessions-without-a-worktree). After this, the only direct worktree access left is backup's (2.3) |
-| ☐ | **1.6 Repo-level work by name**: `gh` calls take `--repo owner/name` instead of a main-checkout cwd; no `git remote -v` | [runner.md](runner.md#repo-level-work-in-the-daemon) |
-| ☐ | **1.7 A redacted `hello`, and the `provider` commands.** The daemon makes tracker calls for the views, files split plans, and runs `coli issue add`; the TUI never receives a key | [gateway.md](gateway.md#the-thin-client). Bumps `PROTOCOL_VERSION`. Updates [docs/remote.md](../../docs/remote.md#known-gaps), whose `n`/`:plan` gap is already closed |
-| ☐ | **1.8 The rest of the thin client**: `gh pr ready` as an owner-only daemon command; review-doc and editor handoffs as file transfers | |
+| ◐ | **1.4 The rest of the dispatcher onto `Workspace`**: the subtask file, the worktree-exists check before a resume | [#147](https://github.com/jubrad/colinear/pull/147) |
+| ◐ | **1.5 Reviews, plans and gc onto `Workspace`**: `reviewer.ts`, `selfreview.ts`, plan worktrees, gc removal; the provider gains `ensureReview`, `ensurePlan`, `remove` and `Workspace.watch` | Reviews [#148](https://github.com/jubrad/colinear/pull/148), plans and gc [#149](https://github.com/jubrad/colinear/pull/149). Fixed on the way: the review doc's git exclude was written where git ignores it |
+| ☐ | **1.5b The plan draft into the plan's workspace**, and `ensureScratch` for sessions with no worktree | The draft lives in the daemon's state dir today and the agent is told that absolute path, which a runner can't reach ([runner.md](runner.md#plans-and-sessions-without-a-worktree)) |
+| ◐ | **1.6 Repo-level work by name**: PR polling takes `--repo owner/name` (`repoSlug`) instead of a main-checkout cwd; a new optional `github` repo key | [#150](https://github.com/jubrad/colinear/pull/150). Review checkouts still use `git remote -v` through the local provider, which is where it belongs |
+| ◐ | **1.7 A redacted `hello`, and the `provider` commands.** Views keep calling `providerFor(cfg)`; on the client it's a proxy whose calls the daemon makes, from an allowlist. The TUI never receives a key | [#151](https://github.com/jubrad/colinear/pull/151). Protocol 21. `thinclient.check.ts` runs a real demo daemon. `coli issue add` (a CLI command, not the TUI) still calls the tracker itself |
+| ◐ | **1.8 The rest of the thin client**: `gh pr ready` as a daemon command; review-doc and plan-draft editing as whole-document transfers to a local temp copy | [#152](https://github.com/jubrad/colinear/pull/152). Protocol 22 |
 
 ## M2: the runner, in single-user mode
 
 | | step | notes |
 |---|---|---|
-| ☐ | **2.1 Protocol types, `coli runner` over stdio, and `RunnerBackend`.** `"runner": "process"` runs sessions in a child. A dropped runner leaves the task `interrupted` | `runner.check.ts`. Needs 1.1 and 1.3 |
+| ◐ | **2.1 Protocol types, `coli runner` over stdio, and `RunnerBackend`.** `"runner": "process"` runs each session in a child. A runner that dies mid-session fails it (`error`, resumable with `r`) | [#153](https://github.com/jubrad/colinear/pull/153). `runner.check.ts` |
 | ☐ | **2.2 Workspace operations and `prepare` through the runner** | `workspace.check.ts` runs its `contract()` against the runner too, with identical results |
 | ☐ | **2.3 Transcripts streamed to the daemon**; `transcriptDir`, `sessionExists` and backup answered from the daemon's copies | [runner.md](runner.md#the-two-synchronous-questions) |
 | ☐ | **2.4 The `credentials` frame and token sync**, with a test credential source; real logins arrive in M5 | Waits on 0.1 and 0.2 for the file layout |
@@ -80,6 +81,7 @@ Refactors with no behaviour change, then the thin client. These would be good fo
 | ☐ | **3.1 The Rust workspace**: `deploy/` with the four CRD types, `bin/gen-crds --check`, a chart skeleton, CI for `cargo test`, a Dependabot entry for Cargo | [operator.md](operator.md#layout) |
 | ☐ | **3.2 `ColiUser` reconcile**: namespace, service accounts, the RBAC rows for daemon, workspace, gateway and operator, the daemon StatefulSet, NetworkPolicy, quota, the OAuth Secret copy | Pure "desired objects" functions, unit tested for the security properties |
 | ☐ | **3.3 The org config layer**: `ColiOrg` → `ConfigMap` → the daemon's `mergeLayers`; `:config` shows sources, locks and ignored keys | [config.md](config.md). `config.check.ts` |
+| ☐ | **3.0 `:gc` from the provider**: candidates listed by the provider rather than by reading worktree roots off disk, so a cluster can answer with its `ColiWorkspace`s | |
 | ☐ | **3.4 `ColiWorkspace` reconcile**: volume, pod template, sleep and wake, finalizer; `task`, `review`, `plan` and `scratch` kinds | |
 | ☐ | **3.5 `RunnerWorkspaceProvider` in cluster mode**: create or wake a `ColiWorkspace`, accept its runner's connection, check its token with a `TokenReview` | [runner.md](runner.md#authentication-in-a-cluster) |
 | ☐ | **3.6 Images, `bin/kind-up`, and the first `bin/e2e`**: one user, a fake runtime, a workspace that wakes, runs and sleeps | |

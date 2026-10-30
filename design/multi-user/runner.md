@@ -224,8 +224,8 @@ doesn't already have: the same pod, the same credentials, the same tools.
 
 ### Disconnects
 
-v1: a dropped connection is treated like a daemon restart is today. The session is aborted, and the
-task goes to `interrupted`, where `r` resumes it by session id.
+v1: a dropped connection fails the session with "the runner went away". The task goes to `error`,
+where `r` resumes it by session id, as after any failure.
 
 Later: the runner keeps the session going and buffers events by sequence number, and a reconnecting
 daemon replays from the last one it saw. That makes daemon restarts and upgrades free for running
