@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { runChecks } from './checks.js';
 import { parseSubtasks, watchSubtasks } from './subtasks.js';
 import type { Subtask } from './types.js';
-import { localWorkspace, localWorkspaces, type Workspace } from './workspace.js';
+import { localWorkspace, localWorkspaces } from './workspace.js';
+import { workspaceContract } from './workspace.contract.js';
 
 /**
  * The daemon's way into a worktree: commands, files, and making one.
@@ -27,55 +28,6 @@ const git = (cwd: string, ...args: string[]) => run('git', ['-C', cwd, ...args])
 // realpath: git reports resolved paths, and macOS makes /var a symlink
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'coli-workspace-check-')));
 
-/** The behaviour every Workspace must have, whatever is behind it. */
-async function contract(label: string, ws: Workspace) {
-  const ok = await ws.exec(['sh', '-c', 'echo out; echo err >&2']);
-  check(`${label}: a command that works says 0`, ok.code === 0, JSON.stringify(ok));
-  check(`${label}: and keeps each stream`, ok.stdout === 'out\n' && ok.stderr === 'err\n');
-  check(`${label}: and both, interleaved`, ok.output.includes('out') && ok.output.includes('err'));
-  const bad = await ws.exec(['sh', '-c', 'exit 3']);
-  check(`${label}: a command that fails says its code, without throwing`, bad.code === 3);
-  const missing = await ws.exec(['no-such-command-coli']);
-  check(`${label}: a command that cannot start says -1`, missing.code === -1 && missing.output.length > 0, JSON.stringify(missing));
-  const input = await ws.exec(['cat'], { input: 'piped in' });
-  check(`${label}: input reaches the command`, input.stdout === 'piped in');
-  const env = await ws.exec(['sh', '-c', 'echo $COLI_CHECK'], { env: { COLI_CHECK: 'set' } });
-  check(`${label}: env reaches the command`, env.stdout.trim() === 'set');
-  const big = await ws.exec(['sh', '-c', 'yes x | head -c 5000'], { maxOutput: 1000 });
-  check(`${label}: output is capped to its tail, and says so`, big.stdout.length === 1000 && big.truncated);
-  const slow = await ws.exec(['sleep', '5'], { timeoutMs: 200 });
-  check(`${label}: a timeout stops the command`, slow.code !== 0);
-  const abort = new AbortController();
-  const stopping = ws.exec(['sleep', '5'], { signal: abort.signal });
-  abort.abort();
-  check(`${label}: an abort stops the command`, (await stopping).code !== 0);
-
-  await ws.writeFile('notes/a.md', 'first');
-  check(`${label}: a written file reads back`, (await ws.readFile('notes/a.md')) === 'first');
-  await ws.writeFile('notes/a.md', 'second');
-  check(`${label}: and is replaced whole`, (await ws.readFile('notes/a.md')) === 'second');
-  check(`${label}: exists says so`, (await ws.exists('notes/a.md')) && !(await ws.exists('notes/b.md')));
-  check(`${label}: a missing file reads as undefined`, (await ws.readFile('notes/b.md')) === undefined);
-  const sub = await ws.exec(['pwd'], { cwd: 'notes' });
-  check(`${label}: cwd is relative to the worktree`, sub.stdout.trim() === join(ws.path, 'notes'), sub.stdout);
-
-  // nothing outside the worktree, by any route
-  const escapes: Array<[string, () => Promise<unknown>]> = [
-    ['read ../', () => ws.readFile('../outside.txt')],
-    ['read an absolute path', () => ws.readFile('/etc/hosts')],
-    ['write ../', () => ws.writeFile('../outside.txt', 'x')],
-    ['exists ../', () => ws.exists('../outside.txt')],
-  ];
-  for (const [what, attempt] of escapes) {
-    const refused = await attempt().then(
-      () => false,
-      (e: unknown) => String(e).includes('outside the worktree'),
-    );
-    check(`${label}: refuses to ${what}`, refused);
-  }
-  const climbing = await ws.exec(['pwd'], { cwd: '..' });
-  check(`${label}: refuses a cwd outside it`, climbing.code === -1 && climbing.output.includes('outside the worktree'), JSON.stringify(climbing));
-}
 
 try {
   // a remote to fetch from, and the main checkout colinear cuts worktrees from
@@ -122,7 +74,7 @@ try {
   check('a live worktree exists', await localWorkspaces.open(made.workspace.path).exists('.'));
   check('a vanished one does not', !(await localWorkspaces.open(join(root, 'trees', 'GONE-1')).exists('.')));
 
-  await contract('local', made.workspace);
+  await workspaceContract('local', made.workspace, check);
 
   // checks run through the workspace, in it
   writeFileSync(join(made.workspace.path, 'fail.sh'), 'echo failing on purpose; exit 1\n');
@@ -217,7 +169,7 @@ try {
   check('removing nothing is not an error', true);
 
   mkdirSync(join(root, 'empty'));
-  await contract('a bare directory', localWorkspace(join(root, 'empty')));
+  await workspaceContract('a bare directory', localWorkspace(join(root, 'empty')), check);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

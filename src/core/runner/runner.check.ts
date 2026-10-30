@@ -9,6 +9,9 @@
  *
  * Run with `npx tsx src/core/runner/runner.check.ts`. `bin/check` runs it.
  */
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { SessionInbox, type AgentBackend, type RunSessionOpts, type SessionResult } from '../agents/shared.js';
 import { CLAUDE_CAPABILITIES } from '../agents/claude.js';
@@ -18,6 +21,8 @@ import { handshake, runnerBackend, spawnRunner, type RunnerLink } from './backen
 import type { FromRunner, ToRunner } from './frames.js';
 import { serveRunner } from './host.js';
 import { streamLink } from './link.js';
+import { runnerWorkspace } from './workspace.js';
+import { workspaceContract } from '../workspace.contract.js';
 
 const failures: string[] = [];
 const check = (name: string, ok: boolean, detail = ''): void => {
@@ -78,7 +83,7 @@ const scripted: AgentBackend = {
 };
 
 /** A runner in this process, on the other end of two pipes, speaking real frames. */
-async function pipedRunner(): Promise<{ link: RunnerLink; kill: () => void }> {
+async function pipedRunner(workspace?: string): Promise<{ link: RunnerLink; kill: () => void }> {
   const toRunner = new PassThrough();
   const fromRunner = new PassThrough();
   const runnerSide = streamLink<ToRunner, FromRunner>(toRunner, fromRunner);
@@ -88,7 +93,7 @@ async function pipedRunner(): Promise<{ link: RunnerLink; kill: () => void }> {
   serveRunner(runnerSide, () => scripted, { version: 'check', runtimes: ['scripted'] });
   const daemonSide = streamLink<FromRunner, ToRunner>(fromRunner, toRunner);
   return {
-    link: await handshake(daemonSide, cfg),
+    link: await handshake(daemonSide, cfg, { workspace }),
     kill: () => {
       fromRunner.end();
       toRunner.end();
@@ -174,6 +179,41 @@ const run = async (): Promise<void> => {
     new Promise<string>((r) => setTimeout(() => r('hung'), 3_000)),
   ]);
   check('a runner that goes away fails the session rather than hanging it', died.includes('went away'), died);
+
+  // ── the workspace, served by a runner ─────────────────────────────────────
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'coli-runner-ws-')));
+  try {
+    const served = await pipedRunner(root);
+    const remote = runnerWorkspace(served.link, root);
+    // the same contract a worktree on this disk meets, every line of it
+    await workspaceContract('through a runner', remote, check);
+
+    const none = await pipedRunner();
+    const refused = await runnerWorkspace(none.link, root).readFile('x').then(
+      () => 'served',
+      (e: unknown) => String(e),
+    );
+    check('a runner with no workspace serves none', refused.includes('serves no workspace'), refused);
+    none.kill();
+
+    const slow = remote.exec(['sleep', '5']);
+    const reading = remote.readFile('notes/a.md');
+    served.kill();
+    const lost = await Promise.race([slow, new Promise<null>((r) => setTimeout(() => r(null), 3_000))]);
+    check('a command in flight when the runner goes is a failed command, not a throw or a hang', lost !== null && lost.code === -1, JSON.stringify(lost));
+    const unread = await reading.then(
+      () => 'read',
+      (e: unknown) => String(e),
+    );
+    check('a read in flight is rejected, saying why', unread === 'read' || unread.includes('went away'), unread);
+    const after = await remote.exists('.').then(
+      () => 'answered',
+      (e: unknown) => String(e),
+    );
+    check('and so is one asked afterwards', after.includes('went away'), after);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 
   // ── a real child ───────────────────────────────────────────────────────────
   const child = await spawnRunner(cfg).then(
