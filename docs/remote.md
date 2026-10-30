@@ -83,6 +83,12 @@ Start the daemon over there once, the normal way:
 ssh vm 'cd ~ && coli daemon'    # or run it under systemd/tmux so it survives logout
 ```
 
+## What stays on the VM
+
+**The tracker key.** The daemon sends its config to the TUI with the key blanked out, and every
+tracker call a view makes — listing issues, filing a split, posting a comment — goes over the socket
+for the daemon to make. `:config` shows the key as held by the daemon.
+
 ## What changes in the UI
 
 Almost nothing, deliberately — but five things had to stop assuming the daemon's disk is yours:
@@ -108,12 +114,8 @@ flag rather than something inferred.
 
 ## Known gaps
 
-- **`:plan` and `n` still run in the TUI process**, so they use your laptop's network and expect the
-  repo to exist locally. Remote makes that pre-existing debt visible; moving them behind the daemon
-  is the fix.
-- **The daemon sends its config, including the API key, in the handshake**, because views make
-  provider calls client-side. Over SSH that's encrypted, but the cleaner shape is proxying provider
-  calls through the daemon so the key never leaves the VM.
+- **The plan chat's `c` and `S` attach run in your terminal**, with the remote handoffs in the table
+  above. The `n` and `:plan` drafts themselves run in the daemon.
 - Nothing supervises the tunnel. If ssh drops, the client stops receiving deltas — restart both.
 - With `remote` set, colinear refuses to start a local daemon for that context, and
   `coli daemon status|stop` won't signal a pid that belongs to another machine's namespace — it

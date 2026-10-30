@@ -405,3 +405,12 @@ export function experimentOn(cfg: Config, name: ExperimentName): boolean {
 function expandHome(p: string): string {
   return p.startsWith('~') ? join(homedir(), p.slice(1)) : p;
 }
+
+/**
+ * The config as a client may see it: everything but credentials. The daemon
+ * makes every tracker call, so nothing a view does needs the key, and a
+ * client on another machine — or someone else's — must never be handed it.
+ */
+export function redactConfig(cfg: Config): Config {
+  return { ...cfg, linearApiKey: '' };
+}

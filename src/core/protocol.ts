@@ -4,6 +4,7 @@ import type { Change, Delta, Snapshot } from './delta.js';
 import { STATE_DIR } from './log.js';
 import type { AgentSession } from './sessions.js';
 import type { ProjectBrief } from './newproject.js';
+import type { ProviderCall, ProviderInfo } from './provider.js';
 import type { Config, Issue, RepoConfig, TaskEdits, UiState } from './types.js';
 
 /**
@@ -21,7 +22,7 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 20;
+export const PROTOCOL_VERSION = 21;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -98,7 +99,9 @@ export type Command =
   | { name: 'channelHistory'; channel: string }
   | { name: 'gcRemove'; paths: string[] }
   /** store writes the UI makes directly (escalation flags, task edits, …) */
-  | { name: 'change'; change: Change };
+  | { name: 'change'; change: Change }
+  /** a tracker call, made by the daemon with the credentials only it holds; answered by providerResult */
+  | { name: 'provider'; rid: number; method: ProviderCall; args: unknown[] };
 
 export type ClientMsg = { t: 'sync'; version: number } | { t: 'cmd'; cmd: Command };
 
@@ -106,7 +109,9 @@ export type ServerMsg =
   | { t: 'gc'; items: Array<{ path: string; kilobytes: number; label: string; reason: string; ageDays: number }> }
   /** one per worktree as it goes, so the UI can show progress rather than hang */
   | { t: 'gcProgress'; done: number; total: number; path: string; ok: boolean; finished: boolean }
-  | { t: 'hello'; protocol: number; pid: number; cfg: Config; snapshot: Snapshot; ui: UiState }
+  /** cfg is redacted (redactConfig): a client never receives a credential */
+  | { t: 'hello'; protocol: number; pid: number; cfg: Config; provider: ProviderInfo; snapshot: Snapshot; ui: UiState }
+  | { t: 'providerResult'; rid: number; ok: boolean; value?: unknown; error?: string }
   | { t: 'delta'; delta: Delta }
   | { t: 'snapshot'; snapshot: Snapshot }
   | { t: 'toast'; text: string; kind: 'info' | 'ok' | 'err' }

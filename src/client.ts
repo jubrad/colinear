@@ -1,3 +1,4 @@
+import { remoteProvider, useProvider } from './core/provider.js';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
@@ -279,6 +280,9 @@ export async function connectToDaemon(): Promise<Connection> {
   const diffListeners = new Set<(id: string, diff: string) => void>();
   const taskDiffListeners = new Set<(id: string, diff: string) => void>();
   const creatingListeners = new Set<(agentId: string) => void>();
+  // tracker calls in flight, answered by providerResult
+  const pendingCalls = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+  let nextRid = 0;
 
   return await new Promise<Connection>((resolve, reject) => {
     let ready = false;
@@ -294,6 +298,20 @@ export async function connectToDaemon(): Promise<Connection> {
           return;
         }
         store.hydrate(msg.snapshot);
+        // the daemon holds the tracker credentials and makes every call; the
+        // views keep using providerFor(cfg) and get this instead
+        useProvider(
+          msg.cfg,
+          remoteProvider(
+            msg.provider,
+            (method, args) =>
+              new Promise((resolve, reject) => {
+                const rid = ++nextRid;
+                pendingCalls.set(rid, { resolve, reject });
+                command({ name: 'provider', rid, method, args });
+              }),
+          ),
+        );
         store.attach(
           (change) => command({ name: 'change', change }),
           (id, answers) => command({ name: 'answer', id, answers }),
@@ -414,6 +432,10 @@ export async function connectToDaemon(): Promise<Connection> {
             gcRemove: (paths) => command({ name: 'gcRemove', paths }),
           },
         });
+      } else if (msg.t === 'providerResult') {
+        const call = pendingCalls.get(msg.rid);
+        pendingCalls.delete(msg.rid);
+        if (call) msg.ok ? call.resolve(msg.value) : call.reject(new Error(msg.error ?? 'tracker call failed'));
       } else if (msg.t === 'taskDiff') {
         for (const fn of taskDiffListeners) fn(msg.id, msg.diff);
       } else if (msg.t === 'reviewDiff') {
@@ -454,6 +476,9 @@ export async function connectToDaemon(): Promise<Connection> {
     });
     socket?.on('close', () => {
       closeTunnel?.();
+      // nothing will answer these now; a view waiting on one must hear so
+      for (const call of pendingCalls.values()) call.reject(new Error('lost the connection to the daemon'));
+      pendingCalls.clear();
       if (!ready) reject(new Error('daemon closed the connection during handshake'));
     });
     socket?.on('error', (err) => {
