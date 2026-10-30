@@ -1,9 +1,7 @@
-import { execFile } from 'node:child_process';
 import { providerFor } from './provider.js';
-import { recoveryNote, worktreeForBranch } from './worktrees.js';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { promisify } from 'node:util';
+import { localWorkspaces, type WorkspaceProvider } from './workspace.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { agentFor, SessionInbox, type AgentBackend, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
 import { demoChecks, demoPullRequest, demoSession, demoWorktree, isDemo } from './demo.js';
@@ -21,8 +19,6 @@ import { guidanceFor } from './guidance.js';
 import { autoSplitDecision, childIssues, fileSplit, trackingFields, type SplitChild } from './split.js';
 import { store } from './store.js';
 import { questionSummary, type Config, type Issue, type PrInfo, type RepoConfig, type Subtask, type Task, type TaskEdits, type TaskStatus, type TriageVerdict, type Verification } from './types.js';
-
-const exec = promisify(execFile);
 
 const SUBTASKS_FILE = '.colinear-subtasks.md';
 
@@ -121,6 +117,8 @@ export class Dispatcher {
   /** mailboxes of the sessions running right now, keyed by task id */
   private inboxes = new Map<string, SessionInbox>();
   private viewer?: { id: string; displayName: string };
+  /** where worktrees come from and how the daemon reaches into them */
+  private workspaces: WorkspaceProvider = localWorkspaces;
 
   constructor(private cfg: Config) {
     // unref: a pending timer must never keep the process alive after quit
@@ -1183,7 +1181,7 @@ export class Dispatcher {
       if (repoChecks.length) {
         store.setStatus(id, 'checks');
         store.addActivity(id, 'running checks');
-        const results = await this.checks(repoChecks, worktree, controller.signal);
+        const results = await this.checks(repoChecks, this.workspaces.open(worktree), controller.signal);
         store.update(id, { checks: results });
       }
 
@@ -1345,89 +1343,17 @@ export class Dispatcher {
     /** somewhere to say what had to be repaired on the way */
     note: (line: string) => void = () => {},
   ): Promise<{ worktree: string; branch: string }> {
-    const { path: repo, defaultBranch, worktreeRoot } = repoCfg;
-    const remote = repoCfg.remote ?? 'origin';
-    const branch = branchOverride ?? providerFor(this.cfg).branchFor(issue);
-    // git allows one checkout per branch: if some worktree (old path scheme,
-    // manual checkout, attach shell) already has it, reuse that worktree.
-    // A checkout that has been deleted out from under us is *still listed* —
-    // and was still returned here, which is how a resume ended up starting an
-    // agent in a directory that no longer existed. The lookup clears those.
-    const found = await worktreeForBranch(repo, branch);
-    for (const gone of found.cleared) {
-      if (gone !== found.lost?.path) note(`cleared a stale worktree registration for ${gone}`);
-    }
-    if (found.lost) note(recoveryNote(branch, found.lost.head));
-    const existing = found.path;
-    if (existing && existing !== repo) {
-      await this.excludeSubtasksFile(existing);
-      return { worktree: existing, branch };
-    }
-    const worktree = join(worktreeRoot, issue.identifier);
-    if (existsSync(worktree)) {
-      if (branchOverride) {
-        // adopting a PR into a pre-existing worktree: make sure it's on the PR's branch
-        const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', '--abbrev-ref', 'HEAD']).catch(() => ({ stdout: '' }));
-        if (stdout.trim() !== branchOverride) {
-          const prRemote = repoCfg.pushRemote ?? remote;
-          await exec('git', ['-C', repo, 'fetch', prRemote, branchOverride]).catch(() => {});
-          await exec('git', ['-C', worktree, 'checkout', branchOverride]).catch(async () => {
-            await exec('git', ['-C', worktree, 'checkout', '-b', branchOverride, `${prRemote}/${branchOverride}`]).catch(() => {});
-          });
-        }
-      }
-      return { worktree, branch };
-    }
-
-    mkdirSync(worktreeRoot, { recursive: true });
-    if (branchOverride) {
-      // the PR's branch lives on the push remote in a fork workflow
-      const prRemote = repoCfg.pushRemote ?? remote;
-      await exec('git', ['-C', repo, 'fetch', prRemote, branchOverride]).catch(() => {});
-      try {
-        await exec('git', ['-C', repo, 'worktree', 'add', worktree, branchOverride]);
-      } catch {
-        await exec('git', ['-C', repo, 'worktree', 'add', worktree, '-b', branchOverride, `${prRemote}/${branchOverride}`]);
-      }
-      await this.excludeSubtasksFile(worktree);
-      return { worktree, branch };
-    }
-    await exec('git', ['-C', repo, 'fetch', remote, defaultBranch]);
-    try {
-      await exec('git', ['-C', repo, 'worktree', 'add', worktree, '-b', branch, `${remote}/${defaultBranch}`]);
-    } catch {
-      // branch already exists — attach the worktree to it instead
-      await exec('git', ['-C', repo, 'worktree', 'add', worktree, branch]);
-    }
-    await this.excludeSubtasksFile(worktree);
-    return { worktree, branch };
-  }
-
-  /** Keep the subtask scratch file out of git via the per-worktree exclude file. */
-  /**
-   * Keep colinear's own scratch files out of git, per worktree. Both of them:
-   * the subtask checklist the agent writes, and the review document the
-   * operator's read of the branch lands in — a review accidentally committed
-   * to a PR is worse than no review at all.
-   */
-  private async excludeSubtasksFile(worktree: string) {
-    try {
-      // the COMMON git dir, not this worktree's. `info/exclude` is only ever
-      // read from the shared one — writing it under
-      // `.git/worktrees/<name>/info/` looks right, is what
-      // `--absolute-git-dir` hands you in a linked worktree, and is silently
-      // ignored, which left both scratch files showing up in every agent's
-      // `git status` (and one `git add -A` away from being committed).
-      const { stdout } = await exec('git', ['-C', worktree, 'rev-parse', '--path-format=absolute', '--git-common-dir']);
-      const excludePath = join(stdout.trim(), 'info', 'exclude');
-      mkdirSync(dirname(excludePath), { recursive: true });
-      const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : '';
-      for (const file of [SUBTASKS_FILE, REVIEW_FILE]) {
-        if (!existing.includes(file)) appendFileSync(excludePath, `${file}\n`);
-      }
-    } catch {
-      // non-fatal; the prompt also tells the agent not to commit it
-    }
+    const { workspace, branch } = await this.workspaces.ensureTask(
+      {
+        name: issue.identifier,
+        branch: branchOverride ?? providerFor(this.cfg).branchFor(issue),
+        adopt: Boolean(branchOverride),
+        repo: repoCfg,
+        scratch: [SUBTASKS_FILE, REVIEW_FILE],
+      },
+      note,
+    );
+    return { worktree: workspace.path, branch };
   }
 }
 
