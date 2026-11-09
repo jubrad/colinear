@@ -3,6 +3,7 @@ import type { ChannelMessage } from './channel.js';
 import type { Change, Delta, Snapshot } from './delta.js';
 import { STATE_DIR } from './log.js';
 import type { AgentSession } from './sessions.js';
+import type { CodeSearchResult, SearchMode } from './symbols.js';
 import type { ProjectBrief } from './newproject.js';
 import type { Config, Issue, RepoConfig, TaskEdits, UiState } from './types.js';
 
@@ -21,7 +22,7 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 20;
+export const PROTOCOL_VERSION = 21;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -61,7 +62,8 @@ export type Command =
   /** opts: `c` over the marked lines — a model and a request, for this one ask */
   | { name: 'explainLines'; id: string; file: string; startLine: number; endLine: number; opts?: { model?: string; instructions?: string } }
   /** the diff of a task's own branch, for reading it before promoting the PR */
-  | { name: 'taskDiff'; id: string }
+  /** expand: files widened to the whole file, or opened though unchanged */
+  | { name: 'taskDiff'; id: string; expand?: string[] }
   /** review a task's own work with a fresh session */
   | { name: 'reviewTask'; id: string }
   /** edit, add or drop a finding on a task's self-review */
@@ -70,7 +72,9 @@ export type Command =
   /** hand the self-review back to the agent that wrote the code */
   | { name: 'sendFindings'; id: string }
   /** the PR's diff, for the annotated review view */
-  | { name: 'reviewDiff'; id: string }
+  | { name: 'reviewDiff'; id: string; expand?: string[] }
+  /** search a review's or a task's checkout — `/` text, `*` a symbol's call sites */
+  | { name: 'codeSearch'; id: string; reqId: number; mode: SearchMode; query: string }
   /** edit, add or drop the comment anchored at a line (rewrites the document) */
   /** by: who wrote it, which decides whether it is signed (absent keeps it as it was) */
   | { name: 'editFinding'; id: string; file: string; line: number; comment: string; severity?: string; startLine?: number; by?: 'you' | 'agent'; nth?: number }
@@ -114,6 +118,7 @@ export type ServerMsg =
   | { t: 'agents'; list: AgentSession[] }
   | { t: 'reviewDiff'; id: string; diff: string }
   | { t: 'taskDiff'; id: string; diff: string }
+  | { t: 'codeSearch'; id: string; reqId: number; result: CodeSearchResult }
   /** a daemon-side draft started; watch it in :agents by this id */
   | { t: 'creating'; agentId: string }
   /**

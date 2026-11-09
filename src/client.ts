@@ -19,6 +19,7 @@ import { store } from './core/store.js';
 import { openTunnel } from './core/tunnel.js';
 import type { AgentSession } from './core/sessions.js';
 import type { ProjectBrief } from './core/newproject.js';
+import type { CodeSearchResult, SearchMode } from './core/symbols.js';
 import type { Config, Issue, RepoConfig, TaskEdits, UiState } from './core/types.js';
 
 /**
@@ -66,8 +67,11 @@ export interface DispatcherApi {
   postPlanUpdate(projectId: string): void;
   startPlanChat(projectId: string): void;
   listAgents(): void;
-  reviewDiff(id: string): void;
-  taskDiff(id: string): void;
+  /** expand: files widened to the whole file, or opened though the change does not touch them */
+  reviewDiff(id: string, expand?: string[]): void;
+  taskDiff(id: string, expand?: string[]): void;
+  /** search the checkout behind a review or a task: `grep` a pattern, `refs` a symbol's call sites */
+  codeSearch(id: string, mode: SearchMode, query: string): Promise<CodeSearchResult>;
   explainLines(
     id: string,
     file: string,
@@ -279,6 +283,9 @@ export async function connectToDaemon(): Promise<Connection> {
   const diffListeners = new Set<(id: string, diff: string) => void>();
   const taskDiffListeners = new Set<(id: string, diff: string) => void>();
   const creatingListeners = new Set<(agentId: string) => void>();
+  /** code searches in flight, by the id their reply will carry */
+  const searches = new Map<number, (result: CodeSearchResult) => void>();
+  let nextSearch = 1;
 
   return await new Promise<Connection>((resolve, reject) => {
     let ready = false;
@@ -392,8 +399,23 @@ export async function connectToDaemon(): Promise<Connection> {
           postPlanUpdate: (projectId) => command({ name: 'postPlanUpdate', projectId }),
           startPlanChat: (projectId) => command({ name: 'startPlanChat', projectId }),
           listAgents: () => command({ name: 'listAgents' }),
-          reviewDiff: (id) => command({ name: 'reviewDiff', id }),
-          taskDiff: (id) => command({ name: 'taskDiff', id }),
+          reviewDiff: (id, expand) => command({ name: 'reviewDiff', id, expand }),
+          taskDiff: (id, expand) => command({ name: 'taskDiff', id, expand }),
+          codeSearch: (id, mode, query) =>
+            new Promise<CodeSearchResult>((resolve) => {
+              const reqId = nextSearch++;
+              // a daemon that never answers (restarted mid-search) must not
+              // leave the popup spinning for ever
+              const timer = setTimeout(() => {
+                searches.delete(reqId);
+                resolve({ mode, query, hits: [], error: 'no answer from the daemon' });
+              }, 30_000);
+              searches.set(reqId, (result) => {
+                clearTimeout(timer);
+                resolve(result);
+              });
+              command({ name: 'codeSearch', id, reqId, mode, query });
+            }),
           explainLines: (id, file, startLine, endLine, opts) =>
             command({ name: 'explainLines', id, file, startLine, endLine, opts }),
           reviewTask: (id) => command({ name: 'reviewTask', id }),
@@ -416,6 +438,10 @@ export async function connectToDaemon(): Promise<Connection> {
         });
       } else if (msg.t === 'taskDiff') {
         for (const fn of taskDiffListeners) fn(msg.id, msg.diff);
+      } else if (msg.t === 'codeSearch') {
+        const done = searches.get(msg.reqId);
+        searches.delete(msg.reqId);
+        done?.(msg.result);
       } else if (msg.t === 'reviewDiff') {
         for (const fn of diffListeners) fn(msg.id, msg.diff);
       } else if (msg.t === 'agents') {

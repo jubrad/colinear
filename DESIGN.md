@@ -354,6 +354,29 @@ only a missing `comment` drops one. A line outside the diff makes GitHub reject 
 review; nothing is posted, and the findings go back to the agent to re-anchor against the
 current head (docs/views/reviews.md, "When the anchors have gone stale").
 
+**Reading around the change is one more diff, not another view.** `x` (whole file), `/` (search)
+and `*` (call sites) all end at a line of code, and the cheapest place to show a line of code is
+the annotated diff that is already open. So the daemon widens the diff it sends rather than the
+view growing a file reader: `reviewDiff`/`taskDiff` take an `expand` list, a changed file in it
+is re-read with `-U1000000`, and an unchanged one is appended as a hunk that is all context,
+headed by a meta row (`OPENED_MARK`) so the view can tint its tab. Line numbers are the file's
+own either way, so findings, `n`/`N`, `a` and the margin work on opened code with no new path.
+Three things follow:
+
+- **Searches read `HEAD`, not the working tree** — the diff and opened files come from commits,
+  and a hit has to name a line in that same text.
+- **A widened file makes every line look commentable, and GitHub disagrees.** `postableLines`
+  recomputes the lines GitHub will take (added lines, plus three lines of context either side),
+  and the compose pane defaults to an annotation off them and warns if you pick a posting level.
+- **The cursor follows a line, not a row index.** Widening changes every index below the cursor,
+  so a jump waits for the new diff and resolves by `file:line` at the same screen height. It must
+  not resolve against the old diff even when the line is in it: that index is wrong in the new one.
+
+Call sites are a whole-word `git grep`, classified per hit (def / call / ref / import) by
+`symbols.ts`. No language server: a review spans every language a PR touches, and the question
+"who calls this?" is answered well enough by text, provided each hit says what kind of mention it
+is.
+
 ## Project plans
 
 A third entity beside tasks and reviews, same CDC contract (`plan-*` deltas, keyed by project id).

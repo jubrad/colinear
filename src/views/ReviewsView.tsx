@@ -105,6 +105,8 @@ export function ReviewsView(props: { param?: string }) {
   const [confirm, setConfirm] = useState<'post' | 'approve' | 'request-changes'>();
   const [reading, setReading] = useState(false);
   const [diffs, setDiffs] = useState<Record<string, string>>({});
+  /** per review: files widened to the whole file, or opened from a search */
+  const [expanded, setExpanded] = useState<Record<string, string[]>>({});
   const [annotated, setAnnotated] = useState(true);
   /** the `c` popup: a model and instructions for this review */
   const [customizing, setCustomizing] = useState(false);
@@ -244,7 +246,7 @@ export function ReviewsView(props: { param?: string }) {
       if (key.return) {
         setAnnotated(true);
         setReading(true);
-        if (!diffs[selected.id]) ctx.dispatcher.reviewDiff(selected.id);
+        if (!diffs[selected.id]) ctx.dispatcher.reviewDiff(selected.id, expanded[selected.id]);
       }
       if (input === 'd') {
         setAnnotated(false);
@@ -345,6 +347,12 @@ export function ReviewsView(props: { param?: string }) {
         onExplain={(file, startLine, endLine, opts) =>
           ctx.dispatcher.explainLines(selected.id, file, startLine, endLine, opts)
         }
+        expanded={expanded[selected.id]}
+        onExpand={(files) => {
+          setExpanded((e) => ({ ...e, [selected.id]: files }));
+          ctx.dispatcher.reviewDiff(selected.id, files);
+        }}
+        onSearch={(mode, query) => ctx.dispatcher.codeSearch(selected.id, mode, query)}
         onPost={() => {
           ctx.dispatcher.postReview(selected.id);
           ctx.toast(`posting ${selected.repository}#${selected.number}…`, 'info');

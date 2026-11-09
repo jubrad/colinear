@@ -17,6 +17,7 @@ import {
   viewerLogin,
   type ReviewEvent,
 } from './reviews.js';
+import { diffOver, expandDiff } from './codesearch.js';
 import { demoDiff, isDemo } from './demo.js';
 import { askedLine, explainPrompt, type AskOptions } from './selfreview.js';
 import { store } from './store.js';
@@ -898,8 +899,11 @@ export class Reviewer {
    * The PR's diff, for the annotated view. Read on demand rather than mirrored:
    * it is large, it changes with every push, and it belongs to the worktree
    * rather than the record.
+   *
+   * `expand` widens files — a changed one to the whole file, one the PR does
+   * not touch opened as context (see codesearch.ts).
    */
-  async diff(id: string): Promise<string> {
+  async diff(id: string, expand: string[] = []): Promise<string> {
     const review = store.getReview(id);
     // demo mode has no repository to read a diff out of, and an empty one
     // leaves the annotated view loading for ever
@@ -907,19 +911,11 @@ export class Reviewer {
     if (!review?.worktree) return '';
     const remote = review.repo ? await this.remoteFor(review.repo.path, review.repository) : 'origin';
     // three dots: what this branch added since it left the base, which is the
-    // diff GitHub shows and the one the review is about
-    const { stdout } = await exec(
-      'git',
-      ['-C', review.worktree, 'diff', `${remote}/${review.baseRefName}...HEAD`],
-      { maxBuffer: 32 * 1024 * 1024 },
-    ).catch(async () => {
-      // the base ref may not be fetched (an old worktree, a renamed default);
-      // the merge base with HEAD's own history is the next best anchor
-      const fallback = await exec('git', ['-C', review.worktree!, 'diff', 'HEAD~1...HEAD'], {
-        maxBuffer: 32 * 1024 * 1024,
-      }).catch(() => ({ stdout: '' }));
-      return fallback;
-    });
+    // diff GitHub shows and the one the review is about. The base ref may not
+    // be fetched (an old worktree, a renamed default); the merge base with
+    // HEAD's own history is the next best anchor
+    const { text, range } = await diffOver(review.worktree, [`${remote}/${review.baseRefName}...HEAD`, 'HEAD~1...HEAD']);
+    const stdout = await expandDiff(review.worktree, text, range, expand);
     return stdout.length > DIFF_LIMIT ? `${stdout.slice(0, DIFF_LIMIT)}\n\n[diff truncated at ${DIFF_LIMIT} bytes]` : stdout;
   }
 
