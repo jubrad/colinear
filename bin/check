@@ -75,4 +75,9 @@ echo '── split'
 npm run check:split
 
 echo
+echo '── code search'
+# widening a file keeps line numbers and adds nothing commentable; call sites come back classified
+npm run check:codesearch
+
+echo
 echo 'ok'

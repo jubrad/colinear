@@ -4,6 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { runtimeFor } from './agent.js';
+import { diffOver, expandDiff } from './codesearch.js';
 import { demoDiff, isDemo } from './demo.js';
 import { guidanceFor } from './guidance.js';
 import { log } from './log.js';
@@ -36,11 +37,11 @@ export const docPath = (task: Task): string | undefined =>
  * the worktree rather than GitHub: it is local, it is current, and it works
  * before anyone has fetched anything.
  */
-export async function taskDiff(cfg: Config, task: Task): Promise<string> {
+export async function taskDiff(cfg: Config, task: Task, expand: string[] = []): Promise<string> {
   // same reason as the review side: no repository, so nothing to read
   if (isDemo(cfg)) return demoDiff();
   if (!task.worktree) return '';
-  // both git calls below swallow their errors, so a missing checkout would
+  // the git calls below swallow their errors, so a missing checkout would
   // read as "this branch changed nothing" — which is the one wrong answer
   if (!existsSync(task.worktree)) {
     return `the worktree at ${task.worktree} is gone — press r to rebuild it from the branch, then read it again
@@ -48,16 +49,10 @@ export async function taskDiff(cfg: Config, task: Task): Promise<string> {
   }
   const base = task.repo ? cfg.repos.find((r) => r.name === task.repo?.name)?.defaultBranch : undefined;
   const remote = 'origin';
-  const against = base ? `${remote}/${base}` : 'HEAD~1';
-  const { stdout } = await exec('git', ['-C', task.worktree, 'diff', `${against}...HEAD`], {
-    maxBuffer: 32 * 1024 * 1024,
-  }).catch(async () => {
-    // an unfetched base, or a branch with no merge base yet
-    const fallback = await exec('git', ['-C', task.worktree!, 'diff', 'HEAD~1...HEAD'], {
-      maxBuffer: 32 * 1024 * 1024,
-    }).catch(() => ({ stdout: '' }));
-    return fallback;
-  });
+  // an unfetched base, or a branch with no merge base yet, falls back to the last commit
+  const ranges = base ? [`${remote}/${base}...HEAD`, 'HEAD~1...HEAD'] : ['HEAD~1...HEAD'];
+  const { text, range } = await diffOver(task.worktree, ranges);
+  const stdout = await expandDiff(task.worktree, text, range, expand);
   return stdout.length > DIFF_LIMIT ? `${stdout.slice(0, DIFF_LIMIT)}\n\n[diff truncated]` : stdout;
 }
 

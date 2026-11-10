@@ -210,6 +210,9 @@ acts on the line under the cursor, or on the marked block when there is one.
 | `j`/`k` arrows | move a line · `space`/`pageup` a page · `g`/`G` top and bottom |
 | `n` `N` | the next and previous finding: each one on a line in turn, then the next line |
 | `]` `[` | hop to the next / previous changed file |
+| `/` | [search the checkout](#reading-around-the-change) — a regex over every file |
+| `*` | the call sites of a symbol on the cursor's line — definitions first |
+| `x` | the whole of this file around its hunks · `x` again, back to the diff (closes an opened file) |
 | `enter` | read the current finding in full, scrolling inside it |
 | `v` | mark a block — move to grow it, `v` or `esc` to drop it |
 | `e` | write a finding — level and comment in one pane, `tab` between them |
@@ -224,6 +227,38 @@ acts on the line under the cursor, or on the marked block when there is one.
 
 The task-side view, [`:diff`](diff.md), has the same keys against your own agent's branch — the one
 difference being where `p` sends them.
+
+### Reading around the change
+
+A diff shows what changed, and the question a review keeps asking is about what didn't: who calls
+this, where else the pattern appears, what the function looks like above the hunk. Three keys answer
+it without leaving the view, all against the review's own checkout at the reviewed sha — so every
+line they take you to is numbered the way the margin is.
+
+**`x` widens the file under the cursor to the whole file.** The hunks stay where they were, with the
+rest of the file filled in around them; the strip says `whole file`, and the cursor stays on its line
+at the same height on screen, so what you were reading is still under your eye. `x` again goes back to
+the diff alone.
+
+**`/` searches the checkout** — a regex over every tracked file, case-insensitive unless the pattern
+has a capital in it. **`*` lists the call sites of a symbol on the cursor's line**: it offers the
+line's names, best guess first (what the line declares, then what it calls), and `enter` finds every
+whole-word mention, each tagged `def`, `call`, `ref` or `use` (an import) and listed in that order.
+Hits in files this change touches are marked `*` and come first within each kind, because those are
+the callers a PR is likeliest to have broken. It is a textual match rather than a language server,
+so it works the same in every language a PR can touch and can be fooled by a name that means two
+things; the tags say which hits look like what.
+
+**`enter` on a hit takes the diff there.** A line already on screen is a cursor move. A line in a
+changed file that the hunks leave out widens that file first. A file the change never touches is
+**opened** — appended after the changed files with a tinted tab, and a first row saying it is
+unchanged — and read like any other: highlighted, with `n`/`N`, `v`, `a` and `i` working on it. `x`
+on an opened file closes it. `/` again starts from the last pattern, so `enter` on it goes straight
+back to those results, at the hit you left.
+
+A line outside the diff GitHub shows (anything more than three lines from a change, and everything in
+an opened file) can't take an inline comment: GitHub refuses it. So `e` there starts on
+**annotation**, and if you pick a posting level anyway the pane says so in yellow.
 
 ### Commenting on a block
 

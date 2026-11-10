@@ -119,6 +119,13 @@ src/core/
                      lines into visual rows; layoutMargin aligns annotations beside them
   diff.check.ts      a tab-indented diff measured in the columns a terminal actually paints:
                      every row fits its pane at every width (bin/check runs it)
+  symbols.ts         reading around a diff, the pure half: the symbols on a line (declared name
+                     first), what kind of mention a hit is (def/call/ref/import), hit ranking
+  codesearch.ts      the daemon half: git grep over a checkout's HEAD (`/` and `*` in the
+                     annotated diff), diffOver (the review/self-review range fallback), and
+                     expandDiff — a changed file widened to the whole file, an unchanged one
+                     opened as an all-context diff. codesearch.check.ts runs both against a
+                     throwaway repo: line numbers survive widening, nothing new is commentable
                      clearBrokenSubmodules undoes the wreckage `submodule.recurse` leaves in
                      a linked worktree, which otherwise wedges a review permanently
   reviewer.check.ts  an info finding reaches no review body, over every caller shape and
@@ -150,7 +157,7 @@ src/core/
   notify.ts          terminal-notifier (click-through URL) with osascript fallback
   log.ts             append log at ~/.local/state/colinear/colinear.log (also captures diverted stderr)
 src/ui/              presentation primitives: Table (generic sortable), CommandBar (prompt+ranked
-                     completion; rank = prefix>substring>subsequence), modals (Dispatch/EditTask/SubIssue/ReviewOptions — `c` in :reviews, NewIssue — `n` in :issues), and Form.tsx — the pieces new popup forms are built from (one label column, one-line choice rows, a fixed-height help area, key hints, the standard form's sizing), ChatLog.tsx (an agent conversation wrapped and scrollable, plus `Working`, the spinner shown while an agent has something of yours),
+                     completion; rank = prefix>substring>subsequence), modals (Dispatch/EditTask/SubIssue/ReviewOptions — `c` in :reviews, NewIssue — `n` in :issues), and Form.tsx — the pieces new popup forms are built from (one label column, one-line choice rows, a fixed-height help area, key hints, the standard form's sizing), ChatLog.tsx (an agent conversation wrapped and scrollable, plus `Working`, the spinner shown while an agent has something of yours), CodeSearch.tsx (the `/` and `*` popup over the annotated diff),
                      Header/Crumbs, format helpers, AppCtx definition (context.ts)
 src/views/           registry.ts maps names/aliases → components + hotkey help; issues/board/tasks/
                      task/projects/project/plan/reviews/costs/logs/gc/config/help; custom views wrap

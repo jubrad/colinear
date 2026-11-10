@@ -25,6 +25,8 @@ import {
 } from './core/protocol.js';
 import { findReclaimable, removeWorktree } from './core/gc.js';
 import * as selfreview from './core/selfreview.js';
+import { searchCode } from './core/codesearch.js';
+import type { CodeSearchResult } from './core/symbols.js';
 import { createIssueFromPrompt } from './core/newissue.js';
 import { createProjectFromPrompt } from './core/newproject.js';
 import { listSessions, updateSession } from './core/sessions.js';
@@ -265,7 +267,7 @@ export async function runDaemon(): Promise<void> {
       }
       case 'taskDiff': {
         const task = store.get(cmd.id);
-        if (task) void selfreview.taskDiff(cfg, task).then((diff) => reply({ t: 'taskDiff', id: cmd.id, diff }));
+        if (task) void selfreview.taskDiff(cfg, task, cmd.expand).then((diff) => reply({ t: 'taskDiff', id: cmd.id, diff }));
         break;
       }
       case 'reviewTask': {
@@ -309,8 +311,17 @@ export async function runDaemon(): Promise<void> {
         break;
       }
       case 'reviewDiff':
-        void reviewer.diff(cmd.id).then((diff) => reply({ t: 'reviewDiff', id: cmd.id, diff }));
+        void reviewer.diff(cmd.id, cmd.expand).then((diff) => reply({ t: 'reviewDiff', id: cmd.id, diff }));
         break;
+      case 'codeSearch': {
+        // the checkout the diff came from: a task's own, or the review's
+        const worktree = store.get(cmd.id)?.worktree ?? store.getReview(cmd.id)?.worktree;
+        const answer = (result: CodeSearchResult) => reply({ t: 'codeSearch', id: cmd.id, reqId: cmd.reqId, result });
+        if (isDemo(cfg)) answer({ mode: cmd.mode, query: cmd.query, hits: [], error: 'the demo has no checkout to search' });
+        else if (!worktree || !existsSync(worktree)) answer({ mode: cmd.mode, query: cmd.query, hits: [], error: 'no checkout yet — r reads the PR first' });
+        else void searchCode(worktree, cmd.mode, cmd.query).then(answer);
+        break;
+      }
       case 'editFinding':
         reviewer.editFinding(
           cmd.id,

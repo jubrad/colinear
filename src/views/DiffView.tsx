@@ -23,6 +23,8 @@ export function DiffView(props: { param?: string }) {
   const pane = useViewSize();
   const tasks = useTasks();
   const [diffs, setDiffs] = useState<Record<string, string>>({});
+  /** per task: files widened to the whole file, or opened from a search */
+  const [expanded, setExpanded] = useState<Record<string, string[]>>({});
 
   const task = useMemo(() => {
     const wanted = props.param?.trim().toLowerCase();
@@ -32,8 +34,16 @@ export function DiffView(props: { param?: string }) {
 
   useEffect(() => ctx.onTaskDiff?.((id, diff) => setDiffs((d) => ({ ...d, [id]: diff }))), []);
   useEffect(() => {
-    if (task && !diffs[task.issue.id]) ctx.dispatcher.taskDiff(task.issue.id);
+    if (task && !diffs[task.issue.id]) ctx.dispatcher.taskDiff(task.issue.id, expanded[task.issue.id]);
   }, [task?.issue.id]);
+  // the diff owns every key while it is up — esc and q close it, R reviews,
+  // and / * search — so the app's own (q quits, R reloads, : the command bar)
+  // stand down, the same as :reviews does while it is reading
+  const reading = task?.status === 'pr_open';
+  useEffect(() => {
+    ctx.setCapture(reading);
+    return () => ctx.setCapture(false);
+  }, [reading]);
 
   if (!task) {
     return (
@@ -90,6 +100,12 @@ export function DiffView(props: { param?: string }) {
       onExplain={(file, startLine, endLine, opts) =>
         ctx.dispatcher.explainLines(task.issue.id, file, startLine, endLine, opts)
       }
+      expanded={expanded[task.issue.id]}
+      onExpand={(files) => {
+        setExpanded((e) => ({ ...e, [task.issue.id]: files }));
+        ctx.dispatcher.taskDiff(task.issue.id, files);
+      }}
+      onSearch={(mode, query) => ctx.dispatcher.codeSearch(task.issue.id, mode, query)}
       onPost={() => {
         ctx.dispatcher.sendFindings(task.issue.id);
         ctx.toast(`${task.issue.identifier}: handing your review to the agent…`, 'info');
@@ -110,6 +126,9 @@ export const diffKeys: Array<[string, string]> = [
   ['v', 'mark a block'],
   ['e', 'comment · i annotate'],
   ['a', 'ask what it does'],
+  ['/', 'search the checkout'],
+  ['*', 'call sites of a symbol on the line'],
+  ['x', 'whole file · back to the diff'],
   ['R', 'have an agent review it'],
   ['p', 'hand the comments to the agent'],
   ['tab', 'message the agent'],

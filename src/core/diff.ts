@@ -321,3 +321,48 @@ export function sliceSpans(spans: Span[], start: number, end: number): Span[] {
   }
   return out;
 }
+
+/**
+ * The meta row that heads a file the change never touched, opened for reading
+ * (see codesearch.ts). Written there and recognised here, so the view can tell
+ * a file someone changed from one you went to look at.
+ */
+export const OPENED_MARK = 'colinear: unchanged in this change — opened for reading';
+
+/** Files in the diff only because they were opened from a search, not because they changed. */
+export function openedFiles(lines: DiffLine[]): Set<string> {
+  return new Set(lines.filter((l) => l.kind === 'meta' && l.text === OPENED_MARK).map((l) => l.file));
+}
+
+/** Context git shows around a change by default — and the lines GitHub will take a comment on. */
+const DEFAULT_CONTEXT = 3;
+
+/**
+ * The new-side lines an inline comment can land on: every added line, and the
+ * context within three lines of a change. That is the diff GitHub shows, and a
+ * comment anywhere else is refused — which matters once a file has been widened
+ * to the whole file, because every line of it then looks just as commentable.
+ */
+export function postableLines(lines: DiffLine[]): Set<string> {
+  const out = new Set<string>();
+  const body = lines.filter((l) => l.kind === 'add' || l.kind === 'del' || l.kind === 'context');
+  // distance in context lines to the nearest change, walked from both ends
+  const dist = new Array<number>(body.length).fill(Infinity);
+  for (const order of [body.map((_, i) => i), body.map((_, i) => body.length - 1 - i)]) {
+    let since = Infinity;
+    let file = '';
+    for (const i of order) {
+      const l = body[i];
+      if (l.file !== file) {
+        file = l.file;
+        since = Infinity;
+      }
+      since = l.kind === 'context' ? since + 1 : 0;
+      dist[i] = Math.min(dist[i], since);
+    }
+  }
+  body.forEach((l, i) => {
+    if (l.newLine !== undefined && dist[i] <= DEFAULT_CONTEXT) out.add(anchorKey(l.file, l.newLine));
+  });
+  return out;
+}

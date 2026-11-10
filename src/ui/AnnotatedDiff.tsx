@@ -1,6 +1,8 @@
 import { Box, Text, useInput } from 'ink';
-import { useEffect, useMemo, useState } from 'react';
-import { anchorKey, expandTabs, filesIn, layoutMargin, parseDiff, toVisualRows, type DiffLine, type MarginItem, type TokenKind, type VisualRow } from '../core/diff.js';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { anchorKey, expandTabs, filesIn, layoutMargin, openedFiles, parseDiff, postableLines, toVisualRows, type DiffLine, type MarginItem, type TokenKind, type VisualRow } from '../core/diff.js';
+import { symbolsOn, type CodeHit, type CodeSearchResult, type SearchMode } from '../core/symbols.js';
+import { CodeSearch, type SearchMemo } from './CodeSearch.js';
 import { highlightDiff } from '../core/highlight.js';
 import type { Review, ReviewFinding, Severity } from '../core/types.js';
 import { ChatLog, spinFrame, useAwaitingReply, useFrame } from './ChatLog.js';
@@ -113,12 +115,22 @@ export function AnnotatedDiff(props: {
     endLine: number,
     opts?: { model?: string; instructions?: string },
   ) => void;
+  /**
+   * Files widened to the whole file, or opened though the change does not
+   * touch them; `onExpand` asks for the diff again with a new list. Absent,
+   * `x` and jumping to a search hit outside the diff do nothing.
+   */
+  expanded?: string[];
+  onExpand?: (files: string[]) => void;
+  /** search the checkout behind this diff — `/` text, `*` call sites */
+  onSearch?: (mode: SearchMode, query: string) => Promise<CodeSearchResult>;
   onPost: () => void;
   /** run an agent over this diff; absent where the review already has one */
   onReview?: () => void;
   onClose: () => void;
 }) {
-  const { review, diff, width, height, busy, onSend, onEditFinding, onExplain, onPost, onReview, onClose, signing } = props;
+  const { review, diff, width, height, busy, onSend, onEditFinding, onExplain, onPost, onReview, onClose, signing, onExpand, onSearch } = props;
+  const expanded = props.expanded ?? [];
   const { fullScreen, setFullScreen, cfg } = useColinear();
   // the annotated diff wants the room: claim the whole terminal while it is open,
   // and give it back on the way out. `f` toggles the header back if you want it.
@@ -163,6 +175,18 @@ export function AnnotatedDiff(props: {
   const frame = useFrame(pending.length > 0);
   /** how far into a finding being read in full we have scrolled */
   const [readScroll, setReadScroll] = useState(0);
+  /** the search popup: `/` (text) or `*` (call sites of a symbol on this line) */
+  const [searching, setSearching] = useState<{ mode: SearchMode; symbols?: string[] } | null>(null);
+  /** the last search and where in it you were, so `/` + enter goes back to it */
+  const [searchMemo, setSearchMemo] = useState<SearchMemo | undefined>();
+  /**
+   * Where the cursor should land once the diff that has it arrives — a search
+   * hit in a file being widened or opened, or the line you were on when `x`
+   * changed what is around it. `from` is the diff it was asked against: until
+   * that changes, a line not found is a line not here *yet*. `offset` keeps the
+   * row where it was on screen.
+   */
+  const [jumpTo, setJumpTo] = useState<{ file: string; line: number; from?: string; offset?: number } | null>(null);
 
   // parse then highlight, both keyed on the diff so tokenizing runs once per
   // diff and never in the frame loop (the app re-renders on a clock)
@@ -173,6 +197,12 @@ export function AnnotatedDiff(props: {
   const lines = useMemo(() => toVisualRows(parsed, codeWidth), [parsed, codeWidth]);
   /** files changed, in diff order — the tabs across the top */
   const files = useMemo(() => filesIn(parsed), [parsed]);
+  /** files here only because a search hit opened them */
+  const opened = useMemo(() => openedFiles(parsed), [parsed]);
+  /** is this file part of the change, rather than one opened to read */
+  const inChange = useCallback((file: string) => files.includes(file) && !opened.has(file), [files, opened]);
+  /** the lines GitHub takes an inline comment on — not every line of a widened file */
+  const postable = useMemo(() => postableLines(parsed), [parsed]);
 
   /**
    * Each finding's identity on screen, and its place among the findings
@@ -295,6 +325,43 @@ export function AnnotatedDiff(props: {
     if (cursor < scroll) setScroll(cursor);
     else if (cursor >= scroll + paneHeight) setScroll(cursor - paneHeight + 1);
   }, [cursor, paneHeight]);
+
+  /** the row a line starts on, or -1 when it is not in the diff */
+  const rowOf = (file: string, line: number) =>
+    lines.findIndex((r) => r.first && r.line.file === file && r.line.newLine === line);
+  /** the closest row to a line in the same file — where a jump lands when the line itself is not shown */
+  const nearestRow = (file: string, line: number) => {
+    let best = -1;
+    let gap = Infinity;
+    lines.forEach((r, i) => {
+      if (r.line.file !== file) return;
+      const d = r.first && r.line.newLine !== undefined ? Math.abs(r.line.newLine - line) : Infinity;
+      if (best === -1 || d < gap) {
+        best = i;
+        gap = d;
+      }
+    });
+    return best;
+  };
+
+  useEffect(() => {
+    if (!jumpTo) return;
+    // the diff this is waiting on has not come back yet. Resolving against the
+    // old one is wrong even when the line is in it: the row index found there
+    // points somewhere else once the wider diff replaces it
+    if (jumpTo.from !== undefined && diff === jumpTo.from) return;
+    const exact = rowOf(jumpTo.file, jumpTo.line);
+    setJumpTo(null);
+    const row = exact !== -1 ? exact : nearestRow(jumpTo.file, jumpTo.line);
+    if (row === -1) return setCursor((c) => Math.min(c, Math.max(0, lines.length - 1)));
+    setCursor(row);
+    setScroll(Math.max(0, row - (jumpTo.offset ?? Math.floor(paneHeight / 3))));
+  }, [lines, jumpTo]);
+
+  // a file closed with `x` takes its rows with it
+  useEffect(() => {
+    if (!jumpTo && cursor > lines.length - 1) setCursor(Math.max(0, lines.length - 1));
+  }, [lines.length]);
 
   const current = lines[cursor]?.line;
   // the changed file the cursor is in, and its place in the tab strip
@@ -447,7 +514,9 @@ export function AnnotatedDiff(props: {
       const at = selection ?? { file: anchor.file, start: anchor.line, end: anchor.line };
       setWriting({ file: at.file, line: at.end, startLine: at.end > at.start ? at.start : undefined, nth: -1 });
       setDraft('');
-      const kind = KINDS.findIndex((k) => k.severity === (as ?? 'consider'));
+      // off the diff GitHub shows, only an annotation can stay where it is put
+      const offDiff = Boolean(signing) && !postable.has(anchorKey(at.file, at.end));
+      const kind = KINDS.findIndex((k) => k.severity === (as ?? (offDiff ? 'info' : 'consider')));
       setKindIdx(kind === -1 ? 1 : kind);
       setBy('you');
     }
@@ -466,9 +535,37 @@ export function AnnotatedDiff(props: {
     setMarkRow(null);
   };
 
+  /** go to a search hit — widening or opening its file first if the line is not in the diff */
+  const goToHit = (hit: CodeHit, memo: SearchMemo) => {
+    setSearchMemo(memo);
+    setSearching(null);
+    const row = rowOf(hit.file, hit.line);
+    if (row !== -1) return setJumpTo({ file: hit.file, line: hit.line });
+    if (onExpand && !expanded.includes(hit.file)) {
+      setJumpTo({ file: hit.file, line: hit.line, from: diff });
+      onExpand([...expanded, hit.file]);
+      return;
+    }
+    setJumpTo({ file: hit.file, line: hit.line });
+  };
+
+  /**
+   * `x`: the whole of the cursor's file, or back to the diff alone. A file
+   * opened from a search closes. The cursor stays on its line, at the same
+   * height on screen, so what you were reading is still under your eye.
+   */
+  const toggleExpand = () => {
+    if (!onExpand || !current?.file) return;
+    const file = current.file;
+    let line = current.newLine;
+    for (let i = cursor; line === undefined && i < lines.length && lines[i].line.file === file; i++) line = lines[i].line.newLine;
+    setJumpTo({ file, line: line ?? 1, from: diff, offset: cursor - scroll });
+    onExpand(expanded.includes(file) ? expanded.filter((f) => f !== file) : [...expanded, file]);
+  };
+
   useInput((input, key) => {
     // the popup has the keyboard while it is open
-    if (asking) return;
+    if (asking || searching) return;
     if (focus === 'compose') {
       // one pane, both halves: the level row and the comment, tab between them.
       if (key.escape) {
@@ -515,6 +612,9 @@ export function AnnotatedDiff(props: {
       setFocus('diff');
       return;
     }
+    // a jump still waiting on a diff that may never differ (widening a file
+    // the diff already shows whole) must not move the cursor later, under you
+    if (jumpTo) setJumpTo(null);
     // a selection is the innermost thing esc should let go of
     if (key.escape && markRow !== null) return setMarkRow(null);
     if (key.escape || input === 'q') return onClose();
@@ -565,6 +665,15 @@ export function AnnotatedDiff(props: {
     }
     if (input === 'p') onPost();
     if (input === 'R' && onReview) onReview();
+    // reading around the change: search the checkout, a symbol's call sites,
+    // and the rest of the file the hunk is cut out of
+    if (input === '/' && onSearch) return setSearching({ mode: 'grep' });
+    if (input === '*' && onSearch) {
+      const row = lines[cursor];
+      const text = row && ['add', 'del', 'context'].includes(row.line.kind) ? row.line.text : '';
+      return setSearching({ mode: 'refs', symbols: symbolsOn(text) });
+    }
+    if (input === 'x') toggleExpand();
   });
 
   return (
@@ -600,13 +709,21 @@ export function AnnotatedDiff(props: {
                 const idx = lo + k;
                 const here = idx === fileIdx;
                 return (
-                  <Text key={files[idx]} inverse={here} bold={here} color={here ? theme.accent : theme.dim}>
+                  <Text
+                    key={files[idx]}
+                    inverse={here}
+                    bold={here}
+                    // a file opened to read is not part of the change: tinted, so the
+                    // strip still says at a glance which files the PR touches
+                    color={opened.has(files[idx]) ? theme.annotation : here ? theme.accent : theme.dim}
+                  >
                     {' '}{b}{' '}
                   </Text>
                 );
               })}
               <Text dimColor>
-                {hi < files.length - 1 ? ' ›' : ''} {fileIdx + 1}/{files.length} · ]/[ file
+                {hi < files.length - 1 ? ' ›' : ''} {fileIdx + 1}/{files.length}
+                {current && opened.has(current.file) ? ' · opened, not changed' : current && expanded.includes(current.file) ? ' · whole file' : ''} · ]/[ file
               </Text>
             </Text>
           );
@@ -680,9 +797,15 @@ export function AnnotatedDiff(props: {
                 {writing.nth === -1 && anchoredAt(writing.file, writing.line).length ? ' · added beside what is there' : ''}
               </Text>
               {/* the consequence, said plainly */}
-              <Text dimColor wrap="truncate">
-                {editAs === 'info' ? 'stays in colinear — never posted' : 'goes to the author when you post'}
-              </Text>
+              {signing && editAs !== 'info' && !postable.has(anchorKey(writing.file, writing.line)) ? (
+                <Text color={theme.warn} wrap="truncate">
+                  outside the PR's diff — GitHub won't take it inline; make it an annotation or move it
+                </Text>
+              ) : (
+                <Text dimColor wrap="truncate">
+                  {editAs === 'info' ? 'stays in colinear — never posted' : 'goes to the author when you post'}
+                </Text>
+              )}
               {signing && (
                 <Text wrap="truncate">
                   <Text bold color={by === 'you' ? theme.accent : theme.key}>
@@ -840,6 +963,8 @@ export function AnnotatedDiff(props: {
           </Text>
         ) : null}
         j/k move · n/N next · ]/[ file · enter reads · v select · a explain · c ask · e finding · i annotate · d drop ·{' '}
+        {onSearch ? '/ search · * callers · ' : ''}
+        {onExpand ? 'x expand · ' : ''}
         {onReview ? 'R review · p hand back' : 'p post'} · f {fullScreen ? 'header' : 'full'} · esc
       </Text>
 
@@ -873,6 +998,32 @@ export function AnnotatedDiff(props: {
                   setAsking(null);
                 }}
                 onCancel={() => setAsking(null)}
+              />
+            </Popup>
+          );
+        })()}
+      {searching &&
+        onSearch &&
+        (() => {
+          const w = Math.min(124, width - 4);
+          const h = Math.min(height - 2, 28);
+          return (
+            <Popup
+              width={w}
+              height={h}
+              top={Math.max(0, Math.floor((height - h) / 2))}
+              left={Math.max(0, Math.floor((width - w) / 2))}
+            >
+              <CodeSearch
+                mode={searching.mode}
+                symbols={searching.symbols}
+                width={w - 4}
+                height={h - 2}
+                last={searchMemo}
+                run={onSearch}
+                inChange={inChange}
+                onPick={goToHit}
+                onCancel={() => setSearching(null)}
               />
             </Popup>
           );
