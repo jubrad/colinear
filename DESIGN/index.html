@@ -2141,6 +2141,28 @@ operator's verbatim in a rewrite.</p>
 only a missing <code>comment</code> drops one. A line outside the diff makes GitHub reject the whole
 review; nothing is posted, and the findings go back to the agent to re-anchor against the
 current head (docs/views/reviews.md, "When the anchors have gone stale").</p>
+<p><strong>Reading around the change is one more diff, not another view.</strong> <code>x</code> (whole file), <code>/</code> (search)
+and <code>*</code> (call sites) all end at a line of code, and the cheapest place to show a line of code is
+the annotated diff that is already open. So the daemon widens the diff it sends rather than the
+view growing a file reader: <code>reviewDiff</code>/<code>taskDiff</code> take an <code>expand</code> list, a changed file in it
+is re-read with <code>-U1000000</code>, and an unchanged one is appended as a hunk that is all context,
+headed by a meta row (<code>OPENED_MARK</code>) so the view can tint its tab. Line numbers are the file's
+own either way, so findings, <code>n</code>/<code>N</code>, <code>a</code> and the margin work on opened code with no new path.
+Three things follow:</p>
+<ul>
+<li><strong>Searches read <code>HEAD</code>, not the working tree</strong> — the diff and opened files come from commits,
+  and a hit has to name a line in that same text.</li>
+<li><strong>A widened file makes every line look commentable, and GitHub disagrees.</strong> <code>postableLines</code>
+  recomputes the lines GitHub will take (added lines, plus three lines of context either side),
+  and the compose pane defaults to an annotation off them and warns if you pick a posting level.</li>
+<li><strong>The cursor follows a line, not a row index.</strong> Widening changes every index below the cursor,
+  so a jump waits for the new diff and resolves by <code>file:line</code> at the same screen height. It must
+  not resolve against the old diff even when the line is in it: that index is wrong in the new one.</li>
+</ul>
+<p>Call sites are a whole-word <code>git grep</code>, classified per hit (def / call / ref / import) by
+<code>symbols.ts</code>. No language server: a review spans every language a PR touches, and the question
+"who calls this?" is answered well enough by text, provided each hit says what kind of mention it
+is.</p>
 <h2 id="project-plans">Project plans<a class="headerlink" href="#project-plans" title="Permanent link">&para;</a></h2>
 <p>A third entity beside tasks and reviews, same CDC contract (<code>plan-*</code> deltas, keyed by project id).
 It is the review-document pattern with the storage <strong>inverted</strong>: there, colinear owns the file and

@@ -950,6 +950,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#reading-around-the-change" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading around the change
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#commenting-on-a-block" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1558,6 +1569,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#reading-around-the-change" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading around the change
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#commenting-on-a-block" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1917,6 +1939,18 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 <td>hop to the next / previous changed file</td>
 </tr>
 <tr>
+<td><code>/</code></td>
+<td><a href="#reading-around-the-change">search the checkout</a> — a regex over every file</td>
+</tr>
+<tr>
+<td><code>*</code></td>
+<td>the call sites of a symbol on the cursor's line — definitions first</td>
+</tr>
+<tr>
+<td><code>x</code></td>
+<td>the whole of this file around its hunks · <code>x</code> again, back to the diff (closes an opened file)</td>
+</tr>
+<tr>
 <td><code>enter</code></td>
 <td>read the current finding in full, scrolling inside it</td>
 </tr>
@@ -1964,6 +1998,32 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 </table>
 <p>The task-side view, <a href="../diff/"><code>:diff</code></a>, has the same keys against your own agent's branch — the one
 difference being where <code>p</code> sends them.</p>
+<h3 id="reading-around-the-change">Reading around the change<a class="headerlink" href="#reading-around-the-change" title="Permanent link">&para;</a></h3>
+<p>A diff shows what changed, and the question a review keeps asking is about what didn't: who calls
+this, where else the pattern appears, what the function looks like above the hunk. Three keys answer
+it without leaving the view, all against the review's own checkout at the reviewed sha — so every
+line they take you to is numbered the way the margin is.</p>
+<p><strong><code>x</code> widens the file under the cursor to the whole file.</strong> The hunks stay where they were, with the
+rest of the file filled in around them; the strip says <code>whole file</code>, and the cursor stays on its line
+at the same height on screen, so what you were reading is still under your eye. <code>x</code> again goes back to
+the diff alone.</p>
+<p><strong><code>/</code> searches the checkout</strong> — a regex over every tracked file, case-insensitive unless the pattern
+has a capital in it. <strong><code>*</code> lists the call sites of a symbol on the cursor's line</strong>: it offers the
+line's names, best guess first (what the line declares, then what it calls), and <code>enter</code> finds every
+whole-word mention, each tagged <code>def</code>, <code>call</code>, <code>ref</code> or <code>use</code> (an import) and listed in that order.
+Hits in files this change touches are marked <code>*</code> and come first within each kind, because those are
+the callers a PR is likeliest to have broken. It is a textual match rather than a language server,
+so it works the same in every language a PR can touch and can be fooled by a name that means two
+things; the tags say which hits look like what.</p>
+<p><strong><code>enter</code> on a hit takes the diff there.</strong> A line already on screen is a cursor move. A line in a
+changed file that the hunks leave out widens that file first. A file the change never touches is
+<strong>opened</strong> — appended after the changed files with a tinted tab, and a first row saying it is
+unchanged — and read like any other: highlighted, with <code>n</code>/<code>N</code>, <code>v</code>, <code>a</code> and <code>i</code> working on it. <code>x</code>
+on an opened file closes it. <code>/</code> again starts from the last pattern, so <code>enter</code> on it goes straight
+back to those results, at the hit you left.</p>
+<p>A line outside the diff GitHub shows (anything more than three lines from a change, and everything in
+an opened file) can't take an inline comment: GitHub refuses it. So <code>e</code> there starts on
+<strong>annotation</strong>, and if you pick a posting level anyway the pane says so in yellow.</p>
 <h3 id="commenting-on-a-block">Commenting on a block<a class="headerlink" href="#commenting-on-a-block" title="Permanent link">&para;</a></h3>
 <p>A comment is often about a <em>passage</em>, not a line: the loop rather than its first statement. <strong><code>v</code>
 marks a block</strong> — press it, move, and the range grows with the cursor; <code>▏</code> runs down the gutter
