@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { diffOver, expandDiff, searchCode } from './codesearch.js';
-import { filesIn, openedFiles, parseDiff, postableLines } from './diff.js';
+import { fileStats, filesIn, openedFiles, parseDiff, postableLines } from './diff.js';
 import { classifyHit, symbolsOn } from './symbols.js';
 
 /**
@@ -57,6 +57,9 @@ try {
   check('widening makes no new line commentable', before === after, `${before} vs ${after}`);
   check('three lines either side of a change are commentable', postableLines(wide).has('lib.ts:19') && !postableLines(wide).has('lib.ts:18'));
   check('nothing in an opened file is commentable', ![...postableLines(wide)].some((k) => k.startsWith('caller.ts:')));
+  const stat = (lines: typeof base) => fileStats(lines).map((s) => `${s.file} +${s.added} -${s.removed}`).join();
+  check('a file counts what it adds and removes', stat(base) === 'lib.ts +1 -1', stat(base));
+  check('widening changes no count, and an opened file is not a change', stat(wide) === stat(base), stat(wide));
   check('expanding nothing changes nothing', (await expandDiff(dir, text, range, [])) === text);
   check('a file that is not there is skipped', (await expandDiff(dir, text, range, ['missing.ts'])) === text);
 

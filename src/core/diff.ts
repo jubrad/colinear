@@ -334,6 +334,33 @@ export function openedFiles(lines: DiffLine[]): Set<string> {
   return new Set(lines.filter((l) => l.kind === 'meta' && l.text === OPENED_MARK).map((l) => l.file));
 }
 
+export interface FileStat {
+  file: string;
+  added: number;
+  removed: number;
+}
+
+/**
+ * Lines added and removed per changed file, in diff order — the `--numstat`
+ * of a diff already in hand. A file opened only to read is not a change and is
+ * left out; a widened one counts the same as before, since context is neither.
+ */
+export function fileStats(lines: DiffLine[]): FileStat[] {
+  const opened = openedFiles(lines);
+  const out = new Map<string, FileStat>();
+  for (const l of lines) {
+    if (l.kind === 'file') {
+      if (!opened.has(l.file) && !out.has(l.file)) out.set(l.file, { file: l.file, added: 0, removed: 0 });
+      continue;
+    }
+    const s = out.get(l.file);
+    if (!s) continue;
+    if (l.kind === 'add') s.added++;
+    else if (l.kind === 'del') s.removed++;
+  }
+  return [...out.values()];
+}
+
 /** Context git shows around a change by default — and the lines GitHub will take a comment on. */
 const DEFAULT_CONTEXT = 3;
 

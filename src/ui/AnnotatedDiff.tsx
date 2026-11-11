@@ -124,6 +124,8 @@ export function AnnotatedDiff(props: {
   onExpand?: (files: string[]) => void;
   /** search the checkout behind this diff — `/` text, `*` call sites */
   onSearch?: (mode: SearchMode, query: string) => Promise<CodeSearchResult>;
+  /** open on this line rather than the top — enter on a finding in the review list's preview */
+  startAt?: { file: string; line: number };
   onPost: () => void;
   /** run an agent over this diff; absent where the review already has one */
   onReview?: () => void;
@@ -186,7 +188,9 @@ export function AnnotatedDiff(props: {
    * that changes, a line not found is a line not here *yet*. `offset` keeps the
    * row where it was on screen.
    */
-  const [jumpTo, setJumpTo] = useState<{ file: string; line: number; from?: string; offset?: number } | null>(null);
+  const [jumpTo, setJumpTo] = useState<{ file: string; line: number; from?: string; offset?: number } | null>(
+    props.startAt ?? null,
+  );
 
   // parse then highlight, both keyed on the diff so tokenizing runs once per
   // diff and never in the frame loop (the app re-renders on a clock)
@@ -350,6 +354,8 @@ export function AnnotatedDiff(props: {
     // old one is wrong even when the line is in it: the row index found there
     // points somewhere else once the wider diff replaces it
     if (jumpTo.from !== undefined && diff === jumpTo.from) return;
+    // nothing to land in yet: opened at a finding before its diff arrived
+    if (!lines.length) return;
     const exact = rowOf(jumpTo.file, jumpTo.line);
     setJumpTo(null);
     const row = exact !== -1 ? exact : nearestRow(jumpTo.file, jumpTo.line);
@@ -1132,7 +1138,7 @@ function DiffRow(props: {
 }
 
 /** Word wrap for the annotation pane; the comment is prose and must stay readable. */
-function wrapText(text: string, width: number): string[] {
+export function wrapText(text: string, width: number): string[] {
   const out: string[] = [];
   // an agent's comment quotes code, so it carries tabs too — and a tab here
   // overflows this pane the same way it overflowed the diff's
