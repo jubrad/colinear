@@ -1250,10 +1250,21 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#only-once-the-draft-pr-is-open" class="md-nav__link">
+  <a href="#while-the-agent-is-still-writing" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Only once the draft PR is open
+        While the agent is still writing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#measured-against-what" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measured against what
       
     </span>
   </a>
@@ -1353,16 +1364,55 @@ where it goes: <strong><code>p</code> hands the list to the agent that wrote the
 <td>hand the comments back to the agent</td>
 </tr>
 <tr>
+<td><code>w</code></td>
+<td>measure against <a href="#measured-against-what">the whole branch, since your hand-back, or live</a></td>
+</tr>
+<tr>
 <td><code>tab</code></td>
 <td>say something to the agent directly</td>
 </tr>
 </tbody>
 </table>
-<h2 id="only-once-the-draft-pr-is-open">Only once the draft PR is open<a class="headerlink" href="#only-once-the-draft-pr-is-open" title="Permanent link">&para;</a></h2>
-<p>Colinear opens PRs as drafts and leaves promoting them to you, which is the moment this view is
-for: the work is committed, the agent is idle, and the diff you are reading is the diff that
-exists. Before that the branch is still moving — half of what you read would be gone by the time
-you commented on it — so <code>v</code> says so and does nothing.</p>
+<h2 id="while-the-agent-is-still-writing">While the agent is still writing<a class="headerlink" href="#while-the-agent-is-still-writing" title="Permanent link">&para;</a></h2>
+<p><code>v</code> works on a task whose agent is at work, not only once its draft PR is open. You get the
+worktree <strong>as it stands</strong> — committed, uncommitted and untracked work against where the branch
+left its base — re-read every four seconds, so you can watch the change take shape and stop it
+early (<code>x</code> on the board) if it is heading somewhere wrong.</p>
+<p>A file with work <strong>not committed yet</strong> has an amber tab and says so on the strip, and its diff
+opens with a line saying the agent is still writing it. The cursor follows its line as the diff
+moves: an agent writing above where you are reading renumbers every line below, so the view finds
+your line by its text rather than its number.</p>
+<p>It is <strong>read-only</strong> until the draft PR opens. <code>/</code>, <code>*</code>, <code>x</code>, <code>]</code>/<code>[</code> and <code>n</code>/<code>N</code> all work; the keys
+that write a comment, ask about lines or hand back say why they do not. Half of what you commented
+on would be gone by the time the agent read it — the same reason colinear waited before, applied to
+commenting rather than to reading. Reading the worktree never touches its index: untracked files are
+diffed against nothing rather than added with <code>git add -N</code>.</p>
+<h2 id="measured-against-what">Measured against what<a class="headerlink" href="#measured-against-what" title="Permanent link">&para;</a></h2>
+<p><code>w</code> switches what the diff is measured against, and the title says which you are reading:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>the whole branch</strong></td>
+<td>everything since it left its base — the PR. The default once the draft PR is open</td>
+</tr>
+<tr>
+<td><strong>since you handed it back</strong></td>
+<td>only what the agent committed after your last <code>p</code> — its answer to your comments. Offered once you have handed something back; the commit the branch was at is recorded when you do</td>
+</tr>
+<tr>
+<td><strong>live</strong></td>
+<td>the worktree as it stands, uncommitted work included. The default while an agent is writing, and offered on an open PR the agent is revising</td>
+</tr>
+</tbody>
+</table>
+<p>After a hand-back, <em>since</em> is the diff worth reading: the agent was told to touch nothing that was not
+raised, and this shows whether it did.</p>
 <h2 id="the-reviewing-agent-is-a-different-one">The reviewing agent is a different one<a class="headerlink" href="#the-reviewing-agent-is-a-different-one" title="Permanent link">&para;</a></h2>
 <p><code>R</code> starts a <strong>fresh</strong> session rather than asking the agent that wrote the code. An agent reviewing
 its own work in its own context agrees with itself; a session that arrives cold, reads the diff and

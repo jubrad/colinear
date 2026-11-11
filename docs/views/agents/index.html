@@ -1250,6 +1250,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#beside-every-view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Beside every view
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#drafts" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1279,57 +1290,97 @@
 
 <h1 id="agents-what-is-running-right-now"><code>:agents</code> — what is running right now<a class="headerlink" href="#agents-what-is-running-right-now" title="Permanent link">&para;</a></h1>
 <p>Alias: <code>ps</code>. No argument.</p>
-<p>Every agent the daemon has running, in one list, with <strong>what started it</strong>. Sessions belong to
-four different things — a task, a review, a project plan, a one-off draft — and each was only
-visible in the view that owned it, if it had one at all.</p>
-<div class="highlight"><pre><span></span><code>  KIND            WORKING ON            STARTED BY            FOR      TOKENS   DOING
-⠙ work            CLO-203               dispatch              4m12s    182k     ⚒ Bash cargo clippy -p mz…
-⠹ review          cloud#13251           you pressed r         1m03s    54k      ⚒ Read src/analytics.py
-  draft-issue     make the retry back…  you pressed n in :i…  8s       2k       created CLO-214
+<p>Every agent, in the order it wants you: <strong>stopped on a question</strong>, <strong>working</strong>, <strong>just finished</strong>.
+Sessions belong to four different things — a task, a review, a project plan, a one-off draft — and
+each was only visible in the view that owned it, if it had one at all.</p>
+<div class="highlight"><pre><span></span><code>  WORKING ON        KIND         FOR   DOING                 ┌──────────────────────────────────────────┐
+needs you 1                                                   │ CLO-203 make the retry backoff configur… │
+? CLO-203           question     2m    which retry policy…    │ question · dispatch · ran 6m · 2m ago    │
+working 2                                                     │                                          │
+⠙ CLO-211           work         4m    ⚒ Bash cargo clippy…   │ ? which retry policy should reconnect…   │
+⠹ colinear#162      review       1m    ⚒ Read src/core/cod…   │   1. exponential — doubles to 30s        │
+just finished 2                                               │   2. fixed 1s                            │
+✓ make the retry b… draft-issue  now   created CLO-214        │                                          │
+✓ CLO-198           work         3m    PR #412 opened         │ last 3 of 3 steps                        │
+                                                              │ ⚒ Bash cargo test -p conn                │
+                                                              │ a answers · 1-9 picks · M message · s…   │
+                                                              └──────────────────────────────────────────┘
 </code></pre></div>
+<p><strong>Needs you</strong> is an agent that asked a question and is waiting for the answer. Its session has
+<em>ended</em> — it is over until you reply — so these come from the tasks and reviews holding a question
+rather than from the list of running sessions, and they are listed once, longest-waiting first.
+<strong>Working</strong> is every running session, longest-running first. <strong>Just finished</strong> keeps a session for
+ten minutes after it ends, with its outcome, so you can see what just happened. One row per thing
+being worked on: a task's live session supersedes its earlier finished one.</p>
+<p>A label in <strong>bold</strong> has something you have not seen: a question asked, a session started or
+finished after you last opened that task or review. Opening it — <code>enter</code> here, or from anywhere
+else — is what counts as looking.</p>
+<p>The pane on the right (below, on a narrow terminal) is the selected agent in full: what started it,
+for how long, its model and spend, its question with the options, the last of what it has been
+doing, its worktree and a ready-to-paste <code>claude --resume</code>.</p>
 <table>
 <thead>
 <tr>
-<th>column</th>
+<th>key</th>
 <th>what</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>KIND</code></td>
-<td><code>work</code> · <code>triage</code> · <code>maintenance</code> (a CI fix or rebase on an open PR) · <code>coordinator</code> · <code>review</code> · <code>plan</code> · <code>draft-issue</code> · <code>draft-project</code> · <code>todo</code> (ranking <a href="../todo/"><code>:todo</code></a>)</td>
+<td><code>j</code> <code>k</code> / ↑ ↓</td>
+<td>move · <code>g</code> top · <code>G</code> bottom</td>
 </tr>
 <tr>
-<td><code>WORKING ON</code></td>
-<td>the issue, PR or project it belongs to</td>
+<td><code>enter</code></td>
+<td>open whatever owns it — the task, the review, the plan</td>
 </tr>
 <tr>
-<td><code>STARTED BY</code></td>
-<td>why it exists — <em>dispatch</em>, <em>CI failing</em>, <em>you pressed r</em>, <em>you messaged the parent</em></td>
+<td><code>a</code></td>
+<td>answer its question — the <a href="../task/#answering-questions">answer form</a>; for a review, in the review</td>
 </tr>
 <tr>
-<td><code>FOR</code></td>
-<td>how long it has been going</td>
+<td><code>1</code>–<code>9</code></td>
+<td>pick an option outright, when there is one question</td>
 </tr>
 <tr>
-<td><code>DOING</code></td>
-<td>its last line, or its outcome once finished</td>
+<td><code>M</code></td>
+<td>message the agent without attaching</td>
+</tr>
+<tr>
+<td><code>s</code></td>
+<td>attach to its session · <code>S</code> a shell in its worktree</td>
 </tr>
 </tbody>
 </table>
-<p><code>enter</code> opens whatever owns it — the task, the review, the plan. A finished agent stays listed for
-ten minutes so you can see what just happened; a running one is never aged out, because an agent
-that has been going for an hour is a fact worth seeing rather than something to tidy away.</p>
-<p>The selected agent's worktree and a ready-to-paste <code>claude --resume</code> are shown underneath.</p>
+<p><code>a</code>, <code>M</code>, <code>s</code> and <code>S</code> act on the <strong>task</strong> behind a row — they mean the same thing on every task, so
+they work here as on the board. Cancelling does not: <code>x</code> cancels a task in one place and a review in
+another, so <code>enter</code> takes you where it means one thing.</p>
+<h2 id="beside-every-view">Beside every view<a class="headerlink" href="#beside-every-view" title="Permanent link">&para;</a></h2>
+<p><strong><code>\</code></strong> puts the same list in a rail down the left of every view — two rows an agent, what it is on
+and for how long, then what it is doing, bold where there is something new. It answers "what is going
+on" without leaving the view you are in; this page is where you act on it.</p>
+<div class="highlight"><pre><span></span><code>╭ agents · 3 new · \ hides ─╮
+│ needs you                 │
+│ ? CLO-203              2m │
+│   which retry policy sho… │
+│ working 2                 │
+│ ⠙ CLO-211 work         4m │
+│   ⚒ Bash cargo clippy -p… │
+│ just finished 2           │
+│ ✓ CLO-198 work         3m │
+│   PR #412 opened          │
+╰───────────────────────────╯
+</code></pre></div>
+<p>It needs a terminal 150 columns wide, and steps aside when a view goes full screen (the annotated
+diff) and here on <code>:agents</code>, which is the same list with room to act. The view beside it is told the
+terminal is narrower by the rail's width, so every view lays itself out as it would on a smaller
+screen. Whether it is on is remembered, like the board's layout.</p>
 <h2 id="drafts">Drafts<a class="headerlink" href="#drafts" title="Permanent link">&para;</a></h2>
 <p><code>n</code> in <a href="../issues/"><code>:issues</code></a> or <a href="../projects/"><code>:projects</code></a> starts a drafting agent, and those used
 to run inside the TUI: closing the progress popup left it invisible, and reloading the UI (<code>R</code>) or
 quitting killed it outright. They run in the daemon now, like every other agent. <code>esc</code> closes the
 popup, not the session — the draft keeps going, it appears here, and the toast still lands when the
 issue is filed.</p>
-<p>This view is read-only. What you can do to an agent depends on what it is working on — <code>x</code> cancels
-a task in one place and a review in another — so <code>enter</code> takes you where those keys mean something
-rather than pretending one verb fits all of them.</p>
 
 
 

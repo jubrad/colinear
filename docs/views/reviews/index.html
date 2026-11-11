@@ -894,6 +894,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#side-by-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Side by side
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-wants-you" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1513,6 +1524,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#side-by-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Side by side
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-wants-you" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1743,6 +1765,32 @@
 <p>Aliases: <code>rev</code>, <code>pr</code>. PRs where your review is requested, across every repo your <code>gh</code> auth can see,
 refreshed every five minutes.</p>
 <p><a class="glightbox" href="../../images/reviews.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The review queue: two PRs, the selected one pre-reviewed with four findings graded lead, blocking, consider and nit" src="../../images/reviews.png" /></a></p>
+<h2 id="side-by-side">Side by side<a class="headerlink" href="#side-by-side" title="Permanent link">&para;</a></h2>
+<p>On a terminal 140 columns or wider the list and the selected review sit <strong>side by side</strong>: the
+list on the left keeps what picks a row out — whether it wants you, its state, the PR, the title —
+and the preview on the right carries the rest.</p>
+<div class="highlight"><pre><span></span><code>      PR                TITLE                    ┌───────────────────────────────────────────────┐
+●   ◆ colinear#162      Search, list call sit…   │ colinear#162 jubrad · open · feat → main      │
+○   ⠇ console#882       fix the table header…    │ Search, list call sites and widen the diff    │
+●   · db#30112          persist: compact batc…   │                                               │
+                                                 │ 5 findings · 1 blocking                       │
+                                                 │ lead     Sound overall; the jump race is the… │
+                                                 │ blocking src/ui/AnnotatedDiff.tsx:352 the ju… │
+                                                 │ consider src/core/codesearch.ts:30 diffOver…  │
+                                                 │                                               │
+                                                 │ 14 files +1200 -80                            │
+                                                 │ src/core/codesearch.ts     +147   -0  ▆▆▆▆▆▆  │
+                                                 │ src/ui/AnnotatedDiff.tsx    +88  -12  ▆▆▆▆    │
+                                                 └───────────────────────────────────────────────┘
+</code></pre></div>
+<p>The preview holds <strong>every finding</strong>, ordered for reading from a list — the lead, then blocking down
+to praise, annotations last — and <strong>the files the PR changes</strong>, each with what it adds and removes
+and a bar to its scale. The file list comes from the review's checkout, read once the cursor
+settles on a row; a PR not checked out yet shows only its totals until <code>r</code> checks it out.</p>
+<p><code>l</code> (or <code>→</code>) moves into the preview, where <code>i</code>/<code>k</code> walk the findings and <strong><code>enter</code> opens the
+annotated diff on the one you are on</strong>, not at the top. <code>j</code>, <code>←</code> or <code>esc</code> go back to the list. Every
+other key — <code>r</code>, <code>p</code>, <code>A</code>, <code>X</code>, <code>s</code>, <code>o</code> — acts on the selected PR from either side.</p>
+<p>Narrower than that, the detail pane stacks under the list as before.</p>
 <h2 id="what-wants-you">What wants you<a class="headerlink" href="#what-wants-you" title="Permanent link">&para;</a></h2>
 <p>Two facts decide whether a row needs you, and neither is the review's status:</p>
 <table>
@@ -1951,6 +1999,10 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 <td>the whole of this file around its hunks · <code>x</code> again, back to the diff (closes an opened file)</td>
 </tr>
 <tr>
+<td><code>w</code></td>
+<td>the whole PR · only what was pushed since the review you posted (<a href="#round-two">round two</a>)</td>
+</tr>
+<tr>
 <td><code>enter</code></td>
 <td>read the current finding in full, scrolling inside it</td>
 </tr>
@@ -2093,6 +2145,12 @@ first two rather than keeping them alive to look thorough, and engaging with the
 third rather than restating the original comment. The document is rewritten whole each round, so
 what you see is what round two would post.</p>
 <p><code>p</code> then posts the revised review as a second one on the PR.</p>
+<p>You can read the same thing yourself: <strong><code>w</code> in the annotated diff</strong> switches between the whole PR and
+<strong>only what was pushed since the review you posted</strong> — the commits after that SHA, which is the
+author's answer to you. Findings still sit beside their lines; anything anchored on a line the
+author has not touched since is simply not on screen until you <code>w</code> back. Before <code>r</code> has re-read the
+PR at its new head the checkout is still at the old one, and the diff says so rather than showing
+nothing.</p>
 <h2 id="a-different-model-your-own-instructions">A different model, your own instructions<a class="headerlink" href="#a-different-model-your-own-instructions" title="Permanent link">&para;</a></h2>
 <p><code>c</code> is <code>r</code> with a popup first. It runs the same thing <code>r</code> would: a pre-review, or round two once
 you have posted. Before it starts, you pick:</p>
@@ -2214,6 +2272,10 @@ the network) still just fails and says so, because re-anchoring cannot help with
 <tr>
 <td><code>enter</code></td>
 <td>the annotated diff · <code>d</code> the review document</td>
+</tr>
+<tr>
+<td><code>l</code> <code>j</code> / → ←</td>
+<td>into and out of the <a href="#side-by-side">preview</a>, on a wide terminal — <code>enter</code> there opens the diff at that finding</td>
 </tr>
 <tr>
 <td><code>p</code> post · <code>A</code> approve · <code>X</code> request changes · <code>n</code> attach a note that rides along</td>

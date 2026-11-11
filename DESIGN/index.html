@@ -1883,6 +1883,11 @@ because divergence here is invisible until someone acts on a stale card.</p>
 <td>it drives a progress bar; the agent rewrites it mid-turn</td>
 </tr>
 <tr>
+<td>15s</td>
+<td>what each working task's worktree has changed (<code>measureLive()</code>): files, lines, uncommitted</td>
+<td>a card says what an agent has done, not only for how long; four cheap git reads per live task, nothing written when unchanged</td>
+</tr>
+<tr>
 <td>60s</td>
 <td>PR state, CI rollup, review decision, mergeability</td>
 <td>GitHub's own numbers move on this order; faster mostly buys rate limits</td>
@@ -2149,6 +2154,17 @@ is re-read with <code>-U1000000</code>, and an unchanged one is appended as a hu
 headed by a meta row (<code>OPENED_MARK</code>) so the view can tint its tab. Line numbers are the file's
 own either way, so findings, <code>n</code>/<code>N</code>, <code>a</code> and the margin work on opened code with no new path.
 Three things follow:</p>
+<p><strong>What a diff is measured against is a parameter, not a view.</strong> <code>taskDiff</code> and <code>reviewDiff</code> take
+<code>against</code>: <code>base</code> (the branch, the PR), <code>since</code> (after a recorded commit — the review you posted,
+the comments you handed back) and <code>live</code> (a task's worktree, uncommitted work included). The reply
+carries it back so the view caches each separately and <code>w</code> switching is instant. <code>live</code> diffs the
+working tree against the merge base and diffs untracked files against <code>/dev/null</code> — never
+<code>git add -N</code>, because the index belongs to the agent writing in it — then marks files with work not
+committed as a meta row, <em>after</em> widening, since <code>expandDiff</code> replaces a widened file's chunk whole.
+The view re-reads a live diff on a 4s clock and follows the cursor's line <strong>by its text</strong>: an agent
+writing above it renumbers everything below, and following the number lands on a neighbour.
+Commenting stays gated on <code>pr_open</code> (and off in <code>live</code> on an open PR): reading a moving diff is
+useful, commenting on one is not.</p>
 <ul>
 <li><strong>Searches read <code>HEAD</code>, not the working tree</strong> — the diff and opened files come from commits,
   and a hit has to name a line in that same text.</li>
@@ -2498,7 +2514,15 @@ every live worktree looks dead.</p>
 <li>Every session registers in <code>core/sessions.ts</code> from inside <code>runSession</code>, which is what <code>:agents</code>
   reads. It is a plain in-memory registry rather than a CDC entity: the client asks for the list
   while the view is open instead of following deltas, because it is a "what is happening now"
-  question and nothing persists it across a daemon restart.</li>
+  question and nothing persists it across a daemon restart. The client asks while <code>:agents</code> is
+  open, or every 2s while the rail (<code>\</code>) is shown. <code>core/fleet.ts</code> merges it with the store,
+  because an agent that asked a question has <em>ended</em> — the waiting ones only exist as tasks and
+  reviews holding a question.</li>
+<li><strong>The rail narrows the terminal rather than the views.</strong> The app wraps the view in a second
+  <code>AppContext.Provider</code> whose <code>size.columns</code> is the terminal less the rail, so every view — many
+  size themselves from <code>ctx.size</code> directly — lays out as on a smaller screen and none of them knows
+  a rail exists. "New" is <code>UiState.seen</code> (when each task or review was last opened, stamped on the
+  way in and out, pruned to 200) — daemon-persisted like the board layout, so it survives <code>R</code>.</li>
 <li><code>escalated</code> status is vestigial (verdicts now park as needs_input) but kept for old persisted state.</li>
 <li>Interactive attach + headless resume share one session id; concurrent writers are prevented by suspend-first, not enforced.</li>
 <li>No pagination UI past the 500-issue cap; silently truncates.</li>
