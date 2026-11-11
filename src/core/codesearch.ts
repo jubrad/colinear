@@ -10,7 +10,7 @@
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { expandTabs, OPENED_MARK } from './diff.js';
+import { expandTabs, OPENED_MARK, UNCOMMITTED_MARK } from './diff.js';
 import { REVIEW_FILE } from './reviewer.js';
 import { classifyHit, type CodeHit, type CodeSearchResult, type SearchMode } from './symbols.js';
 
@@ -42,6 +42,73 @@ export async function diffOver(worktree: string, ranges: string[]): Promise<{ te
     }
   }
   return { text: '' };
+}
+
+/**
+ * The commit a task's branch left its base at: the merge base of the first
+ * `a...b` range that resolves. The live diff is measured from here, because a
+ * worktree's uncommitted work can only be compared against a commit.
+ */
+async function mergeBase(worktree: string, ranges: string[]): Promise<string | undefined> {
+  for (const range of ranges) {
+    const [from, to] = range.split('...');
+    if (!from || !to) continue;
+    const found = await exec('git', ['-C', worktree, 'merge-base', from, to]).catch(() => undefined);
+    const sha = found?.stdout.trim();
+    if (sha) return sha;
+  }
+  return undefined;
+}
+
+/** Untracked files past this many are listed by the next poll's agent, not diffed into this one. */
+const MAX_UNTRACKED = 50;
+
+/**
+ * A task's worktree as it stands — committed, uncommitted and untracked work
+ * against where the branch left its base — and which files have work not yet
+ * committed. Read-only: untracked files are diffed against /dev/null rather
+ * than added with `git add -N`, because the index belongs to the agent writing
+ * in it. `range` is the base commit, which `git diff` (and so `expandDiff`)
+ * reads as "against the working tree".
+ */
+export async function liveDiff(
+  worktree: string,
+  ranges: string[],
+): Promise<{ text: string; range?: string; uncommitted: Set<string> }> {
+  const base = await mergeBase(worktree, ranges);
+  if (!base) return { text: '', uncommitted: new Set() };
+  const spec = ['--', '.', `:(exclude)${REVIEW_FILE}`];
+  const git = (args: string[]) =>
+    exec('git', ['-C', worktree, ...args], { maxBuffer: 32 * 1024 * 1024 })
+      .then((r) => r.stdout)
+      .catch(() => '');
+  const [tracked, dirty, others] = await Promise.all([
+    git(['diff', base, ...spec]),
+    git(['diff', '--name-only', 'HEAD', ...spec]),
+    git(['ls-files', '--others', '--exclude-standard', '-z', ...spec]),
+  ]);
+  const untracked = others.split('\0').filter(Boolean);
+  let text = tracked;
+  for (const file of untracked.slice(0, MAX_UNTRACKED)) {
+    // --no-index exits 1 when the files differ, which here they always do
+    const added = await exec('git', ['diff', '--no-index', '--', '/dev/null', file], { cwd: worktree, maxBuffer: 16 * 1024 * 1024 })
+      .then((r) => r.stdout)
+      .catch((err: { stdout?: string }) => err.stdout ?? '');
+    if (added && !/^Binary files/m.test(added)) text += added.endsWith('\n') ? added : `${added}\n`;
+  }
+  return { text, range: base, uncommitted: new Set([...dirty.split('\n').filter(Boolean), ...untracked]) };
+}
+
+/** Put `mark` as a meta row under the header of every file in `files` — how a diff says which files are which. */
+export function markFiles(text: string, files: Set<string>, mark: string = UNCOMMITTED_MARK): string {
+  if (!files.size) return text;
+  return splitDiff(text)
+    .map((c) => {
+      if (!c.file || !files.has(c.file)) return c.text;
+      const nl = c.text.indexOf('\n');
+      return nl === -1 ? c.text : `${c.text.slice(0, nl + 1)}${mark}\n${c.text.slice(nl + 1)}`;
+    })
+    .join('');
 }
 
 /** A diff cut at each file header, keeping whatever came before the first. */

@@ -363,6 +363,18 @@ headed by a meta row (`OPENED_MARK`) so the view can tint its tab. Line numbers 
 own either way, so findings, `n`/`N`, `a` and the margin work on opened code with no new path.
 Three things follow:
 
+**What a diff is measured against is a parameter, not a view.** `taskDiff` and `reviewDiff` take
+`against`: `base` (the branch, the PR), `since` (after a recorded commit — the review you posted,
+the comments you handed back) and `live` (a task's worktree, uncommitted work included). The reply
+carries it back so the view caches each separately and `w` switching is instant. `live` diffs the
+working tree against the merge base and diffs untracked files against `/dev/null` — never
+`git add -N`, because the index belongs to the agent writing in it — then marks files with work not
+committed as a meta row, *after* widening, since `expandDiff` replaces a widened file's chunk whole.
+The view re-reads a live diff on a 4s clock and follows the cursor's line **by its text**: an agent
+writing above it renumbers everything below, and following the number lands on a neighbour.
+Commenting stays gated on `pr_open` (and off in `live` on an open PR): reading a moving diff is
+useful, commenting on one is not.
+
 - **Searches read `HEAD`, not the working tree** — the diff and opened files come from commits,
   and a hit has to name a line in that same text.
 - **A widened file makes every line look commentable, and GitHub disagrees.** `postableLines`

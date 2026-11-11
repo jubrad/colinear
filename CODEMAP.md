@@ -124,7 +124,8 @@ src/core/
   codesearch.ts      the daemon half: git grep over a checkout's HEAD (`/` and `*` in the
                      annotated diff), diffOver (the review/self-review range fallback), and
                      expandDiff — a changed file widened to the whole file, an unchanged one
-                     opened as an all-context diff. codesearch.check.ts runs both against a
+                     opened as an all-context diff; liveDiff — a task's worktree as it stands,
+                     uncommitted and untracked work included, marked with markFiles. codesearch.check.ts runs both against a
                      throwaway repo: line numbers survive widening, nothing new is commentable
                      clearBrokenSubmodules undoes the wreckage `submodule.recurse` leaves in
                      a linked worktree, which otherwise wedges a review permanently

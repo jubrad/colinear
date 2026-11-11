@@ -1,3 +1,4 @@
+import type { DiffAgainst } from './core/diff.js';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { connect, type Socket } from 'node:net';
@@ -68,8 +69,8 @@ export interface DispatcherApi {
   startPlanChat(projectId: string): void;
   listAgents(): void;
   /** expand: files widened to the whole file, or opened though the change does not touch them */
-  reviewDiff(id: string, expand?: string[]): void;
-  taskDiff(id: string, expand?: string[]): void;
+  reviewDiff(id: string, expand?: string[], against?: DiffAgainst): void;
+  taskDiff(id: string, expand?: string[], against?: DiffAgainst): void;
   /** search the checkout behind a review or a task: `grep` a pattern, `refs` a symbol's call sites */
   codeSearch(id: string, mode: SearchMode, query: string): Promise<CodeSearchResult>;
   explainLines(
@@ -145,8 +146,8 @@ export interface Connection {
   onGcProgress(fn: (p: GcProgress) => void): () => void;
   onPlanChatReady(fn: (r: PlanChatReady) => void): () => void;
   onAgents(fn: (list: AgentSession[]) => void): () => void;
-  onReviewDiff(fn: (id: string, diff: string) => void): () => void;
-  onTaskDiff(fn: (id: string, diff: string) => void): () => void;
+  onReviewDiff(fn: (id: string, diff: string, against?: DiffAgainst) => void): () => void;
+  onTaskDiff(fn: (id: string, diff: string, against?: DiffAgainst) => void): () => void;
   onCreating(fn: (agentId: string) => void): () => void;
   /** daemon-side messages (edit results, etc.); returns an unsubscribe */
   onToast(fn: (text: string, kind: 'info' | 'ok' | 'err') => void): () => void;
@@ -280,8 +281,8 @@ export async function connectToDaemon(): Promise<Connection> {
   const gcProgressListeners = new Set<(p: GcProgress) => void>();
   const planChatListeners = new Set<(r: PlanChatReady) => void>();
   const agentListeners = new Set<(list: AgentSession[]) => void>();
-  const diffListeners = new Set<(id: string, diff: string) => void>();
-  const taskDiffListeners = new Set<(id: string, diff: string) => void>();
+  const diffListeners = new Set<(id: string, diff: string, against?: DiffAgainst) => void>();
+  const taskDiffListeners = new Set<(id: string, diff: string, against?: DiffAgainst) => void>();
   const creatingListeners = new Set<(agentId: string) => void>();
   /** code searches in flight, by the id their reply will carry */
   const searches = new Map<number, (result: CodeSearchResult) => void>();
@@ -399,8 +400,8 @@ export async function connectToDaemon(): Promise<Connection> {
           postPlanUpdate: (projectId) => command({ name: 'postPlanUpdate', projectId }),
           startPlanChat: (projectId) => command({ name: 'startPlanChat', projectId }),
           listAgents: () => command({ name: 'listAgents' }),
-          reviewDiff: (id, expand) => command({ name: 'reviewDiff', id, expand }),
-          taskDiff: (id, expand) => command({ name: 'taskDiff', id, expand }),
+          reviewDiff: (id, expand, against) => command({ name: 'reviewDiff', id, expand, against }),
+          taskDiff: (id, expand, against) => command({ name: 'taskDiff', id, expand, against }),
           codeSearch: (id, mode, query) =>
             new Promise<CodeSearchResult>((resolve) => {
               const reqId = nextSearch++;
@@ -437,13 +438,13 @@ export async function connectToDaemon(): Promise<Connection> {
           },
         });
       } else if (msg.t === 'taskDiff') {
-        for (const fn of taskDiffListeners) fn(msg.id, msg.diff);
+        for (const fn of taskDiffListeners) fn(msg.id, msg.diff, msg.against);
       } else if (msg.t === 'codeSearch') {
         const done = searches.get(msg.reqId);
         searches.delete(msg.reqId);
         done?.(msg.result);
       } else if (msg.t === 'reviewDiff') {
-        for (const fn of diffListeners) fn(msg.id, msg.diff);
+        for (const fn of diffListeners) fn(msg.id, msg.diff, msg.against);
       } else if (msg.t === 'agents') {
         for (const fn of agentListeners) fn(msg.list);
       } else if (msg.t === 'creating') {

@@ -246,6 +246,7 @@ acts on the line under the cursor, or on the marked block when there is one.
 | `/` | [search the checkout](#reading-around-the-change) — a regex over every file |
 | `*` | the call sites of a symbol on the cursor's line — definitions first |
 | `x` | the whole of this file around its hunks · `x` again, back to the diff (closes an opened file) |
+| `w` | the whole PR · only what was pushed since the review you posted ([round two](#round-two)) |
 | `enter` | read the current finding in full, scrolling inside it |
 | `v` | mark a block — move to grow it, `v` or `esc` to drop it |
 | `e` | write a finding — level and comment in one pane, `tab` between them |
@@ -380,6 +381,13 @@ third rather than restating the original comment. The document is rewritten whol
 what you see is what round two would post.
 
 `p` then posts the revised review as a second one on the PR.
+
+You can read the same thing yourself: **`w` in the annotated diff** switches between the whole PR and
+**only what was pushed since the review you posted** — the commits after that SHA, which is the
+author's answer to you. Findings still sit beside their lines; anything anchored on a line the
+author has not touched since is simply not on screen until you `w` back. Before `r` has re-read the
+PR at its new head the checkout is still at the old one, and the diff says so rather than showing
+nothing.
 
 ## A different model, your own instructions
 

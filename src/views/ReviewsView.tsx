@@ -8,7 +8,7 @@ import { attachTo, rememberView, reviewAttachable, sessionRuntime, setPendingAct
 import { useReviews } from '../core/hooks.js';
 import { parsePrSpec } from '../core/reviews.js';
 import { store } from '../core/store.js';
-import { fileStats, parseDiff, type FileStat } from '../core/diff.js';
+import { fileStats, parseDiff, type DiffAgainst, type FileStat } from '../core/diff.js';
 import type { Review, ReviewFinding } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
 import { AnnotatedDiff, wrapText } from '../ui/AnnotatedDiff.js';
@@ -112,7 +112,16 @@ export function ReviewsView(props: { param?: string }) {
   /** the `c` popup: a model and instructions for this review */
   const [customizing, setCustomizing] = useState(false);
 
-  useEffect(() => ctx.onReviewDiff?.((id, diff) => setDiffs((d) => ({ ...d, [id]: diff }))), []);
+  /** per review: only what was pushed after the review you posted (`w` in the diff) */
+  const [sinceDiffs, setSinceDiffs] = useState<Record<string, string>>({});
+  const [against, setAgainst] = useState<DiffAgainst>('base');
+  useEffect(
+    () =>
+      ctx.onReviewDiff?.((id, diff, as) =>
+        (as === 'since' ? setSinceDiffs : setDiffs)((d) => ({ ...d, [id]: diff })),
+      ),
+    [],
+  );
   /**
    * A diff fetched before a review re-read the PR is the old PR's diff. Dropped
    * when the sha a review was read at moves, so the preview's file list and
@@ -122,12 +131,15 @@ export function ReviewsView(props: { param?: string }) {
   useEffect(() => {
     const moved = reviews.filter((r) => readAt.current.has(r.id) && readAt.current.get(r.id) !== r.reviewedSha);
     for (const r of reviews) readAt.current.set(r.id, r.reviewedSha);
-    if (moved.length)
-      setDiffs((d) => {
-        const next = { ...d };
-        for (const r of moved) delete next[r.id];
-        return next;
-      });
+    const drop = (d: Record<string, string>) => {
+      const next = { ...d };
+      for (const r of moved) delete next[r.id];
+      return next;
+    };
+    if (moved.length) {
+      setDiffs(drop);
+      setSinceDiffs(drop);
+    }
   }, [reviews]);
   /** wide enough for the list and a preview side by side */
   const wide = pane.width >= SPLIT_MIN;
@@ -204,6 +216,7 @@ export function ReviewsView(props: { param?: string }) {
   // another PR is another list of findings: start at its first, from the list
   useEffect(() => {
     setFindIdx(0);
+    setAgainst('base');
     if (!ordered.length) setFocus('list');
   }, [selected?.id]);
   useEffect(() => setFindIdx((i) => Math.max(0, Math.min(i, ordered.length - 1))), [ordered.length]);
@@ -306,6 +319,7 @@ export function ReviewsView(props: { param?: string }) {
         setStartAt(f?.file && typeof f.line === 'number' ? { file: f.file, line: f.line } : undefined);
         setAnnotated(true);
         setReading(true);
+        setAgainst('base');
         if (!diffs[selected.id]) ctx.dispatcher.reviewDiff(selected.id, expanded[selected.id]);
       }
       if (input === 'd') {
@@ -405,9 +419,28 @@ export function ReviewsView(props: { param?: string }) {
     return (
       <AnnotatedDiff
         review={selected}
-        diff={diffs[selected.id]}
+        diff={(against === 'since' ? sinceDiffs : diffs)[selected.id]}
         width={pane.width}
         height={Math.max(12, pane.height)}
+        compare={
+          selected.posted?.sha
+            ? {
+                label: against === 'since' ? 'since the review you posted' : 'the whole PR',
+                next: against === 'since' ? 'the whole PR' : 'since your review',
+                onNext: () => {
+                  const next: DiffAgainst = against === 'since' ? 'base' : 'since';
+                  setAgainst(next);
+                  const cache = next === 'since' ? sinceDiffs : diffs;
+                  if (cache[selected.id] === undefined) ctx.dispatcher.reviewDiff(selected.id, expanded[selected.id], next);
+                },
+              }
+            : undefined
+        }
+        emptyText={
+          against === 'since'
+            ? `nothing since the review you posted${freshness(selected)?.glyph === '↻' ? ' in this checkout — r re-reads the PR at its new head' : ''}`
+            : undefined
+        }
       busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
         onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
         onEditFinding={(file, line, comment, severity, startLine, by, nth) =>
@@ -420,7 +453,14 @@ export function ReviewsView(props: { param?: string }) {
         expanded={expanded[selected.id]}
         onExpand={(files) => {
           setExpanded((e) => ({ ...e, [selected.id]: files }));
-          ctx.dispatcher.reviewDiff(selected.id, files);
+          // the other comparison was widened differently: read again when switched to
+          const other = against === 'since' ? setDiffs : setSinceDiffs;
+          other((d) => {
+            const next = { ...d };
+            delete next[selected.id];
+            return next;
+          });
+          ctx.dispatcher.reviewDiff(selected.id, files, against);
         }}
         onSearch={(mode, query) => ctx.dispatcher.codeSearch(selected.id, mode, query)}
         startAt={startAt}

@@ -279,6 +279,8 @@ export interface Task {
   blockedBy?: Array<{ id: string; identifier: string; kind: 'start' | 'merge'; done?: boolean }>;
   /** one automatic retry after a rate-limit failure */
   retried?: boolean;
+  /** the commit the branch was at when the self-review was last handed back — `:diff`'s "since" */
+  handedBackSha?: string;
   /**
    * Operator messages typed while no session was live (`M`). They ride into
    * the next session's opening prompt and are cleared once delivered; a live
