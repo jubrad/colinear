@@ -726,7 +726,15 @@ Every `~/.local/state/colinear/` path above moves under `contexts/<name>/` in a 
 - Every session registers in `core/sessions.ts` from inside `runSession`, which is what `:agents`
   reads. It is a plain in-memory registry rather than a CDC entity: the client asks for the list
   while the view is open instead of following deltas, because it is a "what is happening now"
-  question and nothing persists it across a daemon restart.
+  question and nothing persists it across a daemon restart. The client asks while `:agents` is
+  open, or every 2s while the rail (`\`) is shown. `core/fleet.ts` merges it with the store,
+  because an agent that asked a question has *ended* — the waiting ones only exist as tasks and
+  reviews holding a question.
+- **The rail narrows the terminal rather than the views.** The app wraps the view in a second
+  `AppContext.Provider` whose `size.columns` is the terminal less the rail, so every view — many
+  size themselves from `ctx.size` directly — lays out as on a smaller screen and none of them knows
+  a rail exists. "New" is `UiState.seen` (when each task or review was last opened, stamped on the
+  way in and out, pruned to 200) — daemon-persisted like the board layout, so it survives `R`.
 - `escalated` status is vestigial (verdicts now park as needs_input) but kept for old persisted state.
 - Interactive attach + headless resume share one session id; concurrent writers are prevented by suspend-first, not enforced.
 - No pagination UI past the 500-issue cap; silently truncates.

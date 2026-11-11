@@ -40,7 +40,7 @@ Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset) and `
 ## What it does
 
 - **Dispatch** — an agent per issue, in a worktree cut from your repo. Triage picks the repo and scopes the work, the work pass implements it and opens a **draft** PR. Agents never mark a PR ready; that's your keypress.
-- **Watch** — a kanban board and a table view of every task: live duration, tokens, cost, subtask progress, CI and review state, blocked-by chains.
+- **Watch** — a kanban board and a table view of every task: live duration, tokens, cost, subtask progress, CI and review state, blocked-by chains. `:agents` (or `\` for a rail beside every view) lists every agent by what it wants from you: waiting on a question, working, just finished.
 - **Steer** — answer an agent's questions in a form, message a running agent without attaching, attach to its session and hand it back, cancel, resume, rebase.
 - **Review** — PRs awaiting your review get an assisted pre-review you edit and post deterministically, never by an agent.
 - **Plan** — a read-only planning chat that drafts sub-issues for you to approve.
