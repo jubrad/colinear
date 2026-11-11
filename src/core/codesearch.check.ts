@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { diffOver, expandDiff, searchCode } from './codesearch.js';
-import { fileStats, filesIn, openedFiles, parseDiff, postableLines } from './diff.js';
+import { diffOver, expandDiff, liveDiff, markFiles, searchCode } from './codesearch.js';
+import { fileStats, filesIn, openedFiles, parseDiff, postableLines, uncommittedFiles } from './diff.js';
 import { classifyHit, symbolsOn } from './symbols.js';
 
 /**
@@ -82,6 +82,24 @@ try {
   check('words in strings are not symbols', !symbolsOn('log("retryCall failed")').includes('retryCall'));
   check('a go method is a definition', classifyHit('Fetch', 'func (r *Repo) Fetch(ctx context.Context) error {') === 'def');
   check('a rust macro call is a call', classifyHit('vec', 'let v = vec![1];') !== 'def');
+
+  // the live diff: work in flight on top of the committed change
+  writeFileSync(join(dir, 'lib.ts'), lib('  return n * 3;'));
+  writeFileSync(join(dir, 'fresh.ts'), 'export const fresh = 1;\n');
+  const index = git('ls-files', '--stage');
+  const live = await liveDiff(dir, ['nope...HEAD', 'HEAD~1...HEAD']);
+  const liveLines = parseDiff(markFiles(live.text, live.uncommitted));
+  check('the live diff holds uncommitted work', liveLines.some((l) => l.kind === 'add' && l.text === '  return n * 3;'));
+  check('and untracked files, as new ones', filesIn(liveLines).join() === 'lib.ts,fresh.ts', filesIn(liveLines).join());
+  check('files not committed are marked', [...uncommittedFiles(liveLines)].sort().join() === 'fresh.ts,lib.ts');
+  check('reading it leaves the index alone', git('ls-files', '--stage') === index);
+  const liveWide = parseDiff(markFiles(await expandDiff(dir, live.text, live.range, ['lib.ts']), live.uncommitted));
+  check(
+    'widening a live file widens the working copy, and keeps its mark',
+    liveWide.filter((l) => l.file === 'lib.ts' && l.newLine !== undefined).length === 43 && uncommittedFiles(liveWide).has('lib.ts'),
+  );
+  const since = await diffOver(dir, ['HEAD~1..HEAD']);
+  check('since a commit is only what came after it', parseDiff(since.text).filter((l) => l.kind === 'add').map((l) => l.text).join() === '  return n * 2;');
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

@@ -267,7 +267,11 @@ export async function runDaemon(): Promise<void> {
       }
       case 'taskDiff': {
         const task = store.get(cmd.id);
-        if (task) void selfreview.taskDiff(cfg, task, cmd.expand).then((diff) => reply({ t: 'taskDiff', id: cmd.id, diff }));
+        if (task) {
+          void selfreview
+            .taskDiff(cfg, task, cmd.expand, cmd.against)
+            .then((diff) => reply({ t: 'taskDiff', id: cmd.id, diff, against: cmd.against }));
+        }
         break;
       }
       case 'reviewTask': {
@@ -297,6 +301,10 @@ export async function runDaemon(): Promise<void> {
           broadcast({ t: 'toast', text: 'nothing to hand back — no findings to act on', kind: 'err' });
           break;
         }
+        // where the branch is now, before the agent starts answering: `:diff`'s
+        // "since" is what it commits after this point. A rev-parse is done long
+        // before a session that has to start, read and edit gets to a commit
+        void selfreview.markHandBack(task);
         // maintenance, not a wake: waking would set the task back to `queued`
         // and drop it out of PR Open, which is not what happened
         if (!dispatcher.revise(task.issue.id, handed.text)) {
@@ -311,7 +319,9 @@ export async function runDaemon(): Promise<void> {
         break;
       }
       case 'reviewDiff':
-        void reviewer.diff(cmd.id, cmd.expand).then((diff) => reply({ t: 'reviewDiff', id: cmd.id, diff }));
+        void reviewer
+          .diff(cmd.id, cmd.expand, cmd.against)
+          .then((diff) => reply({ t: 'reviewDiff', id: cmd.id, diff, against: cmd.against }));
         break;
       case 'codeSearch': {
         // the checkout the diff came from: a task's own, or the review's

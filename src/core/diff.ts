@@ -329,6 +329,22 @@ export function sliceSpans(spans: Span[], start: number, end: number): Span[] {
  */
 export const OPENED_MARK = 'colinear: unchanged in this change — opened for reading';
 
+/**
+ * What a diff is measured against. `base` is the branch since it left its base
+ * — the PR. `since` is only what landed after a point you care about: the
+ * review you posted, the comments you handed back. `live` is a task's worktree
+ * as it stands, uncommitted work included, while its agent is still writing.
+ */
+export type DiffAgainst = 'base' | 'since' | 'live';
+
+/** The meta row heading a file with work not committed yet, in a `live` diff. */
+export const UNCOMMITTED_MARK = 'colinear: not committed yet — the agent is still writing this';
+
+/** Files in a live diff with work the agent has not committed. */
+export function uncommittedFiles(lines: DiffLine[]): Set<string> {
+  return new Set(lines.filter((l) => l.kind === 'meta' && l.text === UNCOMMITTED_MARK).map((l) => l.file));
+}
+
 /** Files in the diff only because they were opened from a search, not because they changed. */
 export function openedFiles(lines: DiffLine[]): Set<string> {
   return new Set(lines.filter((l) => l.kind === 'meta' && l.text === OPENED_MARK).map((l) => l.file));

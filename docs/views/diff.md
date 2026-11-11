@@ -22,14 +22,39 @@ where it goes: **`p` hands the list to the agent that wrote the code** instead o
 | `c` | ask about them your own way — a model and a request; a critique that finds a problem comes back as a finding you can hand back with `p`. See [asking with a model and a request](reviews.md#asking-with-a-model-and-a-request) |
 | `enter` `n`/`N` | read the current finding in full, scrolling · walk between them, one at a time where a line has several |
 | `p` | hand the comments back to the agent |
+| `w` | measure against [the whole branch, since your hand-back, or live](#measured-against-what) |
 | `tab` | say something to the agent directly |
 
-## Only once the draft PR is open
+## While the agent is still writing
 
-Colinear opens PRs as drafts and leaves promoting them to you, which is the moment this view is
-for: the work is committed, the agent is idle, and the diff you are reading is the diff that
-exists. Before that the branch is still moving — half of what you read would be gone by the time
-you commented on it — so `v` says so and does nothing.
+`v` works on a task whose agent is at work, not only once its draft PR is open. You get the
+worktree **as it stands** — committed, uncommitted and untracked work against where the branch
+left its base — re-read every four seconds, so you can watch the change take shape and stop it
+early (`x` on the board) if it is heading somewhere wrong.
+
+A file with work **not committed yet** has an amber tab and says so on the strip, and its diff
+opens with a line saying the agent is still writing it. The cursor follows its line as the diff
+moves: an agent writing above where you are reading renumbers every line below, so the view finds
+your line by its text rather than its number.
+
+It is **read-only** until the draft PR opens. `/`, `*`, `x`, `]`/`[` and `n`/`N` all work; the keys
+that write a comment, ask about lines or hand back say why they do not. Half of what you commented
+on would be gone by the time the agent read it — the same reason colinear waited before, applied to
+commenting rather than to reading. Reading the worktree never touches its index: untracked files are
+diffed against nothing rather than added with `git add -N`.
+
+## Measured against what
+
+`w` switches what the diff is measured against, and the title says which you are reading:
+
+| | |
+|---|---|
+| **the whole branch** | everything since it left its base — the PR. The default once the draft PR is open |
+| **since you handed it back** | only what the agent committed after your last `p` — its answer to your comments. Offered once you have handed something back; the commit the branch was at is recorded when you do |
+| **live** | the worktree as it stands, uncommitted work included. The default while an agent is writing, and offered on an open PR the agent is revising |
+
+After a hand-back, *since* is the diff worth reading: the agent was told to touch nothing that was not
+raised, and this shows whether it did.
 
 ## The reviewing agent is a different one
 

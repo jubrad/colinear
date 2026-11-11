@@ -4,7 +4,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { runtimeFor } from './agent.js';
-import { diffOver, expandDiff } from './codesearch.js';
+import { diffOver, expandDiff, liveDiff, markFiles } from './codesearch.js';
+import type { DiffAgainst } from './diff.js';
 import { demoDiff, isDemo } from './demo.js';
 import { guidanceFor } from './guidance.js';
 import { log } from './log.js';
@@ -33,11 +34,25 @@ export const docPath = (task: Task): string | undefined =>
   task.worktree ? join(task.worktree, REVIEW_FILE) : undefined;
 
 /**
+ * The ranges a task's branch is read over, best first: from where it left the
+ * default branch, or — an unfetched base, a branch with no merge base yet —
+ * just its last commit. The diff and the live change counts ask the same.
+ */
+export function taskRanges(cfg: Config, task: Task): string[] {
+  const base = task.repo ? cfg.repos.find((r) => r.name === task.repo?.name)?.defaultBranch : undefined;
+  return base ? [`origin/${base}...HEAD`, 'HEAD~1...HEAD'] : ['HEAD~1...HEAD'];
+}
+
+/**
  * What the agent has written, against the branch it started from. Read from
  * the worktree rather than GitHub: it is local, it is current, and it works
  * before anyone has fetched anything.
+ *
+ * `since` is only what the agent committed after you last handed it your
+ * comments — the answer to them. `live` is the worktree as it stands, while the
+ * agent is still writing, with the files it has not committed marked.
  */
-export async function taskDiff(cfg: Config, task: Task, expand: string[] = []): Promise<string> {
+export async function taskDiff(cfg: Config, task: Task, expand: string[] = [], against: DiffAgainst = 'base'): Promise<string> {
   // same reason as the review side: no repository, so nothing to read
   if (isDemo(cfg)) return demoDiff();
   if (!task.worktree) return '';
@@ -47,13 +62,24 @@ export async function taskDiff(cfg: Config, task: Task, expand: string[] = []): 
     return `the worktree at ${task.worktree} is gone — press r to rebuild it from the branch, then read it again
 `;
   }
-  const base = task.repo ? cfg.repos.find((r) => r.name === task.repo?.name)?.defaultBranch : undefined;
-  const remote = 'origin';
-  // an unfetched base, or a branch with no merge base yet, falls back to the last commit
-  const ranges = base ? [`${remote}/${base}...HEAD`, 'HEAD~1...HEAD'] : ['HEAD~1...HEAD'];
-  const { text, range } = await diffOver(task.worktree, ranges);
-  const stdout = await expandDiff(task.worktree, text, range, expand);
+  let stdout: string;
+  if (against === 'live') {
+    const { text, range, uncommitted } = await liveDiff(task.worktree, taskRanges(cfg, task));
+    // marked after widening: expandDiff replaces a widened file's chunk whole
+    stdout = markFiles(await expandDiff(task.worktree, text, range, expand), uncommitted);
+  } else {
+    const ranges = against === 'since' && task.handedBackSha ? [`${task.handedBackSha}..HEAD`] : taskRanges(cfg, task);
+    const { text, range } = await diffOver(task.worktree, ranges);
+    stdout = await expandDiff(task.worktree, text, range, expand);
+  }
   return stdout.length > DIFF_LIMIT ? `${stdout.slice(0, DIFF_LIMIT)}\n\n[diff truncated]` : stdout;
+}
+
+/** The commit a task's branch is at now — recorded when comments are handed back, so `since` has a start. */
+export async function markHandBack(task: Task): Promise<void> {
+  if (!task.worktree) return;
+  const sha = await headSha(task.worktree);
+  if (sha) store.update(task.issue.id, { handedBackSha: sha });
 }
 
 /** Pull findings out of the document on disk and onto the card. */

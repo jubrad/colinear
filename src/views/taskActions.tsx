@@ -74,11 +74,12 @@ export function useTaskActions(): TaskActions {
       ctx.toast('not split work — :family lists every parent that is', 'info');
       return;
     }
-    // reading your own agent's work: only once the draft PR is open, when the
-    // branch has stopped moving
+    // reading your own agent's work: live and read-only while it writes,
+    // and to comment on once the draft PR is open and the branch holds still
     if (input === 'v') {
-      if (selected.status !== 'pr_open') {
-        ctx.toast('open its draft PR first — until then the branch is still moving', 'info');
+      const writing = selected.status === 'working' || selected.status === 'needs_input' || selected.maintenance;
+      if (!selected.worktree || (selected.status !== 'pr_open' && !writing)) {
+        ctx.toast('nothing to read yet — v works while an agent is writing, and once the draft PR is open', 'info');
         return;
       }
       return ctx.navigate('diff', selected.issue.identifier);

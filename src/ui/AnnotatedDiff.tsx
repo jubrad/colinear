@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { anchorKey, expandTabs, filesIn, layoutMargin, openedFiles, parseDiff, postableLines, toVisualRows, type DiffLine, type MarginItem, type TokenKind, type VisualRow } from '../core/diff.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { anchorKey, expandTabs, filesIn, layoutMargin, openedFiles, parseDiff, postableLines, toVisualRows, uncommittedFiles, type DiffLine, type MarginItem, type TokenKind, type VisualRow } from '../core/diff.js';
 import { symbolsOn, type CodeHit, type CodeSearchResult, type SearchMode } from '../core/symbols.js';
 import { CodeSearch, type SearchMemo } from './CodeSearch.js';
 import { highlightDiff } from '../core/highlight.js';
@@ -129,11 +129,26 @@ export function AnnotatedDiff(props: {
   onPost: () => void;
   /** run an agent over this diff; absent where the review already has one */
   onReview?: () => void;
+  /**
+   * Why nothing can be written here, when nothing can: a diff still being
+   * written under you, whose lines would move before a comment on them landed.
+   * The keys that write say this instead of doing it.
+   */
+  readOnly?: string;
+  /**
+   * What this diff is measured against, and `w` to measure it against the next
+   * thing — the whole branch, only what came after your comments, the live
+   * worktree. Absent where there is only one answer.
+   */
+  compare?: { label: string; next: string; onNext: () => void };
+  /** what an empty diff means here, when it is not "nothing fetched" */
+  emptyText?: string;
   onClose: () => void;
 }) {
   const { review, diff, width, height, busy, onSend, onEditFinding, onExplain, onPost, onReview, onClose, signing, onExpand, onSearch } = props;
+  const { readOnly, compare } = props;
   const expanded = props.expanded ?? [];
-  const { fullScreen, setFullScreen, cfg } = useColinear();
+  const { fullScreen, setFullScreen, cfg, toast } = useColinear();
   // the annotated diff wants the room: claim the whole terminal while it is open,
   // and give it back on the way out. `f` toggles the header back if you want it.
   useEffect(() => {
@@ -203,6 +218,8 @@ export function AnnotatedDiff(props: {
   const files = useMemo(() => filesIn(parsed), [parsed]);
   /** files here only because a search hit opened them */
   const opened = useMemo(() => openedFiles(parsed), [parsed]);
+  /** files with work the agent has not committed yet — a live diff only */
+  const uncommitted = useMemo(() => uncommittedFiles(parsed), [parsed]);
   /** is this file part of the change, rather than one opened to read */
   const inChange = useCallback((file: string) => files.includes(file) && !opened.has(file), [files, opened]);
   /** the lines GitHub takes an inline comment on — not every line of a widened file */
@@ -325,9 +342,12 @@ export function AnnotatedDiff(props: {
   const marginText = Math.max(8, noteWidth - 6);
 
   useEffect(() => {
-    // keep the cursor on screen, following it rather than snapping to it
+    // keep the cursor on screen, following it rather than snapping to it. The
+    // pane draws two rows fewer than its height — its border — and following to
+    // the height let the cursor walk two rows off the bottom before it scrolled
+    const shown = Math.max(1, paneHeight - 2);
     if (cursor < scroll) setScroll(cursor);
-    else if (cursor >= scroll + paneHeight) setScroll(cursor - paneHeight + 1);
+    else if (cursor >= scroll + shown) setScroll(cursor - shown + 1);
   }, [cursor, paneHeight]);
 
   /** the row a line starts on, or -1 when it is not in the diff */
@@ -363,6 +383,37 @@ export function AnnotatedDiff(props: {
     setCursor(row);
     setScroll(Math.max(0, row - (jumpTo.offset ?? Math.floor(paneHeight / 3))));
   }, [lines, jumpTo]);
+
+  /**
+   * The line the cursor is on, kept across a new diff arriving. A live diff is
+   * re-read every few seconds and a switch of what it is measured against
+   * replaces it whole; either way the row index points somewhere else after,
+   * so the cursor follows the line rather than the index. Only updated when the
+   * cursor moves, so it always names a line in the diff the cursor moved in.
+   */
+  const held = useRef<{ file: string; line: number; text: string; offset: number } | undefined>(undefined);
+  useEffect(() => {
+    const l = lines[cursor]?.line;
+    if (l?.newLine !== undefined) held.current = { file: l.file, line: l.newLine, text: l.text, offset: cursor - scroll };
+  }, [cursor, scroll]);
+  const lastDiff = useRef(diff);
+  useEffect(() => {
+    const had = lastDiff.current;
+    lastDiff.current = diff;
+    // the first diff, or one a jump is already waiting on (x, a search hit)
+    if (had === undefined || had === diff || jumpTo || !held.current) return;
+    const { file, line, text, offset } = held.current;
+    // By its text first: an agent writing above the cursor renumbers every line
+    // below, and following the number would walk the cursor onto a neighbour.
+    // The nearest match wins, so a repeated line (a lone brace) stays local.
+    let best: number | undefined;
+    for (const r of lines) {
+      const n = r.line.newLine;
+      if (!r.first || n === undefined || r.line.file !== file || r.line.text !== text) continue;
+      if (best === undefined || Math.abs(n - line) < Math.abs(best - line)) best = n;
+    }
+    setJumpTo({ file, line: best ?? line, offset });
+  }, [diff]);
 
   // a file closed with `x` takes its rows with it
   useEffect(() => {
@@ -643,6 +694,9 @@ export function AnnotatedDiff(props: {
     if (input === ']') return hopFile(1);
     if (input === '[') return hopFile(-1);
     if (input === 'f') return setFullScreen(!fullScreen);
+    if (input === 'w' && compare) return compare.onNext();
+    // a diff still being written: reading and searching, never writing
+    if (readOnly && ['v', 'a', 'c', 'e', 'i', 'd', 'p', 'R'].includes(input)) return toast(readOnly, 'info');
     // pick what kind of finding this is *before* writing it: the old default
     // put every new comment on the author's PR at `consider` without asking,
     // and left blocking, nit and praise unreachable from this view entirely
@@ -701,6 +755,7 @@ export function AnnotatedDiff(props: {
           {annotatedRows.length ? ` · ${annotatedRows.length} anchored (n/N)` : ''}
           {review.posted ? ' · posted' : ''}
         </Text>
+        {compare && <Text color={theme.accent}> · {compare.label}</Text>}
       </Text>
       {files.length > 0 &&
         (() => {
@@ -721,7 +776,16 @@ export function AnnotatedDiff(props: {
                     bold={here}
                     // a file opened to read is not part of the change: tinted, so the
                     // strip still says at a glance which files the PR touches
-                    color={opened.has(files[idx]) ? theme.annotation : here ? theme.accent : theme.dim}
+                    // and a file with work not committed yet is the one still moving
+                    color={
+                      opened.has(files[idx])
+                        ? theme.annotation
+                        : uncommitted.has(files[idx])
+                          ? theme.warn
+                          : here
+                            ? theme.accent
+                            : theme.dim
+                    }
                   >
                     {' '}{b}{' '}
                   </Text>
@@ -729,7 +793,8 @@ export function AnnotatedDiff(props: {
               })}
               <Text dimColor>
                 {hi < files.length - 1 ? ' ›' : ''} {fileIdx + 1}/{files.length}
-                {current && opened.has(current.file) ? ' · opened, not changed' : current && expanded.includes(current.file) ? ' · whole file' : ''} · ]/[ file
+                {current && opened.has(current.file) ? ' · opened, not changed' : current && expanded.includes(current.file) ? ' · whole file' : ''}
+                {current && uncommitted.has(current.file) ? ' · not committed yet' : ''} · ]/[ file
               </Text>
             </Text>
           );
@@ -754,7 +819,7 @@ export function AnnotatedDiff(props: {
               the two as one left the pane loading for ever on a diff that came
               back with nothing in it */}
           {diff === undefined && <Text dimColor>loading the diff…</Text>}
-          {diff !== undefined && !lines.length && <Text dimColor>no diff — has the branch been fetched?</Text>}
+          {diff !== undefined && !lines.length && <Text dimColor>{props.emptyText ?? 'no diff — has the branch been fetched?'}</Text>}
           {lines.slice(scroll, scroll + paneHeight - 2).map((row, i) => (
             <DiffRow
               key={`${scroll + i}-${row.text.slice(0, 12)}`}
@@ -968,10 +1033,13 @@ export function AnnotatedDiff(props: {
             {pickIdx + 1}/{stack.length} on this line · n/N steps through them ·{' '}
           </Text>
         ) : null}
-        j/k move · n/N next · ]/[ file · enter reads · v select · a explain · c ask · e finding · i annotate · d drop ·{' '}
+        j/k move · n/N next · ]/[ file · enter reads ·{' '}
+        {readOnly ? '' : 'v select · a explain · c ask · e finding · i annotate · d drop · '}
         {onSearch ? '/ search · * callers · ' : ''}
         {onExpand ? 'x expand · ' : ''}
-        {onReview ? 'R review · p hand back' : 'p post'} · f {fullScreen ? 'header' : 'full'} · esc
+        {compare ? `w ${compare.next} · ` : ''}
+        {readOnly ? <Text color={theme.warn}>read-only while it is being written · </Text> : onReview ? 'R review · p hand back · ' : 'p post · '}
+        f {fullScreen ? 'header' : 'full'} · esc
       </Text>
 
       {/* last: an absolute box is overdrawn by anything rendered after it */}
