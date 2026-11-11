@@ -80,4 +80,9 @@ echo '── code search'
 npm run check:codesearch
 
 echo
+echo '── agents'
+# waiting-on-you first and once, live supersedes finished, "new" is after you last looked
+npm run check:fleet
+
+echo
 echo 'ok'

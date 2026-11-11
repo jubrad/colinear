@@ -94,6 +94,10 @@ export interface UiState {
   team?: string;
   /** how :board arranges its statuses */
   boardLayout?: BoardLayout;
+  /** the agent rail beside every view (`\`) */
+  rail?: boolean;
+  /** when you last opened each task, review or plan, keyed by the param that opens it — what makes an agent "new" */
+  seen?: Record<string, number>;
 }
 
 export type TaskStatus =
