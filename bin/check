@@ -80,4 +80,9 @@ echo '── code search'
 npm run check:codesearch
 
 echo
+echo '── live change counts'
+# committed, uncommitted and untracked work all count; the index is never touched
+npm run check:changes
+
+echo
 echo 'ok'

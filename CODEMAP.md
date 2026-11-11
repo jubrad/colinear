@@ -127,6 +127,10 @@ src/core/
                      opened as an all-context diff; liveDiff — a task's worktree as it stands,
                      uncommitted and untracked work included, marked with markFiles. codesearch.check.ts runs both against a
                      throwaway repo: line numbers survive widening, nothing new is commentable
+  changes.ts         live change counts for a working task's worktree: files, lines in and out
+                     against where the branch left its base, uncommitted files — untracked ones
+                     read rather than `git add -N`'d, so the agent's index is never touched.
+                     Polled by Dispatcher.measureLive; changes.check.ts runs it on a real repo
                      clearBrokenSubmodules undoes the wreckage `submodule.recurse` leaves in
                      a linked worktree, which otherwise wedges a review permanently
   reviewer.check.ts  an info finding reaches no review body, over every caller shape and

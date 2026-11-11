@@ -78,6 +78,7 @@ Nothing polls on render. Every recurring read lives in the daemon on a fixed tim
 | every | what runs | why that number |
 |---|---|---|
 | 2s | the running task's subtask checklist file | it drives a progress bar; the agent rewrites it mid-turn |
+| 15s | what each working task's worktree has changed (`measureLive()`): files, lines, uncommitted | a card says what an agent has done, not only for how long; four cheap git reads per live task, nothing written when unchanged |
 | 60s | PR state, CI rollup, review decision, mergeability | GitHub's own numbers move on this order; faster mostly buys rate limits |
 | 60s | blocked recheck, retention sweep, closed-issue sweep, sub-issue rollup | one tick, four jobs — see `recheckBlocked()` |
 | 5m | `gh` search for PRs awaiting your review, then a batched read of every live review it didn't return | a review request is not urgent, and the search is expensive. The second half is what keeps your own PRs and ones you have reviewed current, since the search no longer returns them |
