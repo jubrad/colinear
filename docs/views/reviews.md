@@ -5,6 +5,39 @@ refreshed every five minutes.
 
 ![The review queue: two PRs, the selected one pre-reviewed with four findings graded lead, blocking, consider and nit](../images/reviews.png)
 
+## Side by side
+
+On a terminal 140 columns or wider the list and the selected review sit **side by side**: the
+list on the left keeps what picks a row out — whether it wants you, its state, the PR, the title —
+and the preview on the right carries the rest.
+
+```
+      PR                TITLE                    ┌───────────────────────────────────────────────┐
+●   ◆ colinear#162      Search, list call sit…   │ colinear#162 jubrad · open · feat → main      │
+○   ⠇ console#882       fix the table header…    │ Search, list call sites and widen the diff    │
+●   · db#30112          persist: compact batc…   │                                               │
+                                                 │ 5 findings · 1 blocking                       │
+                                                 │ lead     Sound overall; the jump race is the… │
+                                                 │ blocking src/ui/AnnotatedDiff.tsx:352 the ju… │
+                                                 │ consider src/core/codesearch.ts:30 diffOver…  │
+                                                 │                                               │
+                                                 │ 14 files +1200 -80                            │
+                                                 │ src/core/codesearch.ts     +147   -0  ▆▆▆▆▆▆  │
+                                                 │ src/ui/AnnotatedDiff.tsx    +88  -12  ▆▆▆▆    │
+                                                 └───────────────────────────────────────────────┘
+```
+
+The preview holds **every finding**, ordered for reading from a list — the lead, then blocking down
+to praise, annotations last — and **the files the PR changes**, each with what it adds and removes
+and a bar to its scale. The file list comes from the review's checkout, read once the cursor
+settles on a row; a PR not checked out yet shows only its totals until `r` checks it out.
+
+`l` (or `→`) moves into the preview, where `i`/`k` walk the findings and **`enter` opens the
+annotated diff on the one you are on**, not at the top. `j`, `←` or `esc` go back to the list. Every
+other key — `r`, `p`, `A`, `X`, `s`, `o` — acts on the selected PR from either side.
+
+Narrower than that, the detail pane stacks under the list as before.
+
 ## What wants you
 
 Two facts decide whether a row needs you, and neither is the review's status:
@@ -457,6 +490,7 @@ the network) still just fails and says so, because re-anchoring cannot help with
 | `r` | pre-review · **re-review** once posted · `x` cancel one · `u` refresh the list |
 | `c` | the same, on a [model and with instructions](#a-different-model-your-own-instructions) you pick — kept on the review |
 | `enter` | the annotated diff · `d` the review document |
+| `l` `j` / → ← | into and out of the [preview](#side-by-side), on a wide terminal — `enter` there opens the diff at that finding |
 | `p` post · `A` approve · `X` request changes · `n` attach a note that rides along |
 | `s` | hand the terminal to that review's claude session |
 | `S` | sort: needs-me / updated / size / repo / author / cost (again reverses) |
