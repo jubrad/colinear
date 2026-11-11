@@ -13,6 +13,9 @@ import { AppContext, type AppCtx, type ToastKind } from './ui/context.js';
 import { Crumbs } from './ui/Crumbs.js';
 import { formatTokens } from './ui/format.js';
 import { Header } from './ui/Header.js';
+import { AgentRail, RAIL_MIN_COLUMNS, RAIL_WIDTH } from './ui/AgentRail.js';
+import { fleet, markSeen } from './core/fleet.js';
+import type { AgentSession } from './core/sessions.js';
 import { commandCandidates, findView, reloadCustomViews, views } from './views/registry.js';
 import { theme } from './theme.js';
 
@@ -23,6 +26,7 @@ const GLOBAL_KEYS: Array<[string, string]> = [
   ['R', 'reload ui'],
   ['esc', 'back'],
   ['q', 'quit view'],
+  ['\\', 'agent rail'],
 ];
 
 interface StackEntry {
@@ -125,6 +129,35 @@ export function App(props: {
 
   const current = stack[stack.length - 1];
   const viewDef = findView(current.name) ?? views[0];
+
+  // The rail: every agent beside every view. Hidden full screen (the annotated
+  // diff wants the room) and on a terminal too narrow to give it any.
+  // Not on :agents either, which is the same list with room to act on it.
+  const railShown = Boolean(ui.rail) && !fullScreen && size.columns >= RAIL_MIN_COLUMNS && viewDef.name !== 'agents';
+  const [agents, setAgents] = useState<AgentSession[]>([]);
+  useEffect(() => onAgents?.(setAgents), [onAgents]);
+  useEffect(() => {
+    if (!railShown) return;
+    // the registry is not CDC state: it changes inside sessions that never
+    // touch the store, so it is asked for rather than pushed
+    dispatcher.listAgents();
+    const timer = setInterval(() => dispatcher.listAgents(), 2000);
+    return () => clearInterval(timer);
+  }, [railShown]);
+  const entries = useMemo(() => fleet(tasks, reviews, agents), [tasks, reviews, agents]);
+
+  // Opening a task or a review is looking at it: stamped on the way in and on
+  // the way out, so what happened while you were on it is not news after.
+  const uiRef = useRef(ui);
+  uiRef.current = ui;
+  useEffect(() => {
+    const stamp = () => {
+      const seen = markSeen(uiRef.current.seen, current.name, current.param, Date.now());
+      if (seen) setUi({ seen });
+    };
+    stamp();
+    return stamp;
+  }, [current.name, current.param]);
 
   // so a pending action (attach, $EDITOR) can restore this view afterwards
   useEffect(() => rememberView(current.name, current.param), [current.name, current.param]);
@@ -237,6 +270,13 @@ export function App(props: {
         else exit();
       }
       if (input === '?') navigate('help');
+      if (input === '\\') {
+        if (!ui.rail && size.columns < RAIL_MIN_COLUMNS) {
+          ctx.toast(`the agent rail needs ${RAIL_MIN_COLUMNS} columns — :agents has the same list`, 'info');
+          return;
+        }
+        setUi({ rail: !ui.rail });
+      }
     },
     { isActive: !capture && !cmdOpen },
   );
@@ -266,6 +306,13 @@ export function App(props: {
   ];
 
   const ViewComponent = viewDef.Component;
+  const viewHeight = Math.max(8, size.rows - (fullScreen ? 0 : 4) - 2 - (cmdOpen ? 4 : 0));
+  // the view is told the terminal is as wide as what is left of it: every view
+  // sizes itself from ctx.size, and none of them should have to know a rail exists
+  const viewCtx = useMemo<AppCtx>(
+    () => (railShown ? { ...ctx, size: { columns: size.columns - RAIL_WIDTH, rows: size.rows } } : ctx),
+    [ctx, railShown, size],
+  );
 
   return (
     <AppContext.Provider value={ctx}>
@@ -298,19 +345,26 @@ export function App(props: {
             />
           </Box>
         )}
-        <Box
-          flexDirection="column"
-          // hard height: flex-basis is content size in yoga, so a grown pane
-          // would otherwise push the whole app taller than the terminal and
-          // scroll the header off the top
-          // full screen has no header above it, so the view keeps those 4 rows
-          height={Math.max(8, size.rows - (fullScreen ? 0 : 4) - 2 - (cmdOpen ? 4 : 0))}
-          overflow="hidden"
-          borderStyle="round"
-          borderColor={theme.border}
-          paddingX={1}
-        >
-          <ViewComponent key={current.key} param={current.param} />
+        <Box flexDirection="row" height={viewHeight}>
+          {railShown && <AgentRail entries={entries} seen={ui.seen} now={now} height={viewHeight} />}
+          <Box
+            flexDirection="column"
+            // hard height: flex-basis is content size in yoga, so a grown pane
+            // would otherwise push the whole app taller than the terminal and
+            // scroll the header off the top
+            // full screen has no header above it, so the view keeps those 4 rows
+            height={viewHeight}
+            width={railShown ? size.columns - 2 - RAIL_WIDTH : undefined}
+            flexGrow={1}
+            overflow="hidden"
+            borderStyle="round"
+            borderColor={theme.border}
+            paddingX={1}
+          >
+            <AppContext.Provider value={viewCtx}>
+              <ViewComponent key={current.key} param={current.param} />
+            </AppContext.Provider>
+          </Box>
         </Box>
         <Crumbs
           trail={stack.map((e) => (e.param ? `${e.name}(${e.param})` : e.name))}

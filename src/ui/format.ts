@@ -1,5 +1,5 @@
 import { theme } from '../theme.js';
-import type { PrInfo } from '../core/types.js';
+import type { PrInfo, Task, WorkChanges } from '../core/types.js';
 
 /** Human label + color for a PR's review state. */
 export function reviewStatus(pr: PrInfo): { text: string; color: string } {
@@ -78,4 +78,19 @@ export function spinner(now: number): string {
 /** Alternates every tick — for a card that is being worked on where it sits. */
 export function blink(now: number): string {
   return Math.floor(now / 1000) % 2 ? '●' : '○';
+}
+
+/** An agent at work that has edited nothing for this long is worth a look — usually it is going in circles. */
+export const STALL_MS = 20 * 60_000;
+
+/** "+84 -12" — lines in and out of a task's worktree, for a card line or a table cell. */
+export function changesShort(c?: WorkChanges): string {
+  return c ? `+${c.added} -${c.removed}` : '';
+}
+
+/** Minutes since a working task's worktree last changed, once that is long enough to say so. */
+export function stalledMinutes(task: Task, now: number): number | undefined {
+  if (task.status !== 'working' || task.awaitingStart || !task.changes) return undefined;
+  const idle = now - task.changes.movedAt;
+  return idle >= STALL_MS ? Math.floor(idle / 60_000) : undefined;
 }

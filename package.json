@@ -24,7 +24,9 @@
     "check:todo": "tsx src/core/todo.check.ts",
     "check:newissue": "tsx src/core/newissue.check.ts",
     "check:split": "tsx src/core/split.check.ts",
-    "check:codesearch": "tsx src/core/codesearch.check.ts"
+    "check:codesearch": "tsx src/core/codesearch.check.ts",
+    "check:changes": "tsx src/core/changes.check.ts",
+    "check:fleet": "tsx src/core/fleet.check.ts"
   },
   "engines": {
     "node": "^22.23.4 || ^24.22.1 || >=26.12.1"

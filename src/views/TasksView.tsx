@@ -4,7 +4,7 @@ import { useTasks } from '../core/hooks.js';
 import type { Task } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
 import { useColinear } from '../ui/context.js';
-import { formatDuration, formatTokens } from '../ui/format.js';
+import { changesShort, formatDuration, formatTokens, stalledMinutes } from '../ui/format.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { prRank, prState, PR_STATE_COLOR } from './BoardView.js';
@@ -68,6 +68,15 @@ export function TasksView(props: { param?: string }) {
         text: (t) => formatDuration(t, ctx.now),
         color: () => theme.dim,
         sort: (a, b) => compareTasks('time', a, b),
+      },
+      {
+        key: 'changes',
+        label: 'CHANGE',
+        width: 13,
+        // lines in and out, and a ~ for files not committed yet
+        text: (t) => (t.changes ? `${changesShort(t.changes)}${t.changes.uncommitted ? ` ~${t.changes.uncommitted}` : ''}` : ''),
+        color: (t) => (stalledMinutes(t, ctx.now) !== undefined ? theme.warn : theme.dim),
+        sort: (a, b) => changeSize(b) - changeSize(a),
       },
       {
         key: 'tokens',
@@ -237,3 +246,8 @@ export const tasksKeys: Array<[string, string]> = [
   [',', 'sort'],
   ...TASK_ACTION_KEYS,
 ];
+
+/** Lines a task's worktree has moved, for sorting by how much it has changed. */
+function changeSize(t: Task): number {
+  return t.changes ? t.changes.added + t.changes.removed : -1;
+}

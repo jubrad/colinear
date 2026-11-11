@@ -5,6 +5,10 @@ cards than a column can show.
 
 ![The task table sorted in board order, the cursor on a PR-open task whose detail pane sits below](../images/tasks.png)
 
+`CHANGE` is [what the worktree has changed](board.md#what-it-has-changed) — `+added -removed`, then `~n`
+for files not committed yet — and turns amber when a working agent has edited nothing for twenty
+minutes.
+
 Default order is the board read left-to-right: column, then what needs you first. `,` sorts by any
 column (again on the same one reverses), `/` filters with the same matcher the board uses.
 

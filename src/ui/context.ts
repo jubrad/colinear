@@ -1,3 +1,4 @@
+import type { DiffAgainst } from '../core/diff.js';
 import { createContext, useContext } from 'react';
 import type { DispatcherApi, GcItem, GcProgress, PlanChatReady } from '../client.js';
 import type { AgentSession } from '../core/sessions.js';
@@ -15,8 +16,8 @@ export interface AppCtx {
   onGcProgress?: (fn: (p: GcProgress) => void) => () => void;
   onPlanChatReady?: (fn: (r: PlanChatReady) => void) => () => void;
   onAgents?: (fn: (list: AgentSession[]) => void) => () => void;
-  onReviewDiff?: (fn: (id: string, diff: string) => void) => () => void;
-  onTaskDiff?: (fn: (id: string, diff: string) => void) => () => void;
+  onReviewDiff?: (fn: (id: string, diff: string, against?: DiffAgainst) => void) => () => void;
+  onTaskDiff?: (fn: (id: string, diff: string, against?: DiffAgainst) => void) => () => void;
   onCreating?: (fn: (agentId: string) => void) => () => void;
   /** the daemon's own disk, for when it isn't this machine's disk */
   onLogTail?: (fn: (text: string) => void) => () => void;

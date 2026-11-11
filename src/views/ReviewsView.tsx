@@ -8,9 +8,10 @@ import { attachTo, rememberView, reviewAttachable, sessionRuntime, setPendingAct
 import { useReviews } from '../core/hooks.js';
 import { parsePrSpec } from '../core/reviews.js';
 import { store } from '../core/store.js';
-import type { Review } from '../core/types.js';
+import { fileStats, parseDiff, type DiffAgainst, type FileStat } from '../core/diff.js';
+import type { Review, ReviewFinding } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
-import { AnnotatedDiff } from '../ui/AnnotatedDiff.js';
+import { AnnotatedDiff, wrapText } from '../ui/AnnotatedDiff.js';
 import { ReviewDocModal } from '../ui/ReviewDocModal.js';
 import { ReviewOptionsModal } from '../ui/ReviewOptionsModal.js';
 import { Popup, formHeight, popupPlacement } from '../ui/Popup.js';
@@ -111,7 +112,42 @@ export function ReviewsView(props: { param?: string }) {
   /** the `c` popup: a model and instructions for this review */
   const [customizing, setCustomizing] = useState(false);
 
-  useEffect(() => ctx.onReviewDiff?.((id, diff) => setDiffs((d) => ({ ...d, [id]: diff }))), []);
+  /** per review: only what was pushed after the review you posted (`w` in the diff) */
+  const [sinceDiffs, setSinceDiffs] = useState<Record<string, string>>({});
+  const [against, setAgainst] = useState<DiffAgainst>('base');
+  useEffect(
+    () =>
+      ctx.onReviewDiff?.((id, diff, as) =>
+        (as === 'since' ? setSinceDiffs : setDiffs)((d) => ({ ...d, [id]: diff })),
+      ),
+    [],
+  );
+  /**
+   * A diff fetched before a review re-read the PR is the old PR's diff. Dropped
+   * when the sha a review was read at moves, so the preview's file list and
+   * enter both ask again rather than showing what was there an hour ago.
+   */
+  const readAt = useRef(new Map<string, string | undefined>());
+  useEffect(() => {
+    const moved = reviews.filter((r) => readAt.current.has(r.id) && readAt.current.get(r.id) !== r.reviewedSha);
+    for (const r of reviews) readAt.current.set(r.id, r.reviewedSha);
+    const drop = (d: Record<string, string>) => {
+      const next = { ...d };
+      for (const r of moved) delete next[r.id];
+      return next;
+    };
+    if (moved.length) {
+      setDiffs(drop);
+      setSinceDiffs(drop);
+    }
+  }, [reviews]);
+  /** wide enough for the list and a preview side by side */
+  const wide = pane.width >= SPLIT_MIN;
+  /** the list or the preview: in the preview, i/k walk the findings */
+  const [focus, setFocus] = useState<'list' | 'preview'>('list');
+  const [findIdx, setFindIdx] = useState(0);
+  /** where enter put the diff — a finding picked in the preview, or the top */
+  const [startAt, setStartAt] = useState<{ file: string; line: number }>();
   const [sort, setSort] = useState<SortKey>('needs me');
   const [desc, setDesc] = useState(false);
 
@@ -175,15 +211,39 @@ export function ReviewsView(props: { param?: string }) {
     setCursor((c) => Math.max(0, Math.min(c, rows.length - 1)));
   }, [rows.length]);
 
+  /** the preview's findings, in the order you would want them read */
+  const ordered = useMemo(() => byWeight(selected?.findings ?? []), [selected?.findings]);
+  // another PR is another list of findings: start at its first, from the list
+  useEffect(() => {
+    setFindIdx(0);
+    setAgainst('base');
+    if (!ordered.length) setFocus('list');
+  }, [selected?.id]);
+  useEffect(() => setFindIdx((i) => Math.max(0, Math.min(i, ordered.length - 1))), [ordered.length]);
+
+  // The preview lists the files the PR changes, and that needs the diff. Fetched
+  // once the cursor settles rather than on every row it passes over: holding j
+  // through twenty PRs should not be twenty `git diff`s.
+  useEffect(() => {
+    if (!wide || !selected?.worktree || diffs[selected.id] !== undefined) return;
+    const id = selected.id;
+    const t = setTimeout(() => ctx.dispatcher.reviewDiff(id, expanded[id]), 250);
+    return () => clearTimeout(t);
+  }, [wide, selected?.id, selected?.worktree, selected ? diffs[selected.id] : undefined]);
+  const selectedDiff = selected ? diffs[selected.id] : undefined;
+  const stats = useMemo(() => (selectedDiff ? fileStats(parseDiff(selectedDiff)) : undefined), [selectedDiff]);
+
   useEffect(() => {
     // the modal's chat input owns the keyboard too
     ctx.setCapture(filtering || noting || reading || customizing);
   }, [filtering, noting, reading, customizing]);
   useEffect(() => () => ctx.setCapture(false), []);
   useEffect(() => {
-    ctx.setEscHandler(query ? () => (setQuery(''), true) : null);
+    // esc steps back out of the preview before it clears a filter
+    const inPreview = wide && focus === 'preview';
+    ctx.setEscHandler(inPreview ? () => (setFocus('list'), true) : query ? () => (setQuery(''), true) : null);
     return () => ctx.setEscHandler(null);
-  }, [query]);
+  }, [query, focus, wide]);
 
   // one poll on entry so the list isn't stale from the 5-minute cadence
   useEffect(() => {
@@ -237,15 +297,29 @@ export function ReviewsView(props: { param?: string }) {
         setConfirm(undefined);
         return;
       }
-      if (key.upArrow || input === 'i') setCursor((c) => Math.max(0, c - 1));
-      if (key.downArrow || input === 'k') setCursor((c) => Math.min(rows.length - 1, c + 1));
+      const inPreview = wide && focus === 'preview';
+      // sideways between the list and the preview, the way the board moves
+      // between columns
+      if (wide && (input === 'l' || key.rightArrow) && ordered.length) setFocus('preview');
+      if (input === 'j' || key.leftArrow) setFocus('list');
+      if (inPreview) {
+        if (key.upArrow || input === 'i') setFindIdx((n) => Math.max(0, n - 1));
+        if (key.downArrow || input === 'k') setFindIdx((n) => Math.min(ordered.length - 1, n + 1));
+      } else {
+        if (key.upArrow || input === 'i') setCursor((c) => Math.max(0, c - 1));
+        if (key.downArrow || input === 'k') setCursor((c) => Math.min(rows.length - 1, c + 1));
+      }
       if (input === '/') setFiltering(true);
       if (!selected) return;
       if (input === 'a' && selected.question) return; // answering handled below
-      // enter reads the review against the code; d reads the document itself
+      // enter reads the review against the code — from the preview, at the
+      // finding the cursor is on; d reads the document itself
       if (key.return) {
+        const f = inPreview ? ordered[findIdx] : undefined;
+        setStartAt(f?.file && typeof f.line === 'number' ? { file: f.file, line: f.line } : undefined);
         setAnnotated(true);
         setReading(true);
+        setAgainst('base');
         if (!diffs[selected.id]) ctx.dispatcher.reviewDiff(selected.id, expanded[selected.id]);
       }
       if (input === 'd') {
@@ -326,8 +400,18 @@ export function ReviewsView(props: { param?: string }) {
     .filter(Boolean)
     .join(', ');
   const cols = layout(ctx.size.columns);
-  // rows that fit: total height less the detail pane, header and chrome
-  const visible = Math.max(3, ctx.size.rows - 16);
+  // Side by side, the list keeps the columns that pick a row out — whether it
+  // wants you, what state it is in, which PR — and the preview carries the
+  // rest. The split's height is the pane less the header, the filter bar and
+  // whatever prompt sits under it; anything taller would push the header off.
+  const listWidth = Math.min(84, Math.max(56, Math.floor(pane.width * 0.42)));
+  const splitHeight = Math.max(
+    8,
+    pane.height - 2 - (filtering ? 1 : 0) - (noting ? 1 : 0) - (confirm ? 3 : 0),
+  );
+  // rows that fit: in the split, the split less its column header and the
+  // scroll line; stacked, the total less the detail pane, header and chrome
+  const visible = wide ? Math.max(3, splitHeight - 2) : Math.max(3, ctx.size.rows - 16);
   const start = Math.max(0, Math.min(cursor - Math.floor(visible / 2), rows.length - visible));
   const window = rows.slice(start, start + visible);
 
@@ -335,9 +419,28 @@ export function ReviewsView(props: { param?: string }) {
     return (
       <AnnotatedDiff
         review={selected}
-        diff={diffs[selected.id]}
+        diff={(against === 'since' ? sinceDiffs : diffs)[selected.id]}
         width={pane.width}
         height={Math.max(12, pane.height)}
+        compare={
+          selected.posted?.sha
+            ? {
+                label: against === 'since' ? 'since the review you posted' : 'the whole PR',
+                next: against === 'since' ? 'the whole PR' : 'since your review',
+                onNext: () => {
+                  const next: DiffAgainst = against === 'since' ? 'base' : 'since';
+                  setAgainst(next);
+                  const cache = next === 'since' ? sinceDiffs : diffs;
+                  if (cache[selected.id] === undefined) ctx.dispatcher.reviewDiff(selected.id, expanded[selected.id], next);
+                },
+              }
+            : undefined
+        }
+        emptyText={
+          against === 'since'
+            ? `nothing since the review you posted${freshness(selected)?.glyph === '↻' ? ' in this checkout — r re-reads the PR at its new head' : ''}`
+            : undefined
+        }
       busy={Boolean(selected.chatting) || ACTIVE.includes(selected.status)}
         onSend={(text) => ctx.dispatcher.reviewChat(selected.id, text)}
         onEditFinding={(file, line, comment, severity, startLine, by, nth) =>
@@ -350,9 +453,17 @@ export function ReviewsView(props: { param?: string }) {
         expanded={expanded[selected.id]}
         onExpand={(files) => {
           setExpanded((e) => ({ ...e, [selected.id]: files }));
-          ctx.dispatcher.reviewDiff(selected.id, files);
+          // the other comparison was widened differently: read again when switched to
+          const other = against === 'since' ? setDiffs : setSinceDiffs;
+          other((d) => {
+            const next = { ...d };
+            delete next[selected.id];
+            return next;
+          });
+          ctx.dispatcher.reviewDiff(selected.id, files, against);
         }}
         onSearch={(mode, query) => ctx.dispatcher.codeSearch(selected.id, mode, query)}
+        startAt={startAt}
         onPost={() => {
           ctx.dispatcher.postReview(selected.id);
           ctx.toast(`posting ${selected.repository}#${selected.number}…`, 'info');
@@ -428,6 +539,67 @@ export function ReviewsView(props: { param?: string }) {
         />
       )}
 
+      {wide ? (
+        <Box flexDirection="row" marginTop={1} height={splitHeight} flexShrink={0}>
+          <Box flexDirection="column" width={listWidth} flexShrink={0} overflow="hidden">
+            <Text bold color={theme.header} wrap="truncate">
+              {cell('', W.flag)}
+              {'  '}
+              {cell('PR', W.pr)}
+              TITLE
+            </Text>
+            {window.map((r, i) => {
+              const onCursor = start + i === cursor;
+              const flag = freshness(r);
+              // the cursor stays lit while you are in the preview, dimmer, so
+              // it still says which PR the preview is of
+              const lit = onCursor && focus === 'list';
+              return (
+                <Text
+                  key={r.id}
+                  wrap="truncate"
+                  inverse={lit}
+                  bold={onCursor && !lit}
+                  dimColor={r.hidden && !onCursor}
+                >
+                  <Text color={lit ? undefined : flag?.color}>{cell(flag?.glyph ?? '', W.flag)}</Text>
+                  <Text color={lit ? undefined : REVIEW_COLORS[r.status] ?? theme.dim}>
+                    {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)}{' '}
+                  </Text>
+                  <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
+                  <Text color={!lit && r.isDraft ? theme.dim : undefined}>{r.title}</Text>
+                </Text>
+              );
+            })}
+            {!rows.length && <Text dimColor>No PRs are waiting on your review.</Text>}
+            {rows.length > visible && (
+              <Text dimColor>
+                {start > 0 ? `↑${start} ` : ''}
+                {start + visible < rows.length ? `↓${rows.length - start - visible}` : ''}
+                {`  ${cursor + 1}/${rows.length}`}
+              </Text>
+            )}
+          </Box>
+          {selected && (
+            <Preview
+              review={selected}
+              now={ctx.now}
+              width={pane.width - listWidth - 1}
+              height={splitHeight}
+              findings={ordered}
+              findIdx={findIdx}
+              focused={focus === 'preview'}
+              stats={stats}
+              loadingStats={Boolean(selected.worktree) && selectedDiff === undefined}
+              resumeHint={(id) => {
+                const owner = sessionRuntime(selected);
+                return (owner ? agentNamed(ctx.cfg, owner) : agentFor(ctx.cfg)).resumeHint(id);
+              }}
+            />
+          )}
+        </Box>
+      ) : (
+        <>
       <Box flexDirection="column" marginTop={1} flexShrink={0}>
         <Text bold color={theme.header} wrap="truncate">
           {'  '}
@@ -504,6 +676,8 @@ export function ReviewsView(props: { param?: string }) {
           ))}
         </Box>
       )}
+        </>
+      )}
 
       {noting && (
         <Box>
@@ -569,14 +743,25 @@ export function ReviewsView(props: { param?: string }) {
   );
 }
 
-function Detail(props: { review: Review; now: number; resumeHint: (id: string) => string | undefined }) {
+/** Rows `DetailHead` draws, so the preview can budget what is left under it. */
+function headRows(review: Review): number {
+  return (
+    (freshness(review) ? 1 : 0) +
+    2 +
+    (review.sessionId ? 1 : 0) +
+    (review.error ? 1 : 0) +
+    (review.note ? 1 : 0) +
+    (review.model || review.instructions ? 1 : 0)
+  );
+}
+
+/** Who, where and what state: the top of the detail pane, stacked or beside the list. */
+function DetailHead(props: { review: Review; now: number; resumeHint: (id: string) => string | undefined }) {
   const { review, now } = props;
-  const findings = review.findings ?? [];
-  const blocking = findings.filter((f) => f.severity === 'blocking').length;
   // the glyph in the row is a hint; this is where it says what it means
   const flag = freshness(review);
   return (
-    <Box flexDirection="column" flexGrow={1} marginTop={1} borderStyle="single" borderColor={theme.border} paddingX={1} overflow="hidden">
+    <>
       {flag && (
         <Text color={flag.color} wrap="truncate">
           {flag.glyph} {flag.why}
@@ -624,6 +809,17 @@ function Detail(props: { review: Review; now: number; resumeHint: (id: string) =
           <Text dimColor> — c changes</Text>
         </Text>
       )}
+    </>
+  );
+}
+
+function Detail(props: { review: Review; now: number; resumeHint: (id: string) => string | undefined }) {
+  const { review } = props;
+  const findings = review.findings ?? [];
+  const blocking = findings.filter((f) => f.severity === 'blocking').length;
+  return (
+    <Box flexDirection="column" flexGrow={1} marginTop={1} borderStyle="single" borderColor={theme.border} paddingX={1} overflow="hidden">
+      <DetailHead {...props} />
 
       {review.summary ? (
         <>
@@ -668,6 +864,217 @@ function Detail(props: { review: Review; now: number; resumeHint: (id: string) =
   );
 }
 
+/** Narrower than this, the list and the preview stack — the list needs its title, the preview its findings. */
+const SPLIT_MIN = 140;
+
+const WEIGHT: Record<string, number> = { blocking: 1, consider: 2, comment: 3, nit: 4, praise: 5, info: 6 };
+
+/**
+ * Findings in the order they are worth reading from a list: the lead (what the
+ * whole thing amounts to), then blocking down to praise, annotations last —
+ * they are context for reading the diff, and read best beside it.
+ */
+function byWeight(findings: ReviewFinding[]): ReviewFinding[] {
+  return [...findings].sort((a, b) => (a.severity ? WEIGHT[a.severity] ?? 7 : 0) - (b.severity ? WEIGHT[b.severity] ?? 7 : 0));
+}
+
+/** A path cut from the left, keeping the file name. */
+function shortenPath(path: string, room: number): string {
+  return path.length <= room ? path : `…${path.slice(path.length - room + 1)}`;
+}
+
+/**
+ * The selected review beside the list: who and where, what the agent made of
+ * it, every finding — walkable, so enter opens the diff on the one you picked —
+ * and the files the PR touches with what each one changes. The pane is sized
+ * by hand rather than left to flex: Ink overflows instead of clipping, so a
+ * preview one row too tall paints over the footer.
+ */
+function Preview(props: {
+  review: Review;
+  now: number;
+  width: number;
+  height: number;
+  findings: ReviewFinding[];
+  findIdx: number;
+  focused: boolean;
+  stats?: FileStat[];
+  loadingStats: boolean;
+  resumeHint: (id: string) => string | undefined;
+}) {
+  const { review, now, findings, findIdx, focused, stats } = props;
+  // border and padding: two columns a side, a row top and bottom
+  const w = Math.max(20, props.width - 4);
+  const h = Math.max(4, props.height - 2);
+  const blocking = findings.filter((f) => f.severity === 'blocking').length;
+  const active = ACTIVE.includes(review.status);
+
+  const questions = review.question?.questions ?? [];
+  const questionRows = questions.reduce((n, q) => n + 1 + q.options.length, 0);
+  // a short pane spends its rows on the findings before the prose about them
+  const wrapped = review.summary ? wrapText(review.summary.replace(/\s+/g, ' '), w) : [];
+  const summary = wrapped.slice(0, h >= 24 ? 3 : h >= 18 ? 1 : 0);
+  if (summary.length && wrapped.length > summary.length) {
+    summary[summary.length - 1] = `${summary[summary.length - 1].slice(0, w - 1)}…`;
+  }
+  // what the agent is doing, while there is nothing yet to say about the PR
+  const tail = !review.summary && active ? review.activity.slice(h >= 24 ? -8 : -3) : [];
+  const hint = !review.summary && !active && !findings.length;
+  const used =
+    headRows(review) +
+    1 +
+    questionRows +
+    (summary.length ? 1 + summary.length : 0) +
+    (active && !review.summary ? 2 + tail.length : 0) +
+    (hint ? 2 : 0);
+
+  // The findings and the files share what is left, each section spending a
+  // blank row and a header. Both get all they want when it fits; otherwise the
+  // files keep a third and the findings — the reason to look — take the rest.
+  const fileCount = stats?.length ?? 0;
+  const avail = Math.max(2, h - used - 2 - (findings.length ? 2 : 0));
+  const fileWant = Math.max(1, fileCount);
+  let findRows = findings.length
+    ? Math.max(1, Math.min(findings.length, avail - Math.min(fileWant, Math.max(1, Math.floor(avail / 3)))))
+    : 0;
+  let filesRows = Math.max(1, Math.min(fileWant, avail - findRows));
+  // cut short, the list ends in an "N more" line, which comes out of the files' own rows
+  if (fileCount > filesRows) filesRows = Math.max(1, avail - findRows - 1);
+  let filesMore = fileCount > filesRows ? 1 : 0;
+  // Over budget — the "N more" line is a row too — each list gives way, never
+  // below one row. Ink does not clip an overfull box, it squashes rows out of
+  // the top, which is how a short terminal lost the PR's own header.
+  while (findRows + filesRows + filesMore > avail && findRows > 1) findRows--;
+  while (findRows + filesRows + filesMore > avail && filesRows > 1) {
+    filesRows--;
+    filesMore = fileCount > filesRows ? 1 : 0;
+  }
+  const top = Math.max(0, Math.min(findIdx - Math.floor(findRows / 2), findings.length - findRows));
+
+  const pathRoom = Math.max(12, w - 26);
+  const most = Math.max(1, ...(stats ?? []).map((s) => s.added + s.removed));
+  const BAR = 10;
+  const bar = (n: number) => (n ? Math.max(1, Math.round((n / most) * BAR)) : 0);
+
+  return (
+    <Box
+      flexDirection="column"
+      width={props.width}
+      height={props.height}
+      marginLeft={1}
+      borderStyle="single"
+      borderColor={focused ? theme.key : theme.border}
+      paddingX={1}
+      overflow="hidden"
+    >
+      <DetailHead review={review} now={now} resumeHint={props.resumeHint} />
+      <Text bold wrap="truncate">
+        {review.title}
+      </Text>
+
+      {questions.map((q, qi) => (
+        <Box key={`${qi}-${q.text.slice(0, 12)}`} flexDirection="column">
+          <Text color={theme.info} bold wrap="truncate">
+            ? {q.header ? `[${q.header}] ` : ''}
+            {q.text}
+          </Text>
+          {q.options.map((opt, i) => (
+            <Text key={opt.label} color={theme.info} wrap="truncate">
+              {'  '}
+              {i + 1}. {opt.label}
+              {opt.description ? <Text dimColor> — {opt.description}</Text> : null}
+            </Text>
+          ))}
+        </Box>
+      ))}
+
+      {summary.length > 0 && (
+        <>
+          <Text> </Text>
+          {summary.map((line, i) => (
+            <Text key={`s${i}`} wrap="truncate">
+              {line}
+            </Text>
+          ))}
+        </>
+      )}
+
+      {findings.length > 0 && (
+        <>
+          <Text> </Text>
+          <Text bold color={theme.header} wrap="truncate">
+            {findings.length} finding{findings.length === 1 ? '' : 's'}
+            {blocking ? <Text color={theme.err}> · {blocking} blocking</Text> : null}
+            <Text dimColor>
+              {focused ? ' — i/k walk · enter opens the diff there · j back' : ' — l walks them · enter reads the diff'}
+            </Text>
+          </Text>
+          {findings.slice(top, top + findRows).map((f, i) => {
+            const here = focused && top + i === findIdx;
+            const where = f.file ? `${shortenPath(f.file, 28)}${f.line ? `:${f.line}` : ''} ` : '';
+            return (
+              <Text key={`${f.file}-${f.line}-${top + i}`} wrap="truncate" inverse={here}>
+                <Text color={here ? undefined : f.severity ? (SEVERITY_COLOR[f.severity] ?? theme.dim) : theme.accent}>
+                  {(f.severity ?? 'lead').padEnd(9)}
+                </Text>
+                <Text dimColor={!here}>{where}</Text>
+                {f.comment.replace(/\s+/g, ' ')}
+              </Text>
+            );
+          })}
+        </>
+      )}
+
+      {!review.summary && active && (
+        <>
+          <Text> </Text>
+          <Text dimColor>
+            {review.activity.length} step{review.activity.length === 1 ? '' : 's'} · s attaches to this session
+          </Text>
+          {tail.map((line, i) => (
+            <Text key={`${i}-${line.slice(0, 12)}`} dimColor wrap="truncate">
+              {line}
+            </Text>
+          ))}
+        </>
+      )}
+      {hint && (
+        <>
+          <Text> </Text>
+          <Text dimColor wrap="truncate">
+            no pre-review yet — r checks the PR out and reads the diff
+          </Text>
+        </>
+      )}
+
+      <Text> </Text>
+      <Text bold color={theme.header} wrap="truncate">
+        {review.changedFiles} file{review.changedFiles === 1 ? '' : 's'}{' '}
+        <Text color={theme.ok}>+{review.additions}</Text> <Text color={theme.err}>-{review.deletions}</Text>
+        <Text dimColor>
+          {stats
+            ? ''
+            : props.loadingStats
+              ? ' — reading the diff…'
+              : review.repo
+                ? ' — r checks it out, and the files are listed here'
+                : ''}
+        </Text>
+      </Text>
+      {(stats ?? []).slice(0, filesRows).map((s) => (
+        <Text key={s.file} wrap="truncate">
+          {cell(shortenPath(s.file, pathRoom - 1), pathRoom)}
+          <Text color={theme.ok}>{`+${s.added}`.padStart(6)}</Text>
+          <Text color={theme.err}>{`-${s.removed}`.padStart(6)}</Text>{' '}
+          <Text backgroundColor={theme.ok}>{' '.repeat(bar(s.added))}</Text>
+          <Text backgroundColor={theme.err}>{' '.repeat(bar(s.removed))}</Text>
+        </Text>
+      ))}
+      {filesMore ? <Text dimColor>… {fileCount - filesRows} more — enter, then ] and [ walk them</Text> : null}
+    </Box>
+  );
+}
+
 function statusGlyph(r: Review): string {
   if (r.status === 'ready') return '◆';
   if (r.status === 'approved') return '✔';
@@ -684,6 +1091,7 @@ function shortRepo(repository: string): string {
 
 export const reviewsKeys: Array<[string, string]> = [
   ['i/k ↑↓', 'row'],
+  ['l/j ←→', 'into / out of the preview (wide)'],
   ['r', 'pre-review · re-review once posted'],
   ['c', 'review with a model + instructions'],
   ['enter', 'diff + annotations'],

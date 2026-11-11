@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
 import { store } from '../core/store.js';
 import { useColinear } from '../ui/context.js';
-import { formatDuration, formatTokens, formatTokensFull } from '../ui/format.js';
+import { formatDuration, formatTokens, formatTokensFull, stalledMinutes } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import type { Task } from '../core/types.js';
 
@@ -42,6 +42,7 @@ export function DetailPane(props: { task: Task }) {
         </Text>
       )}
       {task.sessionId && <Text dimColor>session {task.sessionId}</Text>}
+      {task.changes && <ChangesLine task={task} />}
 
       {task.verdict && (
         <Text>
@@ -150,4 +151,24 @@ export function DetailPane(props: { task: Task }) {
 
 function lastLines(text: string, n: number): string {
   return text.trim().split('\n').slice(-n).join(' | ').slice(0, 160);
+}
+
+/** What the worktree has changed so far, and how long since it last did. */
+function ChangesLine(props: { task: Task }) {
+  const c = props.task.changes!;
+  const now = Date.now();
+  const stalled = stalledMinutes(props.task, now);
+  const ago = Math.floor((now - c.movedAt) / 60_000);
+  return (
+    <Text dimColor wrap="truncate">
+      changes <Text color={theme.ok}>+{c.added}</Text> <Text color={theme.err}>-{c.removed}</Text> in {c.files} file
+      {c.files === 1 ? '' : 's'}
+      {c.uncommitted ? <Text color={theme.warn}> · {c.uncommitted} not committed</Text> : ' · all committed'}
+      {stalled !== undefined ? (
+        <Text color={theme.warn}> · no edits for {stalled}m — it may be going in circles</Text>
+      ) : (
+        ` · last moved ${ago ? `${ago}m ago` : 'just now'}`
+      )}
+    </Text>
+  );
 }

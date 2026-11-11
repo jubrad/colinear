@@ -1,3 +1,4 @@
+import type { DiffAgainst } from './diff.js';
 import { join } from 'node:path';
 import type { ChannelMessage } from './channel.js';
 import type { Change, Delta, Snapshot } from './delta.js';
@@ -22,7 +23,7 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 21;
+export const PROTOCOL_VERSION = 22;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -63,7 +64,8 @@ export type Command =
   | { name: 'explainLines'; id: string; file: string; startLine: number; endLine: number; opts?: { model?: string; instructions?: string } }
   /** the diff of a task's own branch, for reading it before promoting the PR */
   /** expand: files widened to the whole file, or opened though unchanged */
-  | { name: 'taskDiff'; id: string; expand?: string[] }
+  /** against: the branch (default), only what came after the last hand-back, or the live worktree */
+  | { name: 'taskDiff'; id: string; expand?: string[]; against?: DiffAgainst }
   /** review a task's own work with a fresh session */
   | { name: 'reviewTask'; id: string }
   /** edit, add or drop a finding on a task's self-review */
@@ -72,7 +74,8 @@ export type Command =
   /** hand the self-review back to the agent that wrote the code */
   | { name: 'sendFindings'; id: string }
   /** the PR's diff, for the annotated review view */
-  | { name: 'reviewDiff'; id: string; expand?: string[] }
+  /** against: the PR (default), or only what was pushed after the review you posted */
+  | { name: 'reviewDiff'; id: string; expand?: string[]; against?: DiffAgainst }
   /** search a review's or a task's checkout — `/` text, `*` a symbol's call sites */
   | { name: 'codeSearch'; id: string; reqId: number; mode: SearchMode; query: string }
   /** edit, add or drop the comment anchored at a line (rewrites the document) */
@@ -116,8 +119,8 @@ export type ServerMsg =
   | { t: 'toast'; text: string; kind: 'info' | 'ok' | 'err' }
   | { t: 'logTail'; text: string }
   | { t: 'agents'; list: AgentSession[] }
-  | { t: 'reviewDiff'; id: string; diff: string }
-  | { t: 'taskDiff'; id: string; diff: string }
+  | { t: 'reviewDiff'; id: string; diff: string; against?: DiffAgainst }
+  | { t: 'taskDiff'; id: string; diff: string; against?: DiffAgainst }
   | { t: 'codeSearch'; id: string; reqId: number; result: CodeSearchResult }
   /** a daemon-side draft started; watch it in :agents by this id */
   | { t: 'creating'; agentId: string }

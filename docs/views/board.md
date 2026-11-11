@@ -9,10 +9,27 @@ sort by what wants you first — changes requested, conflicting, approved, draft
 the header carries a coloured count per state (`PR Open(7) 1-1-2-2-1`): pink changes-requested, red
 conflicting, green approved, grey draft, orange awaiting, purple merged, red closed.
 
-A card shows live duration, tokens, repo, subtask progress, its question if it has one, blocked-by
+A card shows live duration, tokens, [what the worktree has changed](#what-it-has-changed), repo, subtask progress, its question if it has one, blocked-by
 chains, checks, and each PR with CI and review state. A **blinking dot** means a maintenance session
 is running on an already-open PR — green rebasing, amber fixing CI — rather than the feature being
 rewritten. Green is a rebase, amber a CI fix, and a `revise` dot means it is working through your review of the branch ([`:diff`](diff.md)).
+
+## What it has changed
+
+While an agent works, the daemon reads its worktree every fifteen seconds and the card carries the
+result: **`+84 -12 ~2`** — lines added and removed against where the branch left the default
+branch, and how many files are **not committed yet**. Uncommitted and untracked work counts, because
+mid-session that is most of what an agent has done; the review document does not, because it is
+yours. Measuring is read-only — it never touches the index the agent is using.
+
+**`no edits 23m`**, in amber beside the clock, means the agent has been working for twenty minutes
+without its worktree moving. Usually it is reading, testing or going in circles; the card is saying
+it is worth a look, not that anything is wrong. The clock restarts whenever an agent starts on the
+task, so resuming one that sat idle overnight does not read as stalled.
+
+The detail pane spells it out — files, what is committed, when it last moved — and
+[`:tasks`](tasks.md) has it as the `CHANGE` column, sortable by size. Once the agent stops, the
+count is taken once more and kept: the card's last word is what the agent left.
 
 ## Keys
 

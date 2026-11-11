@@ -5,7 +5,7 @@ import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import { questionSummary, type BoardLayout, type Task, type TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
-import { blink, formatDuration, formatTokens, reviewStatus, spinner } from '../ui/format.js';
+import { blink, formatDuration, formatTokens, reviewStatus, spinner, stalledMinutes } from '../ui/format.js';
 import { STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
 import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
@@ -395,6 +395,8 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
   // a manual dispatch sits in Working with no agent: spinning would say a
   // session is thinking when the card is in fact waiting on the operator
   const active = ACTIVE_STATUSES.includes(task.status) && !task.awaitingStart;
+  // busy for a while with nothing to show for it: said on the line that has the clock
+  const stalled = stalledMinutes(task, now);
   if (task.status === 'done' || task.status === 'cancelled') {
     // settled work — id, title, and how it finished is the whole story
     const merged = task.prs.find((pr) => pr.state === 'MERGED');
@@ -449,7 +451,18 @@ function Card(props: { task: Task; selected: boolean; color: string; now: number
         </Text>
       </Box>
       <Text dimColor wrap="truncate">
-        {formatDuration(task, now) || '--:--'} · {formatTokens(task.tokens)} tok
+        {formatDuration(task, now) || '--:--'}
+        {stalled !== undefined && <Text color={theme.warn}> · no edits {stalled}m</Text>}
+        {/* before the tokens: on a card this narrow, what it has done beats what it cost */}
+        {task.changes && (
+          <>
+            {' · '}
+            <Text color={theme.ok}>+{task.changes.added}</Text> <Text color={theme.err}>-{task.changes.removed}</Text>
+            {task.changes.uncommitted ? <Text color={theme.warn}> ~{task.changes.uncommitted}</Text> : null}
+          </>
+        )}
+        {' · '}
+        {formatTokens(task.tokens)} tok
         {task.repo ? ` · ${task.repo.name}` : ''}
       </Text>
       {task.awaitingStart && (

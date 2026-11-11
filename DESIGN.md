@@ -78,6 +78,7 @@ Nothing polls on render. Every recurring read lives in the daemon on a fixed tim
 | every | what runs | why that number |
 |---|---|---|
 | 2s | the running task's subtask checklist file | it drives a progress bar; the agent rewrites it mid-turn |
+| 15s | what each working task's worktree has changed (`measureLive()`): files, lines, uncommitted | a card says what an agent has done, not only for how long; four cheap git reads per live task, nothing written when unchanged |
 | 60s | PR state, CI rollup, review decision, mergeability | GitHub's own numbers move on this order; faster mostly buys rate limits |
 | 60s | blocked recheck, retention sweep, closed-issue sweep, sub-issue rollup | one tick, four jobs — see `recheckBlocked()` |
 | 5m | `gh` search for PRs awaiting your review, then a batched read of every live review it didn't return | a review request is not urgent, and the search is expensive. The second half is what keeps your own PRs and ones you have reviewed current, since the search no longer returns them |
@@ -362,6 +363,18 @@ is re-read with `-U1000000`, and an unchanged one is appended as a hunk that is 
 headed by a meta row (`OPENED_MARK`) so the view can tint its tab. Line numbers are the file's
 own either way, so findings, `n`/`N`, `a` and the margin work on opened code with no new path.
 Three things follow:
+
+**What a diff is measured against is a parameter, not a view.** `taskDiff` and `reviewDiff` take
+`against`: `base` (the branch, the PR), `since` (after a recorded commit — the review you posted,
+the comments you handed back) and `live` (a task's worktree, uncommitted work included). The reply
+carries it back so the view caches each separately and `w` switching is instant. `live` diffs the
+working tree against the merge base and diffs untracked files against `/dev/null` — never
+`git add -N`, because the index belongs to the agent writing in it — then marks files with work not
+committed as a meta row, *after* widening, since `expandDiff` replaces a widened file's chunk whole.
+The view re-reads a live diff on a 4s clock and follows the cursor's line **by its text**: an agent
+writing above it renumbers everything below, and following the number lands on a neighbour.
+Commenting stays gated on `pr_open` (and off in `live` on an open PR): reading a moving diff is
+useful, commenting on one is not.
 
 - **Searches read `HEAD`, not the working tree** — the diff and opened files come from commits,
   and a hit has to name a line in that same text.
@@ -713,7 +726,15 @@ Every `~/.local/state/colinear/` path above moves under `contexts/<name>/` in a 
 - Every session registers in `core/sessions.ts` from inside `runSession`, which is what `:agents`
   reads. It is a plain in-memory registry rather than a CDC entity: the client asks for the list
   while the view is open instead of following deltas, because it is a "what is happening now"
-  question and nothing persists it across a daemon restart.
+  question and nothing persists it across a daemon restart. The client asks while `:agents` is
+  open, or every 2s while the rail (`\`) is shown. `core/fleet.ts` merges it with the store,
+  because an agent that asked a question has *ended* — the waiting ones only exist as tasks and
+  reviews holding a question.
+- **The rail narrows the terminal rather than the views.** The app wraps the view in a second
+  `AppContext.Provider` whose `size.columns` is the terminal less the rail, so every view — many
+  size themselves from `ctx.size` directly — lays out as on a smaller screen and none of them knows
+  a rail exists. "New" is `UiState.seen` (when each task or review was last opened, stamped on the
+  way in and out, pruned to 200) — daemon-persisted like the board layout, so it survives `R`.
 - `escalated` status is vestigial (verdicts now park as needs_input) but kept for old persisted state.
 - Interactive attach + headless resume share one session id; concurrent writers are prevented by suspend-first, not enforced.
 - No pagination UI past the 500-issue cap; silently truncates.

@@ -329,9 +329,52 @@ export function sliceSpans(spans: Span[], start: number, end: number): Span[] {
  */
 export const OPENED_MARK = 'colinear: unchanged in this change — opened for reading';
 
+/**
+ * What a diff is measured against. `base` is the branch since it left its base
+ * — the PR. `since` is only what landed after a point you care about: the
+ * review you posted, the comments you handed back. `live` is a task's worktree
+ * as it stands, uncommitted work included, while its agent is still writing.
+ */
+export type DiffAgainst = 'base' | 'since' | 'live';
+
+/** The meta row heading a file with work not committed yet, in a `live` diff. */
+export const UNCOMMITTED_MARK = 'colinear: not committed yet — the agent is still writing this';
+
+/** Files in a live diff with work the agent has not committed. */
+export function uncommittedFiles(lines: DiffLine[]): Set<string> {
+  return new Set(lines.filter((l) => l.kind === 'meta' && l.text === UNCOMMITTED_MARK).map((l) => l.file));
+}
+
 /** Files in the diff only because they were opened from a search, not because they changed. */
 export function openedFiles(lines: DiffLine[]): Set<string> {
   return new Set(lines.filter((l) => l.kind === 'meta' && l.text === OPENED_MARK).map((l) => l.file));
+}
+
+export interface FileStat {
+  file: string;
+  added: number;
+  removed: number;
+}
+
+/**
+ * Lines added and removed per changed file, in diff order — the `--numstat`
+ * of a diff already in hand. A file opened only to read is not a change and is
+ * left out; a widened one counts the same as before, since context is neither.
+ */
+export function fileStats(lines: DiffLine[]): FileStat[] {
+  const opened = openedFiles(lines);
+  const out = new Map<string, FileStat>();
+  for (const l of lines) {
+    if (l.kind === 'file') {
+      if (!opened.has(l.file) && !out.has(l.file)) out.set(l.file, { file: l.file, added: 0, removed: 0 });
+      continue;
+    }
+    const s = out.get(l.file);
+    if (!s) continue;
+    if (l.kind === 'add') s.added++;
+    else if (l.kind === 'del') s.removed++;
+  }
+  return [...out.values()];
 }
 
 /** Context git shows around a change by default — and the lines GitHub will take a comment on. */
