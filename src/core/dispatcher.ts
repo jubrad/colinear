@@ -6,6 +6,8 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { agentFor, SessionInbox, type AgentBackend, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
+import { measureChanges, sameChanges } from './changes.js';
+import { taskRanges } from './selfreview.js';
 import { demoChecks, demoPullRequest, demoSession, demoWorktree, isDemo } from './demo.js';
 import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { coordinatorCwd, coordinatorPrompt, familyStatus, type CoordinatorTools } from './coordinator.js';
@@ -112,6 +114,9 @@ function triageSchema(repoNames: string[]) {
   };
 }
 
+/** How often a working task's change counts are refreshed. */
+const CHANGES_EVERY = 15_000;
+
 export class Dispatcher {
   private queue: string[] = [];
   private running = 0;
@@ -125,6 +130,45 @@ export class Dispatcher {
   constructor(private cfg: Config) {
     // unref: a pending timer must never keep the process alive after quit
     setInterval(() => void this.recheckBlocked(), 60_000).unref();
+    setInterval(() => void this.measureLive(), CHANGES_EVERY).unref();
+  }
+
+  /** a measuring pass still running — a slow disk must not stack them */
+  private measuring = false;
+  /** tasks measured last pass because an agent was at work in them */
+  private wasLive = new Set<string>();
+
+  /**
+   * Refresh what each working task's worktree has changed. Live means an agent
+   * is in it: working, waiting on a question mid-change, or repairing an open
+   * PR. A task that has just stopped being live is measured once more, so the
+   * card's last word is what the agent left — its final commit included — and
+   * not what it looked like fifteen seconds before it finished.
+   */
+  private async measureLive() {
+    if (this.measuring || isDemo(this.cfg)) return;
+    this.measuring = true;
+    try {
+      const live = new Set(
+        store
+          .list()
+          .filter((t) => t.status === 'working' || t.status === 'needs_input' || t.maintenance)
+          .map((t) => t.issue.id),
+      );
+      for (const id of new Set([...live, ...this.wasLive])) {
+        const task = store.get(id);
+        if (!task?.worktree || !existsSync(task.worktree)) continue;
+        const now = await measureChanges(task.worktree, taskRanges(this.cfg, task));
+        // an agent that has just started (or a daemon that has just) is not
+        // stalled because the last edit was yesterday: the clock starts now
+        const started = live.has(id) && !this.wasLive.has(id);
+        if (!now || (sameChanges(now, task.changes) && !started)) continue;
+        store.update(id, { changes: { ...now, movedAt: Date.now() } });
+      }
+      this.wasLive = live;
+    } finally {
+      this.measuring = false;
+    }
   }
 
   /** Abort every live session so quitting doesn't wait on (or orphan) agents. */

@@ -180,6 +180,15 @@ export function TaskView(props: { param?: string }) {
           {task.costUsd.toFixed(2)}
           {task.repo ? ` · ${task.repo.name}` : ''}
           {task.branch ? ` · ${task.branch}` : ''}
+          {task.changes && (
+            // on the line that is already here: the log below is sized to the rows above it
+            <>
+              {' · '}
+              <Text color={theme.ok}>+{task.changes.added}</Text> <Text color={theme.err}>-{task.changes.removed}</Text>
+              {` in ${task.changes.files}f`}
+              {task.changes.uncommitted ? <Text color={theme.warn}> ~{task.changes.uncommitted} uncommitted</Text> : null}
+            </>
+          )}
         </Text>
       </Text>
       {(task.worktree || task.sessionId) && (

@@ -199,6 +199,22 @@ export interface Subtask {
   done: boolean;
 }
 
+/**
+ * How much a task's worktree has changed against where its branch started —
+ * committed or not, untracked files included — measured by the daemon while an
+ * agent is at work, so a card says what it has done and not only how long it
+ * has been doing it.
+ */
+export interface WorkChanges {
+  files: number;
+  added: number;
+  removed: number;
+  /** files changed since the last commit, untracked ones included — work in flight */
+  uncommitted: number;
+  /** when any of the above last moved: an agent busy for an hour that has edited nothing is a fact worth seeing */
+  movedAt: number;
+}
+
 export interface Task {
   issue: Issue;
   status: TaskStatus;
@@ -279,6 +295,8 @@ export interface Task {
   blockedBy?: Array<{ id: string; identifier: string; kind: 'start' | 'merge'; done?: boolean }>;
   /** one automatic retry after a rate-limit failure */
   retried?: boolean;
+  /** what the worktree has changed, refreshed while an agent works in it */
+  changes?: WorkChanges;
   /**
    * Operator messages typed while no session was live (`M`). They ride into
    * the next session's opening prompt and are cleared once delivered; a live

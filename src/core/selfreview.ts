@@ -33,6 +33,16 @@ export const docPath = (task: Task): string | undefined =>
   task.worktree ? join(task.worktree, REVIEW_FILE) : undefined;
 
 /**
+ * The ranges a task's branch is read over, best first: from where it left the
+ * default branch, or — an unfetched base, a branch with no merge base yet —
+ * just its last commit. The diff and the live change counts ask the same.
+ */
+export function taskRanges(cfg: Config, task: Task): string[] {
+  const base = task.repo ? cfg.repos.find((r) => r.name === task.repo?.name)?.defaultBranch : undefined;
+  return base ? [`origin/${base}...HEAD`, 'HEAD~1...HEAD'] : ['HEAD~1...HEAD'];
+}
+
+/**
  * What the agent has written, against the branch it started from. Read from
  * the worktree rather than GitHub: it is local, it is current, and it works
  * before anyone has fetched anything.
@@ -47,11 +57,7 @@ export async function taskDiff(cfg: Config, task: Task, expand: string[] = []): 
     return `the worktree at ${task.worktree} is gone — press r to rebuild it from the branch, then read it again
 `;
   }
-  const base = task.repo ? cfg.repos.find((r) => r.name === task.repo?.name)?.defaultBranch : undefined;
-  const remote = 'origin';
-  // an unfetched base, or a branch with no merge base yet, falls back to the last commit
-  const ranges = base ? [`${remote}/${base}...HEAD`, 'HEAD~1...HEAD'] : ['HEAD~1...HEAD'];
-  const { text, range } = await diffOver(task.worktree, ranges);
+  const { text, range } = await diffOver(task.worktree, taskRanges(cfg, task));
   const stdout = await expandDiff(task.worktree, text, range, expand);
   return stdout.length > DIFF_LIMIT ? `${stdout.slice(0, DIFF_LIMIT)}\n\n[diff truncated]` : stdout;
 }
