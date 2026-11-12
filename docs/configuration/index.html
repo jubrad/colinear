@@ -2098,6 +2098,7 @@ model can be given its own way down as well.</p>
 <div class="highlight"><pre><span></span><code><span class="nt">"todo"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
 <span class="w">  </span><span class="nt">"reviewSlaHours"</span><span class="p">:</span><span class="w"> </span><span class="mi">24</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">"staleDays"</span><span class="p">:</span><span class="w"> </span><span class="mi">14</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"oldDays"</span><span class="p">:</span><span class="w"> </span><span class="mi">30</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">"horizonDays"</span><span class="p">:</span><span class="w"> </span><span class="mi">21</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">"refreshMinutes"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
 <span class="w">  </span><span class="nt">"maxCandidates"</span><span class="p">:</span><span class="w"> </span><span class="mi">60</span><span class="p">,</span>
@@ -2137,6 +2138,11 @@ model can be given its own way down as well.</p>
 <td><code>staleDays</code></td>
 <td><code>14</code></td>
 <td>a PR untouched this long is stale. Its clock stops and it sinks. A draft is always stale</td>
+</tr>
+<tr>
+<td><code>oldDays</code></td>
+<td><code>30</code></td>
+<td>a PR opened this many days ago is stale, however recently it was touched</td>
 </tr>
 <tr>
 <td><code>horizonDays</code></td>

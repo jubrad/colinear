@@ -1603,14 +1603,25 @@ press <code>r</code>, or on a clock if you set <code>todo.refreshMinutes</code>.
 <li><strong>Reviews are owed within about a working day.</strong> The longer a request waits, the higher it goes.
   One past its turnaround outranks everything except an agent stopped on a question or an urgent,
   overdue deadline. The clock counts working hours from the latest request, so a re-request restarts
-  it and a weekend doesn't age it. A <strong>stale</strong> PR stops climbing and sinks: a draft, or one untouched
-  for <code>staleDays</code>.</li>
-<li><strong>Deadlines</strong> come from the issue's due date, its milestone and its project, whichever is nearest.
-  Overdue or due within a couple of days ranks high, and a date past the horizon counts for nothing.</li>
-<li><strong>Priority</strong> is the issue's and its project's, from 1 (urgent) to 4 (low).</li>
-<li><strong>Agents waiting on you</strong> are cheap to unblock and keep work moving, so they sit near the top. At
-  equal weight, started work beats new work.</li>
+  it and a weekend doesn't age it.</li>
+<li><strong>Some reviews aren't urgent, whatever their wait.</strong> Their clock stops, and each one says why:</li>
+<li><strong>A draft</strong> isn't asking for review yet.</li>
+<li><strong>An old PR</strong> was opened <code>oldDays</code> (30) or more days ago. It counts as stale however recently it
+    was touched, because a bot comment or a rebase doesn't make a month-old PR fresh.</li>
+<li><strong>An untouched PR</strong> hasn't changed in <code>staleDays</code>.</li>
+<li><strong>Already reviewed:</strong> someone else (not you, not the author, not a bot) has reviewed it, or
+    GitHub already counts it as approved. Your review would be a second opinion. It drops to <code>week</code>,
+    or to <code>later</code> if it was only asked of your team, and the line says who reviewed it and how
+    ("alice approved").</li>
 </ul>
+<p>The ranking agent can reorder these but <strong>can't mark them more urgent</strong> than colinear did, so a
+  draft can't be lifted back to <code>now</code>. The list stays ordered by urgency, with the agent's order kept
+  inside each band.
+- <strong>Deadlines</strong> come from the issue's due date, its milestone and its project, whichever is nearest.
+  Overdue or due within a couple of days ranks high, and a date past the horizon counts for nothing.
+- <strong>Priority</strong> is the issue's and its project's, from 1 (urgent) to 4 (low).
+- <strong>Agents waiting on you</strong> are cheap to unblock and keep work moving, so they sit near the top. At
+  equal weight, started work beats new work.</p>
 <p>Colinear's own scoring follows the same rules, as a weighted sum.</p>
 <table>
 <thead>
@@ -1622,7 +1633,7 @@ press <code>r</code>, or on a clock if you set <code>todo.refreshMinutes</code>.
 <tbody>
 <tr>
 <td>review</td>
-<td>60 when asked, 110 at the SLA, 160 at twice it, then one more per working day up to 170. A team request is discounted by a fifth, and a stale one scores 5</td>
+<td>60 when asked, 110 at the SLA, 160 at twice it, then one more per working day up to 170. A team request is discounted by a fifth. One someone else has reviewed scores 20–40, and a stale one (draft, old, untouched) scores 5</td>
 </tr>
 <tr>
 <td>agent question</td>
