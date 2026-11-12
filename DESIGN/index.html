@@ -1056,6 +1056,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../docs/views/theme/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :theme
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../docs/views/help/" class="md-nav__link">
         
   
@@ -2355,10 +2383,20 @@ every live worktree looks dead.</p>
 <p>If adding tests someday: core/ is mostly pure-ish and dependency-injectable (store is a singleton — the main obstacle); prs.ts matching and dispatcher redispatch/adoption logic are the highest-value targets.</p>
 <h2 id="rendering-gotchas-hard-won-do-not-relearn-these">Rendering gotchas (hard-won — do not relearn these)<a class="headerlink" href="#rendering-gotchas-hard-won-do-not-relearn-these" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>A pane that overflows by one row loses its title.</strong> Ink paints the overflow over the first
+<li>
+<p><strong>Colours come from the theme, read at render time.</strong> <code>theme</code>, <code>STATUS_COLORS</code> and
+  <code>REVIEW_COLORS</code> are filled in place by <code>applyTheme</code> (the app calls it with <code>UiState.theme</code> at the
+  top of every render), so switching in <code>:theme</code> is a re-render. Two ways to break it: a colour
+  literal in a view (<code>theme.check.ts</code> fails on those), and a module-level map like
+  <code>const X = { a: theme.ok }</code>, which copies the colour the theme had at import and never changes.
+  Build those with <code>palette(() =&gt; ({ ... }))</code>, which reads through on every access.</p>
+</li>
+<li>
+<p><strong>A pane that overflows by one row loses its title.</strong> Ink paints the overflow over the first
   line rather than clipping the last, so a fixed-height pane must slice its content to
   <code>height - borders - header rows</code>. Both panes of the review modal hit this the moment an
-  error line appeared above the doc.</li>
+  error line appeared above the doc.</p>
+</li>
 <li><strong>A question is a set, not a string.</strong> <code>PendingQuestion</code> holds every question the agent asked
   (1–4) with per-option descriptions, and <code>answer</code> takes an array in the same order. The wire
   format carries the set minus the callback, which the mirror rebuilds; <code>npm run check</code> asserts a
