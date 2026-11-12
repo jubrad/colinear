@@ -90,6 +90,11 @@ echo '── agents'
 npm run check:fleet
 
 echo
+echo '── jobs'
+# a new job may do nothing; an approval needs a clean review of the current head; the clock skips paused
+npm run check:jobs
+
+echo
 echo '── themes'
 # no colour outside theme.ts, and a switch reaches the maps built from the theme
 npm run check:theme

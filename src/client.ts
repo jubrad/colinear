@@ -58,6 +58,9 @@ export interface DispatcherApi {
   /** rebuild :todo — with the ranking agent, or with colinear's scoring alone */
   refreshTodo(agent: boolean): void;
   cancelTodo(): void;
+  /** :jobs — run one now, or stop the run in flight */
+  runJob(id: string): void;
+  cancelJob(id: string): void;
   /** project plans — the design doc drafted here, owned by the tracker */
   startPlan(projectId: string): void;
   planChat(projectId: string, text: string): void;
@@ -391,6 +394,8 @@ export async function connectToDaemon(): Promise<Connection> {
             pollReviews: () => command({ name: 'pollReviews' }),
             refreshTodo: (agent) => command({ name: 'refreshTodo', agent }),
             cancelTodo: () => command({ name: 'cancelTodo' }),
+            runJob: (id) => command({ name: 'runJob', id }),
+            cancelJob: (id) => command({ name: 'cancelJob', id }),
           startPlan: (projectId) => command({ name: 'startPlan', projectId }),
           planChat: (projectId, text) => command({ name: 'planChat', projectId, text }),
           reloadPlanDoc: (projectId) => command({ name: 'reloadPlanDoc', projectId }),

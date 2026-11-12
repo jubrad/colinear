@@ -13,6 +13,7 @@ import { channels, formatMessages } from '../channel.js';
 import { endSession, startSession, updateSession } from '../sessions.js';
 import type { SessionChannels } from '../channel.js';
 import type { CoordinatorTools } from '../coordinator.js';
+import type { JobTools } from '../jobs.js';
 import type { AskedQuestion, PlannedSubtask, SessionSpend } from '../types.js';
 import type {
   AgentBackend,
@@ -50,6 +51,7 @@ export const CLAUDE_CAPABILITIES: AgentCapabilities = {
   // colinear mints the uuid and passes --session-id, so the plan chat is one
   // conversation shared between a headless session and the operator's terminal
   sharedSessionId: true,
+  colinearTools: true,
 };
 
 /** What the pickers offer. The config still takes any string, including an exact id. */
@@ -89,6 +91,7 @@ const COLINEAR_TOOL_PREFIX = 'mcp__colinear__';
 function colinearServer(opts: {
   channels?: SessionChannels;
   coordinator?: CoordinatorTools;
+  jobTools?: JobTools;
 }) {
   const tools = [];
   const membership = opts.channels;
@@ -172,6 +175,43 @@ function colinearServer(opts: {
         }),
       ),
     );
+  }
+  // a job's actions: only the ones its job lists exist at all, so an action
+  // the operator did not grant is not refused — it is not there to call
+  const job = opts.jobTools;
+  if (job) {
+    const pr = z.string().min(1).describe('the pull request: owner/repo#123 or its URL');
+    const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
+    if (job.actions.includes('review')) {
+      tools.push(
+        tool(
+          'review_pr',
+          "Run colinear's pre-review of a pull request and wait for it to finish (minutes, not seconds). Returns the summary and every finding with its severity. A PR reviewed before is re-reviewed only if it changed.",
+          { pr, instructions: z.string().max(2000).optional().describe('what to look for, on top of the standing review guidance') },
+          async ({ pr: spec, instructions }) => text(await job.review(spec, instructions)),
+        ),
+      );
+    }
+    if (job.actions.includes('approve')) {
+      tools.push(
+        tool(
+          'approve_pr',
+          'Submit an approving review on a pull request colinear has reviewed. Refused unless its review has finished with no findings that ask for a change.',
+          { pr },
+          async ({ pr: spec }) => text(await job.approve(spec)),
+        ),
+      );
+    }
+    if (job.actions.includes('comment')) {
+      tools.push(
+        tool(
+          'comment_pr',
+          "Post a colinear review's findings to the pull request as review comments.",
+          { pr },
+          async ({ pr: spec }) => text(await job.comment(spec)),
+        ),
+      );
+    }
   }
   return tools.length ? createSdkMcpServer({ name: 'colinear', tools }) : undefined;
 }
@@ -279,9 +319,9 @@ export async function runSession(opts: RunSessionOpts): Promise<SessionResult> {
 async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
   const {
     prompt, cwd, callbacks, outputSchema, model, fallbackModel, maxTurns, resume, abortController,
-    channels: membership, inbox, coordinator, permissions,
+    channels: membership, inbox, coordinator, permissions, jobTools, userSettings,
   } = opts;
-  const mcp = colinearServer({ channels: membership, coordinator });
+  const mcp = colinearServer({ channels: membership, coordinator, jobTools });
 
   const q = query({
     prompt: inbox ? asUserMessages(inbox.stream(prompt)) : prompt,
@@ -298,7 +338,8 @@ async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
       // uncertain calls falling through to canUseTool below. haiku predates it.
       permissionMode: (model?.includes('haiku') ? 'acceptEdits' : permissions?.mode ?? 'auto') as PermissionMode,
       // 'project' loads the repo's own .claude/settings.json and CLAUDE.md
-      settingSources: ['project'],
+      // 'user' adds the operator's own settings and MCP servers — a job's opt-in
+      settingSources: userSettings ? ['user', 'project'] : ['project'],
       // policy tier: the operator's deny/ask rules, from a config file outside
       // the worktree. A repo's own settings can be edited by the agent working
       // in it; these can't be, and restrictive rules can't be loosened.

@@ -12,6 +12,7 @@ import { FamilyView, familyKeys } from './FamilyView.js';
 import { GcView, gcKeys } from './GcView.js';
 import { HelpView, helpKeys } from './HelpView.js';
 import { IssuesView, issuesKeys } from './IssuesView.js';
+import { JobsView, jobsKeys } from './JobsView.js';
 import { LogsView, logsKeys } from './LogsView.js';
 import { ProjectsView, projectsKeys } from './ProjectsView.js';
 import { ProjectView, projectKeys } from './ProjectView.js';
@@ -86,6 +87,13 @@ const builtinViews: ViewDef[] = [
     describe: 'what to do next: reviews, waiting agents, deadlines, ranked',
     Component: TodoView,
     keys: todoKeys,
+  },
+  {
+    name: 'jobs',
+    aliases: ['job', 'j', 'cron'],
+    describe: 'work asked of colinear directly, by hand or on a schedule, and what each run reported',
+    Component: JobsView,
+    keys: jobsKeys,
   },
   {
     name: 'costs',

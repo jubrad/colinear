@@ -83,6 +83,7 @@ Nothing polls on render. Every recurring read lives in the daemon on a fixed tim
 | 60s | blocked recheck, retention sweep, closed-issue sweep, sub-issue rollup | one tick, four jobs — see `recheckBlocked()` |
 | 5m | `gh` search for PRs awaiting your review, then a batched read of every live review it didn't return | a review request is not urgent, and the search is expensive. The second half is what keeps your own PRs and ones you have reviewed current, since the search no longer returns them |
 | `todo.refreshMinutes` | re-rank `:todo` with the agent — off (`0`) by default | it spends tokens, so the operator chooses whether a clock may |
+| 30s | due jobs (`JobRunner.tick`) | cron's grain is a minute; half that starts a run on its minute |
 
 Two retries also sit on clocks: a session that dies before starting is requeued once after **5s**,
 and a rate-limited session after **30s**. Both are one-shot — a second failure parks the task rather
@@ -483,6 +484,35 @@ stays registered and says how to turn it back on, the same rule experimental vie
 live store, using the same predicates that listed it (`reviewNeed`, `taskNeed`). "Handled" therefore
 means exactly "would not be listed now", and posting a review or answering a question marks the row
 without re-ranking anything.
+
+## Jobs
+
+The fifth CDC entity (`job-upsert`, `job-update`, `job-activity`, `job-delete`). A job holds its
+definition and its last 20 runs together, and a run's report travels with it, so `:jobs` reads it
+like any other row. The daemon's `JobRunner` (`core/jobs.ts`) owns the clock and the runs. The view
+writes definitions through the store like any mirror, and asks the daemon to run or cancel.
+
+**The security profile is the tool list.** A job's colinear actions (`review`, `approve`, `comment`)
+are tools in the in-process `colinear` MCP server, which the coordinator's family tools also use.
+Only granted ones are built, so an ungranted action doesn't exist in the session rather than being
+refused at call time. They're closed over the job and its run, so every call is recorded on the run
+with no parameter for the agent to misreport.
+
+**Through colinear, not around it.** `approve_pr` calls `reviewer.verdict`, the same deterministic
+`gh api` post `a` makes, and refuses unless the PR has a finished colinear review of its *current
+head* with no finding asking for a change. That's why the dependabot job has to review first: there
+is no path to an approval colinear hasn't read. `review_pr` adopts the PR into `:reviews` (it
+usually isn't asking for your review) and awaits `reviewer.start`, which resolves when the session
+ends.
+
+**User settings are opt-in.** Every session loads only `project` settings. A job with `user tools`
+on adds `user`, which brings the operator's own MCP servers: that's how a job reaches Slack or
+Linear. claude.ai connectors aren't loaded by Agent SDK sessions even then; a probe on 2026-11-11
+found them only in the interactive CLI. So the route is a local MCP server, not the connector.
+
+**Unattended means no questions.** A job's `onQuestion` answers "no one is available, make the
+conservative call", and its prompt says the same. The answer comes back through `REPORT_SCHEMA`
+(`summary` + markdown `report`), so a run with no report is an error rather than an empty success.
 
 ## Agent runtimes
 

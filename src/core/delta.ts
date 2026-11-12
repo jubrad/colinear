@@ -1,4 +1,4 @@
-import type { PendingQuestion, ProjectPlan, Review, Task, TodoList } from './types.js';
+import type { Job, PendingQuestion, ProjectPlan, Review, Task, TodoList } from './types.js';
 
 /**
  * Change data capture for the task store.
@@ -18,6 +18,9 @@ export type Change =
   | { kind: 'plan-upsert'; plan: WirePlan }
   | { kind: 'plan-update'; id: string; patch: Partial<WirePlan>; clear: string[] }
   | { kind: 'plan-activity'; id: string; line: string }
+  | { kind: 'job-upsert'; job: Job }
+  | { kind: 'job-update'; id: string; patch: Partial<Job>; clear: string[] }
+  | { kind: 'job-activity'; id: string; line: string }
   /**
    * The :todo list is one small document, so it travels whole — a patch
    * protocol for a singleton buys nothing. Activity is the exception: it is
@@ -29,7 +32,8 @@ export type Change =
       ways a row ever leaves the store */
   | { kind: 'delete'; id: string }
   | { kind: 'review-delete'; id: string }
-  | { kind: 'plan-delete'; id: string };
+  | { kind: 'plan-delete'; id: string }
+  | { kind: 'job-delete'; id: string };
 
 /** A change stamped with the version it produced. */
 export type Delta = Change & { v: number };
@@ -55,15 +59,17 @@ export interface Snapshot {
   tasks: WireTask[];
   reviews: WireReview[];
   plans: WirePlan[];
+  /** jobs hold no question, so they travel as they are; absent from older daemons */
+  jobs?: Job[];
   /** absent until the first refresh */
   todo?: TodoList;
 }
 
 /** Drop the answer callback; everything else on a task, review or plan is JSON. */
-export function toWire<T extends Partial<Task> | Partial<Review> | Partial<ProjectPlan>>(
+export function toWire<T extends Partial<Task> | Partial<Review> | Partial<ProjectPlan> | Partial<Job>>(
   value: T,
 ): Omit<T, 'question'> & { question?: Omit<PendingQuestion, 'answer'> } {
-  const { question, ...rest } = value;
+  const { question, ...rest } = value as T & { question?: PendingQuestion };
   const wire = structuredClone(rest) as Omit<T, 'question'> & { question?: Omit<PendingQuestion, 'answer'> };
   if (question) wire.question = { questions: structuredClone(question.questions), kind: question.kind };
   return wire;
@@ -74,7 +80,7 @@ export function toWire<T extends Partial<Task> | Partial<Review> | Partial<Proje
  * `undefined`, but callers rely on `{ error: undefined }` meaning "clear it",
  * so those keys travel separately.
  */
-export function encodePatch<T extends Partial<Task> | Partial<Review> | Partial<ProjectPlan>>(
+export function encodePatch<T extends Partial<Task> | Partial<Review> | Partial<ProjectPlan> | Partial<Job>>(
   patch: T,
 ): { patch: Omit<T, 'question'> & { question?: Omit<PendingQuestion, 'answer'> }; clear: string[] } {
   const clear: string[] = [];

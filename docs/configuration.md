@@ -175,7 +175,8 @@ was.
 naming a model per kind of session. The kinds are the ones `:agents` already shows:
 
 `triage`, `work`, `maintenance`, `coordinator`, `review`, `plan`, `draft-issue`,
-`draft-project` and `todo`, plus `general` for everything you have not named.
+`draft-project`, `todo` and `job` (a [job](views/jobs.md) that names no model of its own), plus
+`general` for everything you have not named.
 
 ```json
 {

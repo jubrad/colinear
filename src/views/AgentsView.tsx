@@ -23,6 +23,7 @@ const KIND_COLOR: Record<string, string> = palette(() => ({
   'draft-issue': theme.key,
   'draft-project': theme.key,
   todo: theme.info,
+  job: theme.key,
   // parked: what it is waiting on
   failed: theme.err,
   escalated: theme.err,

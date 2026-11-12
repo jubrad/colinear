@@ -43,6 +43,7 @@ export const CODEX_CAPABILITIES: AgentCapabilities = {
   // Codex mints the thread id itself, so colinear cannot hand one to a fresh
   // session the way the plan chat does with Claude Code
   sharedSessionId: false,
+  colinearTools: false,
 };
 
 /** What the picker offers. `codex debug models` lists what a given build knows. */
