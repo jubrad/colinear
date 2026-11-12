@@ -2315,7 +2315,11 @@ the network) still just fails and says so, because re-anchoring cannot help with
 </tr>
 <tr>
 <td><code>S</code></td>
-<td>sort: needs-me / updated / size / repo / author / cost (again reverses)</td>
+<td>sort: needs-me / reviewed / updated / size / repo / author / cost (again reverses). Remembered</td>
+</tr>
+<tr>
+<td><code>m</code></td>
+<td>only yours, or every review. Remembered</td>
 </tr>
 <tr>
 <td><code>o</code></td>
@@ -2344,6 +2348,17 @@ reclaimed — not when it's posted, since the author may push again.</p>
 usually far more of them than live ones, and a list of everything would bury the work. The header
 always says how many are being held back, so a short list tells you what it is not showing, and
 <code>h</code> shows them. Filtering with <code>/</code> still narrows whichever set you are looking at.</p>
+<p><strong><code>m</code> narrows the list to yours.</strong> That's a PR whose review was asked of you personally, one you
+added with <code>:reviews owner/repo#123</code>, one you've posted on or left a note on, or one colinear has
+reviewed or is reviewing. What drops out is the long tail: team requests anyone on the team can take,
+and PRs that stopped asking you, that you never touched. A team request becomes yours the moment you
+press <code>r</code> on it. The header says which scope you're in, and it's remembered, like the sort.</p>
+<p><strong>The <code>reviewed</code> sort puts the newest colinear review first.</strong> A review running now sorts above all
+of them, and PRs colinear has never reviewed come after every one it has. <code>REV</code> on each row says how
+long ago colinear last reviewed it. It's bold and coloured until you've looked at that review, which
+means resting the cursor on its row for a moment. The header counts the reviews you haven't looked at
+yet ("3 new reviews"), so a review that finished while you were elsewhere doesn't get lost under PRs
+that merely updated.</p>
 <p><strong><code>H</code> hides a PR you are not going to review.</strong> It goes the way a settled one does: off the list,
 out of <code>:todo</code>, and counted in the header ("2 hidden by you"). <code>h</code> shows it again, dimmed and marked
 <code>-</code>, and <code>H</code> on it puts it back. Hiding lasts until you undo it. A new push or another review
