@@ -19,19 +19,20 @@ import {
   tokenTotal,
 } from './taskLens.js';
 import { DetailPane } from './DetailPane.js';
-import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
+import { useTaskActions } from './taskActions.js';
 
 /**
- * Every task as one searchable, sortable table — the board's data without the
- * board's geometry, for when there are more cards than a column can show. The
- * actions are the board's, key for key (see taskActions).
+ * `:agents` as a table (`t`): every task, searchable and sortable — the
+ * board's data without the board's geometry, for when there are more cards
+ * than a column can show, and the columns the grouped list has no room for.
+ * The actions are the board's, key for key (see taskActions).
  */
-export function TasksView(props: { param?: string }) {
+export function TaskTable(props: { onToggle: () => void }) {
   const ctx = useColinear();
   const tasks = useTasks();
   const actions = useTaskActions();
   const [cursor, setCursor] = useState(0);
-  const [query, setQuery] = useState(props.param ?? '');
+  const [query, setQuery] = useState('');
   const [bar, setBar] = useState<'fuzzy' | 'sort' | null>(null);
   const [sortKey, setSortKey] = useState(BOARD_SORT);
   const [sortDesc, setSortDesc] = useState(false);
@@ -114,6 +115,7 @@ export function TasksView(props: { param?: string }) {
       if (key.downArrow || input === 'j') setCursor((c) => Math.min(rows.length - 1, c + 1));
       if (input === 'g') setCursor(0);
       if (input === 'G') setCursor(Math.max(0, rows.length - 1));
+      if (input === 't') return props.onToggle();
       if (input === '/') {
         setBar('fuzzy');
         return;
@@ -148,7 +150,7 @@ export function TasksView(props: { param?: string }) {
       <Box flexDirection="column" flexGrow={1} justifyContent="center" alignItems="center">
         <Text dimColor>No agents dispatched yet.</Text>
         <Text dimColor>
-          press <Text color={theme.key}>n</Text> to pick issues
+          press <Text color={theme.key}>n</Text> to pick issues · <Text color={theme.key}>t</Text> back to the groups
         </Text>
       </Box>
     );
@@ -158,8 +160,8 @@ export function TasksView(props: { param?: string }) {
     <Box flexDirection="column" flexGrow={1}>
       <Box justifyContent="space-between">
         <Text>
-          <Text bold color={theme.accent}>
-            tasks
+          <Text bold color={theme.header}>
+            agents{' '}
           </Text>
           <Text dimColor>
             [{rows.length}/{tasks.length}]
@@ -170,7 +172,7 @@ export function TasksView(props: { param?: string }) {
             {sortDesc ? ' ↓' : ' ↑'}
           </Text>
         </Text>
-        {query ? <Text color={theme.accent}>/{query}</Text> : <Text dimColor>/ filter · , sort</Text>}
+        {query ? <Text color={theme.accent}>/{query}</Text> : <Text dimColor>/ filter · , sort · t groups</Text>}
       </Box>
       {bar === 'fuzzy' && (
         <CommandBar
@@ -239,13 +241,6 @@ function PrCell(props: { task: Task; width: number }) {
     </Text>
   );
 }
-
-export const tasksKeys: Array<[string, string]> = [
-  ['j/k ↑↓', 'move'],
-  ['/', 'filter'],
-  [',', 'sort'],
-  ...TASK_ACTION_KEYS,
-];
 
 /** Lines a task's worktree has moved, for sorting by how much it has changed. */
 function changeSize(t: Task): number {

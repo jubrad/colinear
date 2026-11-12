@@ -17,7 +17,6 @@ import { ProjectsView, projectsKeys } from './ProjectsView.js';
 import { ProjectView, projectKeys } from './ProjectView.js';
 import { ReviewsView, reviewsKeys } from './ReviewsView.js';
 import { TaskView, taskKeys } from './TaskView.js';
-import { TasksView, tasksKeys } from './TasksView.js';
 import { TodoView, todoKeys } from './TodoView.js';
 
 export interface ViewDef {
@@ -43,13 +42,6 @@ const builtinViews: ViewDef[] = [
     describe: 'agent kanban board',
     Component: BoardView,
     keys: boardKeys,
-  },
-  {
-    name: 'tasks',
-    aliases: ['ls', 't'],
-    describe: 'every task as a searchable, sortable table',
-    Component: TasksView,
-    keys: tasksKeys,
   },
   {
     name: 'task',
@@ -116,9 +108,10 @@ const builtinViews: ViewDef[] = [
     keys: diffKeys,
   },
   {
+    // :tasks was the table that is now `t` here, so its names open it
     name: 'agents',
-    aliases: ['ps'],
-    describe: 'every agent running right now, and what started it',
+    aliases: ['ps', 'tasks', 'ls', 't'],
+    describe: 'every agent and task: what needs you, what is working, what waits',
     Component: AgentsView,
     keys: agentsKeys,
   },

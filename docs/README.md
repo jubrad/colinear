@@ -21,7 +21,6 @@
 |---|---|---|
 | [`:issues`](views/issues.md) | `i` `is` | browse the tracker and dispatch agents |
 | [`:board`](views/board.md) | `b` `bo` | agent kanban board |
-| [`:tasks`](views/tasks.md) | `ls` `t` | every task as a searchable, sortable table |
 | [`:task`](views/task.md) | `ta` | task detail + live log (:task CLOUD-123) |
 | [`:projects`](views/projects.md) | `pj` `proj` | projects in the tracker |
 | [`:project`](views/projects.md) | `p` | project kanban (:project NAME) |
@@ -31,7 +30,7 @@
 | [`:costs`](views/costs.md) | `cost` `$` | spend per ticket |
 | [`:logs`](views/logs.md) | `log` `debug` | live debug log (what colinear is actually doing) |
 | [`:diff`](views/diff.md) | `selfreview` | read a task's own branch before promoting its draft PR |
-| [`:agents`](views/agents.md) | `ps` | every agent running right now, and what started it |
+| [`:agents`](views/agents.md) | `ps` `tasks` `ls` `t` | every agent and task: what needs you, what is working, what waits |
 | [`:family`](views/family.md) | `fam` `subs` | split work: every tracking parent and its sub-issue tasks |
 | [`:gc`](views/gc.md) | `disk` | reclaim worktree disk and finished cards |
 | [`:chan`](views/chan.md) | `channel` `irc` | coordination channels (experimental — :chan CLO-67) |

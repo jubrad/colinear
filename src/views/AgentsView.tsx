@@ -5,9 +5,12 @@ import { age, fleet, GROUP_LABEL, isUnread, type FleetEntry, type FleetGroup } f
 import { useReviews, useTasks } from '../core/hooks.js';
 import type { AgentSession } from '../core/sessions.js';
 import { useColinear, useViewSize } from '../ui/context.js';
-import { cell, formatTokens, spinner } from '../ui/format.js';
+import { cell, changesShort, formatTokens } from '../ui/format.js';
 import { theme } from '../theme.js';
-import { useTaskActions } from './taskActions.js';
+import { statusText } from './taskLens.js';
+import { TaskTable } from './TaskTable.js';
+import { fleetGlyph } from '../ui/AgentRail.js';
+import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
 
 const KIND_COLOR: Record<string, string> = {
   question: theme.info,
@@ -20,26 +23,46 @@ const KIND_COLOR: Record<string, string> = {
   'draft-issue': theme.key,
   'draft-project': theme.key,
   todo: theme.info,
+  // parked: what it is waiting on
+  failed: theme.err,
+  escalated: theme.err,
+  interrupted: theme.warn,
+  conflict: theme.err,
+  ci: theme.err,
+  changes: theme.changes,
+  closed: theme.err,
+  approved: theme.ok,
+  draft: theme.key,
+  unstarted: theme.key,
+  proposals: theme.info,
+  input: theme.info,
+  blocked: theme.warn,
+  merged: theme.merged,
+  done: theme.ok,
 };
 
-const GROUP_COLOR: Record<FleetGroup, string> = { needs: theme.info, running: theme.warn, finished: theme.dim };
+const GROUP_COLOR: Record<FleetGroup, string> = {
+  needs: theme.info,
+  yours: theme.accent,
+  running: theme.warn,
+  waiting: theme.dim,
+  finished: theme.dim,
+};
+
 
 /** Wide enough for the list and a preview side by side. */
 const SPLIT_MIN = 130;
 
-/** Keys that act on the task behind a row — the board's, for the verbs that mean the same everywhere. */
-const TASK_KEYS = new Set(['a', 'M', 's', 'S', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
-
 /**
- * Every agent, in the order it wants you: stopped on a question, at work,
- * just finished — and beside the list, the selected one in full: what started
- * it, what it is asking, the last of what it has been doing.
+ * Every agent and every task, in the order it wants you: stopped on a
+ * question, stopped on something else only you can do, at work, waiting on
+ * somebody else, just done — and beside the list, the selected one in full.
+ * `t` swaps the groups for every task as a sortable table (what `:tasks` was).
  *
- * Sessions belong to four different things — a task, a review, a plan, a
- * one-off draft — so what you can do to one depends on what it is working on.
- * `enter` goes to the owner. On a task's row the verbs that mean the same
- * thing everywhere work here too: answer its question, message it, attach.
- * Cancelling stays where cancelling means one thing.
+ * Rows belong to four different things — a task, a review, a plan, a one-off
+ * draft — so what you can do to one depends on what it is. `enter` goes to the
+ * owner; on a task's row every board key works, so the next step is one key
+ * from the line that names it.
  */
 export function AgentsView(_props: { param?: string }) {
   const ctx = useColinear();
@@ -50,6 +73,8 @@ export function AgentsView(_props: { param?: string }) {
   /** the cursor follows a row, not an index: rows move between groups as agents finish */
   const [cursorKey, setCursorKey] = useState<string>();
   const actions = useTaskActions();
+  const table = ctx.ui.agentsLayout === 'table';
+  const toggle = () => ctx.setUi({ agentsLayout: table ? 'groups' : 'table' });
 
   useEffect(() => ctx.onAgents?.(setAgents), []);
   // the registry isn't CDC state — it changes on its own clock inside sessions
@@ -60,7 +85,7 @@ export function AgentsView(_props: { param?: string }) {
     return () => clearInterval(timer);
   }, []);
 
-  const entries = useMemo(() => fleet(tasks, reviews, agents), [tasks, reviews, agents]);
+  const entries = useMemo(() => fleet(tasks, reviews, agents, ctx.now), [tasks, reviews, agents, ctx.now]);
   const found = entries.findIndex((e) => e.key === cursorKey);
   const cursor = found === -1 ? 0 : found;
   const selected = entries[cursor];
@@ -71,6 +96,7 @@ export function AgentsView(_props: { param?: string }) {
 
   useInput(
     (input, key) => {
+      if (input === 't') return toggle();
       if (key.upArrow || input === 'k') move(cursor - 1);
       if (key.downArrow || input === 'j') move(cursor + 1);
       if (input === 'g') move(0);
@@ -81,11 +107,11 @@ export function AgentsView(_props: { param?: string }) {
         else ctx.toast('a draft has nothing to open yet — the toast lands when it is filed', 'info');
         return;
       }
-      if (selected.task && TASK_KEYS.has(input)) return actions.handleKey(input, key, selected.task);
+      if (selected.task) return actions.handleKey(input, key, selected.task);
       // a review's question is answered from the review, where its context is
       if (input === 'a' && selected.review?.question) ctx.navigate('reviews', selected.review.id);
     },
-    { isActive: !actions.busy && !ctx.cmdOpen },
+    { isActive: !table && !actions.busy && !ctx.cmdOpen },
   );
 
   const wide = pane.width >= SPLIT_MIN;
@@ -109,17 +135,20 @@ export function AgentsView(_props: { param?: string }) {
 
   const counts = (g: FleetGroup) => entries.filter((e) => e.group === g).length;
 
+  if (table) return <TaskTable onToggle={toggle} />;
+
   return (
     <Box flexDirection="column" flexGrow={1} overflow="hidden">
       <Text wrap="truncate">
         <Text bold color={theme.header}>
           agents{' '}
         </Text>
-        {counts('needs') ? <Text color={theme.info}>{counts('needs')} waiting on you · </Text> : null}
+        {counts('needs') ? <Text color={theme.info}>{counts('needs')} asking · </Text> : null}
+        {counts('yours') ? <Text color={theme.accent}>{counts('yours')} your move · </Text> : null}
         <Text dimColor>
           {counts('running')} working
-          {counts('finished') ? ` · ${counts('finished')} just finished` : ''}
-          {' · enter opens it · \\ shows this beside every view'}
+          {counts('waiting') ? ` · ${counts('waiting')} waiting` : ''}
+          {' · enter opens it · t table · \\ beside every view'}
         </Text>
       </Text>
       <Box height={1} />
@@ -149,8 +178,9 @@ export function AgentsView(_props: { param?: string }) {
           )}
           {!entries.length && (
             <Text dimColor wrap="wrap">
-              Nothing running. Agents appear here the moment they start — dispatched work, reviews, plan
-              sessions, and the drafts behind `n` — and stay ten minutes after they finish.
+              Nothing here. Every task lands here once dispatched and stays until it is done — at work, stopped
+              on you, or waiting on someone else — along with reviews, plan sessions and the drafts behind `n`.
+              Press n to pick issues.
             </Text>
           )}
         </Box>
@@ -172,10 +202,9 @@ export function AgentsView(_props: { param?: string }) {
 
 function Row(props: { entry: FleetEntry; onCursor: boolean; unread: boolean; now: number }) {
   const { entry, onCursor, unread, now } = props;
-  const glyph =
-    entry.group === 'needs' ? '?' : entry.group === 'running' ? spinner(now) : entry.ok === false ? '✖' : '✓';
-  const glyphColor =
-    entry.group === 'needs' ? theme.info : entry.group === 'running' ? theme.warn : entry.ok === false ? theme.err : theme.ok;
+  const { glyph, color: glyphColor } = fleetGlyph(entry, now);
+  const lineColor =
+    entry.group === 'needs' ? theme.info : entry.group === 'yours' ? theme.accent : entry.ok === false ? theme.err : undefined;
   return (
     // the cursor row goes plain: inverse over coloured cells inverts into a
     // strip of mismatched blocks rather than one bar
@@ -185,10 +214,7 @@ function Row(props: { entry: FleetEntry; onCursor: boolean; unread: boolean; now
       <Text bold={unread}>{cell(entry.label, 18)}</Text>
       <Text color={onCursor ? undefined : KIND_COLOR[entry.kind] ?? theme.dim}>{cell(entry.kind, 13)}</Text>
       <Text dimColor={!onCursor}>{cell(age(entry.since, now), 6)}</Text>
-      <Text
-        color={onCursor ? undefined : entry.group === 'needs' ? theme.info : entry.ok === false ? theme.err : undefined}
-        dimColor={!onCursor && entry.group !== 'needs'}
-      >
+      <Text color={onCursor ? undefined : lineColor} dimColor={!onCursor && !lineColor}>
         {entry.line}
       </Text>
     </Text>
@@ -212,19 +238,35 @@ function Preview(props: {
   const question = entry.task?.question ?? entry.review?.question;
   const activity = entry.task?.activity ?? entry.review?.activity ?? (a?.activity ? [a.activity] : []);
   const questionRows = question ? question.questions.reduce((n, q) => n + 1 + q.options.length, 0) + 1 : 0;
+  const forText = a ? age(a.startedAt, a.endedAt ?? now) : undefined;
+  const t = entry.task;
+  const pr = t?.prs?.[0];
+  const state = t
+    ? [
+        statusText(t),
+        pr ? `PR #${pr.number}${pr.isDraft ? ' draft' : ''}` : '',
+        pr?.checksStatus ? `CI ${pr.checksStatus}` : '',
+        t.changes ? changesShort(t.changes) + (t.changes.uncommitted ? ` ~${t.changes.uncommitted}` : '') : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+  // stopped: the line that says what happens next, where a working row has its last step
+  const parked = entry.group === 'yours' || entry.group === 'waiting';
   const fixed =
     2 + // the border
     1 + // label and title
     1 + // kind, origin, clock
     (a ? 1 : 0) + // spend
     (a?.result ? 1 : 0) +
+    (state ? 1 : 0) +
+    (parked ? 2 : 0) +
     questionRows +
     2 + // a blank row and the activity header
     (a?.cwd ? 1 : 0) +
     (a?.sessionId ? 1 : 0) +
     1; // the keys
   const tail = activity.slice(-Math.max(0, props.height - fixed));
-  const forText = a ? age(a.startedAt, a.endedAt ?? now) : undefined;
 
   return (
     <Box
@@ -247,6 +289,20 @@ function Preview(props: {
         {forText ? ` · ${a?.status === 'running' ? 'for' : 'ran'} ${forText}` : ''}
         {entry.group !== 'running' ? ` · ${GROUP_LABEL[entry.group]} ${age(entry.since, now)} ago` : ''}
       </Text>
+      {state && (
+        <Text dimColor wrap="truncate">
+          {state}
+        </Text>
+      )}
+      {parked && (
+        <>
+          <Text> </Text>
+          <Text color={entry.group === 'yours' ? theme.accent : undefined} dimColor={entry.group === 'waiting'} bold wrap="truncate">
+            {entry.group === 'yours' ? 'next: ' : 'waiting: '}
+            {entry.line}
+          </Text>
+        </>
+      )}
       {a && (
         <Text dimColor wrap="truncate">
           {a.model ? `${a.model} · ` : ''}
@@ -301,7 +357,7 @@ function Preview(props: {
       )}
       <Text color={theme.key} wrap="truncate">
         {entry.open ? 'enter opens it' : 'a draft — nothing to open yet'}
-        {entry.task ? `${entry.task.question ? ' · a answers · 1-9 picks' : ''} · M message · s attach · S shell` : ''}
+        {entry.task ? `${entry.task.question ? ' · a answers · 1-9 picks' : ''} · every board key works here` : ''}
         {entry.review?.question ? ' · a answers, in the review' : ''}
       </Text>
     </Box>
@@ -310,8 +366,7 @@ function Preview(props: {
 
 export const agentsKeys: Array<[string, string]> = [
   ['j/k ↑↓', 'row'],
-  ['enter', 'open what it is working on'],
-  ['a', 'answer its question'],
-  ['M', 'message the agent'],
-  ['s', 'attach · S shell'],
+  ['t', 'groups ⇄ table'],
+  ['/ ,', 'filter · sort (table)'],
+  ...TASK_ACTION_KEYS,
 ];

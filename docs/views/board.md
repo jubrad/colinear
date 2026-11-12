@@ -28,7 +28,7 @@ it is worth a look, not that anything is wrong. The clock restarts whenever an a
 task, so resuming one that sat idle overnight does not read as stalled.
 
 The detail pane spells it out — files, what is committed, when it last moved — and
-[`:tasks`](tasks.md) has it as the `CHANGE` column, sortable by size. Once the agent stops, the
+[`:agents`](agents.md#the-table)' table has it as the `CHANGE` column, sortable by size. Once the agent stops, the
 count is taken once more and kept: the card's last word is what the agent left.
 
 ## Keys
@@ -51,7 +51,7 @@ count is taken once more and kept: the card's last word is what the agent left.
 | `c` | post the triage escalation to the tracker |
 | `o` open the PR · `O` open the issue · `n` back to issues |
 
-The board and [`:tasks`](tasks.md) do the same things with the same keys; only movement differs.
+The board and [`:agents`](agents.md) do the same things with the same keys; only movement differs.
 
 ## Transposing the board
 

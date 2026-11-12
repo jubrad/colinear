@@ -82,7 +82,7 @@ inventing its own.
 
 ## Talking to a running agent
 
-`M` on a card (board or `:tasks`) opens a paragraph-sized box and sends the agent a message without
+`M` on a card (board or `:agents`) opens a paragraph-sized box and sends the agent a message without
 attaching to it — "use the existing helper", "don't touch the schema", a pasted stack trace. `enter`
 is a newline; `ctrl+d` sends (and wakes a parked agent), `ctrl+q` queues it without waking.
 

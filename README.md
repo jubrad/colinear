@@ -11,7 +11,7 @@ It runs on **Claude subscription auth** (the logged-in `claude` CLI), works on *
 
 ![The board: seven columns of dispatched agents, with the selected task's subtasks and live activity in the pane below](docs/images/board.png)
 
-Every task is also a searchable, sortable table — same data, same keys, `:tasks`:
+Every task is also a searchable, sortable table — same data, same keys, `t` in `:agents`:
 
 ![The task table: one row per task with status, repo, PR, CI, elapsed time and tokens](docs/images/tasks.png)
 
@@ -40,7 +40,7 @@ Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset) and `
 ## What it does
 
 - **Dispatch** — an agent per issue, in a worktree cut from your repo. Triage picks the repo and scopes the work, the work pass implements it and opens a **draft** PR. Agents never mark a PR ready; that's your keypress.
-- **Watch** — a kanban board and a table view of every task: live duration, tokens, cost, subtask progress, CI and review state, blocked-by chains. `:agents` (or `\` for a rail beside every view) lists every agent by what it wants from you: waiting on a question, working, just finished.
+- **Watch** — a kanban board and a table view of every task: live duration, tokens, cost, subtask progress, CI and review state, blocked-by chains. `:agents` (or `\` for a rail beside every view) lists every agent and task by whose move it is: asking you a question, stopped on a step only you can take, working, waiting on someone else, just done.
 - **Steer** — answer an agent's questions in a form, message a running agent without attaching, attach to its session and hand it back, cancel, resume, rebase.
 - **Review** — PRs awaiting your review get an assisted pre-review you edit and post deterministically, never by an agent.
 - **Plan** — a read-only planning chat that drafts sub-issues for you to approve.

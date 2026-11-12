@@ -35,8 +35,8 @@ const list = fleet(tasks, reviews, agents);
 const shape = list.map((e) => `${e.group}:${e.label}`).join(' ');
 
 check(
-  'waiting first, then working, then finished newest first',
-  shape === 'needs:A-1 needs:r#5 running:A-2 finished:draft finished:A-3',
+  'questions first, then working, then waiting, then done newest first',
+  shape === 'needs:A-1 needs:r#5 running:A-2 waiting:A-3 finished:draft',
   shape,
 );
 check('a question is dated by the session that asked it', list[0].since === now - 5000);
@@ -44,9 +44,39 @@ check('a live session hides the same task\'s finished one', !list.some((e) => e.
 check('a review opens in :reviews by its id', list[1].open?.view === 'reviews' && list[1].open.param === 'o/r#5');
 check('a draft opens nowhere', list.find((e) => e.label === 'draft')?.open === undefined);
 
+// a stopped agent stays listed by what it is waiting on, not for ten minutes
+const pr = (extra: object) => [{ number: 7, state: 'OPEN', isDraft: false, checksStatus: 'passing', ...extra }];
+const parked = fleet(
+  [
+    task('B-1', 'error', { error: 'boom', endedAt: now - 100 }),
+    task('B-2', 'pr_open', { prs: pr({ isDraft: true }) } as Partial<Task>),
+    task('B-3', 'pr_open', { prs: pr({ isDraft: true, checksStatus: 'pending' }) } as Partial<Task>),
+    task('B-4', 'pr_open', { prs: pr({}) } as Partial<Task>),
+    task('B-5', 'pr_open', { prs: pr({ reviewDecision: 'APPROVED' }) } as Partial<Task>),
+    task('B-6', 'blocked', { blockedBy: [{ id: 'x', identifier: 'B-9', kind: 'start' }] }),
+    task('B-7', 'working', { awaitingStart: true }),
+    task('B-8', 'done', { endedAt: now - 2 * 60 * 60 * 1000 }),
+  ],
+  [],
+  [],
+  now,
+);
+const groupOf = (l: string) => parked.find((e) => e.label === l)?.group;
+check('a failure is yours', groupOf('B-1') === 'yours');
+check('a green draft is yours to promote', groupOf('B-2') === 'yours');
+check('a draft with CI running is waiting', groupOf('B-3') === 'waiting');
+check('a PR in review is waiting on the reviewer', groupOf('B-4') === 'waiting');
+check('an approved PR is yours to merge', groupOf('B-5') === 'yours');
+check('a blocked task names its blocker', groupOf('B-6') === 'waiting' && parked.find((e) => e.label === 'B-6')!.line.includes('B-9'));
+check('dispatched but not started is yours', groupOf('B-7') === 'yours');
+check('done long ago drops off', groupOf('B-8') === undefined);
+check('a row keys on its task, so it keeps the cursor as it changes group', parked.find((e) => e.label === 'B-1')?.key === 'task:B-1');
+
 const seen = { 'A-3': now - 1000 };
-check('finished after you looked is new', isUnread(list.find((e) => e.label === 'A-3')!, { 'A-3': now - 4000 }));
-check('finished before you looked is not', !isUnread(list.find((e) => e.label === 'A-3')!, seen));
+// A-3 stopped at now - 3000: its task says so, its finished session is only the detail
+const a3 = fleet([task('A-3', 'pr_open', { endedAt: now - 3000 })], [], agents).find((e) => e.label === 'A-3')!;
+check('stopped after you looked is new', isUnread(a3, { 'A-3': now - 4000 }));
+check('stopped before you looked is not', !isUnread(a3, seen));
 check('never opened is new', isUnread(list[0], undefined));
 check('a draft is never new — there is nothing to open', !isUnread(list.find((e) => e.label === 'draft')!, undefined));
 
@@ -63,4 +93,4 @@ if (failures.length) {
   console.error(`fleet: ${failures.length} failed\n  ${failures.join('\n  ')}`);
   process.exit(1);
 }
-console.log('ok — agents waiting on you come first and once, a live session supersedes a finished one,\n     and "new" means it happened after you last opened it');
+console.log('ok — questions first and once, a stopped task stays listed by whose move it is,\n     a live session supersedes a finished one, and "new" means it happened after you last opened it');

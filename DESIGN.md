@@ -681,7 +681,7 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
   ones above them, so a terminal row ends up holding two lines and one of them looks like it
   simply vanished. The annotated diff asked for `rows - 6` for months and dropped roughly a
   third of its rows on a 44-row terminal, with the tail of the overwritten line still showing
-  past the end of the shorter one. Anything with a fixed-height companion — TasksView's 15-row
+  past the end of the shorter one. Anything with a fixed-height companion — the agents table's 15-row
   detail pane — has to subtract it *and* the table's own header and count rows, and drop the
   companion when what's left is unreadable.
 
@@ -728,8 +728,10 @@ Every `~/.local/state/colinear/` path above moves under `contexts/<name>/` in a 
   while the view is open instead of following deltas, because it is a "what is happening now"
   question and nothing persists it across a daemon restart. The client asks while `:agents` is
   open, or every 2s while the rail (`\`) is shown. `core/fleet.ts` merges it with the store,
-  because an agent that asked a question has *ended* — the waiting ones only exist as tasks and
-  reviews holding a question.
+  and the store leads: a task's sessions end long before it does — on a question, a failure, a
+  draft PR, a restart — so each task gets a row from its own state, grouped by whose move it is
+  (`nextStep`), and the registry only says whether an agent is on it right now. Sessions with no
+  task behind them (plans, drafts) come from the registry alone, for ten minutes after they end.
 - **The rail narrows the terminal rather than the views.** The app wraps the view in a second
   `AppContext.Provider` whose `size.columns` is the terminal less the rail, so every view — many
   size themselves from `ctx.size` directly — lays out as on a smaller screen and none of them knows

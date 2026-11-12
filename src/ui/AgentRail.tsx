@@ -10,13 +10,37 @@ export const RAIL_MIN_COLUMNS = 150;
 
 const GROUP_COLOR: Record<FleetGroup, string> = {
   needs: theme.info,
+  yours: theme.accent,
   running: theme.warn,
+  waiting: theme.dim,
   finished: theme.dim,
 };
 
+/** How long something done stays in the rail: `:agents` keeps it for the hour. */
+const RAIL_DONE_MS = 10 * 60 * 1000;
+
+/** The row's glyph: what kind of stop it is at a glance. */
+export function fleetGlyph(entry: FleetEntry, now: number): { glyph: string; color: string } {
+  switch (entry.group) {
+    case 'needs':
+      return { glyph: '?', color: theme.info };
+    case 'yours':
+      return { glyph: '!', color: theme.accent };
+    case 'running':
+      return { glyph: spinner(now), color: theme.warn };
+    case 'waiting':
+      return { glyph: '·', color: theme.dim };
+    default:
+      return entry.ok === false ? { glyph: '✖', color: theme.err } : { glyph: '✓', color: theme.ok };
+  }
+}
+
+
 /**
- * Every agent, beside whatever view you are in: which ones are waiting on you,
- * which are working and on what, which just finished. Two rows an agent — what
+ * Every agent, beside whatever view you are in: which ones are waiting on you
+ * — asking, or stopped on a step only you can take — which are working and on
+ * what, which just finished. What is waiting on somebody else stays in
+ * `:agents`: the rail is for what might need you now. Two rows an agent — what
  * it is on and how long, then what it is doing — and bold where something has
  * happened since you last opened it.
  *
@@ -30,7 +54,10 @@ export function AgentRail(props: {
   now: number;
   height: number;
 }) {
-  const { entries, seen, now } = props;
+  const { seen, now } = props;
+  const entries = props.entries.filter(
+    (e) => e.group !== 'waiting' && (e.group !== 'finished' || now - e.since < RAIL_DONE_MS),
+  );
   const inner = RAIL_WIDTH - 4;
   // border top and bottom, and the title row
   let room = Math.max(0, props.height - 3);
@@ -98,10 +125,7 @@ export function AgentRail(props: {
 function Entry(props: { entry: FleetEntry; unread: boolean; now: number; width: number }) {
   const { entry, unread, now, width } = props;
   const when = age(entry.since, now);
-  const glyph =
-    entry.group === 'needs' ? '?' : entry.group === 'running' ? spinner(now) : entry.ok === false ? '✖' : '✓';
-  const glyphColor =
-    entry.group === 'needs' ? theme.info : entry.group === 'running' ? theme.warn : entry.ok === false ? theme.err : theme.ok;
+  const { glyph, color: glyphColor } = fleetGlyph(entry, now);
   // the label and what it is: "CLO-211 work", cut before the age column
   const kind = entry.kind === 'question' ? '' : ` ${entry.kind}`;
   const head = `${entry.label}${kind}`;
@@ -116,7 +140,11 @@ function Entry(props: { entry: FleetEntry; unread: boolean; now: number; width: 
         </Text>{' '}
         <Text dimColor>{when}</Text>
       </Text>
-      <Text wrap="truncate" color={entry.group === 'needs' ? theme.info : undefined} dimColor={entry.group !== 'needs'}>
+      <Text
+        wrap="truncate"
+        color={entry.group === 'needs' ? theme.info : entry.group === 'yours' ? theme.accent : undefined}
+        dimColor={entry.group !== 'needs' && entry.group !== 'yours'}
+      >
         {'  '}
         {entry.line}
       </Text>
