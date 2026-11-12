@@ -1958,7 +1958,9 @@ config file that exists and doesn't parse, which used to fall through to built-i
 against <code>~/work/cloud</code> with none of your settings.</p>
 <p>Constraint on the UI side: every view sizes its panes against a <strong>four-row header</strong>
 (<code>ctx.size.rows - 12</code> and friends), so the context indicator rides on the existing Repo row rather
-than taking a fifth.</p>
+than taking a fifth. Hiding the header (<code>`</code>) keeps that true rather than breaking it: the view's
+context reports a terminal four rows taller, the same trick the rail plays on the width, so no
+view knows the header is gone.</p>
 <h2 id="lifecycle-detours">Lifecycle detours<a class="headerlink" href="#lifecycle-detours" title="Permanent link">&para;</a></h2>
 <p>The diagram above is the shape. These are the parts that surprise people:
 - <code>blocked</code> (Linear blockers open; rechecked every 60s + on merges/completions). Linear has one
