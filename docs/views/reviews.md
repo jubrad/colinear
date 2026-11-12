@@ -501,7 +501,8 @@ the network) still just fails and says so, because re-anchoring cannot help with
 | `l` `j` / → ← | into and out of the [preview](#side-by-side), on a wide terminal — `enter` there opens the diff at that finding |
 | `p` post · `A` approve · `X` request changes · `n` attach a note that rides along |
 | `s` | hand the terminal to that review's claude session |
-| `S` | sort: needs-me / updated / size / repo / author / cost (again reverses) |
+| `S` | sort: needs-me / reviewed / updated / size / repo / author / cost (again reverses). Remembered |
+| `m` | only yours, or every review. Remembered |
 | `o` | open the PR |
 | `H` | hide this PR from the list, or put a hidden one back |
 | `h` | show everything, settled and hidden, and go back to the live list |
@@ -521,6 +522,19 @@ reclaimed — not when it's posted, since the author may push again.
 usually far more of them than live ones, and a list of everything would bury the work. The header
 always says how many are being held back, so a short list tells you what it is not showing, and
 `h` shows them. Filtering with `/` still narrows whichever set you are looking at.
+
+**`m` narrows the list to yours.** That's a PR whose review was asked of you personally, one you
+added with `:reviews owner/repo#123`, one you've posted on or left a note on, or one colinear has
+reviewed or is reviewing. What drops out is the long tail: team requests anyone on the team can take,
+and PRs that stopped asking you, that you never touched. A team request becomes yours the moment you
+press `r` on it. The header says which scope you're in, and it's remembered, like the sort.
+
+**The `reviewed` sort puts the newest colinear review first.** A review running now sorts above all
+of them, and PRs colinear has never reviewed come after every one it has. `REV` on each row says how
+long ago colinear last reviewed it. It's bold and coloured until you've looked at that review, which
+means resting the cursor on its row for a moment. The header counts the reviews you haven't looked at
+yet ("3 new reviews"), so a review that finished while you were elsewhere doesn't get lost under PRs
+that merely updated.
 
 **`H` hides a PR you are not going to review.** It goes the way a settled one does: off the list,
 out of `:todo`, and counted in the header ("2 hidden by you"). `h` shows it again, dimmed and marked

@@ -94,6 +94,10 @@ export interface UiState {
   team?: string;
   /** how :board arranges its statuses */
   boardLayout?: BoardLayout;
+  /** :reviews: the sort (`S`), its direction, and whether the list is narrowed to yours (`m`) */
+  reviewsSort?: string;
+  reviewsSortDesc?: boolean;
+  reviewsScope?: 'all' | 'mine';
   /** how :agents lists them: grouped by whose move it is, or every task as a table (`t`) */
   agentsLayout?: 'groups' | 'table';
   /** the four-row header (who, repo, keys) folded away with `\``: `:` and `/` still open their bars */

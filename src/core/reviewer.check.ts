@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bodyByAgent, clearBrokenSubmodules, leadFinding, parseDoc, reviewBody, reviewPrompt, rereviewPrompt, staleAnchors, upsertFinding, writeFindings } from './reviewer.js';
-import { parsePrSpec, refreshMeta, reviewPayload, revivedStatus, type CurrentPr } from './reviews.js';
+import { involvesMe, lastReviewed, parsePrSpec, refreshMeta, reviewPayload, revivedStatus, type CurrentPr } from './reviews.js';
 import { store } from './store.js';
 import { askedLine, explainPrompt } from './selfreview.js';
 import type { Config, Review, ReviewFinding } from './types.js';
@@ -462,6 +462,21 @@ for (const [spec, repository, number] of SPECS) {
   refreshMeta(store.getReview(id)!, pr);
   check('an unchanged PR writes nothing', store.version === v);
   store.deleteReview(id);
+}
+
+// "yours" and "last reviewed": what `m` keeps and what the `reviewed` sort reads
+{
+  const base = { id: 'o/r#1', status: 'pending', requested: true } as unknown as Review;
+  check('a request aimed at you is yours', involvesMe({ ...base, requestedVia: 'you' }));
+  check('a team request you never touched is not', !involvesMe({ ...base, requestedVia: 'team' }));
+  check('a team request colinear reviewed for you is', involvesMe({ ...base, requestedVia: 'team', reviewedSha: 'abc', doc: '#' }));
+  check('one that stopped asking you, untouched, is not', !involvesMe({ ...base, requested: false }));
+  check('one you added is', involvesMe({ ...base, requested: false, adopted: true }));
+  check('one you posted on is', involvesMe({ ...base, requested: false, posted: { at: 1, event: 'COMMENT', url: '', comments: 0 } }));
+  check('one under review right now is', involvesMe({ ...base, requestedVia: 'team', status: 'reviewing' }));
+  check('never reviewed has no date', lastReviewed({ ...base, endedAt: 5 }) === undefined);
+  check('a finished review is dated by its end', lastReviewed({ ...base, status: 'ready', doc: '#', endedAt: 5 }) === 5);
+  check('a running review is the newest', lastReviewed({ ...base, status: 'reviewing', doc: '#', endedAt: 5 }, 99) === 99);
 }
 
 if (failures.length) {

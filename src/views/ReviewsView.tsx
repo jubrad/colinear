@@ -6,7 +6,8 @@ import { execFile } from 'node:child_process';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { attachTo, rememberView, reviewAttachable, sessionRuntime, setPendingAction } from '../core/attach.js';
 import { useReviews } from '../core/hooks.js';
-import { parsePrSpec } from '../core/reviews.js';
+import { age, markSeen } from '../core/fleet.js';
+import { involvesMe, lastReviewed, parsePrSpec } from '../core/reviews.js';
 import { store } from '../core/store.js';
 import { fileStats, parseDiff, type DiffAgainst, type FileStat } from '../core/diff.js';
 import type { Review, ReviewFinding } from '../core/types.js';
@@ -25,7 +26,7 @@ const ACTIVE: Review['status'][] = ['reviewing', 'posting', 'queued'];
  * Column widths. Status/PR always show; author and size drop out on narrow
  * terminals so the row never wraps (a wrapped row breaks the whole table).
  */
-const W = { flag: 4, status: 12, pr: 24, draft: 9, author: 18, size: 14 };
+const W = { flag: 4, reviewed: 5, status: 12, pr: 24, draft: 9, author: 18, size: 14 };
 
 /**
  * Two facts that decide whether a row wants you, neither of which the status
@@ -56,7 +57,7 @@ export function freshness(r: Review): { glyph: string; color: string; why: strin
 }
 
 /** Sort fields, cycled with S; picking the same one again flips direction. */
-const SORTS = ['needs me', 'updated', 'size', 'repo', 'author', 'cost'] as const;
+const SORTS = ['needs me', 'reviewed', 'updated', 'size', 'repo', 'author', 'cost'] as const;
 type SortKey = (typeof SORTS)[number];
 
 /**
@@ -76,7 +77,7 @@ function layout(columns: number) {
   return {
     size,
     author,
-    title: Math.max(16, avail - W.flag - W.status - W.pr - W.draft - author - size),
+    title: Math.max(16, avail - W.flag - W.reviewed - W.status - W.pr - W.draft - author - size),
   };
 }
 const SEVERITY_COLOR: Record<string, string> = palette(() => ({
@@ -148,8 +149,10 @@ export function ReviewsView(props: { param?: string }) {
   const [findIdx, setFindIdx] = useState(0);
   /** where enter put the diff — a finding picked in the preview, or the top */
   const [startAt, setStartAt] = useState<{ file: string; line: number }>();
-  const [sort, setSort] = useState<SortKey>('needs me');
-  const [desc, setDesc] = useState(false);
+  // remembered like the board's layout: the order you read reviews in is a habit
+  const sort: SortKey = (SORTS as readonly string[]).includes(ctx.ui.reviewsSort ?? '') ? (ctx.ui.reviewsSort as SortKey) : 'needs me';
+  const desc = Boolean(ctx.ui.reviewsSortDesc);
+  const mine = ctx.ui.reviewsScope === 'mine';
 
   const rows = useMemo(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -160,6 +163,7 @@ export function ReviewsView(props: { param?: string }) {
       // them by accident as often as on purpose and told nobody they existed.
       // Hidden with `H` is the same deal by your hand rather than GitHub's.
       if ((r.status === 'stale' || r.hidden) && !showHidden) return false;
+      if (mine && !involvesMe(r)) return false;
       if (!terms.length) return true;
       const hay = `${r.repository} ${r.number} ${r.title} ${r.author} ${r.status}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
@@ -187,6 +191,9 @@ export function ReviewsView(props: { param?: string }) {
     const size = (r: Review) => r.additions + r.deletions;
     const compare = (a: Review, b: Review) => {
       switch (sort) {
+        case 'reviewed':
+          // newest colinear review first; never reviewed after every one that was
+          return (lastReviewed(b) ?? -1) - (lastReviewed(a) ?? -1) || b.updatedAt.localeCompare(a.updatedAt);
         case 'updated':
           return b.updatedAt.localeCompare(a.updatedAt);
         case 'size':
@@ -203,9 +210,26 @@ export function ReviewsView(props: { param?: string }) {
     };
     const sorted = [...matched].sort(compare);
     return desc ? sorted.reverse() : sorted;
-  }, [reviews, query, sort, desc, showHidden]);
+  }, [reviews, query, sort, desc, showHidden, mine]);
 
   const selected = rows[Math.min(cursor, Math.max(0, rows.length - 1))];
+
+  // resting on a row is looking at it: its preview is on screen. Stamped after
+  // a beat so arrowing down the list does not mark everything it passes
+  useEffect(() => {
+    if (!selected) return;
+    const id = selected.id;
+    const timer = setTimeout(() => {
+      const next = markSeen(ctx.ui.seen, 'reviews', id, Date.now());
+      if (next) ctx.setUi({ seen: next });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [selected?.id, selected?.endedAt]);
+  /** a colinear review finished since you last had this row under the cursor */
+  const fresh = (r: Review) => {
+    const at = lastReviewed(r);
+    return at !== undefined && r.status !== 'reviewing' && r.status !== 'queued' && (ctx.ui.seen?.[r.id] ?? 0) < at;
+  };
 
   useEffect(() => {
     setCursor((c) => Math.max(0, Math.min(c, rows.length - 1)));
@@ -381,12 +405,18 @@ export function ReviewsView(props: { param?: string }) {
       if (input === 'S') {
         // cycle the field; landing back on the current one flips direction
         const next = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length];
-        if (desc) {
-          setDesc(false);
-          setSort(next);
-        } else {
-          setDesc(true);
-        }
+        ctx.setUi(desc ? { reviewsSort: next, reviewsSortDesc: undefined } : { reviewsSortDesc: true });
+        setCursor(0);
+      }
+      if (input === 'm') {
+        ctx.setUi({ reviewsScope: mine ? undefined : 'mine' });
+        setCursor(0);
+        ctx.toast(
+          mine
+            ? 'every review'
+            : "yours: asked of you directly, added, posted, noted or reviewed by colinear — team requests you haven't touched are out",
+          'info',
+        );
       }
     },
     { isActive: !filtering && !noting && !reading && !customizing && !ctx.cmdOpen },
@@ -511,7 +541,7 @@ export function ReviewsView(props: { param?: string }) {
           reviews{' '}
         </Text>
         <Text dimColor>
-          {rows.length} {showHidden ? 'shown' : 'awaiting me'}{' '}
+          {rows.length} {showHidden ? 'shown' : mine ? 'yours' : 'awaiting me'}{' '}
         </Text>
         {ready > 0 && <Text color={REVIEW_COLORS.ready}>· {ready} pre-reviewed </Text>}
         {held && (
@@ -519,6 +549,11 @@ export function ReviewsView(props: { param?: string }) {
             · {held} {showHidden ? 'shown (h hides)' : 'not shown (h shows)'}{' '}
           </Text>
         )}
+        {(() => {
+          const n = rows.filter(fresh).length;
+          return n ? <Text color={theme.accent} bold>· {n} new review{n === 1 ? '' : 's'} </Text> : null;
+        })()}
+        <Text color={mine ? theme.accent : theme.dim}>· {mine ? 'yours (m: all)' : 'all (m: yours)'} </Text>
         <Text dimColor>· sort: </Text>
         <Text color={theme.accent}>
           {sort}
@@ -545,6 +580,7 @@ export function ReviewsView(props: { param?: string }) {
             <Text bold color={theme.header} wrap="truncate">
               {cell('', W.flag)}
               {'  '}
+              {cell('REV', W.reviewed)}
               {cell('PR', W.pr)}
               TITLE
             </Text>
@@ -566,8 +602,11 @@ export function ReviewsView(props: { param?: string }) {
                   <Text color={lit ? undefined : REVIEW_COLORS[r.status] ?? theme.dim}>
                     {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)}{' '}
                   </Text>
+                  <ReviewedCell review={r} now={ctx.now} fresh={fresh(r)} plain={lit} />
                   <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
-                  <Text color={!lit && r.isDraft ? theme.dim : undefined}>{r.title}</Text>
+                  <Text bold={fresh(r)} color={!lit && r.isDraft ? theme.dim : undefined}>
+                    {r.title}
+                  </Text>
                 </Text>
               );
             })}
@@ -605,6 +644,7 @@ export function ReviewsView(props: { param?: string }) {
           {'  '}
           {cell('', W.flag)}
           {cell('REVIEW', W.status)}
+          {cell('REV', W.reviewed)}
           {cell('PR', W.pr)}
           {cell('PR STATE', W.draft)}
           {cell('TITLE', cols.title)}
@@ -624,11 +664,12 @@ export function ReviewsView(props: { param?: string }) {
                 {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)}{' '}
                 {cell(STATUS_LABEL[r.status] ?? r.status, W.status)}
               </Text>
+              <ReviewedCell review={r} now={ctx.now} fresh={fresh(r)} plain={onCursor} />
               <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
               <Text color={onCursor ? undefined : r.isDraft ? theme.dim : theme.ok}>
                 {cell(r.isDraft ? 'draft' : 'open', W.draft)}
               </Text>
-              <Text>{cell(r.title, cols.title)}</Text>
+              <Text bold={fresh(r)}>{cell(r.title, cols.title)}</Text>
               <Text dimColor={!onCursor}>
                 {cols.author ? cell(r.author, cols.author) : ''}
                 {cols.size
@@ -1103,9 +1144,25 @@ export const reviewsKeys: Array<[string, string]> = [
   ['n', 'note'],
   ['o', 'open PR'],
   ['x', 'cancel'],
-  ['S', 'sort'],
+  ['S', 'sort · reviewed = newest colinear review'],
+  ['m', 'only yours / all'],
   ['H', 'hide / unhide'],
   ['h', 'show settled + hidden'],
   ['u', 'refresh'],
   ['/', 'filter'],
 ];
+
+/**
+ * How long ago colinear last reviewed it — `3h`, `now` — in the accent colour
+ * while that review is one you have not looked at yet, so a fresh one stands
+ * out from the PRs that merely updated.
+ */
+function ReviewedCell(props: { review: Review; now: number; fresh: boolean; plain: boolean }) {
+  const at = lastReviewed(props.review, props.now);
+  const text = at === undefined ? '' : props.review.status === 'reviewing' || props.review.status === 'queued' ? 'now' : age(at, props.now);
+  return (
+    <Text bold={props.fresh} color={props.plain ? undefined : props.fresh ? theme.accent : theme.dim}>
+      {cell(text, W.reviewed)}
+    </Text>
+  );
+}
