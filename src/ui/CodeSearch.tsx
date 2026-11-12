@@ -30,6 +30,8 @@ export function CodeSearch(props: {
   /** `refs` with symbols starts on the pick-a-symbol list; otherwise on the input */
   mode: SearchMode;
   symbols?: string[];
+  /** a symbol already chosen — the word cursor's — searched for at once, no list */
+  start?: string;
   width: number;
   height: number;
   last?: SearchMemo;
@@ -53,6 +55,7 @@ export function CodeSearch(props: {
   const ticket = useRef(0);
   const live = useRef(true);
   useEffect(() => () => void (live.current = false), []);
+  useEffect(() => void (props.start && search('refs', props.start)), []);
 
   const hits = useMemo(() => (result ? rankHits(result.hits, inChange) : []), [result, inChange]);
 
@@ -88,8 +91,8 @@ export function CodeSearch(props: {
     if (key.escape || input === 'q') return onCancel();
     if (phase === 'loading') return;
     if (phase === 'symbol') {
-      if (input === 'j' || key.downArrow) setSymIdx((i) => Math.min(symbols.length - 1, i + 1));
-      if (input === 'k' || key.upArrow) setSymIdx((i) => Math.max(0, i - 1));
+      if (input === 'k' || key.downArrow) setSymIdx((i) => Math.min(symbols.length - 1, i + 1));
+      if (input === 'i' || key.upArrow) setSymIdx((i) => Math.max(0, i - 1));
       if (key.return && symbols[symIdx]) search('refs', symbols[symIdx]);
       if (input === '/') {
         setQuery(symbols[symIdx] ?? '');
@@ -99,8 +102,8 @@ export function CodeSearch(props: {
     }
     // results
     const last = Math.max(0, hits.length - 1);
-    if (input === 'j' || key.downArrow) setCursor((c) => Math.min(last, c + 1));
-    if (input === 'k' || key.upArrow) setCursor((c) => Math.max(0, c - 1));
+    if (input === 'k' || key.downArrow) setCursor((c) => Math.min(last, c + 1));
+    if (input === 'i' || key.upArrow) setCursor((c) => Math.max(0, c - 1));
     if (key.pageDown || input === ' ') setCursor((c) => Math.min(last, c + listRows));
     if (key.pageUp) setCursor((c) => Math.max(0, c - listRows));
     if (input === 'g') setCursor(0);
@@ -190,9 +193,9 @@ export function CodeSearch(props: {
         {phase === 'query'
           ? `enter searches · tab: ${mode === 'refs' ? 'text instead' : 'call sites instead'} · esc ${result ? 'back' : 'closes'}`
           : phase === 'symbol'
-            ? 'j/k pick · enter lists its call sites · / type another · esc'
+            ? 'i/k pick · enter lists its call sites · / type another · esc'
             : phase === 'results'
-              ? 'j/k move · enter goes there in the diff · / search again · esc'
+              ? 'i/k move · enter goes there in the diff · / search again · esc'
               : 'esc closes'}
       </Text>
     </Box>

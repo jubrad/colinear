@@ -48,8 +48,8 @@ export function ReviewDocModal(props: {
       return;
     }
     if (focus !== 'doc') return; // the input owns every other key while it's focused
-    if (input === 'j' || key.downArrow) setScroll((s) => Math.min(maxScroll, s + 1));
-    if (input === 'k' || key.upArrow) setScroll((s) => Math.max(0, s - 1));
+    if (input === 'k' || key.downArrow) setScroll((s) => Math.min(maxScroll, s + 1));
+    if (input === 'i' || key.upArrow) setScroll((s) => Math.max(0, s - 1));
     if (input === ' ' || key.pageDown) setScroll((s) => Math.min(maxScroll, s + docRows - 1));
     if (key.pageUp) setScroll((s) => Math.max(0, s - (docRows - 1)));
     if (input === 'g') setScroll(0);
@@ -177,7 +177,7 @@ export function ReviewDocModal(props: {
         </Box>
       </Box>
       <Text dimColor wrap="truncate">
-        tab: {focus === 'doc' ? 'discuss' : 'doc'} · {focus === 'doc' ? 'j/k g/G' : '↑/↓ pgup/pgdn'}: scroll · e: edit · p: post · esc: back
+        tab: {focus === 'doc' ? 'discuss' : 'doc'} · {focus === 'doc' ? 'i/k g/G' : '↑/↓ pgup/pgdn'}: scroll · e: edit · p: post · esc: back
       </Text>
     </Box>
   );

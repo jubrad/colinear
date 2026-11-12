@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { anchorKey, expandTabs, filesIn, layoutMargin, openedFiles, parseDiff, postableLines, toVisualRows, uncommittedFiles, type DiffLine, type MarginItem, type TokenKind, type VisualRow } from '../core/diff.js';
-import { symbolsOn, type CodeHit, type CodeSearchResult, type SearchMode } from '../core/symbols.js';
+import { stepWord, symbolsOn, wordAt, type CodeHit, type CodeSearchResult, type SearchMode, type Word } from '../core/symbols.js';
 import { CodeSearch, type SearchMemo } from './CodeSearch.js';
 import { highlightDiff } from '../core/highlight.js';
 import type { Review, ReviewFinding, Severity } from '../core/types.js';
@@ -193,7 +193,13 @@ export function AnnotatedDiff(props: {
   /** how far into a finding being read in full we have scrolled */
   const [readScroll, setReadScroll] = useState(0);
   /** the search popup: `/` (text) or `*` (call sites of a symbol on this line) */
-  const [searching, setSearching] = useState<{ mode: SearchMode; symbols?: string[] } | null>(null);
+  const [searching, setSearching] = useState<{ mode: SearchMode; symbols?: string[]; start?: string } | null>(null);
+  /**
+   * The word cursor's column on the line, once j/l has put it on one; null
+   * until then. A column rather than a word, so i/k carry it down the code
+   * the way an editor does: each line lights whichever word sits under it.
+   */
+  const [col, setCol] = useState<number | null>(null);
   /** the last search and where in it you were, so `/` + enter goes back to it */
   const [searchMemo, setSearchMemo] = useState<SearchMemo | undefined>();
   /**
@@ -421,6 +427,8 @@ export function AnnotatedDiff(props: {
   }, [lines.length]);
 
   const current = lines[cursor]?.line;
+  /** the word the cursor is on, when j/l have put it on one and this is a line of code */
+  const word = col !== null && current && CODE_KINDS.includes(current.kind) ? wordAt(lines[cursor].text, col) : undefined;
   // the changed file the cursor is in, and its place in the tab strip
   const fileIdx = current ? Math.max(0, files.indexOf(current.file)) : 0;
   const anchor =
@@ -632,8 +640,9 @@ export function AnnotatedDiff(props: {
       }
       if (key.tab) return setComposeFocus((f) => (f === 'kind' ? 'text' : 'kind'));
       if (composeFocus === 'kind') {
-        if (key.leftArrow || input === 'k' || key.upArrow) setKindIdx((i) => Math.max(0, i - 1));
-        if (key.rightArrow || input === 'j' || key.downArrow) setKindIdx((i) => Math.min(KINDS.length - 1, i + 1));
+        // j/l sideways, as everywhere: i is the annotation level's own letter
+        if (key.leftArrow || input === 'j' || key.upArrow) setKindIdx((i) => Math.max(0, i - 1));
+        if (key.rightArrow || input === 'l' || key.downArrow) setKindIdx((i) => Math.min(KINDS.length - 1, i + 1));
         // the first letter of each kind, for anyone who already knows the level
         const typed = KINDS.findIndex((k) => k.letter === input);
         if (typed !== -1) setKindIdx(typed);
@@ -652,8 +661,8 @@ export function AnnotatedDiff(props: {
       // long enough to need scrolling is exactly why you opened it — but it is
       // still a reading pane, so anything that is not a movement leaves
       const last = Math.max(0, readLines.length - readRows);
-      if (input === 'j' || key.downArrow) return setReadScroll((r) => Math.min(last, r + 1));
-      if (input === 'k' || key.upArrow) return setReadScroll((r) => Math.max(0, r - 1));
+      if (input === 'k' || key.downArrow) return setReadScroll((r) => Math.min(last, r + 1));
+      if (input === 'i' || key.upArrow) return setReadScroll((r) => Math.max(0, r - 1));
       if (key.pageDown || input === ' ') return setReadScroll((r) => Math.min(last, r + readRows));
       if (key.pageUp) return setReadScroll((r) => Math.max(0, r - readRows));
       if (input === 'G') return setReadScroll(last);
@@ -674,14 +683,25 @@ export function AnnotatedDiff(props: {
     if (jumpTo) setJumpTo(null);
     // a selection is the innermost thing esc should let go of
     if (key.escape && markRow !== null) return setMarkRow(null);
+    // then the word cursor, so esc hands you back the line before it leaves
+    if (key.escape && col !== null) return setCol(null);
     if (key.escape || input === 'q') return onClose();
     if (key.tab) return setFocus('chat');
-    if (input === 'j' || key.downArrow) setCursor((c) => Math.min(lines.length - 1, c + 1));
-    if (input === 'k' || key.upArrow) setCursor((c) => Math.max(0, c - 1));
+    // ijkl, like the list this was opened from: i/k up and down the lines,
+    // j/l along the words of one — which is how * is aimed at a word
+    if (input === 'k' || key.downArrow) setCursor((c) => Math.min(lines.length - 1, c + 1));
+    if (input === 'i' || key.upArrow) setCursor((c) => Math.max(0, c - 1));
     if (key.pageDown || input === ' ') setCursor((c) => Math.min(lines.length - 1, c + paneHeight - 1));
     if (key.pageUp) setCursor((c) => Math.max(0, c - (paneHeight - 1)));
     if (input === 'g') setCursor(0);
     if (input === 'G') setCursor(Math.max(0, lines.length - 1));
+    if (input === 'j' || input === 'l' || key.leftArrow || key.rightArrow) {
+      const row = lines[cursor];
+      if (!row || !CODE_KINDS.includes(row.line.kind)) return;
+      const next = stepWord(row.text, word, input === 'l' || key.rightArrow ? 1 : -1);
+      if (next) setCol(next.start);
+      return;
+    }
     // the reason this view exists: walk what the agent flagged, in code order
     // the margin cuts a block that would run into the next one; this is how you
     // read the rest without editing it
@@ -696,7 +716,7 @@ export function AnnotatedDiff(props: {
     if (input === 'f') return setFullScreen(!fullScreen);
     if (input === 'w' && compare) return compare.onNext();
     // a diff still being written: reading and searching, never writing
-    if (readOnly && ['v', 'a', 'c', 'e', 'i', 'd', 'p', 'R'].includes(input)) return toast(readOnly, 'info');
+    if (readOnly && ['v', 'a', 'c', 'e', 'I', 'd', 'p', 'R'].includes(input)) return toast(readOnly, 'info');
     // pick what kind of finding this is *before* writing it: the old default
     // put every new comment on the author's PR at `consider` without asking,
     // and left blocking, nit and praise unreachable from this view entirely
@@ -711,7 +731,7 @@ export function AnnotatedDiff(props: {
     // straight to an annotation: the common case when reading unfamiliar code.
     // The note already on this line if there is one — never the comment, which
     // a note used to overwrite — and a new one beside it otherwise
-    if (input === 'i' && anchor) {
+    if (input === 'I' && anchor) {
       const note =
         markRow !== null
           ? undefined
@@ -729,6 +749,8 @@ export function AnnotatedDiff(props: {
     // and the rest of the file the hunk is cut out of
     if (input === '/' && onSearch) return setSearching({ mode: 'grep' });
     if (input === '*' && onSearch) {
+      // aimed: straight to that word's call sites
+      if (word) return setSearching({ mode: 'refs', symbols: [word.text], start: word.text });
       const row = lines[cursor];
       const text = row && ['add', 'del', 'context'].includes(row.line.kind) ? row.line.text : '';
       return setSearching({ mode: 'refs', symbols: symbolsOn(text) });
@@ -826,6 +848,7 @@ export function AnnotatedDiff(props: {
               row={row}
               width={diffWidth - 4}
               onCursor={scroll + i === cursor}
+              word={scroll + i === cursor ? word : undefined}
               stacked={row.line.newLine !== undefined ? (byLine.get(anchorKey(row.line.file, row.line.newLine)) ?? []) : []}
               selected={
                 Boolean(markRow !== null && selection) &&
@@ -855,7 +878,7 @@ export function AnnotatedDiff(props: {
               <Box flexGrow={1} />
               <Text dimColor wrap="truncate">
                 {readLines.length > readRows
-                  ? `j/k scrolls · ${Math.min(readScroll + readRows, readLines.length)}/${readLines.length} · `
+                  ? `i/k scrolls · ${Math.min(readScroll + readRows, readLines.length)}/${readLines.length} · `
                   : ''}
                 {stack.length > 1 ? 'n/N the others here · ' : ''}any other key returns · e edits it
               </Text>
@@ -946,7 +969,7 @@ export function AnnotatedDiff(props: {
               />
               <Text dimColor wrap="truncate">
                 {composeFocus === 'kind'
-                  ? `j/k or a letter picks the level (m: comment)${signing ? ' · s: who wrote it' : ''} · tab to write it`
+                  ? `j/l or a letter picks the level (m: comment)${signing ? ' · s: who wrote it' : ''} · tab to write it`
                   : 'tab to the level · ctrl+d saves · empty removes it'}{' '}
                 · esc cancels
               </Text>
@@ -1033,9 +1056,9 @@ export function AnnotatedDiff(props: {
             {pickIdx + 1}/{stack.length} on this line · n/N steps through them ·{' '}
           </Text>
         ) : null}
-        j/k move · n/N next · ]/[ file · enter reads ·{' '}
-        {readOnly ? '' : 'v select · a explain · c ask · e finding · i annotate · d drop · '}
-        {onSearch ? '/ search · * callers · ' : ''}
+        i/k move · n/N next · ]/[ file · enter reads ·{' '}
+        {readOnly ? '' : 'v select · a explain · c ask · e finding · I annotate · d drop · '}
+        {onSearch ? (word ? `/ search · * callers of ${word.text} · ` : '/ search · j/l word · * callers · ') : ''}
         {onExpand ? 'x expand · ' : ''}
         {compare ? `w ${compare.next} · ` : ''}
         {readOnly ? <Text color={theme.warn}>read-only while it is being written · </Text> : onReview ? 'R review · p hand back · ' : 'p post · '}
@@ -1091,6 +1114,7 @@ export function AnnotatedDiff(props: {
               <CodeSearch
                 mode={searching.mode}
                 symbols={searching.symbols}
+                start={searching.start}
                 width={w - 4}
                 height={h - 2}
                 last={searchMemo}
@@ -1150,8 +1174,10 @@ function DiffRow(props: {
   /** the findings on this line — the marker shows how many when it is more than one */
   stacked: ReviewFinding[];
   selected?: boolean;
+  /** the word cursor, on the cursor's row: drawn as a block of its own inside the inverted row */
+  word?: Word;
 }) {
-  const { row, width, onCursor, stacked, selected } = props;
+  const { row, width, onCursor, stacked, selected, word } = props;
   const annotated = stacked.length > 0;
   const info = annotated && stacked.every((f) => f.severity === 'info');
   const line = { ...row.line, text: row.text };
@@ -1191,11 +1217,14 @@ function DiffRow(props: {
       <Text dimColor={!selected} color={selected ? theme.selection : undefined} bold={selected}>
         {num}{' '}
       </Text>
-      {row.spans.map((sp, i) => (
+      {splitAt(row.spans, word).map((sp, i) => (
         <Text
           key={i}
-          // under the cursor the whole row is inverted, so colour is dropped
-          color={onCursor ? undefined : sp.token ? SYNTAX_COLOR[sp.token] : undefined}
+          // under the cursor the whole row is inverted, so colour is dropped —
+          // except on the word cursor, whose colour the inversion turns into
+          // its background
+          color={sp.word ? theme.selection : onCursor ? undefined : sp.token ? SYNTAX_COLOR[sp.token] : undefined}
+          bold={sp.word}
           dimColor={dimCode && !onCursor}
         >
           {sp.text}
@@ -1203,6 +1232,24 @@ function DiffRow(props: {
       ))}
     </Text>
   );
+}
+
+const CODE_KINDS: DiffLine['kind'][] = ['add', 'del', 'context'];
+
+/** A row's spans cut at the word cursor's edges, the word's pieces marked. */
+function splitAt<S extends { text: string }>(spans: S[], word: Word | undefined): Array<S & { word?: boolean }> {
+  if (!word) return spans;
+  const out: Array<S & { word?: boolean }> = [];
+  let at = 0;
+  for (const sp of spans) {
+    const end = at + sp.text.length;
+    const cuts = [at, Math.min(end, Math.max(at, word.start)), Math.min(end, Math.max(at, word.end)), end];
+    for (let k = 0; k < 3; k++) {
+      if (cuts[k + 1] > cuts[k]) out.push({ ...sp, text: sp.text.slice(cuts[k] - at, cuts[k + 1] - at), word: k === 1 });
+    }
+    at = end;
+  }
+  return out;
 }
 
 /** Word wrap for the annotation pane; the comment is prose and must stay readable. */

@@ -182,7 +182,7 @@ long annotation anchored three rows from the bottom used to show three lines and
 takes the pane. Move off it and everything returns to where it was.
 
 Nothing is cut against the next finding; a block is only ever shortened by the bottom of the pane.
-When even that is not enough, **`enter` reads the current one in full** in the right pane — `j`/`k`,
+When even that is not enough, **`enter` reads the current one in full** in the right pane — `i`/`k`,
 `g`/`G` and page keys scroll it, it says where you are (`16/25`), `e` edits what you are reading,
 and anything else returns. A comment about the PR as a whole has no line to sit beside, so it gets
 its own line under both panes.
@@ -219,7 +219,7 @@ conversation shows it was answered.
 The pane names the level and what happens to it — "goes to the author when you post", or "stays in
 colinear — never posted" — because that is the difference that matters. Editing an existing finding
 opens with its level already selected. `ctrl+d` saves, an empty comment removes it, and `d` drops one
-outright. **`i`** opens the same pane pre-set to an annotation — the common case while reading
+outright. **`I`** opens the same pane pre-set to an annotation — the common case while reading
 unfamiliar code — still one `tab` from any other level. Every edit rewrites the ```findings fence in
 the review document, so what you post and what the agent sees never diverge — a later chat turn reads
 your wording, and `p` posts it.
@@ -229,7 +229,7 @@ the agent, or a block that covers a line with its own comment are all normal. Th
 everything anchored on a line as one stack, numbered `1/2`, `2/2`. The diff's marker column shows
 the count instead of `▍`, and the footer says `1/2 on this line`. `n`/`N` step through a line's
 findings before moving to the next line, and inside the reader (`enter`) they move between them
-without leaving it. `e`, `d` and `enter` act on the selected finding. `i` edits the line's note if
+without leaving it. `e`, `d` and `enter` act on the selected finding. `I` edits the line's note if
 there is one, and otherwise adds a new note beside what's there. Before, a note added to a commented
 line replaced the comment.
 
@@ -240,17 +240,18 @@ acts on the line under the cursor, or on the marked block when there is one.
 
 | key | what |
 |---|---|
-| `j`/`k` arrows | move a line · `space`/`pageup` a page · `g`/`G` top and bottom |
+| `i`/`k` ↑↓ | move a line · `space`/`pageup` a page · `g`/`G` top and bottom — the same `ijkl` as the list |
+| `j`/`l` ←→ | move along the line a word at a time, to aim `*` at one · `esc` lets go of the word |
 | `n` `N` | the next and previous finding: each one on a line in turn, then the next line |
 | `]` `[` | hop to the next / previous changed file |
 | `/` | [search the checkout](#reading-around-the-change) — a regex over every file |
-| `*` | the call sites of a symbol on the cursor's line — definitions first |
+| `*` | the call sites of the word under the cursor — or, with none, of a symbol picked from the line — definitions first |
 | `x` | the whole of this file around its hunks · `x` again, back to the diff (closes an opened file) |
 | `w` | the whole PR · only what was pushed since the review you posted ([round two](#round-two)) |
 | `enter` | read the current finding in full, scrolling inside it |
 | `v` | mark a block — move to grow it, `v` or `esc` to drop it |
 | `e` | write a finding — level and comment in one pane, `tab` between them |
-| `i` | the same pane, pre-set to an annotation: the line's note if it has one, otherwise a new one beside the rest |
+| `I` | the same pane, pre-set to an annotation: the line's note if it has one, otherwise a new one beside the rest |
 | `a` | ask an agent what the marked lines do — the answer lands as an annotation |
 | `c` | ask about the marked lines your own way — pick a model, write the request |
 | `d` | drop the selected finding, block and all |
@@ -275,8 +276,9 @@ at the same height on screen, so what you were reading is still under your eye. 
 the diff alone.
 
 **`/` searches the checkout** — a regex over every tracked file, case-insensitive unless the pattern
-has a capital in it. **`*` lists the call sites of a symbol on the cursor's line**: it offers the
-line's names, best guess first (what the line declares, then what it calls), and `enter` finds every
+has a capital in it. **`*` lists the call sites of a symbol.** Put the cursor on a word with `j`/`l` (`←`/`→`) and `*`
+searches for that word at once. Without one, it offers the line's names, best guess first (what the
+line declares, then what it calls), and `enter` on one finds every
 whole-word mention, each tagged `def`, `call`, `ref` or `use` (an import) and listed in that order.
 Hits in files this change touches are marked `*` and come first within each kind, because those are
 the callers a PR is likeliest to have broken. It is a textual match rather than a language server,
@@ -286,7 +288,7 @@ things; the tags say which hits look like what.
 **`enter` on a hit takes the diff there.** A line already on screen is a cursor move. A line in a
 changed file that the hunks leave out widens that file first. A file the change never touches is
 **opened** — appended after the changed files with a tinted tab, and a first row saying it is
-unchanged — and read like any other: highlighted, with `n`/`N`, `v`, `a` and `i` working on it. `x`
+unchanged — and read like any other: highlighted, with `n`/`N`, `v`, `a` and `I` working on it. `x`
 on an opened file closes it. `/` again starts from the last pattern, so `enter` on it goes straight
 back to those results, at the hit you left.
 
@@ -341,7 +343,7 @@ The choice applies to **this ask only**. The model starts on the review's own (t
 `c` from the list, if any), and `default` means that one. Nothing is kept for the next ask.
 
 `d` from the list opens the **document** itself instead — the agent's prose write-up with the same
-chat beside it (`tab` switches, `j/k` scrolls the document and `↑`/`↓` or the page keys scroll the chat, `e` edits it in `$EDITOR`). Your turn resumes the
+chat beside it (`tab` switches, `i/k` scrolls the document and `↑`/`↓` or the page keys scroll the chat, `e` edits it in `$EDITOR`). Your turn resumes the
 reviewing session, so the PR is still in context; when the agent needs a decision it asks in the
 same pane.
 
