@@ -576,6 +576,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#sorting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sorting
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1374,6 +1385,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#sorting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sorting
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1558,6 +1580,21 @@
 </tr>
 </tbody>
 </table>
+<h2 id="sorting">Sorting<a class="headerlink" href="#sorting" title="Permanent link">&para;</a></h2>
+<p>Every sortable view (the agents table, the board, <code>:issues</code>, <code>:projects</code>, <code>:reviews</code>, <code>:costs</code>)
+sorts the same way. <code>,</code> opens the sort bar, which lists the columns in a row:</p>
+<ul>
+<li><strong>Pick a column:</strong> <code>tab</code> or <code>←</code> <code>→</code> walks the columns, and typing jumps to one (<code>tok</code> lands on
+  tokens).</li>
+<li><strong>Sort:</strong> <code>enter</code> sorts by the column under the cursor. On the column that's already sorted, it
+  reverses.</li>
+<li><strong>Choose a direction:</strong> <code>↑</code> sorts ascending and <code>↓</code> descending, so a direction never takes two
+  steps. <code>shift-enter</code> also reverses in terminals that report it; most send plain enter for it, which
+  is why <code>↓</code> exists.</li>
+<li><strong>Leave:</strong> <code>esc</code> closes the bar without changing anything.</li>
+</ul>
+<p>The sorted column's header carries ↑ or ↓. The old keys (<code>s</code> in <code>:issues</code>, <code>:projects</code> and
+<code>:costs</code>, <code>S</code> in <code>:reviews</code>) open the same bar.</p>
 
 
 
