@@ -234,6 +234,7 @@ function normalizeTodo(given: RawTodo | boolean | undefined): TodoConfig {
     guidance: text(raw?.guidance),
     reviewSlaHours: positive(raw?.reviewSlaHours, 24),
     staleDays: positive(raw?.staleDays, 14),
+    oldDays: positive(raw?.oldDays, 30),
     horizonDays: positive(raw?.horizonDays, 21),
     // 0 is meaningful here: only when asked
     refreshMinutes:

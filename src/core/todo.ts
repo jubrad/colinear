@@ -114,6 +114,12 @@ const PRIORITY_WORD: Record<number, string> = { 1: 'Urgent', 2: 'High priority',
 
 const PRE_REVIEW_LIVE = new Set(['queued', 'reviewing', 'posting']);
 
+const REVIEW_VERB: Record<string, string> = {
+  APPROVED: 'approved',
+  CHANGES_REQUESTED: 'requested changes',
+  COMMENTED: 'commented',
+};
+
 /**
  * A pull request waiting on your review, as a todo entry — or undefined when
  * the ball is not in your court. Exported for the view: the same rule that
@@ -129,9 +135,30 @@ export function reviewNeed(review: Review, cfg: TodoConfig, now: number): TodoIt
   const start = Date.parse(review.requestedAt ?? review.createdAt ?? review.updatedAt);
   const waiting = Number.isFinite(start) ? workingHoursBetween(start, now) : 0;
   const untouched = (now - Date.parse(review.updatedAt)) / DAY;
-  const stale = review.isDraft || untouched >= cfg.staleDays;
+  const opened = Date.parse(review.createdAt ?? '');
+  const ageDays = Number.isFinite(opened) ? (now - opened) / DAY : undefined;
+  // Why its clock stops, first reason wins. A draft is not asking yet. A PR
+  // opened a month ago is stale however recently a bot commented or someone
+  // rebased it — "touched" was letting old PRs pass for fresh ones.
+  const parkedFor: TodoFacts['parked'] = review.isDraft
+    ? 'draft'
+    : ageDays !== undefined && ageDays >= cfg.oldDays
+      ? 'old'
+      : untouched >= cfg.staleDays
+        ? 'untouched'
+        : undefined;
+  const stale = parkedFor !== undefined;
   const ratio = waiting / cfg.reviewSlaHours;
   const viaTeam = review.requestedVia === 'team';
+  // Someone else has already reviewed it: yours is a second opinion, not what
+  // the PR is waiting on. It stays listed — you were asked — but off the clock.
+  const others = review.othersReviewed ?? [];
+  const reviewedBy = others.length
+    ? others.map((o) => `${o.login} ${REVIEW_VERB[o.state] ?? o.state.toLowerCase().replace(/_/g, ' ')}`).join(', ')
+    : review.reviewDecision === 'APPROVED'
+      ? 'already approved'
+      : undefined;
+  const secondOpinion = !stale && reviewedBy !== undefined;
 
   // 60 at the moment it is asked, 110 at the SLA, 160 at twice it — a review
   // climbs past everything but an urgent deadline or a waiting agent the day
@@ -140,16 +167,28 @@ export function reviewNeed(review: Review, cfg: TodoConfig, now: number): TodoIt
   // with last week's. A team request is discounted — someone else on the team
   // may well take it — but climbs all the same.
   const beyond = Math.max(0, waiting - 2 * cfg.reviewSlaHours) / 24;
-  let score = stale ? 5 : 60 + 50 * Math.min(ratio, 2) + Math.min(beyond, 10);
+  let score = stale ? 5 : secondOpinion ? 20 + 10 * Math.min(ratio, 2) : 60 + 50 * Math.min(ratio, 2) + Math.min(beyond, 10);
   if (viaTeam && !stale) score *= 0.8;
 
-  const urgency: TodoUrgency = stale ? 'later' : ratio >= 1 ? 'now' : 'today';
+  const urgency: TodoUrgency = stale
+    ? 'later'
+    : secondOpinion
+      ? viaTeam
+        ? 'later'
+        : 'week'
+      : ratio >= 1
+        ? 'now'
+        : 'today';
   const sla = `${formatHours(cfg.reviewSlaHours)} review SLA`;
   const why = stale
-    ? review.isDraft
+    ? parkedFor === 'draft'
       ? 'Still a draft — the review clock is paused until it is marked ready.'
-      : `Untouched for ${Math.floor(untouched)} days — stale, so it has stopped climbing.`
-    : ratio >= 1
+      : parkedFor === 'old'
+        ? `Opened ${Math.floor(ageDays ?? 0)} days ago — an old PR is stale however recently it was touched.`
+        : `Untouched for ${Math.floor(untouched)} days — stale, so it has stopped climbing.`
+    : secondOpinion
+      ? `Already reviewed (${reviewedBy}) — yours would be a second opinion, so it is off the clock.`
+      : ratio >= 1
       ? `Waiting ${formatHours(waiting)}, ${formatHours(waiting - cfg.reviewSlaHours)} past the ${sla}${viaTeam ? ' (asked of your team)' : ''}.`
       : `Waiting ${formatHours(waiting)} of the ${sla}${viaTeam ? ' (asked of your team)' : ''}.`;
 
@@ -159,13 +198,18 @@ export function reviewNeed(review: Review, cfg: TodoConfig, now: number): TodoIt
       ? review.isDraft
         ? 'Nothing until it is ready'
         : 'Nudge the author or drop it'
-      : 'Review it';
+      : secondOpinion
+        ? 'Skim it, or leave it to them'
+        : 'Review it';
 
   const name = review.repository.split('/')[1] ?? review.repository;
   const facts: TodoFacts = {
     waitingHours: Math.round(waiting * 10) / 10,
     slaHours: cfg.reviewSlaHours,
     stale,
+    ...(parkedFor ? { parked: parkedFor } : secondOpinion ? { parked: 'reviewed' as const } : {}),
+    ...(reviewedBy ? { reviewedBy } : {}),
+    ...(ageDays !== undefined ? { ageDays: Math.floor(ageDays) } : {}),
     author: review.author,
     size: `+${review.additions}/-${review.deletions}, ${review.changedFiles} file${review.changedFiles === 1 ? '' : 's'}`,
     via: review.requestedVia,
@@ -325,6 +369,7 @@ function deadlineUrgency(days: number | undefined): TodoUrgency {
 const URGENCY_ORDER: TodoUrgency[] = ['now', 'today', 'week', 'later'];
 const sooner = (a: TodoUrgency, b: TodoUrgency): TodoUrgency =>
   URGENCY_ORDER.indexOf(a) <= URGENCY_ORDER.indexOf(b) ? a : b;
+const later = (a: TodoUrgency, b: TodoUrgency): TodoUrgency => (sooner(a, b) === a ? b : a);
 
 /** The nearest date that bears on an issue, and whose it is. */
 function nearestDeadline(
@@ -592,7 +637,7 @@ export function handledReason(
  */
 export const DEFAULT_TODO_POLICY = `Balance three pressures, roughly in this order:
 
-1. Pull request reviews. Reviews are owed promptly — about one working day (slaHours). The longer a request has been waiting, the higher it goes: one past its SLA outranks everything except an agent stopped on a question or an urgent, overdue deadline. Among reviews, the longest-waiting goes first; a small PR can jump ahead because it costs little to clear. A stale PR (a draft, or untouched for a long time) is the exception: its clock has stopped, so it goes to the bottom or off the list.
+1. Pull request reviews. Reviews are owed promptly — about one working day (slaHours). The longer a request has been waiting, the higher it goes: one past its SLA outranks everything except an agent stopped on a question or an urgent, overdue deadline. Among reviews, the longest-waiting goes first; a small PR can jump ahead because it costs little to clear. Three kinds of review are not urgent, whatever their wait: a draft (it is not asking yet), an old PR (opened a month or more ago, however recently touched), and one someone else has already reviewed (yours is a second opinion). Their clocks have stopped — they go to the bottom or off the list.
 2. Deadlines. Milestone and project target dates, and issue due dates. Overdue, or due within a couple of days, ranks high; a week out matters; a date weeks away barely does. Several issues racing one milestone are one deadline — weigh the milestone.
 3. Priority. Issue and project priority (1 urgent, 2 high, 3 medium, 4 low, 0 none). Urgent work outranks deadlines further out; low priority with no date is "later".
 
@@ -656,7 +701,9 @@ One JSON object per line below. Each is something that may need the operator:
 - facts.priority / projectPriority: 1 urgent, 2 high, 3 medium, 4 low, 0 none
 - facts.due, daysToDue, dueFrom: the nearest deadline, whole days to it (negative = overdue), and whose date it is
 - facts.waitingHours / slaHours: for a review, working hours since the request (weekends don't count) and the turnaround owed
-- facts.stale: the review's clock has stopped — a draft, or untouched for ${cfg.staleDays} days
+- facts.stale: the review's clock has stopped — a draft, opened ${cfg.oldDays}+ days ago, or untouched for ${cfg.staleDays} days
+- facts.parked: why a review is held down (draft · old · untouched · reviewed). colinear will not let you mark these more urgent than its own urgency for them
+- facts.reviewedBy: who else has reviewed it and how; facts.ageDays: days since it was opened
 - facts.status / note: a task's colinear status, and the agent's question, error or PR state
 - facts.size, author, via: a review's diff size, who wrote it, and whether it was asked of them by name or through a team
 
@@ -698,14 +745,21 @@ export function applyRanking(candidates: TodoItem[], answer: RankAnswer): { item
     }
     if (seen.has(candidate.key)) continue;
     seen.add(candidate.key);
+    const asked = URGENCY_ORDER.includes(entry.urgency as TodoUrgency) ? (entry.urgency as TodoUrgency) : candidate.urgency;
     items.push({
       ...candidate,
       action: entry.action?.trim() || candidate.action,
       why: entry.why?.trim() || candidate.why,
-      urgency: URGENCY_ORDER.includes(entry.urgency as TodoUrgency) ? (entry.urgency as TodoUrgency) : candidate.urgency,
+      // a draft, an old PR, one someone else has reviewed: the agent may move
+      // it within its band but not call it more urgent than colinear's rules
+      // did — the one ranking mistake that sends you to work that isn't due
+      urgency: candidate.facts.parked ? later(asked, candidate.urgency) : asked,
     });
   }
-  return { items, unknown };
+  // the agent's order, within urgency: a clamped entry falls to its band
+  // rather than sitting at the top marked "later"
+  const ordered = items.map((item, i) => ({ item, i })).sort((a, b) => urgencyRank(a.item) - urgencyRank(b.item) || a.i - b.i);
+  return { items: ordered.map((o) => o.item), unknown };
 }
 
 /**

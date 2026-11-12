@@ -488,6 +488,14 @@ export interface Review {
    * polled before it was recorded, which fall back to createdAt.
    */
   requestedAt?: string;
+  /** GitHub's overall verdict on the PR: APPROVED · CHANGES_REQUESTED · REVIEW_REQUIRED */
+  reviewDecision?: string;
+  /**
+   * The latest review from each person other than you and the author, bots
+   * left out. Someone else having reviewed it is what makes yours a second
+   * opinion rather than the thing the PR is waiting on.
+   */
+  othersReviewed?: Array<{ login: string; state: string; at?: string }>;
   status: ReviewStatus;
   activity: string[];
   /** local repo the diff was reviewed in, when one is configured */
@@ -604,8 +612,17 @@ export interface TodoFacts {
   waitingHours?: number;
   /** review: the SLA it is measured against */
   slaHours?: number;
-  /** review: a draft, or untouched for `staleDays` — the SLA stops counting */
+  /** review: a draft, opened `oldDays` ago, or untouched for `staleDays` — the SLA stops counting */
   stale?: boolean;
+  /**
+   * review: why colinear holds it below its clock — the ranking may reorder it
+   * but cannot call it more urgent than colinear did
+   */
+  parked?: 'draft' | 'old' | 'untouched' | 'reviewed';
+  /** review: who else has reviewed it, and how ("alice approved") */
+  reviewedBy?: string;
+  /** review: days since the PR was opened */
+  ageDays?: number;
   /** review: the author, and how big it is */
   author?: string;
   size?: string;
@@ -863,6 +880,8 @@ export interface TodoConfig {
   reviewSlaHours: number;
   /** a PR untouched this many days is stale and stops climbing (default 14) */
   staleDays: number;
+  /** a PR opened this many days ago is stale however recently it was touched (default 30) */
+  oldDays: number;
   /** how far ahead a deadline starts to count, in days (default 21) */
   horizonDays: number;
   /** re-rank on a clock, in minutes; 0 = only when asked (default 0) */

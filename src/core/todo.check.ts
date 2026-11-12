@@ -25,7 +25,7 @@ function expect(name: string, ok: boolean, detail?: unknown): void {
   console.error(`FAIL ${name}${detail === undefined ? '' : `: ${JSON.stringify(detail)}`}`);
 }
 
-const cfg: TodoConfig = { enabled: true, reviewSlaHours: 24, staleDays: 14, horizonDays: 21, refreshMinutes: 0, maxCandidates: 60 };
+const cfg: TodoConfig = { enabled: true, reviewSlaHours: 24, staleDays: 14, oldDays: 30, horizonDays: 21, refreshMinutes: 0, maxCandidates: 60 };
 // Wednesday 30 September 2026, 10:00 local
 const NOW = new Date(2026, 8, 30, 10, 0).getTime();
 const hoursAgo = (h: number) => new Date(NOW - h * 3_600_000).toISOString();
@@ -83,6 +83,39 @@ const task = (i: Issue, patch: Partial<Task>): Task => ({
     tasks: [], reviews: [review(6, { requestedAt: hoursAgo(2), requestedVia: 'team' })], issues: [], projects: [], now: NOW, cfg,
   })[0];
   expect('a team request is discounted', (team?.score ?? 0) < (by(2)?.score ?? 0), team);
+}
+
+// ── not urgent, whatever the wait ──
+{
+  const waited = { requestedAt: new Date(2026, 8, 28, 9, 0).toISOString() }; // 49h: past the SLA
+  const old = review(11, { ...waited, createdAt: hoursAgo(24 * 40), updatedAt: hoursAgo(1) });
+  const reviewed = review(12, { ...waited, createdAt: hoursAgo(60), othersReviewed: [{ login: 'alice', state: 'APPROVED' }] });
+  const teamReviewed = review(13, { ...waited, createdAt: hoursAgo(60), requestedVia: 'team', othersReviewed: [{ login: 'bob', state: 'CHANGES_REQUESTED' }] });
+  const decided = review(14, { ...waited, createdAt: hoursAgo(60), reviewDecision: 'APPROVED' });
+  const late = review(15, { ...waited, createdAt: hoursAgo(60) });
+  const items = buildCandidates({ tasks: [], reviews: [old, reviewed, teamReviewed, decided, late], issues: [], projects: [], now: NOW, cfg });
+  const by = (n: number) => items.find((i) => i.key === `review:o/r#${n}`);
+  expect('a PR opened 40 days ago is stale even if touched an hour ago', by(11)?.facts.parked === 'old' && by(11)?.urgency === 'later', by(11));
+  expect('one someone else approved is a second opinion: "week", not "now"', by(12)?.facts.parked === 'reviewed' && by(12)?.urgency === 'week', by(12));
+  expect('it says who reviewed it', by(12)?.facts.reviewedBy === 'alice approved' && /alice approved/.test(by(12)?.why ?? ''), by(12)?.why);
+  expect('reviewed and only asked of your team: "later"', by(13)?.urgency === 'later', by(13));
+  expect("GitHub's own APPROVED counts even without the reviews", by(14)?.facts.parked === 'reviewed', by(14));
+  expect('a second opinion ranks under a late review', (by(12)?.score ?? 0) < (by(15)?.score ?? 0) && by(15)?.urgency === 'now');
+
+  // the agent cannot lift them back up
+  const { items: ranked } = applyRanking(items, {
+    summary: 'x',
+    items: [
+      { key: 'review:o/r#11', action: 'Review it', why: 'Long wait.', urgency: 'now' },
+      { key: 'review:o/r#12', action: 'Review it', why: 'Long wait.', urgency: 'now' },
+      { key: 'review:o/r#15', action: 'Review it', why: 'Late.', urgency: 'now' },
+    ],
+  });
+  expect('an old PR stays "later" whatever the agent says', ranked.find((i) => i.key === 'review:o/r#11')?.urgency === 'later');
+  expect('a reviewed PR stays "week"', ranked.find((i) => i.key === 'review:o/r#12')?.urgency === 'week');
+  expect('clamped entries fall below the urgent ones', ranked.map((i) => i.key).join() === 'review:o/r#15,review:o/r#12,review:o/r#11', ranked.map((i) => i.key));
+  const { items: lower } = applyRanking(items, { summary: 'x', items: [{ key: 'review:o/r#12', action: 'a', why: 'b', urgency: 'later' }] });
+  expect('the agent may still call one less urgent', lower[0]?.urgency === 'later');
 }
 
 // ── the balance ──
