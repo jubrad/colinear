@@ -4,7 +4,7 @@ Aliases: `cost`, `$`. A live bar chart of what each task and PR review has cost,
 
 | key | what |
 |---|---|
-| `s` | cycle sort: cost / tokens / most recent |
+| `,` | sort: cost / tokens / most recent — the [sort bar](../README.md#sorting) |
 | `/` | fuzzy filter |
 | `enter` | task detail |
 

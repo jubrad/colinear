@@ -4,6 +4,7 @@ import { useReviews, useTasks } from '../core/hooks.js';
 import { rowSpend, totalSpend } from '../core/spend.js';
 import type { Review, Task } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
+import { SortBar } from '../ui/SortBar.js';
 import { useColinear } from '../ui/context.js';
 import { cell, formatDuration, formatTokens } from '../ui/format.js';
 import { REVIEW_COLORS, STATUS_COLORS, theme } from '../theme.js';
@@ -68,6 +69,8 @@ export function CostsView(_props: { param?: string }) {
   const [query, setQuery] = useState('');
   const [filtering, setFiltering] = useState(false);
   const [sort, setSort] = useState<SortKey>('cost');
+  const [desc, setDesc] = useState(false);
+  const [sorting, setSorting] = useState(false);
   const [cursor, setCursor] = useState(0);
 
   const rows = useMemo(() => {
@@ -78,21 +81,22 @@ export function CostsView(_props: { param?: string }) {
       const hay = `${r.label} ${r.title}`.toLowerCase();
       return terms.every((term) => hay.includes(term));
     });
-    return matched.sort((a, b) => {
+    const sorted = matched.sort((a, b) => {
       if (sort === 'tokens') return tokens(b) - tokens(a);
       if (sort === 'recent') return (b.startedAt ?? 0) - (a.startedAt ?? 0);
       // an unpriced row sorts as cheapest rather than as free: it has no
       // claim on the top of a cost sort, and none to being called $0 either
       return (b.costUsd ?? -1) - (a.costUsd ?? -1);
     });
-  }, [tasks, reviews, query, sort]);
+    return desc ? sorted.reverse() : sorted;
+  }, [tasks, reviews, query, sort, desc]);
 
   useEffect(() => {
     setCursor((c) => Math.max(0, Math.min(c, rows.length - 1)));
   }, [rows.length]);
 
   // the filter bar owns the keyboard while it's open
-  useEffect(() => ctx.setCapture(filtering), [filtering]);
+  useEffect(() => ctx.setCapture(filtering || sorting), [filtering, sorting]);
   useEffect(() => () => ctx.setCapture(false), []);
   useEffect(() => {
     ctx.setEscHandler(query ? () => (setQuery(''), true) : null);
@@ -104,10 +108,10 @@ export function CostsView(_props: { param?: string }) {
       if (input === '/') setFiltering(true);
       if (key.upArrow || input === 'i') setCursor((c) => Math.max(0, c - 1));
       if (key.downArrow || input === 'k') setCursor((c) => Math.min(rows.length - 1, c + 1));
-      if (input === 's') setSort((s) => SORTS[(SORTS.indexOf(s) + 1) % SORTS.length]);
+      if (input === 's' || input === ',') setSorting(true);
       if (key.return && rows[cursor]?.taskId) ctx.navigate('task', rows[cursor].taskId!);
     },
-    { isActive: !filtering && !ctx.cmdOpen },
+    { isActive: !filtering && !sorting && !ctx.cmdOpen },
   );
 
   const { costUsd: total, unpriced } = totalSpend(rows);
@@ -128,10 +132,26 @@ export function CostsView(_props: { param?: string }) {
           {rows.length} run{rows.length === 1 ? '' : 's'} · ${total.toFixed(2)} total
           {unpriced ? ` · ${unpriced} session${unpriced === 1 ? '' : 's'} unpriced` : ''} · sort:{' '}
         </Text>
-        <Text color={theme.accent}>{sort}</Text>
+        <Text color={theme.accent}>
+          {sort}
+          {desc ? ' ↓' : ' ↑'}
+        </Text>
         {query ? <Text color={theme.accent}> /{query}</Text> : null}
       </Box>
       <Text dimColor>what this would cost on the API — subscription runs are not billed per token</Text>
+      {sorting && (
+        <SortBar
+          options={SORTS.map((key) => ({ key }))}
+          current={sort}
+          desc={desc}
+          onApply={(key, d) => {
+            setSort(key as SortKey);
+            setDesc(d);
+            setSorting(false);
+          }}
+          onCancel={() => setSorting(false)}
+        />
+      )}
       {filtering && (
         <CommandBar
           prefix="/"
@@ -181,6 +201,6 @@ export function CostsView(_props: { param?: string }) {
 export const costsKeys: Array<[string, string]> = [
   ['i/k ↑↓', 'row'],
   ['/', 'filter'],
-  ['s', 'sort'],
+  [', s', 'sort'],
   ['enter', 'task detail'],
 ];

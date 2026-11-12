@@ -8,6 +8,7 @@ import { getUiState, setUiState } from '../core/persist.js';
 import { store } from '../core/store.js';
 import type { Issue } from '../core/types.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
+import { SortBar } from '../ui/SortBar.js';
 import { CreationProgress, creationHeight, pushActivity, type CreationState } from '../ui/CreationProgress.js';
 import { NewIssueModal, newIssuePopup, type NewIssue } from '../ui/NewIssueModal.js';
 import { useColinear } from '../ui/context.js';
@@ -250,7 +251,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       if (input === '/') setBar('fuzzy');
       if (input === 't') setBar('team');
       if (input === 'l') setBar('label');
-      if (input === 's') setBar('sort');
+      if (input === 's' || input === ',') setBar('sort');
       if (input === 'r') refresh(team);
       if (input === 'n') {
         if (!teams.length) ctx.toast('no teams to file into — check the tracker connection', 'err');
@@ -371,7 +372,20 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       {bar === 'fuzzy' && (
         <CommandBar prefix="/" initial={query} onChange={setQuery} onSubmit={() => setBar(null)} onCancel={() => { setQuery(''); setBar(null); }} />
       )}
-      {bar && bar !== 'fuzzy' && (
+      {bar === 'sort' && (
+        <SortBar
+          options={[{ key: 'updated' }, ...columns.map((c) => ({ key: c.key, label: c.label.toLowerCase() }))]}
+          current={sortKey}
+          desc={sortDesc}
+          onApply={(key, desc) => {
+            setSortKey(key);
+            setSortDesc(desc);
+            setBar(null);
+          }}
+          onCancel={() => setBar(null)}
+        />
+      )}
+      {bar && bar !== 'fuzzy' && bar !== 'sort' && (
         <CommandBar prefix={`${bar}> `} candidates={barCandidates} onSubmit={submitBar} onCancel={() => setBar(null)} />
       )}
       <Table
@@ -511,7 +525,7 @@ export const issuesKeys: Array<[string, string]> = [
   ['/', 'filter'],
   ['t', 'team'],
   ['l', 'label'],
-  ['s', 'sort'],
+  [', s', 'sort'],
   ['n', 'new issue'],
   ['p', 'projects on/off'],
   ['S', 'sub-issues on/off'],

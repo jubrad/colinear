@@ -501,7 +501,7 @@ the network) still just fails and says so, because re-anchoring cannot help with
 | `l` `j` / → ← | into and out of the [preview](#side-by-side), on a wide terminal — `enter` there opens the diff at that finding |
 | `p` post · `A` approve · `X` request changes · `n` attach a note that rides along |
 | `s` | hand the terminal to that review's claude session |
-| `S` | sort: needs-me / reviewed / updated / size / repo / author / cost (again reverses). Remembered |
+| `,` | sort: needs-me / reviewed / updated / size / repo / author / cost — the [sort bar](../README.md#sorting) (`S` too). Remembered |
 | `m` | only yours, or every review. Remembered |
 | `o` | open the PR |
 | `H` | hide this PR from the list, or put a hidden one back |

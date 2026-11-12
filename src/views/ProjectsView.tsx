@@ -5,6 +5,7 @@ import { openUrl } from '../core/open.js';
 import type { Project, Scope } from '../core/types.js';
 import { rememberView, setPendingAction, shellIn } from '../core/attach.js';
 import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
+import { SortBar } from '../ui/SortBar.js';
 import { CreationProgress, creationHeight, pushActivity, type CreationState } from '../ui/CreationProgress.js';
 import { usePlans } from '../core/hooks.js';
 import { useColinear } from '../ui/context.js';
@@ -206,7 +207,7 @@ export function ProjectsView(_props: { param?: string }) {
       if (key.downArrow || input === 'j') setCursor((c) => Math.min(rows.length - 1, c + 1));
       if (input === '/') setBar('fuzzy');
       if (input === 't') setBar('team');
-      if (input === 's') setBar('sort');
+      if (input === 's' || input === ',') setBar('sort');
       if (input === 'r') refresh();
       // gated on the provider: a tracker without projects has nothing to create
       if (input === 'n' && providerFor(ctx.cfg).capabilities.createProjects) setCreating(true);
@@ -297,7 +298,20 @@ export function ProjectsView(_props: { param?: string }) {
           }}
         />
       )}
-      {bar && bar !== 'fuzzy' && (
+      {bar === 'sort' && (
+        <SortBar
+          options={columns.map((c) => ({ key: c.key, label: c.label.toLowerCase() }))}
+          current={sortKey}
+          desc={sortDesc}
+          onApply={(key, desc) => {
+            setSortKey(key);
+            setSortDesc(desc);
+            setBar(null);
+          }}
+          onCancel={() => setBar(null)}
+        />
+      )}
+      {bar && bar !== 'fuzzy' && bar !== 'sort' && (
         <CommandBar prefix={`${bar}> `} candidates={barCandidates} onSubmit={submitBar} onCancel={() => setBar(null)} />
       )}
       <Table
@@ -393,6 +407,6 @@ export const projectsKeys: Array<[string, string]> = [
   ['o', 'open in browser'],
   ['/', 'filter'],
   ['t', 'team'],
-  ['s', 'sort'],
+  [', s', 'sort'],
   ['r', 'refresh'],
 ];

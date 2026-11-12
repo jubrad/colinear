@@ -12,6 +12,7 @@ import { store } from '../core/store.js';
 import { fileStats, parseDiff, type DiffAgainst, type FileStat } from '../core/diff.js';
 import type { Review, ReviewFinding } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
+import { SortBar } from '../ui/SortBar.js';
 import { AnnotatedDiff, wrapText } from '../ui/AnnotatedDiff.js';
 import { ReviewDocModal } from '../ui/ReviewDocModal.js';
 import { ReviewOptionsModal } from '../ui/ReviewOptionsModal.js';
@@ -102,6 +103,7 @@ export function ReviewsView(props: { param?: string }) {
   const [cursor, setCursor] = useState(0);
   const [query, setQuery] = useState('');
   const [filtering, setFiltering] = useState(false);
+  const [sorting, setSorting] = useState(false);
   const [noting, setNoting] = useState(false);
   const [note, setNote] = useState('');
   const [confirm, setConfirm] = useState<'post' | 'approve' | 'request-changes'>();
@@ -153,6 +155,8 @@ export function ReviewsView(props: { param?: string }) {
   const sort: SortKey = (SORTS as readonly string[]).includes(ctx.ui.reviewsSort ?? '') ? (ctx.ui.reviewsSort as SortKey) : 'needs me';
   const desc = Boolean(ctx.ui.reviewsSortDesc);
   const mine = ctx.ui.reviewsScope === 'mine';
+  /** a column header with the sort arrow, when this column is the sort */
+  const sortHead = (label: string, key: SortKey) => (sort === key ? `${label}${desc ? '↓' : '↑'}` : label);
 
   const rows = useMemo(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -259,8 +263,8 @@ export function ReviewsView(props: { param?: string }) {
 
   useEffect(() => {
     // the modal's chat input owns the keyboard too
-    ctx.setCapture(filtering || noting || reading || customizing);
-  }, [filtering, noting, reading, customizing]);
+    ctx.setCapture(filtering || sorting || noting || reading || customizing);
+  }, [filtering, sorting, noting, reading, customizing]);
   useEffect(() => () => ctx.setCapture(false), []);
   useEffect(() => {
     // esc steps back out of the preview before it clears a filter
@@ -402,12 +406,7 @@ export function ReviewsView(props: { param?: string }) {
         const pr = `${selected.repository}#${selected.number}`;
         ctx.toast(hide ? `hid ${pr}${showHidden ? '' : ' — h shows hidden ones'}` : `${pr} is back on the list`, 'info');
       }
-      if (input === 'S') {
-        // cycle the field; landing back on the current one flips direction
-        const next = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length];
-        ctx.setUi(desc ? { reviewsSort: next, reviewsSortDesc: undefined } : { reviewsSortDesc: true });
-        setCursor(0);
-      }
+      if (input === 'S' || input === ',') setSorting(true);
       if (input === 'm') {
         ctx.setUi({ reviewsScope: mine ? undefined : 'mine' });
         setCursor(0);
@@ -419,7 +418,7 @@ export function ReviewsView(props: { param?: string }) {
         );
       }
     },
-    { isActive: !filtering && !noting && !reading && !customizing && !ctx.cmdOpen },
+    { isActive: !filtering && !sorting && !noting && !reading && !customizing && !ctx.cmdOpen },
   );
 
   const ready = reviews.filter((r) => r.status === 'ready' && !r.hidden).length;
@@ -437,7 +436,7 @@ export function ReviewsView(props: { param?: string }) {
   const listWidth = Math.min(84, Math.max(56, Math.floor(pane.width * 0.42)));
   const splitHeight = Math.max(
     8,
-    pane.height - 2 - (filtering ? 1 : 0) - (noting ? 1 : 0) - (confirm ? 3 : 0),
+    pane.height - 2 - (filtering || sorting ? 1 : 0) - (noting ? 1 : 0) - (confirm ? 3 : 0),
   );
   // rows that fit: in the split, the split less its column header and the
   // scroll line; stacked, the total less the detail pane, header and chrome
@@ -561,6 +560,19 @@ export function ReviewsView(props: { param?: string }) {
         </Text>
         {query ? <Text color={theme.accent}>/{query}</Text> : null}
       </Box>
+      {sorting && (
+        <SortBar
+          options={SORTS.map((key) => ({ key }))}
+          current={sort}
+          desc={desc}
+          onApply={(key, d) => {
+            ctx.setUi({ reviewsSort: key, reviewsSortDesc: d || undefined });
+            setCursor(0);
+            setSorting(false);
+          }}
+          onCancel={() => setSorting(false)}
+        />
+      )}
       {filtering && (
         <CommandBar
           prefix="/"
@@ -580,8 +592,8 @@ export function ReviewsView(props: { param?: string }) {
             <Text bold color={theme.header} wrap="truncate">
               {cell('', W.flag)}
               {'  '}
-              {cell('REV', W.reviewed)}
-              {cell('PR', W.pr)}
+              {cell(sortHead('REV', 'reviewed'), W.reviewed)}
+              {cell(sortHead('PR', 'repo'), W.pr)}
               TITLE
             </Text>
             {window.map((r, i) => {
@@ -644,12 +656,12 @@ export function ReviewsView(props: { param?: string }) {
           {'  '}
           {cell('', W.flag)}
           {cell('REVIEW', W.status)}
-          {cell('REV', W.reviewed)}
-          {cell('PR', W.pr)}
+          {cell(sortHead('REV', 'reviewed'), W.reviewed)}
+          {cell(sortHead('PR', 'repo'), W.pr)}
           {cell('PR STATE', W.draft)}
           {cell('TITLE', cols.title)}
-          {cols.author ? cell('AUTHOR', cols.author) : ''}
-          {cols.size ? cell('SIZE', cols.size) : ''}
+          {cols.author ? cell(sortHead('AUTHOR', 'author'), cols.author) : ''}
+          {cols.size ? cell(sortHead('SIZE', 'size'), cols.size) : ''}
         </Text>
         {window.map((r, i) => {
           // the cursor row goes plain: `inverse` over coloured cells turns each
@@ -1144,7 +1156,7 @@ export const reviewsKeys: Array<[string, string]> = [
   ['n', 'note'],
   ['o', 'open PR'],
   ['x', 'cancel'],
-  ['S', 'sort · reviewed = newest colinear review'],
+  [', S', 'sort · reviewed = newest colinear review'],
   ['m', 'only yours / all'],
   ['H', 'hide / unhide'],
   ['h', 'show settled + hidden'],
