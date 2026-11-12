@@ -860,6 +860,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../docs/views/jobs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    :jobs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../docs/views/projects/" class="md-nav__link">
         
   
@@ -1371,6 +1399,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Jobs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#agent-runtimes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1678,6 +1717,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Jobs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#agent-runtimes" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1906,6 +1956,11 @@ because divergence here is invisible until someone acts on a stale card.</p>
 <td><code>todo.refreshMinutes</code></td>
 <td>re-rank <code>:todo</code> with the agent — off (<code>0</code>) by default</td>
 <td>it spends tokens, so the operator chooses whether a clock may</td>
+</tr>
+<tr>
+<td>30s</td>
+<td>due jobs (<code>JobRunner.tick</code>)</td>
+<td>cron's grain is a minute; half that starts a run on its minute</td>
 </tr>
 </tbody>
 </table>
@@ -2258,6 +2313,29 @@ stays registered and says how to turn it back on, the same rule experimental vie
 live store, using the same predicates that listed it (<code>reviewNeed</code>, <code>taskNeed</code>). "Handled" therefore
 means exactly "would not be listed now", and posting a review or answering a question marks the row
 without re-ranking anything.</p>
+<h2 id="jobs">Jobs<a class="headerlink" href="#jobs" title="Permanent link">&para;</a></h2>
+<p>The fifth CDC entity (<code>job-upsert</code>, <code>job-update</code>, <code>job-activity</code>, <code>job-delete</code>). A job holds its
+definition and its last 20 runs together, and a run's report travels with it, so <code>:jobs</code> reads it
+like any other row. The daemon's <code>JobRunner</code> (<code>core/jobs.ts</code>) owns the clock and the runs. The view
+writes definitions through the store like any mirror, and asks the daemon to run or cancel.</p>
+<p><strong>The security profile is the tool list.</strong> A job's colinear actions (<code>review</code>, <code>approve</code>, <code>comment</code>)
+are tools in the in-process <code>colinear</code> MCP server, which the coordinator's family tools also use.
+Only granted ones are built, so an ungranted action doesn't exist in the session rather than being
+refused at call time. They're closed over the job and its run, so every call is recorded on the run
+with no parameter for the agent to misreport.</p>
+<p><strong>Through colinear, not around it.</strong> <code>approve_pr</code> calls <code>reviewer.verdict</code>, the same deterministic
+<code>gh api</code> post <code>a</code> makes, and refuses unless the PR has a finished colinear review of its <em>current
+head</em> with no finding asking for a change. That's why the dependabot job has to review first: there
+is no path to an approval colinear hasn't read. <code>review_pr</code> adopts the PR into <code>:reviews</code> (it
+usually isn't asking for your review) and awaits <code>reviewer.start</code>, which resolves when the session
+ends.</p>
+<p><strong>User settings are opt-in.</strong> Every session loads only <code>project</code> settings. A job with <code>user tools</code>
+on adds <code>user</code>, which brings the operator's own MCP servers: that's how a job reaches Slack or
+Linear. claude.ai connectors aren't loaded by Agent SDK sessions even then; a probe on 2026-11-11
+found them only in the interactive CLI. So the route is a local MCP server, not the connector.</p>
+<p><strong>Unattended means no questions.</strong> A job's <code>onQuestion</code> answers "no one is available, make the
+conservative call", and its prompt says the same. The answer comes back through <code>REPORT_SCHEMA</code>
+(<code>summary</code> + markdown <code>report</code>), so a run with no report is an error rather than an empty success.</p>
 <h2 id="agent-runtimes">Agent runtimes<a class="headerlink" href="#agent-runtimes" title="Permanent link">&para;</a></h2>
 <p>Everything above <code>core/agent.ts</code> is runtime-agnostic; everything below it is one adapter.
 <code>runtimeFor(cfg, kind, override)</code> answers the whole question — what runs this, on what model, with
