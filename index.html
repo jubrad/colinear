@@ -876,34 +876,6 @@
   
   
     <li class="md-nav__item">
-      <a href="docs/views/tasks/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    :tasks
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="docs/views/task/" class="md-nav__link">
         
   
@@ -1431,7 +1403,7 @@
 <p>📖 <strong><a href="https://jubrad.github.io/colinear/">Read the docs</a></strong> · 🚀 <strong><a href="https://jubrad.github.io/colinear/docs/getting-started/">Getting started</a></strong></p>
 <p><em>Disclaimer: This is an app I find productive and have developed almost blindly with claude. I've done typescript development, but this is far out of my expertise and the code could very well be vibe-coded trash. I don't really care. The goal is to get something out that is productive. I'm also adding features and fixes to it regularly.. while  I am putting thought into preventing backwards compatible issues I have no guarantees. Use at your own risk, at this point in time I'm not accepting contributions from the general public, but feel free to open an issue.</em></p>
 <p><a class="glightbox" href="docs/images/board.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The board: seven columns of dispatched agents, with the selected task's subtasks and live activity in the pane below" src="docs/images/board.png" /></a></p>
-<p>Every task is also a searchable, sortable table — same data, same keys, <code>:tasks</code>:</p>
+<p>Every task is also a searchable, sortable table — same data, same keys, <code>t</code> in <code>:agents</code>:</p>
 <p><a class="glightbox" href="docs/images/tasks.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The task table: one row per task with status, repo, PR, CI, elapsed time and tokens" src="docs/images/tasks.png" /></a></p>
 <p><em>Both frames are <code>coli demo</code> — a fabricated board you can run yourself in thirty seconds.</em></p>
 <h2 id="try-it-in-thirty-seconds">Try it in thirty seconds<a class="headerlink" href="#try-it-in-thirty-seconds" title="Permanent link">&para;</a></h2>
@@ -1450,7 +1422,7 @@ coli<span class="w">                             </span><span class="c1"># `?` f
 <h2 id="what-it-does">What it does<a class="headerlink" href="#what-it-does" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Dispatch</strong> — an agent per issue, in a worktree cut from your repo. Triage picks the repo and scopes the work, the work pass implements it and opens a <strong>draft</strong> PR. Agents never mark a PR ready; that's your keypress.</li>
-<li><strong>Watch</strong> — a kanban board and a table view of every task: live duration, tokens, cost, subtask progress, CI and review state, blocked-by chains. <code>:agents</code> (or <code>\</code> for a rail beside every view) lists every agent by what it wants from you: waiting on a question, working, just finished.</li>
+<li><strong>Watch</strong> — a kanban board and a table view of every task: live duration, tokens, cost, subtask progress, CI and review state, blocked-by chains. <code>:agents</code> (or <code>\</code> for a rail beside every view) lists every agent and task by whose move it is: asking you a question, stopped on a step only you can take, working, waiting on someone else, just done.</li>
 <li><strong>Steer</strong> — answer an agent's questions in a form, message a running agent without attaching, attach to its session and hand it back, cancel, resume, rebase.</li>
 <li><strong>Review</strong> — PRs awaiting your review get an assisted pre-review you edit and post deterministically, never by an agent.</li>
 <li><strong>Plan</strong> — a read-only planning chat that drafts sub-issues for you to approve.</li>

@@ -776,34 +776,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../docs/views/tasks/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    :tasks
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../docs/views/task/" class="md-nav__link">
         
   
@@ -2426,7 +2398,7 @@ every live worktree looks dead.</p>
   ones above them, so a terminal row ends up holding two lines and one of them looks like it
   simply vanished. The annotated diff asked for <code>rows - 6</code> for months and dropped roughly a
   third of its rows on a 44-row terminal, with the tail of the overwritten line still showing
-  past the end of the shorter one. Anything with a fixed-height companion — TasksView's 15-row
+  past the end of the shorter one. Anything with a fixed-height companion — the agents table's 15-row
   detail pane — has to subtract it <em>and</em> the table's own header and count rows, and drop the
   companion when what's left is unreadable.</p>
 </li>
@@ -2516,8 +2488,10 @@ every live worktree looks dead.</p>
   while the view is open instead of following deltas, because it is a "what is happening now"
   question and nothing persists it across a daemon restart. The client asks while <code>:agents</code> is
   open, or every 2s while the rail (<code>\</code>) is shown. <code>core/fleet.ts</code> merges it with the store,
-  because an agent that asked a question has <em>ended</em> — the waiting ones only exist as tasks and
-  reviews holding a question.</li>
+  and the store leads: a task's sessions end long before it does — on a question, a failure, a
+  draft PR, a restart — so each task gets a row from its own state, grouped by whose move it is
+  (<code>nextStep</code>), and the registry only says whether an agent is on it right now. Sessions with no
+  task behind them (plans, drafts) come from the registry alone, for ten minutes after they end.</li>
 <li><strong>The rail narrows the terminal rather than the views.</strong> The app wraps the view in a second
   <code>AppContext.Provider</code> whose <code>size.columns</code> is the terminal less the rail, so every view — many
   size themselves from <code>ctx.size</code> directly — lays out as on a smaller screen and none of them knows
