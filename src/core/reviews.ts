@@ -31,6 +31,28 @@ interface SearchedPr {
   };
   author: { login: string } | null;
   repository: { nameWithOwner: string };
+  reviewDecision?: string | null;
+  latestReviews?: ReviewNodes;
+}
+
+type ReviewNodes = { nodes: Array<{ state: string; submittedAt?: string; author: { __typename?: string; login?: string } | null }> };
+
+/** Asked of every PR the list follows: the verdict, and the latest review per person. */
+const REVIEWS_FIELDS = `reviewDecision
+      latestReviews(first: 20) { nodes { state submittedAt author { __typename login } } }`;
+
+/**
+ * Everyone else's latest review: not yours, not the author's (a reply to
+ * their own PR), not a bot's. A pending review is a draft nobody can see yet,
+ * and a dismissed one has been withdrawn, so neither counts.
+ */
+export function othersReviewed(nodes: ReviewNodes | undefined, me: string, author: string | undefined): Review['othersReviewed'] {
+  const out = (nodes?.nodes ?? [])
+    .filter((n) => n.author?.login && n.author.__typename !== 'Bot' && !n.author.login.endsWith('[bot]'))
+    .filter((n) => n.author!.login !== me && n.author!.login !== author)
+    .filter((n) => n.state !== 'PENDING' && n.state !== 'DISMISSED')
+    .map((n) => ({ login: n.author!.login!, state: n.state, ...(n.submittedAt ? { at: n.submittedAt } : {}) }));
+  return out.length ? out : undefined;
 }
 
 /**
@@ -51,6 +73,7 @@ query($q: String!) {
       }
       author { login }
       repository { nameWithOwner }
+      ${REVIEWS_FIELDS}
     } }
   }
 }`;
@@ -194,6 +217,8 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
       requestedVia: requestedVia(pr, login),
       createdAt: pr.createdAt,
       requestedAt: requestedAt(pr, login),
+      reviewDecision: pr.reviewDecision ?? undefined,
+      othersReviewed: othersReviewed(pr.latestReviews, login, pr.author?.login),
     };
     if (existing) {
       // A review whose repo never resolved is stuck: the config it needed may
@@ -310,10 +335,13 @@ export interface CurrentPr {
   baseRefName: string;
   headRefOid: string;
   author: { login: string } | null;
+  reviewDecision?: string | null;
+  latestReviews?: ReviewNodes;
 }
 
 const PR_FIELDS = `number title url isDraft state createdAt updatedAt additions deletions changedFiles
-  headRefName baseRefName headRefOid author { login }`;
+  headRefName baseRefName headRefOid author { login }
+  ${REVIEWS_FIELDS}`;
 
 /** How many pull requests one GraphQL request asks about. */
 const PR_BATCH = 25;
@@ -377,6 +405,8 @@ export function refreshMeta(review: Review, pr: CurrentPr): void {
     headRefName: pr.headRefName,
     baseRefName: pr.baseRefName,
     headSha: pr.headRefOid,
+    reviewDecision: pr.reviewDecision ?? undefined,
+    othersReviewed: othersReviewed(pr.latestReviews, cachedLogin ?? '', pr.author?.login ?? review.author),
   };
   const changed = (Object.keys(meta) as Array<keyof Review>).filter(
     (key) => JSON.stringify(meta[key]) !== JSON.stringify(review[key]),

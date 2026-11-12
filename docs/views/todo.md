@@ -83,8 +83,20 @@ The default policy the agent is given, in brief:
 - **Reviews are owed within about a working day.** The longer a request waits, the higher it goes.
   One past its turnaround outranks everything except an agent stopped on a question or an urgent,
   overdue deadline. The clock counts working hours from the latest request, so a re-request restarts
-  it and a weekend doesn't age it. A **stale** PR stops climbing and sinks: a draft, or one untouched
-  for `staleDays`.
+  it and a weekend doesn't age it.
+- **Some reviews aren't urgent, whatever their wait.** Their clock stops, and each one says why:
+  - **A draft** isn't asking for review yet.
+  - **An old PR** was opened `oldDays` (30) or more days ago. It counts as stale however recently it
+    was touched, because a bot comment or a rebase doesn't make a month-old PR fresh.
+  - **An untouched PR** hasn't changed in `staleDays`.
+  - **Already reviewed:** someone else (not you, not the author, not a bot) has reviewed it, or
+    GitHub already counts it as approved. Your review would be a second opinion. It drops to `week`,
+    or to `later` if it was only asked of your team, and the line says who reviewed it and how
+    ("alice approved").
+
+  The ranking agent can reorder these but **can't mark them more urgent** than colinear did, so a
+  draft can't be lifted back to `now`. The list stays ordered by urgency, with the agent's order kept
+  inside each band.
 - **Deadlines** come from the issue's due date, its milestone and its project, whichever is nearest.
   Overdue or due within a couple of days ranks high, and a date past the horizon counts for nothing.
 - **Priority** is the issue's and its project's, from 1 (urgent) to 4 (low).
@@ -95,7 +107,7 @@ Colinear's own scoring follows the same rules, as a weighted sum.
 
 | signal | score |
 |---|---|
-| review | 60 when asked, 110 at the SLA, 160 at twice it, then one more per working day up to 170. A team request is discounted by a fifth, and a stale one scores 5 |
+| review | 60 when asked, 110 at the SLA, 160 at twice it, then one more per working day up to 170. A team request is discounted by a fifth. One someone else has reviewed scores 20–40, and a stale one (draft, old, untouched) scores 5 |
 | agent question | 180 |
 | triage parked it | 110 |
 | session failed | 100 |

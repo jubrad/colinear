@@ -228,6 +228,7 @@ What [`:todo`](views/todo.md) ranks by. Every key is optional.
 "todo": {
   "reviewSlaHours": 24,
   "staleDays": 14,
+  "oldDays": 30,
   "horizonDays": 21,
   "refreshMinutes": 0,
   "maxCandidates": 60,
@@ -242,6 +243,7 @@ What [`:todo`](views/todo.md) ranks by. Every key is optional.
 | `guidance` | none | added after the policy, whether built in or replaced. It suits a rule or two you want on top of the defaults |
 | `reviewSlaHours` | `24` | the review turnaround you hold yourself to, in working hours. A request past it goes to `now` |
 | `staleDays` | `14` | a PR untouched this long is stale. Its clock stops and it sinks. A draft is always stale |
+| `oldDays` | `30` | a PR opened this many days ago is stale, however recently it was touched |
 | `horizonDays` | `21` | how far ahead a deadline starts to count. Milestones and projects past it are not listed |
 | `refreshMinutes` | `0` | re-rank on a clock, with the agent. `0` means only when you press `r` |
 | `maxCandidates` | `60` | the most candidates handed to the agent, best-scored first. The rest are counted but not ranked |

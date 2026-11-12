@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bodyByAgent, clearBrokenSubmodules, leadFinding, parseDoc, reviewBody, reviewPrompt, rereviewPrompt, staleAnchors, upsertFinding, writeFindings } from './reviewer.js';
-import { involvesMe, lastReviewed, parsePrSpec, refreshMeta, reviewPayload, revivedStatus, type CurrentPr } from './reviews.js';
+import { involvesMe, lastReviewed, othersReviewed, parsePrSpec, refreshMeta, reviewPayload, revivedStatus, type CurrentPr } from './reviews.js';
 import { store } from './store.js';
 import { askedLine, explainPrompt } from './selfreview.js';
 import type { Config, Review, ReviewFinding } from './types.js';
@@ -477,6 +477,28 @@ for (const [spec, repository, number] of SPECS) {
   check('never reviewed has no date', lastReviewed({ ...base, endedAt: 5 }) === undefined);
   check('a finished review is dated by its end', lastReviewed({ ...base, status: 'ready', doc: '#', endedAt: 5 }) === 5);
   check('a running review is the newest', lastReviewed({ ...base, status: 'reviewing', doc: '#', endedAt: 5 }, 99) === 99);
+}
+
+// everyone else's reviews: not mine, not the author's, not a bot's, not a draft or a withdrawn one
+{
+  const node = (login: string, state: string, type = 'User') => ({ state, submittedAt: '2026-11-01T00:00:00Z', author: { __typename: type, login } });
+  const got = othersReviewed(
+    {
+      nodes: [
+        node('me', 'APPROVED'),
+        node('author', 'COMMENTED'),
+        node('dependabot', 'COMMENTED', 'Bot'),
+        node('copilot-pull-request-reviewer[bot]', 'COMMENTED'),
+        node('carol', 'PENDING'),
+        node('dave', 'DISMISSED'),
+        node('alice', 'APPROVED'),
+      ],
+    },
+    'me',
+    'author',
+  );
+  check('only a person other than you and the author counts', got?.length === 1 && got[0].login === 'alice', JSON.stringify(got));
+  check('nobody else reviewed is undefined, not empty', othersReviewed({ nodes: [node('me', 'APPROVED')] }, 'me', 'author') === undefined);
 }
 
 if (failures.length) {
