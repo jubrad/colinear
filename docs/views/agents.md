@@ -1,58 +1,83 @@
-# `:agents` — what is running right now
+# `:agents` — every agent and task, by whose move it is
 
-Alias: `ps`. No argument.
+Aliases: `ps`, `tasks`, `ls`, `t`. No argument.
 
-Every agent, in the order it wants you: **stopped on a question**, **working**, **just finished**.
-Sessions belong to four different things — a task, a review, a project plan, a one-off draft — and
-each was only visible in the view that owned it, if it had one at all.
+Every agent and every dispatched task, in the order it wants you. Sessions belong to four different
+things — a task, a review, a project plan, a one-off draft — and a task outlives its sessions: an agent
+that failed, opened a draft PR or was interrupted has stopped, but the task is still waiting on
+someone. This lists it until it is done, under whoever that someone is.
 
 ```
-  WORKING ON        KIND         FOR   DOING                 ┌──────────────────────────────────────────┐
-needs you 1                                                   │ CLO-203 make the retry backoff configur… │
-? CLO-203           question     2m    which retry policy…    │ question · dispatch · ran 6m · 2m ago    │
-working 2                                                     │                                          │
-⠙ CLO-211           work         4m    ⚒ Bash cargo clippy…   │ ? which retry policy should reconnect…   │
-⠹ colinear#162      review       1m    ⚒ Read src/core/cod…   │   1. exponential — doubles to 30s        │
-just finished 2                                               │   2. fixed 1s                            │
-✓ make the retry b… draft-issue  now   created CLO-214        │                                          │
-✓ CLO-198           work         3m    PR #412 opened         │ last 3 of 3 steps                        │
-                                                              │ ⚒ Bash cargo test -p conn                │
-                                                              │ a answers · 1-9 picks · M message · s…   │
-                                                              └──────────────────────────────────────────┘
+  WORKING ON        KIND         FOR   DOING                         ┌──────────────────────────────────────────┐
+needs you 1                                                           │ CLO-198 make the retry backoff configur… │
+? CLO-203           question     2m    which retry policy should…     │ draft · dispatch · ran 12m · your move … │
+your move 2                                                           │ pr open · PR #412 draft · CI passing · … │
+! CLO-190           failed       1h    failed: rate limited twice…    │                                          │
+! CLO-198           draft        3m    draft #412 ready · v reads…    │ next: draft #412 ready · v reads it, th… │
+working 2                                                             │ ✓ PR #412 opened, CI running             │
+⠙ CLO-211           work         4m    ⚒ Bash cargo clippy -p conn    │                                          │
+⠹ colinear#162      review       1m    ⚒ Read src/core/codesearch.ts  │ last 3 of 3 steps                        │
+waiting 3                                                             │ ⚒ Bash cargo test -p conn                │
+· CLO-185           review       2h    #401 awaiting review           │                                          │
+· CLO-180           blocked      10m   blocked by CLO-175 · f star…   │                                          │
+· CLO-177           queued       10m   queued for a free agent        │                                          │
+done 2                                                                │                                          │
+✓ make the retry b… draft-issue  now   created CLO-214                │                                          │
+✓ CLO-170           done         20m   merged #399                    │ enter opens it · every board key works … │
+                                                                      └──────────────────────────────────────────┘
 ```
 
-**Needs you** is an agent that asked a question and is waiting for the answer. Its session has
-*ended* — it is over until you reply — so these come from the tasks and reviews holding a question
-rather than from the list of running sessions, and they are listed once, longest-waiting first.
-**Working** is every running session, longest-running first. **Just finished** keeps a session for
-ten minutes after it ends, with its outcome, so you can see what just happened. One row per thing
-being worked on: a task's live session supersedes its earlier finished one.
+| group | what is in it |
+|---|---|
+| **needs you** | an agent that asked a question. Its session has *ended* — it is over until you reply — so these come from the tasks and reviews holding a question, longest-waiting first. |
+| **your move** | stopped on something only you can do: failed or escalated, interrupted by a restart, dispatched without an agent started, sub-issues proposed, a green draft PR to read and promote, changes requested, a conflict, red CI, an approved PR to merge, a pre-review ready to post. |
+| **working** | an agent is running on it right now, longest-running first. KIND is the session's: work, triage, maintenance, review, plan. |
+| **waiting** | somebody or something else moves next: a blocker, a reviewer, CI still running, a free slot in the queue, sub-issues a tracking parent is waiting on. |
+| **done** | tasks finished in the last hour, and sessions with no task behind them — a plan, a draft — for ten minutes after they end, with their outcome. |
 
-A label in **bold** has something you have not seen: a question asked, a session started or
-finished after you last opened that task or review. Opening it — `enter` here, or from anywhere
-else — is what counts as looking.
+The line on a parked row is the next step, with the key that takes it where there is one — `r`
+resumes, `v` reads the diff, `b` rebases, `f` starts a blocked task anyway. One row per thing being
+worked on, and it keeps its place under the cursor as it moves between groups.
 
-The pane on the right (below, on a narrow terminal) is the selected agent in full: what started it,
-for how long, its model and spend, its question with the options, the last of what it has been
-doing, its worktree and a ready-to-paste `claude --resume`.
+A label in **bold** has something you have not seen: a question asked, a session started, a task
+stopped after you last opened it. Opening it — `enter` here, or from anywhere else — is what counts
+as looking.
+
+The pane on the right (below, on a narrow terminal) is the selected row in full: what started it,
+for how long, the task's status, PR, CI and [what it has changed](board.md#what-it-has-changed), the
+next step, its model and spend, its question with the options, the last of what it has been doing,
+its worktree and a ready-to-paste `claude --resume`.
 
 | key | what |
 |---|---|
 | `j` `k` / ↑ ↓ | move · `g` top · `G` bottom |
 | `enter` | open whatever owns it — the task, the review, the plan |
-| `a` | answer its question — the [answer form](task.md#answering-questions); for a review, in the review |
-| `1`–`9` | pick an option outright, when there is one question |
-| `M` | message the agent without attaching |
-| `s` | attach to its session · `S` a shell in its worktree |
+| `t` | switch to [the table](#the-table) and back — remembered, like the board's layout |
+| everything else | on a task's row, identical to the [board](board.md#keys): `a`, `1`–`9`, `M`, `s`, `S`, `r`, `f`, `v`, `b`, `x`, `o`, … |
 
-`a`, `M`, `s` and `S` act on the **task** behind a row — they mean the same thing on every task, so
-they work here as on the board. Cancelling does not: `x` cancels a task in one place and a review in
-another, so `enter` takes you where it means one thing.
+On a review's row, `a` takes you to the review to answer it there, where its context is.
+
+## The table
+
+`t` swaps the groups for every task as one searchable, sortable table — the board's data without the
+board's geometry, with the columns the grouped list has no room for. This was `:tasks`; its names
+open this view.
+
+![The task table sorted in board order, the cursor on a PR-open task whose detail pane sits below](../images/tasks.png)
+
+`CHANGE` is [what the worktree has changed](board.md#what-it-has-changed) — `+added -removed`, then
+`~n` for files not committed yet — and turns amber when a working agent has edited nothing for twenty
+minutes. Default order is the board read left-to-right: column, then what needs you first. `,` sorts
+by any column (again on the same one reverses), `/` filters with the same matcher the board uses —
+id, title, repo, status, PR state, CI. The selected task's detail pane sits below the table when the
+terminal is tall enough. Every board key works on the selected row.
 
 ## Beside every view
 
 **`\`** puts the same list in a rail down the left of every view — two rows an agent, what it is on
-and for how long, then what it is doing, bold where there is something new. It answers "what is going
+and for how long, then what it is doing, bold where there is something new. It keeps what might need
+you now: questions, your move, working, and what finished in the last ten minutes. What is waiting on
+somebody else stays here. It answers "what is going
 on" without leaving the view you are in; this page is where you act on it.
 
 ```
@@ -60,12 +85,17 @@ on" without leaving the view you are in; this page is where you act on it.
 │ needs you                 │
 │ ? CLO-203              2m │
 │   which retry policy sho… │
+│ your move 2               │
+│ ! CLO-190 failed       1h │
+│   failed: rate limited t… │
+│ ! CLO-198 draft        3m │
+│   draft #412 ready · v r… │
 │ working 2                 │
 │ ⠙ CLO-211 work         4m │
 │   ⚒ Bash cargo clippy -p… │
-│ just finished 2           │
-│ ✓ CLO-198 work         3m │
-│   PR #412 opened          │
+│ done                      │
+│ ✓ make the ret… dr…   now │
+│   created CLO-214         │
 ╰───────────────────────────╯
 ```
 

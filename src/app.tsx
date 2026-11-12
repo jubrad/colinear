@@ -144,7 +144,7 @@ export function App(props: {
     const timer = setInterval(() => dispatcher.listAgents(), 2000);
     return () => clearInterval(timer);
   }, [railShown]);
-  const entries = useMemo(() => fleet(tasks, reviews, agents), [tasks, reviews, agents]);
+  const entries = useMemo(() => fleet(tasks, reviews, agents, now), [tasks, reviews, agents, now]);
 
   // Opening a task or a review is looking at it: stamped on the way in and on
   // the way out, so what happened while you were on it is not news after.

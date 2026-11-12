@@ -94,6 +94,8 @@ export interface UiState {
   team?: string;
   /** how :board arranges its statuses */
   boardLayout?: BoardLayout;
+  /** how :agents lists them: grouped by whose move it is, or every task as a table (`t`) */
+  agentsLayout?: 'groups' | 'table';
   /** the agent rail beside every view (`\`) */
   rail?: boolean;
   /** when you last opened each task, review or plan, keyed by the param that opens it — what makes an agent "new" */

@@ -159,23 +159,25 @@ src/core/
   split.ts           a too_big plan → sub-issues: fileSplit (blocks relations, drops, partial-failure
                      message) shared by plan review's A/D and the dispatcher's autoSplit, and
                      autoSplitDecision (when the daemon splits on its own). split.check.ts holds it
-  fleet.ts           every agent in the order it wants you — waiting on a question (from the
-                     store: an asking session has ended), working, just finished (from the session
-                     registry) — and the seen-map that makes one "new". :agents and the rail
-                     both read it; fleet.check.ts holds the grouping and unread rules
+  fleet.ts           every agent and task by whose move it is — a question, a step only you can
+                     take (nextStep: failed, draft to promote, approved, …), working, waiting on
+                     someone else, done. A task's row comes from the store (its sessions end long
+                     before it does); sessions with no task (plans, drafts) from the registry.
+                     Plus the seen-map that makes one "new". :agents and the rail both read it;
+                     fleet.check.ts holds the grouping and unread rules
   notify.ts          terminal-notifier (click-through URL) with osascript fallback
   log.ts             append log at ~/.local/state/colinear/colinear.log (also captures diverted stderr)
 src/ui/              presentation primitives: Table (generic sortable), CommandBar (prompt+ranked
                      completion; rank = prefix>substring>subsequence), modals (Dispatch/EditTask/SubIssue/ReviewOptions — `c` in :reviews, NewIssue — `n` in :issues), and Form.tsx — the pieces new popup forms are built from (one label column, one-line choice rows, a fixed-height help area, key hints, the standard form's sizing), ChatLog.tsx (an agent conversation wrapped and scrollable, plus `Working`, the spinner shown while an agent has something of yours), CodeSearch.tsx (the `/` and `*` popup over the annotated diff), AgentRail.tsx (every agent beside every view, `\`),
                      Header/Crumbs, format helpers, AppCtx definition (context.ts)
-src/views/           registry.ts maps names/aliases → components + hotkey help; issues/board/tasks/
+src/views/           registry.ts maps names/aliases → components + hotkey help; issues/board/agents/
                      task/projects/project/plan/reviews/costs/logs/gc/config/help; custom views wrap
                      IssuesView with a spec. taskActions.tsx holds the verbs a task has (cancel,
                      resume, force, rebase, attach, edit, escalate, …) plus their modals, so the
-                     board and the tasks table are two renderings of one set of actions.
+                     board and :agents (its groups and its table, TaskTable.tsx) are renderings of one set of actions.
                      taskLens.ts is the other half of that: status words, CI text, the fuzzy
                      matcher and the sort comparator, so a query or a sort key means the same
-                     thing in both views rather than being reimplemented per view.
+                     thing everywhere rather than being reimplemented per view.
                      BoardView draws one grid two ways — statuses as columns, or `t` to transpose
                      them into full-width rows — off the same cursor; windowColumn windows cards
                      down a column, windowLane windows cards across a row.
