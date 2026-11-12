@@ -27,6 +27,7 @@ const GLOBAL_KEYS: Array<[string, string]> = [
   ['esc', 'back'],
   ['q', 'quit view'],
   ['\\', 'agent rail'],
+  ['`', 'hide header'],
 ];
 
 interface StackEntry {
@@ -270,6 +271,10 @@ export function App(props: {
         else exit();
       }
       if (input === '?') navigate('help');
+      if (input === '`') {
+        setUi({ headerHidden: !ui.headerHidden });
+        return;
+      }
       if (input === '\\') {
         if (!ui.rail && size.columns < RAIL_MIN_COLUMNS) {
           ctx.toast(`the agent rail needs ${RAIL_MIN_COLUMNS} columns — :agents has the same list`, 'info');
@@ -306,12 +311,18 @@ export function App(props: {
   ];
 
   const ViewComponent = viewDef.Component;
-  const viewHeight = Math.max(8, size.rows - (fullScreen ? 0 : 4) - 2 - (cmdOpen ? 4 : 0));
-  // the view is told the terminal is as wide as what is left of it: every view
-  // sizes itself from ctx.size, and none of them should have to know a rail exists
+  const headerShown = !fullScreen && !ui.headerHidden;
+  const viewHeight = Math.max(8, size.rows - (headerShown ? 4 : 0) - 2 - (cmdOpen ? 4 : 0));
+  // the view is told the terminal is the size of what is left of it: every view
+  // sizes itself from ctx.size against a four-row header, and none of them
+  // should have to know a rail exists or that the header is folded away
+  const reclaimed = !fullScreen && !headerShown ? 4 : 0;
   const viewCtx = useMemo<AppCtx>(
-    () => (railShown ? { ...ctx, size: { columns: size.columns - RAIL_WIDTH, rows: size.rows } } : ctx),
-    [ctx, railShown, size],
+    () =>
+      railShown || reclaimed
+        ? { ...ctx, size: { columns: size.columns - (railShown ? RAIL_WIDTH : 0), rows: size.rows + reclaimed } }
+        : ctx,
+    [ctx, railShown, reclaimed, size],
   );
 
   return (
@@ -320,7 +331,7 @@ export function App(props: {
           rows (equality included) — one spare row keeps it on the incremental
           diff path, which is what stops the flicker */}
       <Box flexDirection="column" width={size.columns} height={size.rows - 1} paddingX={1} overflow="hidden">
-        {!fullScreen && (
+        {headerShown && (
           <Header info={info} keys={[...viewDef.keys, ...GLOBAL_KEYS]} width={size.columns - 2} version={VERSION} />
         )}
         {cmdOpen && (

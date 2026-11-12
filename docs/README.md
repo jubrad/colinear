@@ -47,4 +47,6 @@
 | `esc` | clear filters, then go back |
 | `q` | back, or quit at the root |
 | `R` | reload the frontend on new code — agents keep running |
+| `\` | the [agent rail](views/agents.md#beside-every-view) beside every view |
+| `` ` `` | hide the header (who, repo, the key grid) and give its rows to the view; `:` and `/` still open their bars. Remembered across restarts |
 | `ctrl+c` | quit |
