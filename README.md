@@ -45,6 +45,7 @@ Requirements: the `claude` CLI logged in (leave `ANTHROPIC_API_KEY` unset) and `
 - **Review** — PRs awaiting your review get an assisted pre-review you edit and post deterministically, never by an agent.
 - **Plan** — a read-only planning chat that drafts sub-issues for you to approve.
 - **Prioritize** — `:todo` pulls reviews, waiting agents, your issues, milestones and projects into one list, ranked by an agent against a policy you can rewrite: reviews within a working day, deadlines, then priority.
+- **Theme** — `:theme` tries each colour theme live as you move: Catppuccin, Dracula, Nord, Gruvbox, Tokyo Night, Solarized, or `terminal` for your terminal's own palette.
 
 ## Documentation
 

@@ -6,13 +6,13 @@ import { useReviews, useTasks } from '../core/hooks.js';
 import type { AgentSession } from '../core/sessions.js';
 import { useColinear, useViewSize } from '../ui/context.js';
 import { cell, changesShort, formatTokens } from '../ui/format.js';
-import { theme } from '../theme.js';
+import { palette, theme } from '../theme.js';
 import { statusText } from './taskLens.js';
 import { TaskTable } from './TaskTable.js';
 import { fleetGlyph } from '../ui/AgentRail.js';
 import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
 
-const KIND_COLOR: Record<string, string> = {
+const KIND_COLOR: Record<string, string> = palette(() => ({
   question: theme.info,
   work: theme.accent,
   triage: theme.warn,
@@ -39,15 +39,15 @@ const KIND_COLOR: Record<string, string> = {
   blocked: theme.warn,
   merged: theme.merged,
   done: theme.ok,
-};
+}));
 
-const GROUP_COLOR: Record<FleetGroup, string> = {
+const GROUP_COLOR: Record<FleetGroup, string> = palette(() => ({
   needs: theme.info,
   yours: theme.accent,
   running: theme.warn,
   waiting: theme.dim,
   finished: theme.dim,
-};
+}));
 
 
 /** Wide enough for the list and a preview side by side. */

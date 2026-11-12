@@ -6,7 +6,7 @@ import { store } from '../core/store.js';
 import { questionSummary, type BoardLayout, type Task, type TaskStatus } from '../core/types.js';
 import { useColinear } from '../ui/context.js';
 import { blink, formatDuration, formatTokens, reviewStatus, spinner, stalledMinutes } from '../ui/format.js';
-import { STATUS_COLORS, theme } from '../theme.js';
+import { palette, STATUS_COLORS, theme } from '../theme.js';
 import { DetailPane } from './DetailPane.js';
 import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
 import { BOARD_SORT, compareTasks, matchesQuery, SORT_KEYS } from './taskLens.js';
@@ -48,7 +48,7 @@ const DETAIL_ROWS = 15;
 const PR_STATES = ['changes', 'conflict', 'approved', 'draft', 'awaiting', 'merged', 'closed'] as const;
 type PrState = (typeof PR_STATES)[number];
 
-export const PR_STATE_COLOR: Record<PrState, string> = {
+export const PR_STATE_COLOR: Record<PrState, string> = palette(() => ({
   conflict: theme.err,
   approved: theme.ok,
   merged: theme.merged,
@@ -56,7 +56,7 @@ export const PR_STATE_COLOR: Record<PrState, string> = {
   draft: theme.dim,
   awaiting: theme.key,
   closed: theme.err,
-};
+}));
 
 export function prState(task: Task): PrState | undefined {
   const pr = task.prs[0];

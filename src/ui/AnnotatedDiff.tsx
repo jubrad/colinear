@@ -7,14 +7,14 @@ import { highlightDiff } from '../core/highlight.js';
 import type { Review, ReviewFinding, Severity } from '../core/types.js';
 import { ChatLog, spinFrame, useAwaitingReply, useFrame } from './ChatLog.js';
 import { TextArea, rowsFor } from './TextArea.js';
-import { theme } from '../theme.js';
+import { palette, theme } from '../theme.js';
 import { useColinear } from './context.js';
 import { pickableModels } from '../core/agent.js';
 import { modelsFor } from '../core/models.js';
 import { Popup, formHeight } from './Popup.js';
 import { ReviewOptionsModal } from './ReviewOptionsModal.js';
 
-const SEVERITY_COLOR: Record<string, string> = {
+const SEVERITY_COLOR: Record<string, string> = palette(() => ({
   blocking: theme.err,
   consider: theme.warn,
   nit: theme.dim,
@@ -23,7 +23,7 @@ const SEVERITY_COLOR: Record<string, string> = {
   comment: theme.accent,
   // never posted, never a problem: blue keeps it off the severity ramp
   info: theme.annotation,
-};
+}));
 
 type Focus = 'diff' | 'compose' | 'chat' | 'read';
 
@@ -1111,13 +1111,13 @@ export function AnnotatedDiff(props: {
  * sign column and gutter (what changed), so a green string literal never fights a
  * green `+`. Colour the frame of the code, not every identifier.
  */
-const SYNTAX_COLOR: Record<TokenKind, string> = {
+const SYNTAX_COLOR: Record<TokenKind, string> = palette(() => ({
   comment: theme.dim,
   string: theme.warn,
   keyword: theme.key,
   number: theme.annotation,
   type: theme.accent,
-};
+}));
 
 /**
  * Which changed-file tabs fit on one row, always keeping the current one shown.

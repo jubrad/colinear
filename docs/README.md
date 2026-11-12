@@ -35,6 +35,7 @@
 | [`:gc`](views/gc.md) | `disk` | reclaim worktree disk and finished cards |
 | [`:chan`](views/chan.md) | `channel` `irc` | coordination channels (experimental — :chan CLO-67) |
 | [`:config`](views/config.md) | `cfg` | view & edit colinear config |
+| [`:theme`](views/theme.md) | `themes` `colors` | pick a colour theme, trying each as you move |
 | [`:help`](views/help.md) | `h` | views, keys, custom view schema |
 <!-- /generated -->
 
