@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { diffOver, expandDiff, liveDiff, markFiles, searchCode } from './codesearch.js';
 import { fileStats, filesIn, openedFiles, parseDiff, postableLines, uncommittedFiles } from './diff.js';
-import { classifyHit, symbolsOn } from './symbols.js';
+import { classifyHit, stepWord, symbolsOn, wordAt } from './symbols.js';
 
 /**
  * Reading around a diff, against a real repository: a throwaway one with a
@@ -80,6 +80,17 @@ try {
   check('the declared name is the best guess', symbolsOn('export async function retryCall(n: number) {')[0] === 'retryCall');
   check('a called name comes before the rest', symbolsOn('const y = retryCall(other);')[0] === 'y' && symbolsOn('  retryCall(other);')[0] === 'retryCall');
   check('words in strings are not symbols', !symbolsOn('log("retryCall failed")').includes('retryCall'));
+  // the word cursor: j/l step along a line, i/k carry its column to the next
+  const line = '  const y = retryCall(other);';
+  let w = stepWord(line, undefined, 1);
+  check('l from no word lands on the first', w?.text === 'const');
+  w = stepWord(line, stepWord(line, w, 1), 1);
+  check('l steps a word at a time', w?.text === 'retryCall', w?.text);
+  check('j steps back', stepWord(line, w, -1)?.text === 'y');
+  check('the line ends stop the cursor', stepWord(line, stepWord(line, undefined, -1), 1)?.text === 'other');
+  check('a column lands on the word covering it', wordAt('    retryCall(x)', 8)?.text === 'retryCall');
+  check('a column past a short line lands on its nearest word', wordAt('  done();', 40)?.text === 'done');
+  check('a line with no words has no word cursor', wordAt('  });', 3) === undefined);
   check('a go method is a definition', classifyHit('Fetch', 'func (r *Repo) Fetch(ctx context.Context) error {') === 'def');
   check('a rust macro call is a call', classifyHit('vec', 'let v = vec![1];') !== 'def');
 

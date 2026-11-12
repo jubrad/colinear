@@ -176,14 +176,15 @@ export function DiffView(props: { param?: string }) {
 }
 
 export const diffKeys: Array<[string, string]> = [
-  ['j/k ↑↓', 'row'],
+  ['i/k ↑↓', 'row'],
+  ['j/l ←→', 'word, for *'],
   ['n/N', 'next annotation'],
   ['enter', 'read it in full'],
   ['v', 'mark a block'],
-  ['e', 'comment · i annotate'],
+  ['e', 'comment · I annotate'],
   ['a', 'ask what it does'],
   ['/', 'search the checkout'],
-  ['*', 'call sites of a symbol on the line'],
+  ['*', 'call sites of the word, or pick one'],
   ['x', 'whole file · back to the diff'],
   ['w', 'the branch · since your hand-back · live'],
   ['R', 'have an agent review it'],

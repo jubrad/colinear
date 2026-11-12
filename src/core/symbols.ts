@@ -104,6 +104,35 @@ export function symbolsOn(text: string): string[] {
   return declared ? [declared, ...ordered] : ordered;
 }
 
+export interface Word {
+  text: string;
+  start: number;
+  end: number;
+}
+
+/** The identifiers on a row of code — what j/l step between and * searches for. */
+export function wordsIn(text: string): Word[] {
+  return [...text.matchAll(IDENT)].map((m) => ({ text: m[0], start: m.index ?? 0, end: (m.index ?? 0) + m[0].length }));
+}
+
+/** The word at a column: the one covering it, or failing that the nearest — a column carried from a longer line still lands somewhere. */
+export function wordAt(text: string, col: number): Word | undefined {
+  const words = wordsIn(text);
+  const covering = words.find((w) => col >= w.start && col < w.end);
+  if (covering) return covering;
+  let best: Word | undefined;
+  for (const w of words) if (!best || Math.abs(w.start - col) < Math.abs(best.start - col)) best = w;
+  return best;
+}
+
+/** The word after (1) or before (-1) the one in hand; from none, the first or the last. Stops at the ends. */
+export function stepWord(text: string, from: Word | undefined, dir: 1 | -1): Word | undefined {
+  const words = wordsIn(text);
+  if (!from) return dir === 1 ? words[0] : words.at(-1);
+  const i = words.findIndex((w) => w.start === from.start);
+  return words[Math.max(0, Math.min(words.length - 1, i + dir))] ?? from;
+}
+
 /** What kind of mention of `name` this line is. */
 export function classifyHit(name: string, text: string): HitKind {
   const n = esc(name);
