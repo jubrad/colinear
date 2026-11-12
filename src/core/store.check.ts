@@ -138,6 +138,23 @@ store.upsertPlan({
 });
 store.deletePlan('proj-gone');
 
+// jobs: the fourth entity — upsert, a run appended and then patched, activity,
+// a cleared field (a schedule removed), and a delete
+store.upsertJob({
+  id: 'job-1', name: 'dependabot sweep', prompt: 'review and approve', schedule: '0 9 * * 1-5', nextRunAt: 100,
+  actions: ['review', 'approve'], createdAt: 1, runs: [], activity: [], costUsd: 0,
+});
+store.updateJob('job-1', { running: true, runs: [{ startedAt: 2, status: 'running', trigger: 'schedule', actions: [] }] });
+store.addJobActivity('job-1', 'scheduled run started');
+store.updateJob('job-1', {
+  running: undefined,
+  schedule: undefined,
+  nextRunAt: undefined,
+  runs: [{ startedAt: 2, endedAt: 3, status: 'ok', trigger: 'schedule', actions: ['approved o/r#9'], summary: 'approved 1', report: '- o/r#9 approved' }],
+});
+store.upsertJob({ id: 'job-gone', name: 'x', prompt: 'y', actions: [], createdAt: 1, runs: [], activity: [], costUsd: 0 });
+store.deleteJob('job-gone');
+
 // the :todo list: a singleton that travels whole, plus activity lines. The
 // first write is an activity line with no list yet — the case a mirror would
 // reject if the owner did not bring the list into being first
@@ -182,8 +199,8 @@ const strip = (t: Task) => ({
   ...t,
   question: t.question ? { kind: t.question.kind, questions: t.question.questions } : undefined,
 });
-const left = JSON.stringify([store.list().map(strip), store.listReviews(), store.listPlans(), store.todo]);
-const right = JSON.stringify([mirror.list().map(strip), mirror.listReviews(), mirror.listPlans(), mirror.todo]);
+const left = JSON.stringify([store.list().map(strip), store.listReviews(), store.listPlans(), store.listJobs(), store.todo]);
+const right = JSON.stringify([mirror.list().map(strip), mirror.listReviews(), mirror.listPlans(), mirror.listJobs(), mirror.todo]);
 if (left !== right) {
   console.error('DIVERGED\n source:', left, '\n mirror:', right);
   process.exit(1);
@@ -208,6 +225,9 @@ if (mirror.get('B')?.activity.length !== 200) throw new Error('mirror activity c
 if (mirror.getPlan('proj-1')?.status !== 'published') throw new Error('mirror lost the plan status');
 if (mirror.getPlan('proj-1')?.error !== undefined) throw new Error('mirror kept a cleared plan field');
 if (mirror.getPlan('proj-gone')) throw new Error('mirror kept a deleted plan');
+if (mirror.getJob('job-1')?.schedule !== undefined || mirror.getJob('job-1')?.running !== undefined) throw new Error('mirror kept a cleared job field');
+if (mirror.getJob('job-1')?.runs[0]?.report !== '- o/r#9 approved') throw new Error('mirror lost a job run');
+if (mirror.getJob('job-gone')) throw new Error('mirror kept a deleted job');
 
 if (mirror.get('B')?.question?.questions.length !== 2) throw new Error('mirror lost a question');
 if (mirror.get('B')?.question?.questions[0].options[0].description !== 'matches the controller path') {
@@ -263,5 +283,5 @@ if (store.getReview('o/r#8')) throw new Error('owner kept a review the mirror as
 for (const delta of store.since(mirror.version) ?? []) mirror.apply(delta);
 if (mirror.getReview('o/r#8')) throw new Error('mirror kept a review the owner deleted');
 console.log(
-  `ok — ${captured.length} deltas replayed, ${store.list().length} tasks + ${store.listReviews().length} reviews + ${store.listPlans().length} plans identical`,
+  `ok — ${captured.length} deltas replayed, ${store.list().length} tasks + ${store.listReviews().length} reviews + ${store.listPlans().length} plans + ${store.listJobs().length} jobs identical`,
 );

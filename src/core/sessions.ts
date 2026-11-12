@@ -21,7 +21,9 @@ export type AgentKind =
   | 'draft-issue'
   | 'draft-project'
   /** orders the :todo list */
-  | 'todo';
+  | 'todo'
+  /** a job from :jobs, run by hand or on its schedule */
+  | 'job';
 
 export interface AgentSession {
   /** registry id, not the Claude session id */

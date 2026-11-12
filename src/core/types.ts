@@ -649,6 +649,75 @@ export interface TodoItem {
 }
 
 /**
+ * What a job may do through colinear. Each is a tool the job's session gets
+ * only when its job lists it — the security profile is the list.
+ */
+export type JobAction =
+  /** start a colinear pre-review of a PR and read its findings */
+  | 'review'
+  /** submit an approval on a reviewed PR — refused while it has findings */
+  | 'approve'
+  /** post a review's findings to the PR as comments */
+  | 'comment';
+
+export const JOB_ACTIONS: JobAction[] = ['review', 'approve', 'comment'];
+
+/**
+ * Work asked of colinear directly — no tracker issue, no PR behind it. Run
+ * once on demand, or on a cron schedule by the daemon.
+ */
+export interface Job {
+  id: string;
+  name: string;
+  /** what to do, in your words: the session's whole brief */
+  prompt: string;
+  /** a cron expression (`0 9 * * 1-5`), or absent for a job you run by hand */
+  schedule?: string;
+  /** a paused job keeps its schedule but the clock skips it */
+  paused?: boolean;
+  /** model for this job (falls back to the config's `job` model) */
+  model?: string;
+  /** the colinear actions its session may call */
+  actions: JobAction[];
+  /**
+   * Load your user-level Claude settings into the session — your own MCP
+   * servers (a Slack or Linear server you have connected) come with it.
+   */
+  userSettings?: boolean;
+  /** permission mode for its session; absent = the config's agentPermissionMode */
+  permissionMode?: string;
+  /** tools denied on top of the config's denyTools */
+  deny?: string[];
+  createdAt: number;
+  /** when the clock will next start it; absent for a job with no schedule */
+  nextRunAt?: number;
+  /** newest last, capped */
+  runs: JobRun[];
+  /** a run is live: what `:agents` shows and what stops a second one starting */
+  running?: boolean;
+  activity: string[];
+  costUsd: number;
+  spend?: SessionSpend[];
+}
+
+export interface JobRun {
+  startedAt: number;
+  endedAt?: number;
+  status: 'running' | 'ok' | 'error' | 'cancelled';
+  /** what started it: the clock, or you */
+  trigger: 'schedule' | 'manual';
+  /** one line on how it went */
+  summary?: string;
+  /** what it reports — markdown, read in :jobs */
+  report?: string;
+  /** every colinear action it took, in order — what reached GitHub or the tracker */
+  actions: string[];
+  error?: string;
+  costUsd?: number;
+  sessionId?: string;
+}
+
+/**
  * The :todo list. A singleton, CDC'd like the other entities: gathering and
  * ranking happen in the daemon, the view only reads.
  */

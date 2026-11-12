@@ -59,6 +59,7 @@ const shortPr = (r: Review) => `${r.repository.split('/')[1] ?? r.repository}#${
 function openFor(agent: AgentSession): FleetEntry['open'] {
   if (agent.kind === 'review') return { view: 'reviews', param: agent.label };
   if (agent.kind === 'plan') return { view: 'plan', param: agent.label };
+  if (agent.kind === 'job') return { view: 'jobs', param: agent.label };
   if (agent.kind.startsWith('draft') || agent.kind === 'todo') return undefined;
   return { view: 'task', param: agent.label };
 }

@@ -32,6 +32,7 @@ import { createProjectFromPrompt } from './core/newproject.js';
 import { listSessions, updateSession } from './core/sessions.js';
 import { store } from './core/store.js';
 import { TodoManager } from './core/todolist.js';
+import { JobRunner } from './core/jobs.js';
 
 /** Liveness marker so `coli daemon status|stop` doesn't need the socket. */
 /** The tail of this daemon's log, for a client that can't read its disk. */
@@ -72,6 +73,7 @@ export async function runDaemon(): Promise<void> {
     cancel: (id) => dispatcher.cancel(id),
   });
   const todo = new TodoManager(cfg);
+  const jobs = new JobRunner(cfg, reviewer);
   loadState(cfg);
   reviewer.resumeWatching(); // reviews restored from disk keep their live doc
   plans.resumeWatching();
@@ -106,6 +108,9 @@ export async function runDaemon(): Promise<void> {
   plans.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
   todo.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
   todo.startClock();
+  jobs.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
+  // demo mode reaches no network, and a scheduled job would
+  if (!isDemo(cfg)) jobs.startClock();
 
   // every store mutation fans out to attached clients as a delta
   let sent = store.version;
@@ -208,6 +213,12 @@ export async function runDaemon(): Promise<void> {
         break;
       case 'refreshTodo':
         void todo.refresh({ agent: cmd.agent, origin: cmd.agent ? 'you pressed r in :todo' : "colinear's own order, no agent" });
+        break;
+      case 'runJob':
+        void jobs.run(cmd.id, 'manual');
+        break;
+      case 'cancelJob':
+        jobs.cancel(cmd.id);
         break;
       case 'cancelTodo':
         todo.cancel();
@@ -522,6 +533,7 @@ export async function runDaemon(): Promise<void> {
     reviewer.shutdown();
     plans.shutdown();
     todo.shutdown();
+    jobs.shutdown();
     stopPrPolling();
     stopReviewPolling();
     setTimeout(() => {

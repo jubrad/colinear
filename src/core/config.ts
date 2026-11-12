@@ -341,7 +341,7 @@ const PERMISSION_MODES = ['auto', 'acceptEdits', 'default', 'plan', 'dontAsk', '
 /** Every scope a model can be named for; the key set `normalizeModel` accepts. */
 const MODEL_SCOPES = [
   'general', 'triage', 'work', 'maintenance', 'coordinator', 'review', 'plan',
-  'draft-issue', 'draft-project', 'todo',
+  'draft-issue', 'draft-project', 'todo', 'job',
 ] as const;
 
 /**

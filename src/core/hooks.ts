@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react';
 import { store } from './store.js';
-import type { ProjectPlan, Review, Task, TodoList } from './types.js';
+import type { Job, ProjectPlan, Review, Task, TodoList } from './types.js';
 
 function useStoreVersion(): number {
   return useSyncExternalStore(
@@ -18,6 +18,11 @@ export function useReviews(): Review[] {
 export function usePlans(): ProjectPlan[] {
   const version = useStoreVersion();
   return useMemo(() => store.listPlans(), [version]);
+}
+
+export function useJobs(): Job[] {
+  const version = useStoreVersion();
+  return useMemo(() => store.listJobs().sort((a, b) => a.createdAt - b.createdAt), [version]);
 }
 
 /** The :todo list, or undefined before its first refresh. */

@@ -1,5 +1,6 @@
 import type { SessionChannels } from '../channel.js';
 import type { CoordinatorTools } from '../coordinator.js';
+import type { JobTools } from '../jobs.js';
 import type { AgentKind } from '../sessions.js';
 import type { PendingQuestion, SessionSpend } from '../types.js';
 
@@ -33,6 +34,8 @@ export interface AgentCapabilities {
   /** colinear can mint the conversation id, so a headless session and an
       interactive terminal can share one conversation (the plan chat) */
   sharedSessionId: boolean;
+  /** colinear's own tools can be handed to a session (coordinator, job actions) */
+  colinearTools: boolean;
 }
 
 
@@ -160,6 +163,14 @@ export interface RunSessionOpts {
   inbox?: SessionInbox;
   /** EXPERIMENTAL: family-management tools for a tracking parent */
   coordinator?: CoordinatorTools;
+  /** a job's colinear actions — only the ones its job lists */
+  jobTools?: JobTools;
+  /**
+   * Load the operator's user-level settings too, not just the project's: their
+   * own MCP servers come with them. Off by default — a session sees only what
+   * colinear gives it — and a job turns it on per job.
+   */
+  userSettings?: boolean;
   /** how much the agent may do on its own, and the operator's deny list */
   permissions?: { mode?: string; deny?: string[] };
   /**

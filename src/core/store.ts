@@ -8,7 +8,7 @@ import {
   type WireReview,
   type WireTask,
 } from './delta.js';
-import type { ProjectPlan, Review, SessionSpend, Task, TaskStatus, TodoList } from './types.js';
+import type { Job, ProjectPlan, Review, SessionSpend, Task, TaskStatus, TodoList } from './types.js';
 
 type Listener = () => void;
 
@@ -21,6 +21,8 @@ class Store {
   reviews = new Map<string, Review>();
   /** project plans, keyed by project id — same CDC contract again */
   plans = new Map<string, ProjectPlan>();
+  /** jobs, keyed by id — same CDC contract again */
+  jobs = new Map<string, Job>();
   /** the :todo list — one per context, absent until first refreshed */
   todo: TodoList | undefined;
   version = 0;
@@ -210,6 +212,45 @@ class Store {
     return [...this.plans.values()];
   }
 
+  upsertJob(job: Job) {
+    const change: Change = { kind: 'job-upsert', job: structuredClone(job) };
+    if (this.remote) return this.remote(change);
+    this.jobs.set(job.id, job);
+    this.emit(change);
+  }
+
+  getJob(id: string): Job | undefined {
+    return this.jobs.get(id);
+  }
+
+  updateJob(id: string, patch: Partial<Job>) {
+    const { patch: wire, clear } = encodePatch(patch);
+    if (this.remote) return this.remote({ kind: 'job-update', id, patch: wire as Partial<Job>, clear });
+    const job = this.jobs.get(id);
+    if (!job) return;
+    Object.assign(job, patch);
+    this.emit({ kind: 'job-update', id, patch: wire as Partial<Job>, clear });
+  }
+
+  addJobActivity(id: string, line: string) {
+    if (this.remote) return this.remote({ kind: 'job-activity', id, line });
+    const job = this.jobs.get(id);
+    if (!job) return;
+    appendActivity(job, line);
+    this.emit({ kind: 'job-activity', id, line });
+  }
+
+  /** Jobs leave only when the operator deletes one. */
+  deleteJob(id: string) {
+    if (this.remote) return this.remote({ kind: 'job-delete', id });
+    if (!this.jobs.delete(id)) return;
+    this.emit({ kind: 'job-delete', id });
+  }
+
+  listJobs(): Job[] {
+    return [...this.jobs.values()];
+  }
+
   /** Replace the :todo list wholesale. */
   setTodo(todo: TodoList) {
     const change: Change = { kind: 'todo-set', todo: structuredClone(todo) };
@@ -253,6 +294,7 @@ class Store {
       tasks: this.list().map((t) => toWire(t) as WireTask),
       reviews: this.listReviews().map((r) => toWire(r) as WireReview),
       plans: this.listPlans().map((p) => toWire(p) as WirePlan),
+      jobs: this.listJobs().map((j) => structuredClone(j)),
       ...(this.todo ? { todo: structuredClone(this.todo) } : {}),
     };
   }
@@ -306,6 +348,14 @@ class Store {
         return this.updatePlan(change.id, withCleared<Partial<ProjectPlan>>(change.patch, change.clear));
       case 'plan-delete':
         return this.deletePlan(change.id);
+      case 'job-upsert':
+        return this.upsertJob(change.job);
+      case 'job-update':
+        return this.updateJob(change.id, withCleared<Partial<Job>>(change.patch, change.clear));
+      case 'job-activity':
+        return this.addJobActivity(change.id, change.line);
+      case 'job-delete':
+        return this.deleteJob(change.id);
       case 'todo-set':
         return this.setTodo(change.todo);
       case 'todo-activity':
@@ -324,6 +374,7 @@ class Store {
     this.reviews = new Map(snapshot.reviews.map((r) => [r.id, this.fromWire(r, r.id) as unknown as Review]));
     // older daemons don't send plans; an empty map beats a crash mid-hydrate
     this.plans = new Map((snapshot.plans ?? []).map((p) => [p.id, this.fromWire(p, p.id) as unknown as ProjectPlan]));
+    this.jobs = new Map((snapshot.jobs ?? []).map((j) => [j.id, structuredClone(j)]));
     this.todo = snapshot.todo;
     this.version = snapshot.version;
     this.log = [];
@@ -347,6 +398,18 @@ class Store {
       this.reviews.delete(delta.id);
     } else if (delta.kind === 'plan-delete') {
       this.plans.delete(delta.id);
+    } else if (delta.kind === 'job-delete') {
+      this.jobs.delete(delta.id);
+    } else if (delta.kind === 'job-upsert') {
+      this.jobs.set(delta.job.id, structuredClone(delta.job));
+    } else if (delta.kind === 'job-activity' || delta.kind === 'job-update') {
+      const job = this.jobs.get(delta.id);
+      if (!job) return false;
+      if (delta.kind === 'job-activity') appendActivity(job, delta.line);
+      else {
+        Object.assign(job, structuredClone(delta.patch));
+        for (const key of delta.clear) (job as unknown as Record<string, unknown>)[key] = undefined;
+      }
     } else if (delta.kind === 'upsert') {
       this.tasks.set(delta.task.issue.id, this.fromWire(delta.task, delta.task.issue.id));
     } else if (delta.kind === 'review-upsert') {

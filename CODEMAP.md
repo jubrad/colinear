@@ -145,6 +145,9 @@ src/core/
                      can't add), and handledReason, which ticks rows off against live state
   todo.check.ts      the scoring with a fixed clock: working-hour SLA, dedupe, ranking can't
                      invent (bin/check runs it)
+  jobs.ts            JobRunner: the cron clock (croner), a run's session, and the job's colinear
+                     actions as tools — only the granted ones exist; approve refuses without a
+                     clean review of the current head. jobs.check.ts holds those rules
   todolist.ts        TodoManager, the daemon half: gather (tracker + a fresh review poll),
                      land colinear's order, then one read-only ranking session; optional clock
   planner.ts         :plan chat — long-lived SDK session (streaming input via AsyncIterable),
