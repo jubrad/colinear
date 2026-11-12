@@ -175,7 +175,9 @@ against `~/work/cloud` with none of your settings.
 
 Constraint on the UI side: every view sizes its panes against a **four-row header**
 (`ctx.size.rows - 12` and friends), so the context indicator rides on the existing Repo row rather
-than taking a fifth.
+than taking a fifth. Hiding the header (`` ` ``) keeps that true rather than breaking it: the view's
+context reports a terminal four rows taller, the same trick the rail plays on the width, so no
+view knows the header is gone.
 
 ## Lifecycle detours
 
