@@ -77,6 +77,28 @@ export interface PrDetails {
 
 export const reviewId = (repository: string, number: number) => `${repository}#${number}`;
 
+/**
+ * Is this review yours to care about? A request aimed at you personally, a PR
+ * you added, one you have posted on, noted, or had colinear review — anything
+ * you asked for or acted on. What it leaves out is the list's long tail: team
+ * requests anyone on the team can take, and PRs that stopped asking you that
+ * you never touched. `m` in :reviews narrows the list to these.
+ */
+export function involvesMe(r: Review): boolean {
+  if (r.requested && r.requestedVia !== 'team') return true;
+  return Boolean(r.adopted || r.posted || r.note || r.reviewedSha || r.doc || r.status === 'reviewing' || r.status === 'queued');
+}
+
+/**
+ * When colinear last reviewed it: a running review is newest of all, one that
+ * produced a document is dated by when its session ended, and one never
+ * reviewed has no date — it sorts after every one that has.
+ */
+export function lastReviewed(r: Review, now = Date.now()): number | undefined {
+  if (r.status === 'reviewing' || r.status === 'queued') return now;
+  return (r.doc || r.summary) && r.endedAt ? r.endedAt : undefined;
+}
+
 /** The one spelling of "no local clone for this PR", so the poll can recognise
     the error it is curing rather than string-matching a near-copy. */
 export const notConfigured = (repository: string) => `${repository} is not a configured repo`;
