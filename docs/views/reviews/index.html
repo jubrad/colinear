@@ -1949,7 +1949,7 @@ the pane to find the rows it needs rather than hanging off its own line and runn
 long annotation anchored three rows from the bottom used to show three lines and an ellipsis; now it
 takes the pane. Move off it and everything returns to where it was.</p>
 <p>Nothing is cut against the next finding; a block is only ever shortened by the bottom of the pane.
-When even that is not enough, <strong><code>enter</code> reads the current one in full</strong> in the right pane — <code>j</code>/<code>k</code>,
+When even that is not enough, <strong><code>enter</code> reads the current one in full</strong> in the right pane — <code>i</code>/<code>k</code>,
 <code>g</code>/<code>G</code> and page keys scroll it, it says where you are (<code>16/25</code>), <code>e</code> edits what you are reading,
 and anything else returns. A comment about the PR as a whole has no line to sit beside, so it gets
 its own line under both panes.</p>
@@ -1979,7 +1979,7 @@ conversation shows it was answered.</p>
 <p>The pane names the level and what happens to it — "goes to the author when you post", or "stays in
 colinear — never posted" — because that is the difference that matters. Editing an existing finding
 opens with its level already selected. <code>ctrl+d</code> saves, an empty comment removes it, and <code>d</code> drops one
-outright. <strong><code>i</code></strong> opens the same pane pre-set to an annotation — the common case while reading
+outright. <strong><code>I</code></strong> opens the same pane pre-set to an annotation — the common case while reading
 unfamiliar code — still one <code>tab</code> from any other level. Every edit rewrites the <code>``findings fence in
 the review document, so what you post and what the agent sees never diverge — a later chat turn reads
 your wording, and</code>p` posts it.</p>
@@ -1988,7 +1988,7 @@ the agent, or a block that covers a line with its own comment are all normal. Th
 everything anchored on a line as one stack, numbered <code>1/2</code>, <code>2/2</code>. The diff's marker column shows
 the count instead of <code>▍</code>, and the footer says <code>1/2 on this line</code>. <code>n</code>/<code>N</code> step through a line's
 findings before moving to the next line, and inside the reader (<code>enter</code>) they move between them
-without leaving it. <code>e</code>, <code>d</code> and <code>enter</code> act on the selected finding. <code>i</code> edits the line's note if
+without leaving it. <code>e</code>, <code>d</code> and <code>enter</code> act on the selected finding. <code>I</code> edits the line's note if
 there is one, and otherwise adds a new note beside what's there. Before, a note added to a commented
 line replaced the comment.</p>
 <h3 id="the-keys-in-one-place">The keys, in one place<a class="headerlink" href="#the-keys-in-one-place" title="Permanent link">&para;</a></h3>
@@ -2003,8 +2003,12 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 </thead>
 <tbody>
 <tr>
-<td><code>j</code>/<code>k</code> arrows</td>
-<td>move a line · <code>space</code>/<code>pageup</code> a page · <code>g</code>/<code>G</code> top and bottom</td>
+<td><code>i</code>/<code>k</code> ↑↓</td>
+<td>move a line · <code>space</code>/<code>pageup</code> a page · <code>g</code>/<code>G</code> top and bottom — the same <code>ijkl</code> as the list</td>
+</tr>
+<tr>
+<td><code>j</code>/<code>l</code> ←→</td>
+<td>move along the line a word at a time, to aim <code>*</code> at one · <code>esc</code> lets go of the word</td>
 </tr>
 <tr>
 <td><code>n</code> <code>N</code></td>
@@ -2020,7 +2024,7 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 </tr>
 <tr>
 <td><code>*</code></td>
-<td>the call sites of a symbol on the cursor's line — definitions first</td>
+<td>the call sites of the word under the cursor — or, with none, of a symbol picked from the line — definitions first</td>
 </tr>
 <tr>
 <td><code>x</code></td>
@@ -2043,7 +2047,7 @@ acts on the line under the cursor, or on the marked block when there is one.</p>
 <td>write a finding — level and comment in one pane, <code>tab</code> between them</td>
 </tr>
 <tr>
-<td><code>i</code></td>
+<td><code>I</code></td>
 <td>the same pane, pre-set to an annotation: the line's note if it has one, otherwise a new one beside the rest</td>
 </tr>
 <tr>
@@ -2088,8 +2092,9 @@ rest of the file filled in around them; the strip says <code>whole file</code>, 
 at the same height on screen, so what you were reading is still under your eye. <code>x</code> again goes back to
 the diff alone.</p>
 <p><strong><code>/</code> searches the checkout</strong> — a regex over every tracked file, case-insensitive unless the pattern
-has a capital in it. <strong><code>*</code> lists the call sites of a symbol on the cursor's line</strong>: it offers the
-line's names, best guess first (what the line declares, then what it calls), and <code>enter</code> finds every
+has a capital in it. <strong><code>*</code> lists the call sites of a symbol.</strong> Put the cursor on a word with <code>j</code>/<code>l</code> (<code>←</code>/<code>→</code>) and <code>*</code>
+searches for that word at once. Without one, it offers the line's names, best guess first (what the
+line declares, then what it calls), and <code>enter</code> on one finds every
 whole-word mention, each tagged <code>def</code>, <code>call</code>, <code>ref</code> or <code>use</code> (an import) and listed in that order.
 Hits in files this change touches are marked <code>*</code> and come first within each kind, because those are
 the callers a PR is likeliest to have broken. It is a textual match rather than a language server,
@@ -2098,7 +2103,7 @@ things; the tags say which hits look like what.</p>
 <p><strong><code>enter</code> on a hit takes the diff there.</strong> A line already on screen is a cursor move. A line in a
 changed file that the hunks leave out widens that file first. A file the change never touches is
 <strong>opened</strong> — appended after the changed files with a tinted tab, and a first row saying it is
-unchanged — and read like any other: highlighted, with <code>n</code>/<code>N</code>, <code>v</code>, <code>a</code> and <code>i</code> working on it. <code>x</code>
+unchanged — and read like any other: highlighted, with <code>n</code>/<code>N</code>, <code>v</code>, <code>a</code> and <code>I</code> working on it. <code>x</code>
 on an opened file closes it. <code>/</code> again starts from the last pattern, so <code>enter</code> on it goes straight
 back to those results, at the hit you left.</p>
 <p>A line outside the diff GitHub shows (anything more than three lines from a change, and everything in
@@ -2139,7 +2144,7 @@ says so.</p>
 <p>The choice applies to <strong>this ask only</strong>. The model starts on the review's own (the one set with
 <code>c</code> from the list, if any), and <code>default</code> means that one. Nothing is kept for the next ask.</p>
 <p><code>d</code> from the list opens the <strong>document</strong> itself instead — the agent's prose write-up with the same
-chat beside it (<code>tab</code> switches, <code>j/k</code> scrolls the document and <code>↑</code>/<code>↓</code> or the page keys scroll the chat, <code>e</code> edits it in <code>$EDITOR</code>). Your turn resumes the
+chat beside it (<code>tab</code> switches, <code>i/k</code> scrolls the document and <code>↑</code>/<code>↓</code> or the page keys scroll the chat, <code>e</code> edits it in <code>$EDITOR</code>). Your turn resumes the
 reviewing session, so the PR is still in context; when the agent needs a decision it asks in the
 same pane.</p>
 <h3 id="the-checkout-is-disposable">The checkout is disposable<a class="headerlink" href="#the-checkout-is-disposable" title="Permanent link">&para;</a></h3>
