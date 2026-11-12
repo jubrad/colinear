@@ -12,7 +12,7 @@ still dispatch.
 |---|---|
 | `/` | fuzzy filter. `#bug` or `label:bug` by label; `parent:CAD-12` or `parent:cadence` by what an issue is part of — the issue above it or its project, since both answer the same question |
 | `t` | switch team (the provider's word for it — team, project, repo) |
-| `l` | add a label filter · `s` sort by any column · `p` include/exclude project issues |
+| `l` | add a label filter · `,` (or `s`) sort by any column — the [sort bar](../README.md#sorting) · `p` include/exclude project issues |
 | `S` | sub-issues on/off — pull in the children of the issues listed, under their parents |
 | `space` | select — actions apply to the selection, or to the row under the cursor |
 | `enter` | **dispatch** |

@@ -52,3 +52,20 @@
 | `\` | the [agent rail](views/agents.md#beside-every-view) beside every view |
 | `` ` `` | hide the header (who, repo, the key grid) and give its rows to the view; `:` and `/` still open their bars. Remembered across restarts |
 | `ctrl+c` | quit |
+
+## Sorting
+
+Every sortable view (the agents table, the board, `:issues`, `:projects`, `:reviews`, `:costs`)
+sorts the same way. `,` opens the sort bar, which lists the columns in a row:
+
+- **Pick a column:** `tab` or `←` `→` walks the columns, and typing jumps to one (`tok` lands on
+  tokens).
+- **Sort:** `enter` sorts by the column under the cursor. On the column that's already sorted, it
+  reverses.
+- **Choose a direction:** `↑` sorts ascending and `↓` descending, so a direction never takes two
+  steps. `shift-enter` also reverses in terminals that report it; most send plain enter for it, which
+  is why `↓` exists.
+- **Leave:** `esc` closes the bar without changing anything.
+
+The sorted column's header carries ↑ or ↓. The old keys (`s` in `:issues`, `:projects` and
+`:costs`, `S` in `:reviews`) open the same bar.

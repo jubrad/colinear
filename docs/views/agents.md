@@ -67,8 +67,8 @@ open this view.
 
 `CHANGE` is [what the worktree has changed](board.md#what-it-has-changed) — `+added -removed`, then
 `~n` for files not committed yet — and turns amber when a working agent has edited nothing for twenty
-minutes. Default order is the board read left-to-right: column, then what needs you first. `,` sorts
-by any column (again on the same one reverses), `/` filters with the same matcher the board uses —
+minutes. Default order is the board read left-to-right: column, then what needs you first. `,` opens
+the [sort bar](../README.md#sorting): `tab` to a column, `enter` to sort, `↑` `↓` for direction, `/` filters with the same matcher the board uses —
 id, title, repo, status, PR state, CI. The selected task's detail pane sits below the table when the
 terminal is tall enough. Every board key works on the selected row.
 

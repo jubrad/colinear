@@ -39,7 +39,7 @@ count is taken once more and kept: the card's last word is what the agent left.
 | `i` `k` / ↑ ↓ | up and down — between cards, or between statuses when transposed |
 | `t` | [transpose](#transposing-the-board): statuses become rows, cards run sideways |
 | `/` | search — id, title, repo, status, PR state, CI. `/conflict`, `/needs`, `/failing` |
-| `,` | sort within columns |
+| `,` | sort within columns — the [sort bar](../README.md#sorting) |
 | `enter` | [task detail](task.md) |
 | `a` | answer the agent's question ([the form](task.md#answering-questions)) |
 | `1`–`9` | pick an option outright, when there's only one question |

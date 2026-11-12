@@ -1,7 +1,7 @@
 # `:projects` and `:project` — project views
 
 `:projects` (aliases `pj`, `proj`) lists the tracker's projects: state, priority, progress, lead,
-teams, target date. `/` filters, `t` switches team, `s` sorts, `enter` opens one.
+teams, target date. `/` filters, `t` switches team, `,` sorts, `enter` opens one.
 
 `c` on a project hands your terminal straight to a design session for it — a worktree and a live
 `claude`, the same thing [`:plan`](plan.md)'s `c` does, without opening the plan first. Wanting to
@@ -51,7 +51,7 @@ Needs a provider with the `createProjects` capability.
 | `p` | the [planning chat](plan.md) for the project under the cursor |
 | `c` | **a design session** — a worktree and a live `claude`, entered directly |
 | `S` | **a shell** in that same worktree |
-| `/` filter · `t` team · `s` sort · `o` open in the tracker · `r` refresh |
+| `/` filter · `t` team · `,` sort ([the sort bar](../README.md#sorting)) · `o` open in the tracker · `r` refresh |
 
 ## Keys (`:project`)
 

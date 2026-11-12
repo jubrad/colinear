@@ -1,5 +1,6 @@
 import { Box, Text, useInput } from 'ink';
-import { CommandBar, type Candidate } from '../ui/CommandBar.js';
+import { CommandBar } from '../ui/CommandBar.js';
+import { SortBar } from '../ui/SortBar.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
@@ -93,6 +94,7 @@ export function BoardView(_props: { param?: string }) {
   const [query, setQuery] = useState('');
   const [bar, setBar] = useState<'fuzzy' | 'sort' | null>(null);
   const [sortKey, setSortKey] = useState<string>(BOARD_SORT);
+  const [sortDesc, setSortDesc] = useState(false);
   const actions = useTaskActions();
   const layout: BoardLayout = ctx.ui.boardLayout ?? 'columns';
   const rows = layout === 'rows';
@@ -106,9 +108,9 @@ export function BoardView(_props: { param?: string }) {
       // orders cards inside their column; it never moves one out of it.
       visible
         .filter((t) => col.statuses.includes(t.status))
-        .sort((a, b) => (sortKey === BOARD_SORT ? prRank(a) - prRank(b) : compareTasks(sortKey, a, b))),
+        .sort((a, b) => (sortKey === BOARD_SORT ? prRank(a) - prRank(b) : compareTasks(sortKey, a, b)) * (sortDesc ? -1 : 1)),
     );
-  }, [tasks, store.version, query, sortKey]);
+  }, [tasks, store.version, query, sortKey, sortDesc]);
 
   // keep the cursor on a real card as tasks move between columns; must
   // return the SAME object when nothing changes or this setState loops
@@ -200,7 +202,7 @@ export function BoardView(_props: { param?: string }) {
   // vertical budget: view inner height (app.tsx sizes the view pane to
   // rows-6-cmd, minus its own border) less the detail pane and the filter/sort
   // lines. Both layouts window to this instead of flex-squeezing.
-  const filtering = Boolean(query) || sortKey !== BOARD_SORT;
+  const filtering = Boolean(query) || sortKey !== BOARD_SORT || sortDesc;
   const viewInner = Math.max(8, ctx.size.rows - 6 - (ctx.cmdOpen ? 4 : 0)) - 2;
   const chrome = (selected ? DETAIL_ROWS : 0) + (filtering ? 1 : 0) + (bar ? 1 : 0);
   // columns reserve one line for the shared column-header row; a lane carries
@@ -238,7 +240,7 @@ export function BoardView(_props: { param?: string }) {
           ) : null}
           <Text dimColor>
             {shown} of {tasks.length} cards
-            {sortKey !== BOARD_SORT ? ` · sorted by ${sortKey}` : ''}
+            {sortKey !== BOARD_SORT || sortDesc ? ` · sorted by ${sortKey} ${sortDesc ? '↓' : '↑'}` : ''}
             {query ? ' · esc clears' : ''}
           </Text>
         </Text>
@@ -256,11 +258,13 @@ export function BoardView(_props: { param?: string }) {
         />
       )}
       {bar === 'sort' && (
-        <CommandBar
-          prefix="sort> "
-          candidates={SORT_KEYS.map((k) => ({ label: k, value: k })) as Candidate[]}
-          onSubmit={(value, top) => {
-            setSortKey(top?.value ?? value ?? BOARD_SORT);
+        <SortBar
+          options={SORT_KEYS.map((key) => ({ key }))}
+          current={sortKey}
+          desc={sortDesc}
+          onApply={(key, desc) => {
+            setSortKey(key);
+            setSortDesc(desc);
             setBar(null);
           }}
           onCancel={() => setBar(null)}

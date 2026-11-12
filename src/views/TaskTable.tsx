@@ -2,7 +2,8 @@ import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
 import type { Task } from '../core/types.js';
-import { CommandBar, fuzzyMatch, type Candidate } from '../ui/CommandBar.js';
+import { CommandBar } from '../ui/CommandBar.js';
+import { SortBar } from '../ui/SortBar.js';
 import { useColinear } from '../ui/context.js';
 import { changesShort, formatDuration, formatTokens, stalledMinutes } from '../ui/format.js';
 import { Table, defaultSort, type Column } from '../ui/Table.js';
@@ -130,13 +131,6 @@ export function TaskTable(props: { onToggle: () => void }) {
     { isActive: bar === null && !actions.busy && !ctx.cmdOpen },
   );
 
-  const sortCandidates = useMemo<Candidate[]>(
-    () => [
-      { label: `${BOARD_SORT} — board order (column, then what needs you)`, value: BOARD_SORT },
-      ...columns.map((c) => ({ label: c.key, value: c.key })),
-    ],
-    [columns],
-  );
 
   // the view pane is rows-8 tall inside its border; the table costs its header
   // and count lines, and the detail pane only appears when rows are left over
@@ -187,18 +181,13 @@ export function TaskTable(props: { onToggle: () => void }) {
         />
       )}
       {bar === 'sort' && (
-        <CommandBar
-          prefix="sort> "
-          candidates={sortCandidates}
-          onSubmit={(value, top) => {
-            const pick = top?.value ?? value;
-            if (pick) {
-              if (pick === sortKey) setSortDesc((d) => !d);
-              else {
-                setSortKey(pick);
-                setSortDesc(false);
-              }
-            }
+        <SortBar
+          options={[{ key: BOARD_SORT }, ...columns.map((c) => ({ key: c.key, label: c.label.toLowerCase() }))]}
+          current={sortKey}
+          desc={sortDesc}
+          onApply={(key, desc) => {
+            setSortKey(key);
+            setSortDesc(desc);
             setBar(null);
           }}
           onCancel={() => setBar(null)}
