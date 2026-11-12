@@ -6,9 +6,9 @@ import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import { useColinear } from '../ui/context.js';
 import { cell } from '../ui/format.js';
-import { theme } from '../theme.js';
+import { palette, theme } from '../theme.js';
 
-const REASON_COLOR: Record<string, string> = {
+const REASON_COLOR: Record<string, string> = palette(() => ({
   done: theme.ok,
   cancelled: theme.dim,
   orphan: theme.warn,
@@ -17,7 +17,7 @@ const REASON_COLOR: Record<string, string> = {
   approved: theme.ok,
   commented: theme.accent,
   changes_requested: theme.warn,
-};
+}));
 
 const formatSize = (kb: number): string =>
   kb >= 1048576 ? `${(kb / 1048576).toFixed(1)}G` : kb >= 1024 ? `${Math.round(kb / 1024)}M` : `${kb}K`;

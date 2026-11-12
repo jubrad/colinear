@@ -639,6 +639,13 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
 
 ## Rendering gotchas (hard-won — do not relearn these)
 
+- **Colours come from the theme, read at render time.** `theme`, `STATUS_COLORS` and
+  `REVIEW_COLORS` are filled in place by `applyTheme` (the app calls it with `UiState.theme` at the
+  top of every render), so switching in `:theme` is a re-render. Two ways to break it: a colour
+  literal in a view (`theme.check.ts` fails on those), and a module-level map like
+  `const X = { a: theme.ok }`, which copies the colour the theme had at import and never changes.
+  Build those with `palette(() => ({ ... }))`, which reads through on every access.
+
 - **A pane that overflows by one row loses its title.** Ink paints the overflow over the first
   line rather than clipping the last, so a fixed-height pane must slice its content to
   `height - borders - header rows`. Both panes of the review modal hit this the moment an

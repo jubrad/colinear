@@ -17,7 +17,7 @@ import { AgentRail, RAIL_MIN_COLUMNS, RAIL_WIDTH } from './ui/AgentRail.js';
 import { fleet, markSeen } from './core/fleet.js';
 import type { AgentSession } from './core/sessions.js';
 import { commandCandidates, findView, reloadCustomViews, views } from './views/registry.js';
-import { theme } from './theme.js';
+import { applyTheme, theme } from './theme.js';
 
 export const VERSION = '0.2.0';
 
@@ -103,6 +103,8 @@ export function App(props: {
   // the daemon owns the file; this is the local mirror so a preference
   // repaints immediately instead of after a reconnect
   const [ui, setUiLocal] = useState<UiState>(props.ui ?? {});
+  // before anything below renders: every view reads the theme's colours at render time
+  applyTheme(ui.theme);
   const setUi = useCallback(
     (patch: Partial<UiState>) => {
       setUiLocal((u) => ({ ...u, ...patch }));

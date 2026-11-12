@@ -18,7 +18,10 @@ src/client.ts        the TUI's half: connects (spawning a detached daemon if non
                      implemented for real by Dispatcher and by message-passing here
 src/app.tsx          view stack + `:` command bar, AppCtx provider, global keys, header/crumbs,
                      clock (pauses when no task is timing), terminal size, toasts
-src/theme.ts         palette + STATUS_COLORS
+src/theme.ts         colour themes: sixteen role tokens per theme (THEMES), applyTheme fills
+                     `theme`/STATUS_COLORS/REVIEW_COLORS in place so a switch is a re-render,
+                     and palette() for maps built from them at import. theme.check.ts fails on
+                     any colour literal outside it
 src/core/
   types.ts           all shared types: Task, TaskStatus, TriageVerdict (incl. split-plan subtasks,
                      verification tier, repo pick), PrInfo, RepoConfig, Config

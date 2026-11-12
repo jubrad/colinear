@@ -1,8 +1,8 @@
 import { Box, Text } from 'ink';
-import { theme } from '../theme.js';
+import { palette, theme } from '../theme.js';
 import type { ToastKind } from './context.js';
 
-const KIND_COLORS: Record<ToastKind, string> = { info: theme.accent, ok: theme.ok, err: theme.err };
+const KIND_COLORS: Record<ToastKind, string> = palette(() => ({ info: theme.accent, ok: theme.ok, err: theme.err }));
 
 export function Crumbs(props: {
   trail: string[];
@@ -17,7 +17,7 @@ export function Crumbs(props: {
           <Text key={`${i}-${crumb}`}>
             <Text
               backgroundColor={i === trail.length - 1 ? theme.key : theme.border}
-              color="black"
+              color={theme.onBadge}
               bold={i === trail.length - 1}
             >
               {` ${crumb} `}

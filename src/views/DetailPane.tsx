@@ -26,7 +26,7 @@ export function DetailPane(props: { task: Task }) {
   const isTracking = Boolean(task.subIssues?.length);
 
   return (
-    <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
+    <Box flexDirection="column" borderStyle="single" borderColor={theme.dim} paddingX={1}>
       <Text bold>
         {task.issue.identifier}: {task.issue.title}{' '}
         <Text dimColor>
@@ -48,9 +48,9 @@ export function DetailPane(props: { task: Task }) {
         <Text>
           verdict <Text bold>{task.verdict.verdict}</Text>: {task.verdict.reason.slice(0, 200)}
           {task.verdict.verdict !== 'do' && !task.escalationCommented && (
-            <Text color="yellow"> — press c to post to Linear</Text>
+            <Text color={theme.warn}> — press c to post to Linear</Text>
           )}
-          {task.escalationCommented && <Text color="green"> (posted to Linear)</Text>}
+          {task.escalationCommented && <Text color={theme.ok}> (posted to Linear)</Text>}
         </Text>
       )}
 
@@ -59,7 +59,7 @@ export function DetailPane(props: { task: Task }) {
           {/* a preview only — `a` opens the form, which has room for the full
               question set, the option descriptions, and a text answer */}
           {task.question.questions.slice(0, 3).map((q, i) => (
-            <Text key={`${i}-${q.text.slice(0, 12)}`} color="magenta" wrap="truncate">
+            <Text key={`${i}-${q.text.slice(0, 12)}`} color={theme.info} wrap="truncate">
               ? {q.header ? `[${q.header}] ` : ''}{q.text}
               {q.options.length ? <Text dimColor> ({q.options.map((o) => o.label).join(' / ')})</Text> : null}
             </Text>
@@ -133,7 +133,7 @@ export function DetailPane(props: { task: Task }) {
       ))}
 
       {task.prs.map((pr) => (
-        <Text key={pr.number} color="cyan">
+        <Text key={pr.number} color={theme.accent}>
           #{pr.number} {pr.title.slice(0, 60)} [{pr.isDraft ? 'draft' : pr.state.toLowerCase()}, {pr.checksStatus}]{' '}
           {pr.baseRefName !== '' && <Text dimColor>← {pr.baseRefName}</Text>}
         </Text>

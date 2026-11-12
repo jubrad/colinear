@@ -17,6 +17,7 @@ import { ProjectsView, projectsKeys } from './ProjectsView.js';
 import { ProjectView, projectKeys } from './ProjectView.js';
 import { ReviewsView, reviewsKeys } from './ReviewsView.js';
 import { TaskView, taskKeys } from './TaskView.js';
+import { ThemeView, themeKeys } from './ThemeView.js';
 import { TodoView, todoKeys } from './TodoView.js';
 
 export interface ViewDef {
@@ -142,6 +143,13 @@ const builtinViews: ViewDef[] = [
     describe: 'view & edit colinear config',
     Component: ConfigView,
     keys: configKeys,
+  },
+  {
+    name: 'theme',
+    aliases: ['themes', 'colors'],
+    describe: 'pick a colour theme, trying each as you move',
+    Component: ThemeView,
+    keys: themeKeys,
   },
   {
     name: 'help',

@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
 import { age, GROUP_LABEL, isUnread, type FleetEntry, type FleetGroup } from '../core/fleet.js';
-import { theme } from '../theme.js';
+import { palette, theme } from '../theme.js';
 import { spinner } from './format.js';
 
 /** Columns the rail takes, border included. */
@@ -8,13 +8,13 @@ export const RAIL_WIDTH = 34;
 /** Narrower than this, the rail stays hidden: the view needs the room more. */
 export const RAIL_MIN_COLUMNS = 150;
 
-const GROUP_COLOR: Record<FleetGroup, string> = {
+const GROUP_COLOR: Record<FleetGroup, string> = palette(() => ({
   needs: theme.info,
   yours: theme.accent,
   running: theme.warn,
   waiting: theme.dim,
   finished: theme.dim,
-};
+}));
 
 /** How long something done stays in the rail: `:agents` keeps it for the hour. */
 const RAIL_DONE_MS = 10 * 60 * 1000;

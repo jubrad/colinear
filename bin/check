@@ -90,4 +90,9 @@ echo '── agents'
 npm run check:fleet
 
 echo
+echo '── themes'
+# no colour outside theme.ts, and a switch reaches the maps built from the theme
+npm run check:theme
+
+echo
 echo 'ok'

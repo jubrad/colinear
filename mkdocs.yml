@@ -94,6 +94,7 @@ nav:
       - ':logs': docs/views/logs.md
       - ':chan': docs/views/chan.md
       - ':config': docs/views/config.md
+      - ':theme': docs/views/theme.md
       - ':help': docs/views/help.md
   - Internals:
       - Architecture: DESIGN.md

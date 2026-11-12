@@ -23,10 +23,10 @@ interface StateColumn {
 }
 
 const STATE_COLUMNS: StateColumn[] = [
-  { title: 'Backlog', types: ['triage', 'backlog'], color: 'gray' },
-  { title: 'Todo', types: ['unstarted'], color: '#5f87af' },
-  { title: 'In Progress', types: ['started'], color: 'yellow' },
-  { title: 'Done', types: ['completed'], color: 'green' },
+  { title: 'Backlog', types: ['triage', 'backlog'], get color() { return theme.dim; } },
+  { title: 'Todo', types: ['unstarted'], get color() { return theme.border; } },
+  { title: 'In Progress', types: ['started'], get color() { return theme.warn; } },
+  { title: 'Done', types: ['completed'], get color() { return theme.ok; } },
 ];
 
 export function ProjectView(props: { param?: string }) {

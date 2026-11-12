@@ -17,7 +17,7 @@ import { ReviewOptionsModal } from '../ui/ReviewOptionsModal.js';
 import { Popup, formHeight, popupPlacement } from '../ui/Popup.js';
 import { useColinear, useViewSize } from '../ui/context.js';
 import { cell, formatDuration, formatTokens, spinner } from '../ui/format.js';
-import { REVIEW_COLORS, theme } from '../theme.js';
+import { palette, REVIEW_COLORS, theme } from '../theme.js';
 
 const ACTIVE: Review['status'][] = ['reviewing', 'posting', 'queued'];
 
@@ -79,7 +79,7 @@ function layout(columns: number) {
     title: Math.max(16, avail - W.flag - W.status - W.pr - W.draft - author - size),
   };
 }
-const SEVERITY_COLOR: Record<string, string> = {
+const SEVERITY_COLOR: Record<string, string> = palette(() => ({
   blocking: theme.err,
   consider: theme.warn,
   nit: theme.dim,
@@ -88,7 +88,7 @@ const SEVERITY_COLOR: Record<string, string> = {
   comment: theme.accent,
   // an annotation is not a mild finding, so it is not a mild yellow
   info: theme.annotation,
-};
+}));
 
 /** PRs waiting on my review, with an assisted pre-review per PR. */
 export function ReviewsView(props: { param?: string }) {

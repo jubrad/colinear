@@ -100,6 +100,8 @@ export interface UiState {
   headerHidden?: boolean;
   /** the agent rail beside every view (`\`) */
   rail?: boolean;
+  /** colour theme, picked in :theme (a name in THEMES; unknown falls back to the default) */
+  theme?: string;
   /** when you last opened each task, review or plan, keyed by the param that opens it — what makes an agent "new" */
   seen?: Record<string, number>;
 }

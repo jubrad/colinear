@@ -1,14 +1,14 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { rankHits, type CodeHit, type CodeSearchResult, type HitKind, type SearchMode } from '../core/symbols.js';
-import { theme } from '../theme.js';
+import { palette, theme } from '../theme.js';
 import { spinFrame, useFrame } from './ChatLog.js';
 import { TextArea } from './TextArea.js';
 
 type Phase = 'symbol' | 'query' | 'loading' | 'results';
 
 const TAG: Record<HitKind, string> = { def: 'def ', call: 'call', ref: 'ref ', import: 'use ' };
-const TAG_COLOR: Record<HitKind, string> = { def: theme.accent, call: theme.key, ref: theme.dim, import: theme.dim };
+const TAG_COLOR: Record<HitKind, string> = palette(() => ({ def: theme.accent, call: theme.key, ref: theme.dim, import: theme.dim }));
 
 /** The last search, kept by the diff so `/` + enter goes straight back to it. */
 export interface SearchMemo {

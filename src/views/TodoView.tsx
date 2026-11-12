@@ -7,22 +7,22 @@ import { handledReason } from '../core/todo.js';
 import type { TodoFacts, TodoItem, TodoUrgency } from '../core/types.js';
 import { useColinear, useViewSize } from '../ui/context.js';
 import { cell, spinner } from '../ui/format.js';
-import { theme } from '../theme.js';
+import { palette, theme } from '../theme.js';
 
-const URGENCY_COLOR: Record<TodoUrgency, string> = {
+const URGENCY_COLOR: Record<TodoUrgency, string> = palette(() => ({
   now: theme.err,
   today: theme.warn,
   week: theme.info,
   later: theme.dim,
-};
+}));
 
-const KIND_COLOR: Record<TodoItem['kind'], string> = {
+const KIND_COLOR: Record<TodoItem['kind'], string> = palette(() => ({
   review: theme.accent,
   task: theme.key,
   issue: theme.ok,
   milestone: theme.info,
   project: theme.info,
-};
+}));
 
 /** rows the selected entry's detail takes under the list: rule, title, why ×2, facts, link */
 const DETAIL_ROWS = 6;
