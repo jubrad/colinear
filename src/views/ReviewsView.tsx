@@ -3,6 +3,7 @@ import { modelsFor } from '../core/models.js';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
+import { useHeldIndex } from '../ui/held.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { attachTo, rememberView, reviewAttachable, sessionRuntime, setPendingAction } from '../core/attach.js';
 import { useReviews } from '../core/hooks.js';
@@ -216,7 +217,18 @@ export function ReviewsView(props: { param?: string }) {
     return desc ? sorted.reverse() : sorted;
   }, [reviews, query, sort, desc, showHidden, mine]);
 
-  const selected = rows[Math.min(cursor, Math.max(0, rows.length - 1))];
+  const at = useHeldIndex(rows, cursor, setCursor, (r) => r.id);
+  const atCursor = rows[Math.min(at, Math.max(0, rows.length - 1))];
+  /**
+   * The review the document or the diff was opened on. Held by id rather than
+   * read off the list: while you read one, a poll can re-sort the list, or the
+   * PR can merge and leave it, and either used to swap what was open for
+   * whichever review took its row.
+   */
+  const [readId, setReadId] = useState<string>();
+  if (reading && !readId && atCursor) setReadId(atCursor.id);
+  if (!reading && readId) setReadId(undefined);
+  const selected = (reading && readId ? reviews.find((r) => r.id === readId) : undefined) ?? atCursor;
 
   // resting on a row is looking at it: its preview is on screen. Stamped after
   // a beat so arrowing down the list does not mark everything it passes
@@ -241,6 +253,8 @@ export function ReviewsView(props: { param?: string }) {
 
   /** the preview's findings, in the order you would want them read */
   const ordered = useMemo(() => byWeight(selected?.findings ?? []), [selected?.findings]);
+  // a finding edited or added re-weighs the list; stay on the one you were on
+  const findAt = useHeldIndex(ordered, findIdx, setFindIdx, (f) => `${f.file ?? ''}:${f.startLine ?? ''}:${f.line ?? ''}:${f.severity ?? ''}:${f.comment.slice(0, 40)}`);
   // another PR is another list of findings: start at its first, from the list
   useEffect(() => {
     setFindIdx(0);
@@ -343,7 +357,7 @@ export function ReviewsView(props: { param?: string }) {
       // enter reads the review against the code — from the preview, at the
       // finding the cursor is on; d reads the document itself
       if (key.return) {
-        const f = inPreview ? ordered[findIdx] : undefined;
+        const f = inPreview ? ordered[findAt] : undefined;
         setStartAt(f?.file && typeof f.line === 'number' ? { file: f.file, line: f.line } : undefined);
         setAnnotated(true);
         setReading(true);
@@ -441,7 +455,7 @@ export function ReviewsView(props: { param?: string }) {
   // rows that fit: in the split, the split less its column header and the
   // scroll line; stacked, the total less the detail pane, header and chrome
   const visible = wide ? Math.max(3, splitHeight - 2) : Math.max(3, ctx.size.rows - 16);
-  const start = Math.max(0, Math.min(cursor - Math.floor(visible / 2), rows.length - visible));
+  const start = Math.max(0, Math.min(at - Math.floor(visible / 2), rows.length - visible));
   const window = rows.slice(start, start + visible);
 
   if (reading && selected && annotated) {
@@ -597,7 +611,7 @@ export function ReviewsView(props: { param?: string }) {
               TITLE
             </Text>
             {window.map((r, i) => {
-              const onCursor = start + i === cursor;
+              const onCursor = start + i === at;
               const flag = freshness(r);
               // the cursor stays lit while you are in the preview, dimmer, so
               // it still says which PR the preview is of
@@ -627,7 +641,7 @@ export function ReviewsView(props: { param?: string }) {
               <Text dimColor>
                 {start > 0 ? `↑${start} ` : ''}
                 {start + visible < rows.length ? `↓${rows.length - start - visible}` : ''}
-                {`  ${cursor + 1}/${rows.length}`}
+                {`  ${at + 1}/${rows.length}`}
               </Text>
             )}
           </Box>
@@ -638,7 +652,7 @@ export function ReviewsView(props: { param?: string }) {
               width={pane.width - listWidth - 1}
               height={splitHeight}
               findings={ordered}
-              findIdx={findIdx}
+              findIdx={findAt}
               focused={focus === 'preview'}
               stats={stats}
               loadingStats={Boolean(selected.worktree) && selectedDiff === undefined}
@@ -667,7 +681,7 @@ export function ReviewsView(props: { param?: string }) {
           // the cursor row goes plain: `inverse` over coloured cells turns each
           // colour into a background, so a coloured row inverts into a strip of
           // mismatched blocks rather than one bar (same rule as ui/Table)
-          const onCursor = start + i === cursor;
+          const onCursor = start + i === at;
           const flag = freshness(r);
           return (
             <Text key={r.id} wrap="truncate" inverse={onCursor} dimColor={r.hidden && !onCursor}>
@@ -696,7 +710,7 @@ export function ReviewsView(props: { param?: string }) {
           <Text dimColor>
             {start > 0 ? `↑${start} ` : ''}
             {start + visible < rows.length ? `↓${rows.length - start - visible}` : ''}
-            {`  ${cursor + 1}/${rows.length}`}
+            {`  ${at + 1}/${rows.length}`}
           </Text>
         )}
       </Box>

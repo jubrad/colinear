@@ -676,6 +676,12 @@ If adding tests someday: core/ is mostly pure-ish and dependency-injectable (sto
   `const X = { a: theme.ok }`, which copies the colour the theme had at import and never changes.
   Build those with `palette(() => ({ ... }))`, which reads through on every access.
 
+- **A cursor over data that re-sorts itself holds an item, not an index.** The reviews list
+  re-orders on every poll, and a cursor kept as a number named whatever moved into its row: the
+  preview, and the document or diff opened from it, switched PRs with no key pressed. `useHeldIndex`
+  (ui/held.ts) moves the index with its item when the list changes under a still cursor, and what
+  is open is held by id, so it stays open even after its PR drops off the list.
+
 - **A pane that overflows by one row loses its title.** Ink paints the overflow over the first
   line rather than clipping the last, so a fixed-height pane must slice its content to
   `height - borders - header rows`. Both panes of the review modal hit this the moment an

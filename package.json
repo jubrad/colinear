@@ -28,7 +28,8 @@
     "check:changes": "tsx src/core/changes.check.ts",
     "check:fleet": "tsx src/core/fleet.check.ts",
     "check:jobs": "tsx src/core/jobs.check.ts",
-    "check:theme": "tsx src/theme.check.ts"
+    "check:theme": "tsx src/theme.check.ts",
+    "check:held": "tsx src/ui/held.check.ts"
   },
   "engines": {
     "node": "^22.23.4 || ^24.22.1 || >=26.12.1"
