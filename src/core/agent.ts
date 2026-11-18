@@ -1,6 +1,7 @@
 import { claudeBackend } from './agents/claude.js';
 import { codexBackend } from './agents/codex.js';
 import type { AgentBackend } from './agents/shared.js';
+import { discovered } from './modelcatalog.js';
 import { modelFor } from './models.js';
 import type { Config, ModelScope } from './types.js';
 
@@ -53,8 +54,10 @@ export function knownAgents(): string[] {
  */
 export function pickableModels(cfg: Config): string[] {
   const out: string[] = [];
+  // what each runtime last said it runs comes first; the built-in names stay
+  // after it, so an alias the operator is used to typing is still offered
   for (const name of registry.keys()) {
-    for (const model of agentNamed(cfg, name).models) if (!out.includes(model)) out.push(model);
+    for (const model of [...discovered(name), ...agentNamed(cfg, name).models]) if (!out.includes(model)) out.push(model);
   }
   return out;
 }
@@ -109,7 +112,9 @@ export function splitModel(cfg: Config, model: string | undefined): { name: stri
     const prefix = model.slice(0, slash);
     if (registry.has(prefix)) return { name: prefix, model: model.slice(slash + 1) || undefined };
   }
-  const owners = [...registry.keys()].filter((n) => agentNamed(cfg, n).claims(model));
+  // a name a runtime listed is its own, however it is spelled — `opus[1m]`
+  // matches no pattern, but Claude Code offered it
+  const owners = [...registry.keys()].filter((n) => agentNamed(cfg, n).claims(model) || discovered(n).includes(model));
   // two runtimes claiming one name is an ambiguity the operator has to settle
   // with a prefix; picking one for them is how the wrong agent runs the work
   if (owners.length === 1) return { name: owners[0], model };

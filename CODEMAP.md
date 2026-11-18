@@ -56,6 +56,8 @@ src/core/
                      SessionInbox turns the prompt into an async iterable so the operator can push a
                      message into a live session (`M`); the session closes on `result` unless one is
                      pending, which is what keeps a normal run from hanging open
+  modelcatalog.ts     the models each runtime reports (discoverModels), asked by the daemon on start
+                     and daily, saved to models.json, pushed to clients; pickers and splitModel read it
   provider.ts        the IssueProvider interface + ProviderCapabilities: the only thing the app
                      knows about issue trackers. Adapters are registered in the map here rather
                      than by import side-effect, so a refactor can't silently unregister one

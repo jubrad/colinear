@@ -1,4 +1,5 @@
 import type { SessionChannels } from '../channel.js';
+import type { DiscoveredModel } from '../modelcatalog.js';
 import type { CoordinatorTools } from '../coordinator.js';
 import type { JobTools } from '../jobs.js';
 import type { AgentKind } from '../sessions.js';
@@ -210,6 +211,13 @@ export interface AgentBackend {
    * runtime with it rather than pairing a Codex model with Claude Code.
    */
   claims(model: string): boolean;
+  /**
+   * Ask the runtime which models it can run right now — what this account and
+   * this build offer, which a list compiled into colinear falls behind. The
+   * daemon calls it on start and daily (core/modelcatalog.ts); absent, the
+   * pickers offer `models` alone.
+   */
+  discoverModels?(): Promise<DiscoveredModel[]>;
   runSession(opts: RunSessionOpts): Promise<SessionResult>;
 
   /** what must be on PATH for this runtime to work at all — `coli doctor` asks */

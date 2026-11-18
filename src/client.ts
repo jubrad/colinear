@@ -1,3 +1,4 @@
+import { setCatalog } from './core/modelcatalog.js';
 import type { DiffAgainst } from './core/diff.js';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
@@ -305,6 +306,7 @@ export async function connectToDaemon(): Promise<Connection> {
           return;
         }
         store.hydrate(msg.snapshot);
+        if (msg.models) setCatalog(msg.models);
         store.attach(
           (change) => command({ name: 'change', change }),
           (id, answers) => command({ name: 'answer', id, answers }),
@@ -450,6 +452,8 @@ export async function connectToDaemon(): Promise<Connection> {
         done?.(msg.result);
       } else if (msg.t === 'reviewDiff') {
         for (const fn of diffListeners) fn(msg.id, msg.diff, msg.against);
+      } else if (msg.t === 'models') {
+        setCatalog(msg.catalog);
       } else if (msg.t === 'agents') {
         for (const fn of agentListeners) fn(msg.list);
       } else if (msg.t === 'creating') {
