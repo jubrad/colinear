@@ -155,6 +155,8 @@ export type PendingAction =
   | { kind: 'edit-config'; path: string }
   /** open a file in $EDITOR, then tell the daemon to re-read it */
   | { kind: 'edit-file'; path: string; reviewId: string }
+  /** open a file in $EDITOR to read or copy from — nothing is re-read after */
+  | { kind: 'view-file'; path: string }
   /** open a plan draft in $EDITOR, then tell the daemon to re-absorb it */
   | { kind: 'edit-plan'; path: string; projectId: string }
   /** answer a question set in $EDITOR, then submit what came back */
