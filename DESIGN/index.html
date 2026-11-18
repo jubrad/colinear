@@ -2470,6 +2470,13 @@ every live worktree looks dead.</p>
   Build those with <code>palette(() =&gt; ({ ... }))</code>, which reads through on every access.</p>
 </li>
 <li>
+<p><strong>A cursor over data that re-sorts itself holds an item, not an index.</strong> The reviews list
+  re-orders on every poll, and a cursor kept as a number named whatever moved into its row: the
+  preview, and the document or diff opened from it, switched PRs with no key pressed. <code>useHeldIndex</code>
+  (ui/held.ts) moves the index with its item when the list changes under a still cursor, and what
+  is open is held by id, so it stays open even after its PR drops off the list.</p>
+</li>
+<li>
 <p><strong>A pane that overflows by one row loses its title.</strong> Ink paints the overflow over the first
   line rather than clipping the last, so a fixed-height pane must slice its content to
   <code>height - borders - header rows</code>. Both panes of the review modal hit this the moment an
