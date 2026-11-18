@@ -1,5 +1,9 @@
 import { Box, Text, useInput } from 'ink';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { useEffect, useState } from 'react';
+import { rememberView, setPendingAction } from '../core/attach.js';
 import { pickableModels } from '../core/agent.js';
 import { useJobs } from '../core/hooks.js';
 import { newJob, nextRun } from '../core/jobs.js';
@@ -7,6 +11,7 @@ import { age } from '../core/fleet.js';
 import { modelsFor } from '../core/models.js';
 import { store } from '../core/store.js';
 import type { Job, JobRun } from '../core/types.js';
+import { copyText } from '../ui/clipboard.js';
 import { JOB_FORM_ROWS, JobModal, type JobFields } from '../ui/JobModal.js';
 import { Popup, popupPlacement } from '../ui/Popup.js';
 import { wrap } from '../ui/TextArea.js';
@@ -105,8 +110,35 @@ export function JobsView(props: { param?: string }) {
     .split('\n')
     .flatMap((line) => (line ? wrap(line, Math.max(10, previewWidth - 4)).map((l) => l.text) : ['']));
 
+  /** the run's report as written — markdown, not the wrapped lines on screen */
+  const reportFile = () => {
+    if (!selected || !run || !reportText) return undefined;
+    const when = new Date(run.startedAt).toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    const slug = selected.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'job';
+    return { name: `colinear-${slug}-${when}.md`, text: `# ${selected.name} — ${new Date(run.startedAt).toLocaleString()}\n\n${reportText}\n` };
+  };
+  /** v: the report in $EDITOR, to read at full width, search, or copy a piece of */
+  const viewReport = () => {
+    const file = reportFile();
+    if (!file || !selected) return ctx.toast('no report to open', 'info');
+    const path = join(tmpdir(), file.name);
+    writeFileSync(path, file.text);
+    rememberView('jobs', selected.id);
+    setPendingAction({ kind: 'view-file', path });
+    ctx.quit();
+  };
+  /** y: the whole report on the clipboard */
+  const copyReport = () => {
+    if (!reportText) return ctx.toast('no report to copy', 'info');
+    const { ok, via } = copyText(reportText);
+    if (!ok) return ctx.toast('nothing to copy with — install pbcopy, wl-copy or xclip, or use v', 'err');
+    ctx.toast(via === 'terminal' ? 'report sent to the terminal clipboard' : 'report copied', 'ok');
+  };
+
   useInput(
     (input, key) => {
+      if (input === 'v') return viewReport();
+      if (input === 'y') return copyReport();
       if (focus === 'report') {
         if (key.upArrow || input === 'k') setScroll((s) => Math.max(0, s - 1));
         if (key.downArrow || input === 'j') setScroll((s) => Math.min(Math.max(0, reportLines.length - 1), s + 1));
@@ -164,7 +196,7 @@ export function JobsView(props: { param?: string }) {
           jobs{' '}
         </Text>
         <Text dimColor>
-          {jobs.length} · {jobs.filter((j) => j.running).length} running · n new · r run · e edit · enter read the report
+          {jobs.length} · {jobs.filter((j) => j.running).length} running · n new · r run · e edit · enter read the report · v open it in $EDITOR · y copy it
         </Text>
       </Text>
       <Box height={1} />
@@ -339,8 +371,8 @@ function Preview(props: {
       <Box flexGrow={1} />
       <Text color={theme.key} wrap="truncate">
         {props.focused
-          ? `j/k scroll · space page · [ ] other runs · esc back${props.lines.length > room ? ` · ${props.scroll + 1}-${Math.min(props.lines.length, props.scroll + room)} of ${props.lines.length}` : ''}`
-          : 'enter read · [ ] other runs · r run now · x stop · p pause · D delete'}
+          ? `j/k scroll · space page · [ ] other runs · v $EDITOR · y copy · esc back${props.lines.length > room ? ` · ${props.scroll + 1}-${Math.min(props.lines.length, props.scroll + room)} of ${props.lines.length}` : ''}`
+          : 'enter read · v $EDITOR · y copy · [ ] other runs · r run now · x stop · p pause · D delete'}
       </Text>
     </Box>
   );
@@ -353,6 +385,8 @@ export const jobsKeys: Array<[string, string]> = [
   ['r', 'run now'],
   ['x', 'stop the run'],
   ['enter', 'read the report'],
+  ['v', 'the report in $EDITOR'],
+  ['y', 'copy the report'],
   ['[ ]', 'older / newer run'],
   ['p', 'pause the schedule'],
   ['D', 'delete (twice)'],

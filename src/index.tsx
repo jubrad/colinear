@@ -447,6 +447,9 @@ async function runTui(): Promise<void> {
         openEditor(cfg, action.path);
       }
       conn.dispatcher.reloadReviewDoc(action.reviewId);
+    } else if (action.kind === 'view-file') {
+      // written by this process, so it is on this machine even with a remote daemon
+      openEditor(cfg, action.path);
     } else if (action.kind === 'edit-plan') {
       if (cfg.remote) {
         // the draft lives in the daemon's state dir, on its host

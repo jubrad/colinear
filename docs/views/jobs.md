@@ -36,6 +36,8 @@ report, which is what you open the job to read.
 | `x` | stop the run in flight |
 | `enter` | move into the report to scroll it (`j`/`k`, `space` a page) · `esc` back |
 | `[` `]` | older / newer run (it keeps the last 20) |
+| `v` | open the report in your editor (`editor` in the config, else `$EDITOR`) — as markdown, at full width, to search or copy from; the file is left in the temp directory |
+| `y` | copy the whole report to the clipboard — `pbcopy`, `wl-copy` or `xclip` locally; over ssh, the terminal's own clipboard (OSC 52) |
 | `p` | pause the schedule, or resume it — the schedule is kept |
 | `D` | delete it and its runs (press twice) |
 
