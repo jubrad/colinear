@@ -109,12 +109,25 @@ neither should be given an API key — the runs bill the subscription behind the
 | | `claude` | `codex` |
 |---|---|---|
 | CLI | `claude` | `codex` |
-| models | `sonnet`, `opus`, `fable`, `haiku` | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-6-astra` |
+| models | whatever Claude Code lists for your account, plus `sonnet`, `opus`, `fable`, `haiku` | whatever the bundled Codex lists, plus `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-6-astra` |
 | can stop and ask you | yes, `AskUserQuestion` | yes, by convention |
 | `M` reaches a session | yes | yes, as the next turn |
 | `s` opens it in a terminal | yes | yes |
 | enforces `denyTools` | yes | **no**, sandbox modes only |
 | reports a price | yes | **no**, tokens only |
+
+**The model lists keep themselves current.** The daemon asks each runtime which models it can run:
+when it starts, then once a day. Claude Code reports what your account offers, and Codex reports
+what its build knows. The answer is saved in the state directory (`models.json`) and offered in
+every model picker ahead of the built-in names, so a model released this week can be picked
+tomorrow without upgrading colinear. Nothing is sent to a model to ask, so it costs nothing. A
+runtime that isn't installed or logged in keeps its last answer. A name a runtime listed routes
+to that runtime, even when it matches no known pattern (`opus[1m]` is Claude Code's). The config
+still takes any model name, listed or not.
+
+Codex is asked through the copy bundled with colinear, which is the one its sessions run. If your
+own `codex` is newer, models only that version knows don't appear, because colinear couldn't run
+them.
 
 The two "no" answers matter more than the rest.
 

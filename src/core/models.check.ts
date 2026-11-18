@@ -2,6 +2,9 @@ import { normalizeModel } from './config.js';
 import { modelFor, modelsFor } from './models.js';
 import { fallbackFor } from './agents/claude.js';
 import type { Config, ModelScope } from './types.js';
+import { pickableModels, splitModel } from './agent.js';
+import { parseCodexModels } from './agents/codex.js';
+import { getCatalog, refreshCatalog, setCatalog } from './modelcatalog.js';
 
 /**
  * Which model runs which kind of session, and the one way that can go wrong.
@@ -104,6 +107,36 @@ for (const models of COLLIDING) {
     }
   }
 }
+
+// ---- models the runtimes report
+const codexJson = JSON.stringify({
+  models: [
+    { slug: 'gpt-7-sol', display_name: 'GPT-7-Sol', visibility: 'list', priority: 2 },
+    { slug: 'gpt-7-astra', display_name: 'GPT-7-Astra', visibility: 'list', priority: 1 },
+    { slug: 'codex-auto-review', visibility: 'hide', priority: 3 },
+  ],
+});
+eq('codex: listed models in its own order, hidden ones left out', parseCodexModels(codexJson).map((m) => m.value), ['gpt-7-astra', 'gpt-7-sol']);
+
+const catalogCfg = { agent: 'claude' } as Config;
+setCatalog({ claude: { models: [{ value: 'opus[1m]' }, { value: 'claude-mythos-6' }], at: 1 } });
+const offered = pickableModels(catalogCfg);
+check('what a runtime reports is offered first', offered[0] === 'opus[1m]' && offered.includes('claude-mythos-6'), offered.join());
+check('the built-in names stay on offer', offered.includes('fable') && offered.includes('sonnet'), offered.join());
+check('a reported name nothing else recognises routes to the runtime that reported it', splitModel({ agent: 'codex' } as Config, 'opus[1m]').name === 'claude');
+
+const kept = await refreshCatalog(
+  [
+    { name: 'claude', discover: async () => { throw new Error('not logged in'); } },
+    { name: 'codex', discover: async () => parseCodexModels(codexJson) },
+  ],
+  2,
+);
+check('a runtime that cannot answer keeps what it said before', getCatalog().claude?.models[0]?.value === 'opus[1m]' && kept.failed.includes('claude'));
+check('one that can is updated', getCatalog().codex?.models.length === 2 && getCatalog().codex?.at === 2);
+await refreshCatalog([{ name: 'codex', discover: () => new Promise(() => {}) }], 3, 50);
+check('a runtime that hangs is given up on, and keeps its answer', getCatalog().codex?.at === 2);
+setCatalog({});
 
 if (failures.length) {
   console.error(`scoped models: ${failures.length} failure(s)`);

@@ -33,6 +33,8 @@ import { listSessions, updateSession } from './core/sessions.js';
 import { store } from './core/store.js';
 import { TodoManager } from './core/todolist.js';
 import { JobRunner } from './core/jobs.js';
+import { agentNamed, knownAgents } from './core/agent.js';
+import { CATALOG_REFRESH_MS, getCatalog, loadCatalog, refreshCatalog, saveCatalog } from './core/modelcatalog.js';
 
 /** Liveness marker so `coli daemon status|stop` doesn't need the socket. */
 /** The tail of this daemon's log, for a client that can't read its disk. */
@@ -111,6 +113,26 @@ export async function runDaemon(): Promise<void> {
   jobs.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
   // demo mode reaches no network, and a scheduled job would
   if (!isDemo(cfg)) jobs.startClock();
+
+  // the models each runtime can run, asked of the runtimes themselves: on
+  // start (the saved answer is offered meanwhile) and daily after. A model
+  // that shipped this week is in the pickers by tomorrow with no upgrade.
+  const catalogPath = join(STATE_DIR, 'models.json');
+  loadCatalog(catalogPath);
+  const askModels = async () => {
+    const runtimes = knownAgents().map((name) => {
+      const backend = agentNamed(cfg, name);
+      return { name, discover: backend.discoverModels?.bind(backend) };
+    });
+    const { catalog, failed } = await refreshCatalog(runtimes);
+    saveCatalog(catalogPath);
+    broadcast({ t: 'models', catalog });
+    log(`models: ${Object.entries(catalog).map(([n, c]) => `${n} ${c.models.length}`).join(', ') || 'none'}${failed.length ? ` (no answer: ${failed.join(', ')})` : ''}`);
+  };
+  if (!isDemo(cfg)) {
+    setTimeout(() => void askModels(), 5_000).unref();
+    setInterval(() => void askModels(), CATALOG_REFRESH_MS).unref();
+  }
 
   // every store mutation fans out to attached clients as a delta
   let sent = store.version;
@@ -499,7 +521,7 @@ export async function runDaemon(): Promise<void> {
     clients.add(socket);
     socket.setNoDelay(true);
     socket.write(
-      encode({ t: 'hello', protocol: PROTOCOL_VERSION, pid: process.pid, cfg, snapshot: store.snapshot(), ui: getUiState() }),
+      encode({ t: 'hello', protocol: PROTOCOL_VERSION, pid: process.pid, cfg, snapshot: store.snapshot(), ui: getUiState(), models: getCatalog() }),
     );
     const decode = createDecoder<ClientMsg>((msg) => {
       if (msg.t === 'cmd') run(msg.cmd, (out) => socket.write(encode(out)));

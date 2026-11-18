@@ -1,6 +1,10 @@
+import { execFile } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { DiscoveredModel } from '../modelcatalog.js';
 import type { AgentBackend, AgentCapabilities, RunSessionOpts, SessionResult } from './shared.js';
 import { endSession, startSession, updateSession } from '../sessions.js';
 
@@ -144,12 +148,38 @@ function activityFor(item: { type: string; [k: string]: unknown }): string | und
   }
 }
 
+const run = promisify(execFile);
+
+/**
+ * What this Codex build knows, from `codex debug models`: the ones it lists
+ * in its own picker (`visibility: list`), in its order. The hidden ones are
+ * internal — an auto-reviewer, a reserve — and not for choosing.
+ *
+ * Asked of the Codex the SDK runs — the one bundled with colinear — and not
+ * whatever `codex` is first on PATH. The two can be versions apart, and a
+ * model only the newer one knows is one a colinear session cannot run.
+ */
+async function discoverModels(): Promise<DiscoveredModel[]> {
+  const bundled = createRequire(import.meta.url).resolve('@openai/codex/bin/codex.js');
+  const { stdout } = await run(process.execPath, [bundled, 'debug', 'models'], { maxBuffer: 32 * 1024 * 1024, timeout: 30_000 });
+  return parseCodexModels(stdout);
+}
+
+export function parseCodexModels(json: string): DiscoveredModel[] {
+  const data = JSON.parse(json) as { models?: Array<{ slug?: string; display_name?: string; description?: string; visibility?: string; priority?: number }> };
+  return (data.models ?? [])
+    .filter((m) => m.slug && m.visibility === 'list')
+    .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
+    .map((m) => ({ value: m.slug!, label: m.display_name, description: m.description }));
+}
+
 export function codexBackend(): AgentBackend {
   return {
     name: 'codex',
     capabilities: CODEX_CAPABILITIES,
     models: CODEX_MODELS,
     claims: (model) => CODEX_MODELS.includes(model) || /^(gpt|codex|o\d)[-.]?/i.test(model),
+    discoverModels,
     runSession,
     cli: {
       command: 'codex',

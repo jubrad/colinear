@@ -6,7 +6,7 @@ import {
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { channels, formatMessages } from '../channel.js';
@@ -14,6 +14,7 @@ import { endSession, startSession, updateSession } from '../sessions.js';
 import type { SessionChannels } from '../channel.js';
 import type { CoordinatorTools } from '../coordinator.js';
 import type { JobTools } from '../jobs.js';
+import type { DiscoveredModel } from '../modelcatalog.js';
 import type { AskedQuestion, PlannedSubtask, SessionSpend } from '../types.js';
 import type {
   AgentBackend,
@@ -57,12 +58,38 @@ export const CLAUDE_CAPABILITIES: AgentCapabilities = {
 /** What the pickers offer. The config still takes any string, including an exact id. */
 export const CLAUDE_MODELS = ['sonnet', 'opus', 'fable', 'haiku'];
 
+/**
+ * What Claude Code offers this account, from the SDK's own model list. No
+ * prompt is ever sent: the session is opened on an input that never yields,
+ * asked, and aborted — it costs nothing and takes about half a second.
+ * `default` is left out; the pickers have their own "default" row, which
+ * means the config's model rather than Claude Code's.
+ */
+async function discoverModels(): Promise<DiscoveredModel[]> {
+  const abortController = new AbortController();
+  let release = () => {};
+  async function* idle(): AsyncGenerator<SDKUserMessage> {
+    await new Promise<void>((resolve) => (release = resolve));
+  }
+  const q = query({ prompt: idle(), options: { abortController, settingSources: [], cwd: tmpdir() } });
+  try {
+    const models = await q.supportedModels();
+    return models
+      .filter((m) => m.value && m.value !== 'default')
+      .map((m) => ({ value: m.value, label: m.displayName, description: m.description }));
+  } finally {
+    abortController.abort();
+    release();
+  }
+}
+
 export function claudeBackend(): AgentBackend {
   return {
     name: 'claude',
     capabilities: CLAUDE_CAPABILITIES,
     models: CLAUDE_MODELS,
     claims: (model) => CLAUDE_MODELS.includes(model) || /^claude[-.]/i.test(model),
+    discoverModels,
     runSession,
     cli: {
       command: 'claude',
