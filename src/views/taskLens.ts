@@ -58,15 +58,33 @@ export function matchesQuery(task: Task, query: string): boolean {
 /** default: the board read left-to-right, then what needs you first */
 export const BOARD_SORT = 'board';
 
-export const SORT_KEYS = [BOARD_SORT, 'issue', 'status', 'title', 'repo', 'pr', 'ci', 'time', 'tokens'] as const;
+export const SORT_KEYS = ['recent', BOARD_SORT, 'issue', 'status', 'title', 'repo', 'pr', 'ci', 'time', 'tokens'] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
+
+const RUNNING: Task['status'][] = ['triage', 'working', 'checks'];
+
+/**
+ * When a task last had anything happen to it that you would call recent: its
+ * agent running (now, while it is), the end of its last session, its work
+ * last changing, or you last opening it (`seen`, keyed by identifier — what
+ * `:task` opens). Not when it was first dispatched: a card dispatched last
+ * week and answered an hour ago is recent, and one dispatched an hour ago
+ * that has sat queued since is not.
+ */
+export function lastTouched(task: Task, seen: Record<string, number> | undefined, now: number): number {
+  if (RUNNING.includes(task.status)) return now;
+  return Math.max(task.endedAt ?? 0, task.startedAt ?? 0, task.changes?.movedAt ?? 0, seen?.[task.issue.identifier] ?? 0);
+}
 
 /**
  * One comparator for both views. On the board it orders cards inside their
  * column, so a sort never moves a card out of the column it belongs to.
  */
-export function compareTasks(key: string, a: Task, b: Task): number {
+export function compareTasks(key: string, a: Task, b: Task, seen?: Record<string, number>, now = Date.now()): number {
   switch (key) {
+    case 'recent':
+      // most recently touched first; the board order breaks ties
+      return lastTouched(b, seen, now) - lastTouched(a, seen, now) || prRank(a) - prRank(b);
     case 'issue':
       return a.issue.identifier.localeCompare(b.issue.identifier, undefined, { numeric: true });
     case 'status':
