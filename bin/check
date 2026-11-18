@@ -100,4 +100,9 @@ echo '── themes'
 npm run check:theme
 
 echo
+echo '── held cursor'
+# a list re-sorted under the cursor keeps it on the same row
+npm run check:held
+
+echo
 echo 'ok'
