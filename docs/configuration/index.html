@@ -1990,8 +1990,8 @@ neither should be given an API key — the runs bill the subscription behind the
 </tr>
 <tr>
 <td>models</td>
-<td><code>sonnet</code>, <code>opus</code>, <code>fable</code>, <code>haiku</code></td>
-<td><code>gpt-5.6-sol</code>, <code>gpt-5.6-terra</code>, <code>gpt-5.6-luna</code>, <code>gpt-6-astra</code></td>
+<td>whatever Claude Code lists for your account, plus <code>sonnet</code>, <code>opus</code>, <code>fable</code>, <code>haiku</code></td>
+<td>whatever the bundled Codex lists, plus <code>gpt-5.6-sol</code>, <code>gpt-5.6-terra</code>, <code>gpt-5.6-luna</code>, <code>gpt-6-astra</code></td>
 </tr>
 <tr>
 <td>can stop and ask you</td>
@@ -2020,6 +2020,17 @@ neither should be given an API key — the runs bill the subscription behind the
 </tr>
 </tbody>
 </table>
+<p><strong>The model lists keep themselves current.</strong> The daemon asks each runtime which models it can run:
+when it starts, then once a day. Claude Code reports what your account offers, and Codex reports
+what its build knows. The answer is saved in the state directory (<code>models.json</code>) and offered in
+every model picker ahead of the built-in names, so a model released this week can be picked
+tomorrow without upgrading colinear. Nothing is sent to a model to ask, so it costs nothing. A
+runtime that isn't installed or logged in keeps its last answer. A name a runtime listed routes
+to that runtime, even when it matches no known pattern (<code>opus[1m]</code> is Claude Code's). The config
+still takes any model name, listed or not.</p>
+<p>Codex is asked through the copy bundled with colinear, which is the one its sessions run. If your
+own <code>codex</code> is newer, models only that version knows don't appear, because colinear couldn't run
+them.</p>
 <p>The two "no" answers matter more than the rest.</p>
 <p><strong>How Codex asks is different.</strong> Codex can ask you things interactively, but not over the
 non-interactive path colinear drives: <code>codex exec</code> answers its own ask-the-user request with "not

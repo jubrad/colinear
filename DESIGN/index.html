@@ -2371,7 +2371,12 @@ the configured runtime cannot do, next to the same line for the tracker.</p>
 <p><code>SessionInbox</code> is shared: it yields plain strings and the adapter puts its own message envelope
 around them, because the queueing, the in-flight bookkeeping and the re-queue on a dead session are
 the same problem whatever reads the stream. The model pickers read <code>backend.models</code>, so a different
-runtime offers its own models rather than Claude's four aliases.</p>
+runtime offers its own models rather than Claude's four aliases. Ahead of those come what each
+runtime <em>reports</em> (<code>discoverModels</code>: the SDK's <code>supportedModels()</code>, <code>codex debug models</code> from the
+bundled binary), asked by the daemon on start and daily, saved to <code>models.json</code> and pushed to
+clients as a <code>models</code> message (core/modelcatalog.ts). The compiled-in list was out of date the week
+a model shipped. A reported name is also a claim, so <code>splitModel</code> routes <code>opus[1m]</code> to the runtime
+that listed it, though no pattern matches it.</p>
 <p>The lifecycle around a session is behind the seam too, not just the session: <code>cli</code> (what <code>doctor</code>
 probes), <code>sessionExists</code> and <code>transcriptDir</code> (which decide fresh-vs-resume, and what backup
 archives), <code>attachArgv</code> (what <code>s</code> hands a terminal, and what the plan chat starts under a minted
