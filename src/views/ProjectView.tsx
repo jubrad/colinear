@@ -39,6 +39,8 @@ export function ProjectView(props: { param?: string }) {
   const [cursor, setCursor] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [asking, setAsking] = useState(false);
+  /** opened by `D` with several repos: skip triage is asked for, and needs a repo named */
+  const [presetSkip, setPresetSkip] = useState(false);
 
   useEffect(() => ctx.setCapture(asking), [asking]);
   useEffect(() => () => ctx.setCapture(false), []);
@@ -111,8 +113,18 @@ export function ProjectView(props: { param?: string }) {
         });
       }
       if (input === 'd' && picked().length) dispatch(picked());
-      if (input === 'D' && picked().length) dispatch(picked(), { skipTriage: true });
-      if (input === 'c' && picked().length) setAsking(true);
+      if (input === 'D' && picked().length) {
+        // with one repo there is nothing to choose; with several, skipping
+        // triage needs one named, and sending none ran triage anyway
+        if (ctx.cfg.repos.length > 1) {
+          setPresetSkip(true);
+          setAsking(true);
+        } else dispatch(picked(), { skipTriage: true });
+      }
+      if (input === 'c' && picked().length) {
+        setPresetSkip(false);
+        setAsking(true);
+      }
       if (input === 'r') refresh();
       if (input === 'o' && current) openUrl(current.url);
       if (input === 'p' && project) ctx.navigate('plan', project.name);
@@ -240,6 +252,7 @@ export function ProjectView(props: { param?: string }) {
                 repos={ctx.cfg.repos}
                 width={inner}
                 instructionLines={lines}
+                skipTriage={presetSkip}
                 onSubmit={(opts) => {
                   setAsking(false);
                   dispatch(picked(), opts);

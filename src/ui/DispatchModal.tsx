@@ -56,6 +56,11 @@ export function DispatchModal(props: {
   width: number;
   /** lines to give the instructions area */
   instructionLines: number;
+  /**
+   * Open on "skip triage" — `D` with several repos, which cannot skip triage
+   * without one named. The form starts on the first repo so `enter` goes.
+   */
+  skipTriage?: boolean;
   onSubmit: (opts: DispatchOptions) => void;
   onCancel: () => void;
 }) {
@@ -63,12 +68,12 @@ export function DispatchModal(props: {
   const modelChoices = modelOptions(models);
   const [instructions, setInstructions] = useState('');
   const [modelIdx, setModelIdx] = useState(0);
-  const [repoIdx, setRepoIdx] = useState(0);
-  const [triageIdx, setTriageIdx] = useState(0);
+  const [repoIdx, setRepoIdx] = useState(props.skipTriage && repos.length > 1 ? 1 : 0);
+  const [triageIdx, setTriageIdx] = useState(props.skipTriage ? 1 : 0);
   const [startIdx, setStartIdx] = useState(0);
   // the options are the quick part; instructions are where you linger, so they
   // come last in tab order and last on screen
-  const [focus, setFocus] = useState<Field>('model');
+  const [focus, setFocus] = useState<Field>(props.skipTriage && repos.length > 1 ? 'repo' : 'model');
 
   const fields = useMemo<Field[]>(
     () =>
@@ -87,9 +92,8 @@ export function DispatchModal(props: {
       instructions: instructions.trim() || undefined,
       model: modelChoices[modelIdx].value,
       repo: repos.length > 1 ? chosenRepo : repos[0],
-      // Triage is what picks the repo, so skipping it and asking for auto are
-      // contradictory. The dispatcher enforces this too — this only keeps the
-      // form from offering a combination it will not honour.
+      // the two rows keep each other consistent (see `pick`), so a skip here
+      // always comes with a repo — the dispatcher would refuse one without
       skipTriage: triageIdx === 1 && !auto,
       manual: startIdx === 1,
     });
@@ -105,8 +109,23 @@ export function DispatchModal(props: {
       if (key.rightArrow || input === 'l') set((i) => (i + 1) % len);
     };
     if (focus === 'model') cycle(modelChoices.length, setModelIdx);
-    if (focus === 'repo') cycle(repos.length + 1, setRepoIdx);
-    if (focus === 'triage') cycle(auto ? 1 : TRIAGE_OPTIONS.length, setTriageIdx);
+    // Triage is what picks the repo, so "auto" and "skip triage" cannot both
+    // stand. Rather than hide one until the other is changed — which read as
+    // custom dispatch being unable to skip triage at all — choosing either
+    // moves the other: skipping triage on auto names the first repo, and auto
+    // on a skipped triage turns triage back on. The hint row says which.
+    const step = (len: number, at: number) =>
+      key.leftArrow || input === 'h' ? (at + len - 1) % len : key.rightArrow || input === 'l' ? (at + 1) % len : at;
+    if (focus === 'repo') {
+      const next = step(repos.length + 1, repoIdx);
+      setRepoIdx(next);
+      if (next === 0 && triageIdx === 1) setTriageIdx(0);
+    }
+    if (focus === 'triage') {
+      const next = step(TRIAGE_OPTIONS.length, triageIdx);
+      setTriageIdx(next);
+      if (next === 1 && auto) setRepoIdx(1);
+    }
     if (focus === 'start') cycle(START_OPTIONS.length, setStartIdx);
     if (key.return) submit();
   });
@@ -163,7 +182,7 @@ export function DispatchModal(props: {
       </Text>
       {optionRow('model', 'model', modelChoices.map((m) => m.label), modelIdx)}
       {repos.length > 1 && optionRow('repo', 'repo', [AUTO_REPO, ...repos.map((r) => r.name)], repoIdx)}
-      {optionRow('triage', 'triage', auto ? [TRIAGE_OPTIONS[0]] : TRIAGE_OPTIONS, triageIdx)}
+      {optionRow('triage', 'triage', TRIAGE_OPTIONS, triageIdx)}
       {optionRow('start', 'start', START_OPTIONS, startIdx)}
       {/*
         Always a row, never sometimes a row. It used to appear only while
@@ -179,6 +198,11 @@ export function DispatchModal(props: {
           </Text>
         ) : auto ? (
           <Text>triage reads the repo descriptions and routes each issue</Text>
+        ) : triageIdx === 1 && (chosenRepo ?? repos[0]) ? (
+          <Text>
+            no triage — straight to work in <Text color={theme.key}>{(chosenRepo ?? repos[0]).name}</Text>
+            {repos.length > 1 ? ' (repo: ←→ to change)' : ''}
+          </Text>
         ) : (
           <Text> </Text>
         )}
