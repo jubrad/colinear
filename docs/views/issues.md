@@ -16,7 +16,7 @@ still dispatch.
 | `S` | sub-issues on/off — pull in the children of the issues listed, under their parents |
 | `space` | select — actions apply to the selection, or to the row under the cursor |
 | `enter` | **dispatch** |
-| `D` | dispatch, skipping triage |
+| `D` | dispatch, skipping triage. With more than one repo configured, it opens custom dispatch set to skip triage on the first repo — `enter` sends it, `←`/`→` on the repo row picks another — because triage is what picks the repo, and skipping it needs one named |
 | `c` | custom dispatch: model, repo, whether to triage, whether to **start** — and a paragraph-sized instructions box (enter is a newline there, `ctrl-d` dispatches). A row with more options than fit scrolls with `←→`, marked `‹ ›`; names are never cut in half |
 | `n` | **new issue**: a team and a priority, each `auto` or set, and a big box for the request. An agent drafts the title and body and files it. See [new issues](#new-issues) |
 | `o` | open in the tracker · `b` board · `r` refresh |

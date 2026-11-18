@@ -78,6 +78,8 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
   const [labelFilters, setLabelFilters] = useState<string[]>([]);
   const [bar, setBar] = useState<BarMode | null>(null);
   const [dispatching, setDispatching] = useState(false);
+  /** opened by `D` with several repos: skip triage is asked for, and needs a repo named */
+  const [presetSkip, setPresetSkip] = useState(false);
   /** the `n` form is open */
   const [filing, setFiling] = useState(false);
   const [progress, setProgress] = useState<CreationState | null>(null);
@@ -282,8 +284,18 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
         });
       }
       if (key.return && picked().length) dispatch(picked());
-      if (input === 'D' && picked().length) dispatch(picked(), { skipTriage: true });
-      if (input === 'c' && picked().length) setDispatching(true);
+      if (input === 'D' && picked().length) {
+        // with one repo there is nothing to choose; with several, skipping
+        // triage needs one named, and sending none ran triage anyway
+        if (ctx.cfg.repos.length > 1) {
+          setPresetSkip(true);
+          setDispatching(true);
+        } else dispatch(picked(), { skipTriage: true });
+      }
+      if (input === 'c' && picked().length) {
+        setPresetSkip(false);
+        setDispatching(true);
+      }
       if (input === 'o' && rows[cursor]) openUrl(rows[cursor].url);
     },
     { isActive: bar === null && !dispatching && !filing && !progress && !ctx.cmdOpen },
@@ -422,6 +434,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
                 repos={ctx.cfg.repos}
                 width={inner}
                 instructionLines={lines}
+                skipTriage={presetSkip}
                 onSubmit={(opts) => {
                   setDispatching(false);
                   dispatch(picked(), opts);
