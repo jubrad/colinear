@@ -87,18 +87,24 @@ export function boardOrder(task: Task): number {
   return idx === -1 ? COLUMNS.length : idx;
 }
 
+const DEFAULT_SORT = 'recent';
+
 export function BoardView(_props: { param?: string }) {
   const ctx = useColinear();
   const tasks = useTasks();
   const [pos, setPos] = useState({ col: 0, row: 0 });
   const [query, setQuery] = useState('');
   const [bar, setBar] = useState<'fuzzy' | 'sort' | null>(null);
-  const [sortKey, setSortKey] = useState<string>(BOARD_SORT);
+  // what moved last on top of its column — an agent running, a session ending,
+  // you opening it — until `,` says otherwise
+  const [sortKey, setSortKey] = useState<string>(DEFAULT_SORT);
   const [sortDesc, setSortDesc] = useState(false);
   const actions = useTaskActions();
   const layout: BoardLayout = ctx.ui.boardLayout ?? 'columns';
   const rows = layout === 'rows';
 
+  // a running card counts as touched now; the app's clock, so every card in a render agrees
+  const now = ctx.now;
   // grid[col] = tasks in that board column, in render order
   const grid = useMemo(() => {
     // the same matcher the list view uses, so a query means one thing
@@ -108,9 +114,9 @@ export function BoardView(_props: { param?: string }) {
       // orders cards inside their column; it never moves one out of it.
       visible
         .filter((t) => col.statuses.includes(t.status))
-        .sort((a, b) => (sortKey === BOARD_SORT ? prRank(a) - prRank(b) : compareTasks(sortKey, a, b)) * (sortDesc ? -1 : 1)),
+        .sort((a, b) => (sortKey === BOARD_SORT ? prRank(a) - prRank(b) : compareTasks(sortKey, a, b, ctx.ui.seen, now)) * (sortDesc ? -1 : 1)),
     );
-  }, [tasks, store.version, query, sortKey, sortDesc]);
+  }, [tasks, store.version, query, sortKey, sortDesc, ctx.ui.seen, now]);
 
   // keep the cursor on a real card as tasks move between columns; must
   // return the SAME object when nothing changes or this setState loops
@@ -202,7 +208,7 @@ export function BoardView(_props: { param?: string }) {
   // vertical budget: view inner height (app.tsx sizes the view pane to
   // rows-6-cmd, minus its own border) less the detail pane and the filter/sort
   // lines. Both layouts window to this instead of flex-squeezing.
-  const filtering = Boolean(query) || sortKey !== BOARD_SORT || sortDesc;
+  const filtering = Boolean(query) || sortKey !== DEFAULT_SORT || sortDesc;
   const viewInner = Math.max(8, ctx.size.rows - 6 - (ctx.cmdOpen ? 4 : 0)) - 2;
   const chrome = (selected ? DETAIL_ROWS : 0) + (filtering ? 1 : 0) + (bar ? 1 : 0);
   // columns reserve one line for the shared column-header row; a lane carries
@@ -240,7 +246,7 @@ export function BoardView(_props: { param?: string }) {
           ) : null}
           <Text dimColor>
             {shown} of {tasks.length} cards
-            {sortKey !== BOARD_SORT || sortDesc ? ` · sorted by ${sortKey} ${sortDesc ? '↓' : '↑'}` : ''}
+            {sortKey !== DEFAULT_SORT || sortDesc ? ` · sorted by ${sortKey} ${sortDesc ? '↓' : '↑'}` : ''}
             {query ? ' · esc clears' : ''}
           </Text>
         </Text>

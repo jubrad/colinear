@@ -5,8 +5,12 @@ Aliases: `b`, `bo`. Every dispatched task, in the column that says what it's wai
 ![The board with CAD-14 selected in Working: its subtask checklist and the tail of its activity log fill the detail pane](../images/board.png)
 
 Columns are Queued · Triage · Working · Needs Input · PR Open · Failed · Done. Within a column cards
-sort by what wants you first — changes requested, conflicting, approved, draft, awaiting review — and
-the header carries a coloured count per state (`PR Open(7) 1-1-2-2-1`): pink changes-requested, red
+sort by **what was touched most recently**: an agent running counts as now, then the end of its last
+session, its work last changing, or you last opening it. When it was first dispatched doesn't count:
+a card dispatched last week and answered an hour ago is near the top, and one dispatched an hour ago
+that has sat idle since is not. Ties, like everything still queued, go by what wants you first:
+changes requested, conflicting, approved, draft, awaiting review. `,` → `board` sorts by that alone.
+The header carries a coloured count per state (`PR Open(7) 1-1-2-2-1`): pink changes-requested, red
 conflicting, green approved, grey draft, orange awaiting, purple merged, red closed.
 
 A card shows live duration, tokens, [what the worktree has changed](#what-it-has-changed), repo, subtask progress, its question if it has one, blocked-by

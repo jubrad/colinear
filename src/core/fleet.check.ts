@@ -1,6 +1,7 @@
 import { age, fleet, isUnread, markSeen } from './fleet.js';
 import type { AgentSession } from './sessions.js';
 import type { Review, Task } from './types.js';
+import { compareTasks, lastTouched } from '../views/taskLens.js';
 
 /**
  * The agent list behind :agents and the rail. What a typecheck cannot see: an
@@ -88,6 +89,19 @@ const pruned = markSeen(big, 'task', 'NEW', now)!;
 check('the map is pruned to the most recent', Object.keys(pruned).length === 200 && pruned.NEW === now && !('T-0' in pruned));
 
 check('ages read the way a glance does', [age(now - 10_000, now), age(now - 240_000, now), age(now - 7_200_000, now)].join() === 'now,4m,2h');
+
+// the board's default order: what was touched last, not what was dispatched last
+const card = (id: string, extra: Partial<Task>): Task =>
+  ({ issue: { id, identifier: id, title: id }, status: 'pr_open', activity: [], subtasks: [], prs: [], tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, ...extra }) as unknown as Task;
+const oldButAnswered = card('OLD', { startedAt: now - 7 * 86_400_000, endedAt: now - 3_600_000 });
+const newButIdle = card('NEW', { startedAt: now - 7_200_000, endedAt: now - 7_000_000 });
+const running = card('RUN', { status: 'working', startedAt: now - 86_400_000 });
+const opened = card('SEEN', { startedAt: now - 9 * 86_400_000, endedAt: now - 8 * 86_400_000 });
+const seenMap = { SEEN: now - 60_000 };
+check('a running agent is touched now', lastTouched(running, undefined, now) === now);
+check('opening a card counts as touching it', lastTouched(opened, seenMap, now) === now - 60_000);
+const order = [newButIdle, opened, oldButAnswered, running].sort((a, b) => compareTasks('recent', a, b, seenMap, now)).map((t) => t.issue.identifier);
+check('recent: running, then last opened, then last session ended — not dispatch order', order.join() === 'RUN,SEEN,OLD,NEW', order.join());
 
 if (failures.length) {
   console.error(`fleet: ${failures.length} failed\n  ${failures.join('\n  ')}`);
