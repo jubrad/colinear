@@ -1774,6 +1774,11 @@
 <td>the allowlist — agents only ever touch these, and only through worktrees. First entry is the default. <a href="#repos">Details</a></td>
 </tr>
 <tr>
+<td><code>cloneRoot</code></td>
+<td>the directory most of <code>repos</code> share</td>
+<td>where a repo <a href="#repos">added from GitHub</a> is cloned</td>
+</tr>
+<tr>
 <td><code>team</code></td>
 <td>your assigned issues</td>
 <td>Linear team key (<code>"CLOUD"</code>) to browse, or <code>"all"</code> for every team. <code>--team CLOUD</code> / <code>--team all</code> override it for one run, and the last team picked with <code>t</code> is remembered</td>
@@ -1971,6 +1976,18 @@
 </tbody>
 </table>
 <p><code>remote</code> / <code>pushRemote</code> are git remote names as they appear in <code>git remote -v</code> for that repo (<code>"mz"</code>, <code>"jubrad"</code>) — not <code>owner/repo</code> slugs. In fork mode agents skip stacked PRs, since those would require pushing to the upstream.</p>
+<p><strong>Adding a repo from GitHub.</strong> You don't have to clone a repo and edit this list by hand first.
+Colinear does both when you ask for work in a repo it doesn't have:</p>
+<ul>
+<li><strong><code>r</code> on a review</strong> of a PR in a repo you haven't configured.</li>
+<li><strong><code>+ clone from GitHub…</code></strong> on the repo row of custom dispatch (<code>c</code>): type <code>owner/repo</code> or paste a
+  GitHub URL.</li>
+</ul>
+<p>Colinear clones it with <code>gh repo clone</code> into <code>cloneRoot</code> (by default the directory most of your repos
+are in) and appends it to <code>repos</code> with its default branch and its GitHub description, so triage can
+route to it. Then it carries on with the review or the dispatch. A clone already on disk is used as
+it is. The entry goes into the file that defines <code>repos</code> for this context, and nothing else in that
+file changes. Every other review of that repo picks it up at the same time.</p>
 <h3 id="agent-runtimes">Agent runtimes<a class="headerlink" href="#agent-runtimes" title="Permanent link">&para;</a></h3>
 <p><code>agent</code> picks what actually runs a session. Both need their own CLI installed and logged in, and
 neither should be given an API key — the runs bill the subscription behind the logged-in CLI.</p>

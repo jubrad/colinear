@@ -2377,6 +2377,10 @@ bundled binary), asked by the daemon on start and daily, saved to <code>models.j
 clients as a <code>models</code> message (core/modelcatalog.ts). The compiled-in list was out of date the week
 a model shipped. A reported name is also a claim, so <code>splitModel</code> routes <code>opus[1m]</code> to the runtime
 that listed it, though no pattern matches it.</p>
+<p>The config can change under the daemon too: importing a repo (core/repoimport.ts) clones it, appends
+it to the config file's <code>repos</code> and reloads, all in the daemon, because the clone has to be on the
+daemon's machine. The clients' copy of the config only came in <code>hello</code>, so a <code>config</code> message carries
+the reloaded one, and the client assigns it in place over the object the app already holds.</p>
 <p>The lifecycle around a session is behind the seam too, not just the session: <code>cli</code> (what <code>doctor</code>
 probes), <code>sessionExists</code> and <code>transcriptDir</code> (which decide fresh-vs-resume, and what backup
 archives), <code>attachArgv</code> (what <code>s</code> hands a terminal, and what the plan chat starts under a minted
