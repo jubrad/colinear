@@ -497,7 +497,7 @@ the network) still just fails and says so, because re-anchoring cannot help with
 
 | key | what |
 |---|---|
-| `r` | pre-review · **re-review** once posted · `x` cancel one · `u` refresh the list |
+| `r` | pre-review · **re-review** once posted · `x` cancel one · `u` refresh the list. On a PR in a repo you have not configured, `r` clones it and adds it to your repos first ([details](../configuration.md#repos)) |
 | `c` | the same, on a [model and with instructions](#a-different-model-your-own-instructions) you pick — kept on the review |
 | `enter` | the annotated diff · `d` the review document |
 | `l` `j` / → ← | into and out of the [preview](#side-by-side), on a wide terminal — `enter` there opens the diff at that finding |

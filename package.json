@@ -29,6 +29,7 @@
     "check:fleet": "tsx src/core/fleet.check.ts",
     "check:jobs": "tsx src/core/jobs.check.ts",
     "check:theme": "tsx src/theme.check.ts",
+    "check:import": "tsx src/core/repoimport.check.ts",
     "check:held": "tsx src/ui/held.check.ts"
   },
   "engines": {

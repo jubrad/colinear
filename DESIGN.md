@@ -563,6 +563,11 @@ clients as a `models` message (core/modelcatalog.ts). The compiled-in list was o
 a model shipped. A reported name is also a claim, so `splitModel` routes `opus[1m]` to the runtime
 that listed it, though no pattern matches it.
 
+The config can change under the daemon too: importing a repo (core/repoimport.ts) clones it, appends
+it to the config file's `repos` and reloads, all in the daemon, because the clone has to be on the
+daemon's machine. The clients' copy of the config only came in `hello`, so a `config` message carries
+the reloaded one, and the client assigns it in place over the object the app already holds.
+
 The lifecycle around a session is behind the seam too, not just the session: `cli` (what `doctor`
 probes), `sessionExists` and `transcriptDir` (which decide fresh-vs-resume, and what backup
 archives), `attachArgv` (what `s` hands a terminal, and what the plan chat starts under a minted

@@ -179,6 +179,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     team: team === undefined ? undefined : team.toLowerCase() === 'all' ? '*' : team.toUpperCase(),
     linearApiKey,
     repos,
+    cloneRoot: raw.cloneRoot ? expandHome(raw.cloneRoot) : undefined,
     repo: repos[0].path,
     defaultBranch: repos[0].defaultBranch,
     worktreeRoot: repos[0].worktreeRoot,

@@ -31,7 +31,7 @@ import type { Config, Issue, RepoConfig, TaskEdits, UiState } from './core/types
 export interface DispatcherApi {
   enqueue(
     issues: Issue[],
-    opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean; manual?: boolean },
+    opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean; manual?: boolean; importRepo?: string },
   ): void;
   cancel(id: string): boolean;
   resume(id: string): boolean;
@@ -292,6 +292,8 @@ export async function connectToDaemon(): Promise<Connection> {
   const searches = new Map<number, (result: CodeSearchResult) => void>();
   let nextSearch = 1;
 
+  /** the config the app was handed, kept so a `config` message can update it in place */
+  let liveCfg: Config | undefined;
   return await new Promise<Connection>((resolve, reject) => {
     let ready = false;
     const decode = createDecoder<ServerMsg>((msg) => {
@@ -312,6 +314,7 @@ export async function connectToDaemon(): Promise<Connection> {
           (id, answers) => command({ name: 'answer', id, answers }),
         );
         ready = true;
+        liveCfg = msg.cfg;
         resolve({
           cfg: msg.cfg,
           ui: msg.ui,
@@ -452,6 +455,9 @@ export async function connectToDaemon(): Promise<Connection> {
         done?.(msg.result);
       } else if (msg.t === 'reviewDiff') {
         for (const fn of diffListeners) fn(msg.id, msg.diff, msg.against);
+      } else if (msg.t === 'config') {
+        // in place: the app holds this object, and every view reads it at render
+        if (liveCfg) Object.assign(liveCfg, msg.cfg);
       } else if (msg.t === 'models') {
         setCatalog(msg.catalog);
       } else if (msg.t === 'agents') {

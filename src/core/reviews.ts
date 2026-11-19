@@ -129,7 +129,7 @@ export const notConfigured = (repository: string) => `${repository} is not a con
 /** owner/repo for each configured repo, read from its git remotes (cached). */
 const slugCache = new Map<string, string[]>();
 
-async function slugsFor(repo: RepoConfig): Promise<string[]> {
+export async function slugsFor(repo: RepoConfig): Promise<string[]> {
   const cached = slugCache.get(repo.path);
   if (cached) return cached;
   let slugs: string[] = [];

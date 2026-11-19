@@ -51,6 +51,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `demo` | `false` | scripted agents, fabricated board, no network. [Details](demo.md) |
 | `linearApiKey` | `$LINEAR_API_KEY` | Linear personal API key. Leave it out of the file and export the env var if you'd rather not have it on disk |
 | `repos` | one repo (see below) | the allowlist — agents only ever touch these, and only through worktrees. First entry is the default. [Details](#repos) |
+| `cloneRoot` | the directory most of `repos` share | where a repo [added from GitHub](#repos) is cloned |
 | `team` | your assigned issues | Linear team key (`"CLOUD"`) to browse, or `"all"` for every team. `--team CLOUD` / `--team all` override it for one run, and the last team picked with `t` is remembered |
 | `concurrency` | `3` | agent sessions running at once. Above ~5 you start hitting subscription rate limits |
 | `agent` | `"claude"` | the runtime for a model no runtime recognises. Most model names say which runtime they belong to on their own, so this is rarely worth setting. [Details](#agent-runtimes) |
@@ -100,6 +101,19 @@ Agents only ever touch repos on this list, and only through worktrees under each
 | `checks` | none | commands run in the worktree after the work pass: `[{ "name": "fmt", "cmd": "bin/fmt --check" }]`. Output lands on the task detail view |
 
 `remote` / `pushRemote` are git remote names as they appear in `git remote -v` for that repo (`"mz"`, `"jubrad"`) — not `owner/repo` slugs. In fork mode agents skip stacked PRs, since those would require pushing to the upstream.
+
+**Adding a repo from GitHub.** You don't have to clone a repo and edit this list by hand first.
+Colinear does both when you ask for work in a repo it doesn't have:
+
+- **`r` on a review** of a PR in a repo you haven't configured.
+- **`+ clone from GitHub…`** on the repo row of custom dispatch (`c`): type `owner/repo` or paste a
+  GitHub URL.
+
+Colinear clones it with `gh repo clone` into `cloneRoot` (by default the directory most of your repos
+are in) and appends it to `repos` with its default branch and its GitHub description, so triage can
+route to it. Then it carries on with the review or the dispatch. A clone already on disk is used as
+it is. The entry goes into the file that defines `repos` for this context, and nothing else in that
+file changes. Every other review of that repo picks it up at the same time.
 
 ### Agent runtimes
 
