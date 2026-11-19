@@ -1417,8 +1417,12 @@
 <p>Aliases: <code>b</code>, <code>bo</code>. Every dispatched task, in the column that says what it's waiting on.</p>
 <p><a class="glightbox" href="../../images/board.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The board with CAD-14 selected in Working: its subtask checklist and the tail of its activity log fill the detail pane" src="../../images/board.png" /></a></p>
 <p>Columns are Queued · Triage · Working · Needs Input · PR Open · Failed · Done. Within a column cards
-sort by what wants you first — changes requested, conflicting, approved, draft, awaiting review — and
-the header carries a coloured count per state (<code>PR Open(7) 1-1-2-2-1</code>): pink changes-requested, red
+sort by <strong>what was touched most recently</strong>: an agent running counts as now, then the end of its last
+session, its work last changing, or you last opening it. When it was first dispatched doesn't count:
+a card dispatched last week and answered an hour ago is near the top, and one dispatched an hour ago
+that has sat idle since is not. Ties, like everything still queued, go by what wants you first:
+changes requested, conflicting, approved, draft, awaiting review. <code>,</code> → <code>board</code> sorts by that alone.
+The header carries a coloured count per state (<code>PR Open(7) 1-1-2-2-1</code>): pink changes-requested, red
 conflicting, green approved, grey draft, orange awaiting, purple merged, red closed.</p>
 <p>A card shows live duration, tokens, <a href="#what-it-has-changed">what the worktree has changed</a>, repo, subtask progress, its question if it has one, blocked-by
 chains, checks, and each PR with CI and review state. A <strong>blinking dot</strong> means a maintenance session
