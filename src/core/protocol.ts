@@ -24,11 +24,11 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 24;
+export const PROTOCOL_VERSION = 25;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
-  | { name: 'enqueue'; issues: Issue[]; opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean; manual?: boolean } }
+  | { name: 'enqueue'; issues: Issue[]; opts?: { instructions?: string; model?: string; repo?: RepoConfig; skipTriage?: boolean; manual?: boolean; importRepo?: string } }
   | { name: 'cancel'; id: string }
   | { name: 'resume'; id: string }
   | { name: 'force'; id: string }
@@ -119,6 +119,8 @@ export type ServerMsg =
   | { t: 'hello'; protocol: number; pid: number; cfg: Config; snapshot: Snapshot; ui: UiState; models?: ModelCatalog }
   /** what each runtime says it can run — on connect, and whenever the daemon asks again */
   | { t: 'models'; catalog: ModelCatalog }
+  /** the config changed under the daemon (a repo imported): the client takes it as it is */
+  | { t: 'config'; cfg: Config }
   | { t: 'delta'; delta: Delta }
   | { t: 'snapshot'; snapshot: Snapshot }
   | { t: 'toast'; text: string; kind: 'info' | 'ok' | 'err' }

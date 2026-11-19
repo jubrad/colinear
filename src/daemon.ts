@@ -12,8 +12,9 @@ import { startPrPolling } from './core/prs.js';
 import { Reviewer } from './core/reviewer.js';
 import { PlanManager } from './core/projectplan.js';
 import { providerFor } from './core/provider.js';
-import type { Project, Severity } from './core/types.js';
-import { adoptReview, pollReviewRequests, startReviewPolling } from './core/reviews.js';
+import type { Project, RepoConfig, Severity } from './core/types.js';
+import { importRepo } from './core/repoimport.js';
+import { adoptReview, notConfigured, pollReviewRequests, startReviewPolling } from './core/reviews.js';
 import {
   createDecoder,
   encode,
@@ -152,9 +153,18 @@ export async function runDaemon(): Promise<void> {
   /** `reply` answers just the client that asked; `broadcast` tells everyone. */
   const run = (cmd: Command, reply: (msg: ServerMsg) => void) => {
     switch (cmd.name) {
-      case 'enqueue':
-        dispatcher.enqueue(cmd.issues, cmd.opts);
+      case 'enqueue': {
+        const { importRepo: slug, ...opts } = cmd.opts ?? {};
+        if (!slug) {
+          dispatcher.enqueue(cmd.issues, cmd.opts);
+          break;
+        }
+        // "clone from GitHub" in custom dispatch: the repo first, then the work in it
+        void importAndReport(slug).then((repo) => {
+          if (repo) dispatcher.enqueue(cmd.issues, { ...opts, repo });
+        });
         break;
+      }
       case 'cancel':
         dispatcher.cancel(cmd.id);
         break;
@@ -209,9 +219,19 @@ export async function runDaemon(): Promise<void> {
             broadcast({ t: 'toast', text: String((err as Error)?.message ?? err).slice(0, 160), kind: 'err' }),
           );
         break;
-      case 'startReview':
+      case 'startReview': {
+        // a review of a repo you have not got: reviewing it is asking for it,
+        // so clone it, add it to the config, and carry on
+        const asked = store.getReview(cmd.id);
+        if (asked && !asked.repo && !isDemo(cfg)) {
+          void importAndReport(asked.repository).then((repo) => {
+            if (repo) void reviewer.start(cmd.id, cmd.opts);
+          });
+          break;
+        }
         void reviewer.start(cmd.id, cmd.opts);
         break;
+      }
       case 'cancelReview':
         reviewer.cancel(cmd.id);
         break;
@@ -507,6 +527,40 @@ export async function runDaemon(): Promise<void> {
         break;
       }
     }
+  };
+
+  /**
+   * Clone a GitHub repo (or find the clone already on disk), add it to the
+   * config, and tell everyone: the toasts, the clients' copy of the config,
+   * and every review of that repo, which until now had nowhere to check out.
+   */
+  const importing = new Map<string, Promise<RepoConfig | undefined>>();
+  const importAndReport = (slug: string): Promise<RepoConfig | undefined> => {
+    const key = slug.toLowerCase();
+    const running = importing.get(key);
+    if (running) return running;
+    broadcast({ t: 'toast', text: `${slug}: not configured — cloning it and adding it to your repos…`, kind: 'info' });
+    const job = importRepo(cfg, slug, () => Object.assign(cfg, loadConfig()))
+      .then(({ repo, how, path }) => {
+        broadcast({ t: 'config', cfg });
+        for (const r of store.listReviews()) {
+          if (r.repository.toLowerCase() !== key || r.repo) continue;
+          store.updateReview(r.id, {
+            repo: { name: repo.name, path: repo.path, worktreeRoot: repo.worktreeRoot },
+            ...(r.status === 'error' && r.error === notConfigured(r.repository) ? { status: 'pending', error: undefined } : {}),
+          });
+        }
+        const said = how === 'cloned' ? `cloned into ${path}` : how === 'found' ? `found at ${path}` : 'already configured';
+        broadcast({ t: 'toast', text: `${slug}: ${said} and added to your repos as ${repo.name}`, kind: 'ok' });
+        return repo;
+      })
+      .catch((err: unknown) => {
+        broadcast({ t: 'toast', text: String((err as Error)?.message ?? err).slice(0, 200), kind: 'err' });
+        return undefined;
+      })
+      .finally(() => importing.delete(key));
+    importing.set(key, job);
+    return job;
   };
 
   mkdirSync(STATE_DIR, { recursive: true });

@@ -931,6 +931,8 @@ export interface Config {
   linearApiKey: string;
   /** repos agents may work on; first entry is the default */
   repos: RepoConfig[];
+  /** where a repo imported from GitHub is cloned (default: the directory most of `repos` share) */
+  cloneRoot?: string;
   /** absolute path to the default repo (mirror of repos[0].path) */
   repo: string;
   defaultBranch: string;

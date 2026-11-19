@@ -100,6 +100,11 @@ echo '── themes'
 npm run check:theme
 
 echo
+echo '── repo import'
+# an import appends one repo to the config and nothing else
+npm run check:import
+
+echo
 echo '── held cursor'
 # a list re-sorted under the cursor keeps it on the same row
 npm run check:held

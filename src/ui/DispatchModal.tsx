@@ -1,5 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useMemo, useState } from 'react';
+import { parseSlug } from '../core/repoimport.js';
 import type { RepoConfig } from '../core/types.js';
 import { theme } from '../theme.js';
 import { TextArea } from './TextArea.js';
@@ -22,9 +23,18 @@ export interface DispatchOptions {
   skipTriage?: boolean;
   /** cut the worktree and stop: no agent until you say so */
   manual?: boolean;
+  /** owner/repo to clone and add to the config first — "clone from GitHub" on the repo row */
+  importRepo?: string;
 }
 
-type Field = 'model' | 'repo' | 'triage' | 'start' | 'instructions';
+type Field = 'model' | 'repo' | 'slug' | 'triage' | 'start' | 'instructions';
+
+/**
+ * The repo row's last choice: a repo you have not cloned. The line under the
+ * options becomes an input for `owner/repo`, and dispatching clones it next
+ * to the others, adds it to the config, and starts the work there.
+ */
+const CLONE_REPO = '+ clone from GitHub…';
 
 /**
  * Letting triage pick the repository.
@@ -71,32 +81,42 @@ export function DispatchModal(props: {
   const [repoIdx, setRepoIdx] = useState(props.skipTriage && repos.length > 1 ? 1 : 0);
   const [triageIdx, setTriageIdx] = useState(props.skipTriage ? 1 : 0);
   const [startIdx, setStartIdx] = useState(0);
+  const [slug, setSlug] = useState('');
+  const [slugError, setSlugError] = useState(false);
   // the options are the quick part; instructions are where you linger, so they
   // come last in tab order and last on screen
   const [focus, setFocus] = useState<Field>(props.skipTriage && repos.length > 1 ? 'repo' : 'model');
 
+  // auto first when there is a choice to leave to triage; clone always last
+  const multi = repos.length > 1;
+  const repoChoices = [...(multi ? [AUTO_REPO] : []), ...repos.map((r) => r.name), CLONE_REPO];
+  const auto = multi && repoIdx === 0;
+  const cloning = repoIdx === repoChoices.length - 1;
+  const chosenRepo = auto || cloning ? undefined : repos[repoIdx - (multi ? 1 : 0)];
+
   const fields = useMemo<Field[]>(
-    () =>
-      repos.length > 1
-        ? ['model', 'repo', 'triage', 'start', 'instructions']
-        : ['model', 'triage', 'start', 'instructions'],
-    [repos.length],
+    () => ['model', 'repo', ...(cloning ? (['slug'] as Field[]) : []), 'triage', 'start', 'instructions'],
+    [cloning],
   );
 
-  // index 0 is AUTO_REPO, so the repos themselves start at 1
-  const chosenRepo = repoIdx === 0 ? undefined : repos[repoIdx - 1];
-  const auto = repoIdx === 0 && repos.length > 1;
-
-  const submit = () =>
+  const submit = () => {
+    const importRepo = cloning ? parseSlug(slug) : undefined;
+    if (cloning && !importRepo) {
+      setSlugError(true);
+      setFocus('slug');
+      return;
+    }
     onSubmit({
       instructions: instructions.trim() || undefined,
       model: modelChoices[modelIdx].value,
-      repo: repos.length > 1 ? chosenRepo : repos[0],
-      // the two rows keep each other consistent (see `pick`), so a skip here
-      // always comes with a repo — the dispatcher would refuse one without
+      repo: chosenRepo,
+      importRepo,
+      // the two rows keep each other consistent (see the repo and triage
+      // keys), so a skip here always comes with a repo named
       skipTriage: triageIdx === 1 && !auto,
       manual: startIdx === 1,
     });
+  };
 
   useInput((input, key) => {
     if (key.escape) return onCancel();
@@ -104,6 +124,8 @@ export function DispatchModal(props: {
     // the text area owns every other key while it has focus — including enter,
     // which has to mean "newline" in a box you are writing a paragraph into
     if (focus === 'instructions') return;
+    // the repo to clone is typed; enter there dispatches, through the text area
+    if (focus === 'slug') return;
     const cycle = (len: number, set: (fn: (i: number) => number) => void) => {
       if (key.leftArrow || input === 'h') set((i) => (i + len - 1) % len);
       if (key.rightArrow || input === 'l') set((i) => (i + 1) % len);
@@ -117,9 +139,9 @@ export function DispatchModal(props: {
     const step = (len: number, at: number) =>
       key.leftArrow || input === 'h' ? (at + len - 1) % len : key.rightArrow || input === 'l' ? (at + 1) % len : at;
     if (focus === 'repo') {
-      const next = step(repos.length + 1, repoIdx);
+      const next = step(repoChoices.length, repoIdx);
       setRepoIdx(next);
-      if (next === 0 && triageIdx === 1) setTriageIdx(0);
+      if (multi && next === 0 && triageIdx === 1) setTriageIdx(0);
     }
     if (focus === 'triage') {
       const next = step(TRIAGE_OPTIONS.length, triageIdx);
@@ -181,7 +203,7 @@ export function DispatchModal(props: {
         custom dispatch — {count} issue{count > 1 ? 's' : ''}
       </Text>
       {optionRow('model', 'model', modelChoices.map((m) => m.label), modelIdx)}
-      {repos.length > 1 && optionRow('repo', 'repo', [AUTO_REPO, ...repos.map((r) => r.name)], repoIdx)}
+      {optionRow('repo', 'repo', repoChoices, repoIdx)}
       {optionRow('triage', 'triage', TRIAGE_OPTIONS, triageIdx)}
       {optionRow('start', 'start', START_OPTIONS, startIdx)}
       {/*
@@ -190,6 +212,26 @@ export function DispatchModal(props: {
         form inside a popup whose height was already fixed — which is what made
         the spacing jump.
       */}
+      {cloning ? (
+        <Box>
+          <Text bold color={focus === 'slug' ? theme.accent : slugError ? theme.err : theme.dim}>
+            {(slugError ? 'owner/repo?' : 'clone').padEnd(LABEL_WIDTH)}
+          </Text>
+          <TextArea
+            value={slug}
+            onChange={(v) => {
+              setSlug(v);
+              setSlugError(false);
+            }}
+            focus={focus === 'slug'}
+            width={Math.max(10, width - LABEL_WIDTH)}
+            height={1}
+            submitOnEnter
+            onSubmit={submit}
+            placeholder="owner/repo or a GitHub URL — tab to type it"
+          />
+        </Box>
+      ) : (
       <Text dimColor wrap="truncate">
         {' '.repeat(LABEL_WIDTH)}
         {manual ? (
@@ -198,15 +240,16 @@ export function DispatchModal(props: {
           </Text>
         ) : auto ? (
           <Text>triage reads the repo descriptions and routes each issue</Text>
-        ) : triageIdx === 1 && (chosenRepo ?? repos[0]) ? (
+        ) : triageIdx === 1 && chosenRepo ? (
           <Text>
-            no triage — straight to work in <Text color={theme.key}>{(chosenRepo ?? repos[0]).name}</Text>
-            {repos.length > 1 ? ' (repo: ←→ to change)' : ''}
+            no triage — straight to work in <Text color={theme.key}>{chosenRepo.name}</Text>
+            {multi ? ' (repo: ←→ to change)' : ''}
           </Text>
         ) : (
           <Text> </Text>
         )}
       </Text>
+      )}
       <Box marginTop={1}>
         <Text bold color={focus === 'instructions' ? theme.accent : theme.dim}>
           instructions

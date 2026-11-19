@@ -291,7 +291,7 @@ export class Reviewer {
     if (!review.repo) {
       store.updateReview(id, { status: 'error', error: notConfigured(review.repository) });
       this.toast(
-        `no local clone matches ${review.repository} — check the paths in repos (the poll retries every 5m)`,
+        `no local clone matches ${review.repository} — r clones it and adds it to your repos`,
         'err',
       );
       return;
