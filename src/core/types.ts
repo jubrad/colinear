@@ -539,12 +539,16 @@ export interface Review {
    */
   adopted?: boolean;
   /**
-   * You took it off the list with `H`. It stays hidden until you bring it
-   * back, through new requests and pushes alike: hiding a PR means you are not
-   * going to review it, and a team re-requesting is not a reason to start.
+   * You took it off the list with `H` — until something new happens on the
+   * PR. A push, a comment, a review, a re-request: anything that moves
+   * GitHub's `updatedAt` past `hiddenSince` puts it back (see `wakesHidden`).
+   * Hiding is "nothing for me here right now", not "never": the PR that
+   * changes after you shelved it is the one you would want to see again.
    * Being off the list also keeps it out of `:todo`.
    */
   hidden?: boolean;
+  /** the PR's `updatedAt` when you hid it — activity after this brings it back */
+  hiddenSince?: string;
   requested?: boolean;
   /**
    * Who it was asked of. GitHub's `review-requested:<you>` search returns both

@@ -37,7 +37,7 @@ const W = { flag: 4, reviewed: 5, status: 12, pr: 24, draft: 9, author: 18, size
  */
 export function freshness(r: Review): { glyph: string; color: string; why: string } | undefined {
   // first: only shown at all because `h` is on, and it should say why it was off
-  if (r.hidden) return { glyph: '-', color: theme.dim, why: 'you hid this — H puts it back on the list' };
+  if (r.hidden) return { glyph: '-', color: theme.dim, why: 'you hid this until there is new activity on the PR — H puts it back now' };
   const reviewed = r.posted?.sha ?? r.reviewedSha;
   if (reviewed && r.headSha && r.headSha !== reviewed) {
     return { glyph: '↻', color: theme.warn, why: 'pushed since your review — r re-reviews' };
@@ -416,9 +416,10 @@ export function ReviewsView(props: { param?: string }) {
       if (input === 'H') {
         // a review write like the note: the mirror forwards it to the daemon
         const hide = !selected.hidden;
-        store.updateReview(selected.id, { hidden: hide || undefined });
+        // until the PR moves again: the mark is GitHub's own updatedAt
+        store.updateReview(selected.id, { hidden: hide || undefined, hiddenSince: hide ? selected.updatedAt : undefined });
         const pr = `${selected.repository}#${selected.number}`;
-        ctx.toast(hide ? `hid ${pr}${showHidden ? '' : ' — h shows hidden ones'}` : `${pr} is back on the list`, 'info');
+        ctx.toast(hide ? `hid ${pr} until there is new activity on it${showHidden ? '' : ' — h shows hidden ones'}` : `${pr} is back on the list`, 'info');
       }
       if (input === 'S' || input === ',') setSorting(true);
       if (input === 'm') {
@@ -1172,7 +1173,7 @@ export const reviewsKeys: Array<[string, string]> = [
   ['x', 'cancel'],
   [', S', 'sort · reviewed = newest colinear review'],
   ['m', 'only yours / all'],
-  ['H', 'hide / unhide'],
+  ['H', 'hide until new activity / unhide'],
   ['h', 'show settled + hidden'],
   ['u', 'refresh'],
   ['/', 'filter'],
