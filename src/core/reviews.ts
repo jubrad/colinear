@@ -227,6 +227,8 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
       // only way that record heals — retention would otherwise be the cure.
       const healed = existing.repo ? undefined : await repoForSlug(cfg, pr.repository.nameWithOwner);
       const patch: Partial<Review> = { ...meta };
+      // re-requested, pushed to, commented on: whatever it was, it is new
+      if (wakesHidden(existing, pr.updatedAt)) Object.assign(patch, wake(id));
       if (healed) {
         patch.repo = { name: healed.name, path: healed.path, worktreeRoot: healed.worktreeRoot };
         // and clear the refusal it caused — but only that one, so a real
@@ -390,6 +392,24 @@ export async function fetchPrs(prs: Array<{ id: string; repository: string; numb
   return out;
 }
 
+/**
+ * Has a hidden review had activity since it was hidden? GitHub's own
+ * `updatedAt` against the one recorded when you hid it — not the clock, so a
+ * skewed machine cannot wake or bury anything. A review hidden before the
+ * mark was kept has none, and is measured from the last `updatedAt` seen.
+ */
+export function wakesHidden(review: Review, updatedAt: string | undefined): boolean {
+  if (!review.hidden || !updatedAt) return false;
+  const since = review.hiddenSince ?? review.updatedAt;
+  return !since || updatedAt > since;
+}
+
+/** The patch that puts a hidden review back, and the line that says why. */
+function wake(id: string): Partial<Review> {
+  store.addReviewActivity(id, 'new activity on the PR since you hid it — back on the list');
+  return { hidden: undefined, hiddenSince: undefined };
+}
+
 /** GitHub's own description of the PR onto the review; nothing that is the operator's. */
 export function refreshMeta(review: Review, pr: CurrentPr): void {
   const meta: Partial<Review> = {
@@ -411,6 +431,10 @@ export function refreshMeta(review: Review, pr: CurrentPr): void {
   const changed = (Object.keys(meta) as Array<keyof Review>).filter(
     (key) => JSON.stringify(meta[key]) !== JSON.stringify(review[key]),
   );
+  if (wakesHidden(review, pr.updatedAt)) {
+    Object.assign(meta, wake(review.id));
+    changed.push('hidden', 'hiddenSince');
+  }
   if (!changed.length) return;
   if (changed.includes('isDraft')) {
     store.addReviewActivity(review.id, pr.isDraft ? 'PR moved back to draft' : 'PR marked ready for review');
@@ -624,7 +648,7 @@ export async function adoptReview(cfg: Config, spec: string): Promise<Review> {
     // invisible, with nothing left to revive it: the sweep skips `stale` rows
     // for good. A review you hid with `H` comes back for the same reason.
     const revived = revivedStatus(existing, pr.state);
-    const shown = { ...meta, hidden: undefined };
+    const shown = { ...meta, hidden: undefined, hiddenSince: undefined };
     store.updateReview(id, revived ? { ...shown, status: revived, error: undefined } : shown);
     store.addReviewActivity(
       id,

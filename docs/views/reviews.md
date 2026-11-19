@@ -506,7 +506,7 @@ the network) still just fails and says so, because re-anchoring cannot help with
 | `,` | sort: needs-me / reviewed / updated / size / repo / author / cost — the [sort bar](../README.md#sorting) (`S` too). Remembered |
 | `m` | only yours, or every review. Remembered |
 | `o` | open the PR |
-| `H` | hide this PR from the list, or put a hidden one back |
+| `H` | hide this PR until it has new activity, or put a hidden one back now |
 | `h` | show everything, settled and hidden, and go back to the live list |
 
 **Every live review follows its PR**, on the same five-minute poll as the list: draft or ready,
@@ -538,11 +538,13 @@ means resting the cursor on its row for a moment. The header counts the reviews 
 yet ("3 new reviews"), so a review that finished while you were elsewhere doesn't get lost under PRs
 that merely updated.
 
-**`H` hides a PR you are not going to review.** It goes the way a settled one does: off the list,
-out of `:todo`, and counted in the header ("2 hidden by you"). `h` shows it again, dimmed and marked
-`-`, and `H` on it puts it back. Hiding lasts until you undo it. A new push or another review
-request does not bring it back, because a team re-requesting is not a reason to start. Naming it
-with `:reviews owner/repo#123` does.
+**`H` hides a PR until something new happens on it.** It goes the way a settled one does: off the
+list, out of `:todo`, and counted in the header ("2 hidden by you"). `h` shows it again, dimmed and
+marked `-`, and `H` on it puts it back straight away. Otherwise it comes back by itself the next time
+the PR has new activity: a push, a comment, a review, a re-request, or anything else that moves
+GitHub's last-updated time past what it was when you hid it. Its activity log says so. Bot
+comments count too, since GitHub doesn't tell them apart there. Naming it with
+`:reviews owner/repo#123` brings it back as well.
 
 Reviews staled by the old behaviour recover on their own: once per daemon start, stale reviews whose
 PR is still open and carries a review of yours get their status back from GitHub's record.
