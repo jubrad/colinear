@@ -1791,7 +1791,7 @@
 
 <h1 id="reviews-prs-awaiting-your-review"><code>:reviews</code> — PRs awaiting your review<a class="headerlink" href="#reviews-prs-awaiting-your-review" title="Permanent link">&para;</a></h1>
 <p>Aliases: <code>rev</code>, <code>pr</code>. PRs where your review is requested, across every repo your <code>gh</code> auth can see,
-refreshed every five minutes.</p>
+refreshed every minute (<a href="../../configuration/"><code>reviewPollSeconds</code></a>). <code>u</code> refreshes now.</p>
 <p><a class="glightbox" href="../../images/reviews.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The review queue: two PRs, the selected one pre-reviewed with four findings graded lead, blocking, consider and nit" src="../../images/reviews.png" /></a></p>
 <h2 id="side-by-side">Side by side<a class="headerlink" href="#side-by-side" title="Permanent link">&para;</a></h2>
 <p>On a terminal 140 columns or wider the list and the selected review sit <strong>side by side</strong>: the
@@ -2328,7 +2328,7 @@ the network) still just fails and says so, because re-anchoring cannot help with
 </tr>
 <tr>
 <td><code>t</code></td>
-<td>the PRs your colinear tasks opened, or back to the reviews asked of you. Remembered</td>
+<td>cycle the list: reviews asked of you → the PRs your colinear tasks opened → both together. Remembered</td>
 </tr>
 <tr>
 <td><code>o</code></td>
@@ -2369,12 +2369,14 @@ means resting the cursor on its row for a moment. The header counts the reviews 
 yet ("3 new reviews"), so a review that finished while you were elsewhere doesn't get lost under PRs
 that merely updated.</p>
 <p><strong><code>t</code> shows the PRs colinear opened for you.</strong> Every open PR one of your tasks opened becomes a
-review here too, added by the review poll (every five minutes). They are kept out of the normal
-list, which is for what others asked of you, and out of <code>:todo</code>'s review queue, since nobody asked
-you to review your own work. <code>t</code> switches to them and back, and the header shows how many are on
-the other side. In that view <code>r</code> has an agent pre-review what the task's agent wrote, and <code>enter</code>
-reads it against the code, as with any review. A task PR stays until it merges or closes, like a
-PR you added by name.</p>
+review here too, added by the review poll (every minute). They are kept out of the normal list,
+which is for what others asked of you, and out of <code>:todo</code>'s review queue, since nobody asked you to
+review your own work. <code>t</code> cycles three views: the reviews asked of you, your tasks' PRs, and <strong>both
+together</strong>. The header counts each side (<code>requests 12 + tasks 3</code>). A task's PR carries its task's
+identifier in front of the title, in every view, and <code>/</code> finds it by that identifier too. <code>m</code> narrows
+only the requests, since your tasks' PRs are yours by definition. <code>r</code> has an agent pre-review what
+the task's agent wrote, and <code>enter</code> reads it against the code, as with any review. A task PR stays
+until it merges or closes, like a PR you added by name.</p>
 <p><strong><code>H</code> hides a PR until something new happens on it.</strong> It goes the way a settled one does: off the
 list, out of <code>:todo</code>, and counted in the header ("2 hidden by you"). <code>h</code> shows it again, dimmed and
 marked <code>-</code>, and <code>H</code> on it puts it back straight away. Otherwise it comes back by itself the next time

@@ -1779,6 +1779,11 @@
 <td>where a repo <a href="#repos">added from GitHub</a> is cloned</td>
 </tr>
 <tr>
+<td><code>reviewPollSeconds</code></td>
+<td><code>60</code></td>
+<td>how often the daemon asks GitHub for review requests and refreshes the PRs <code>:reviews</code> tracks, your tasks' PRs included. At least 30. Each poll costs about 2 of GitHub's 5,000 hourly GraphQL points. Read when the daemon starts</td>
+</tr>
+<tr>
 <td><code>team</code></td>
 <td>your assigned issues</td>
 <td>Linear team key (<code>"CLOUD"</code>) to browse, or <code>"all"</code> for every team. <code>--team CLOUD</code> / <code>--team all</code> override it for one run, and the last team picked with <code>t</code> is remembered</td>
