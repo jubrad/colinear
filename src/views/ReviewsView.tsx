@@ -156,19 +156,24 @@ export function ReviewsView(props: { param?: string }) {
   const sort: SortKey = (SORTS as readonly string[]).includes(ctx.ui.reviewsSort ?? '') ? (ctx.ui.reviewsSort as SortKey) : 'needs me';
   const desc = Boolean(ctx.ui.reviewsSortDesc);
   const mine = ctx.ui.reviewsScope === 'mine';
+  /** `t`: the PRs your colinear tasks opened, in place of what others asked of you */
+  const tasksView = Boolean(ctx.ui.reviewsTasks);
+  /** the reviews this view is about: requests, or your tasks' PRs — never both */
+  const inView = useMemo(() => reviews.filter((r) => Boolean(r.task) === tasksView), [reviews, tasksView]);
   /** a column header with the sort arrow, when this column is the sort */
   const sortHead = (label: string, key: SortKey) => (sort === key ? `${label}${desc ? '↓' : '↑'}` : label);
 
   const rows = useMemo(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const matched = reviews.filter((r) => {
+    const matched = inView.filter((r) => {
       // Settled reviews pile up — a month of them, since retention keeps them
       // that long — so the list is what is still live and `h` reveals the rest.
       // It used to be the filter text containing the word "stale", which found
       // them by accident as often as on purpose and told nobody they existed.
       // Hidden with `H` is the same deal by your hand rather than GitHub's.
       if ((r.status === 'stale' || r.hidden) && !showHidden) return false;
-      if (mine && !involvesMe(r)) return false;
+      // your own work involves you by definition; `m` narrows requests
+      if (mine && !tasksView && !involvesMe(r)) return false;
       if (!terms.length) return true;
       const hay = `${r.repository} ${r.number} ${r.title} ${r.author} ${r.status}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
@@ -215,7 +220,7 @@ export function ReviewsView(props: { param?: string }) {
     };
     const sorted = [...matched].sort(compare);
     return desc ? sorted.reverse() : sorted;
-  }, [reviews, query, sort, desc, showHidden, mine]);
+  }, [inView, query, sort, desc, showHidden, mine, tasksView]);
 
   const at = useHeldIndex(rows, cursor, setCursor, (r) => r.id);
   const atCursor = rows[Math.min(at, Math.max(0, rows.length - 1))];
@@ -422,6 +427,11 @@ export function ReviewsView(props: { param?: string }) {
         ctx.toast(hide ? `hid ${pr} until there is new activity on it${showHidden ? '' : ' — h shows hidden ones'}` : `${pr} is back on the list`, 'info');
       }
       if (input === 'S' || input === ',') setSorting(true);
+      if (input === 't') {
+        ctx.setUi({ reviewsTasks: tasksView ? undefined : true });
+        setCursor(0);
+        ctx.toast(tasksView ? 'reviews asked of you' : "PRs your colinear tasks opened — r has an agent review one; t goes back", 'info');
+      }
       if (input === 'm') {
         ctx.setUi({ reviewsScope: mine ? undefined : 'mine' });
         setCursor(0);
@@ -436,10 +446,12 @@ export function ReviewsView(props: { param?: string }) {
     { isActive: !filtering && !sorting && !noting && !reading && !customizing && !ctx.cmdOpen },
   );
 
-  const ready = reviews.filter((r) => r.status === 'ready' && !r.hidden).length;
-  const settled = reviews.filter((r) => r.status === 'stale').length;
+  const ready = inView.filter((r) => r.status === 'ready' && !r.hidden).length;
+  const settled = inView.filter((r) => r.status === 'stale').length;
   // a hidden review that has since settled counts once, as settled
-  const dismissed = reviews.filter((r) => r.hidden && r.status !== 'stale').length;
+  const dismissed = inView.filter((r) => r.hidden && r.status !== 'stale').length;
+  /** the other view's live count, so the key that reaches it says what is there */
+  const otherCount = reviews.filter((r) => Boolean(r.task) !== tasksView && r.status !== 'stale' && !r.hidden).length;
   const held = [settled ? `${settled} settled` : '', dismissed ? `${dismissed} hidden by you` : '']
     .filter(Boolean)
     .join(', ');
@@ -555,7 +567,7 @@ export function ReviewsView(props: { param?: string }) {
           reviews{' '}
         </Text>
         <Text dimColor>
-          {rows.length} {showHidden ? 'shown' : mine ? 'yours' : 'awaiting me'}{' '}
+          {rows.length} {tasksView ? 'from your tasks' : showHidden ? 'shown' : mine ? 'yours' : 'awaiting me'}{' '}
         </Text>
         {ready > 0 && <Text color={REVIEW_COLORS.ready}>· {ready} pre-reviewed </Text>}
         {held && (
@@ -567,7 +579,10 @@ export function ReviewsView(props: { param?: string }) {
           const n = rows.filter(fresh).length;
           return n ? <Text color={theme.accent} bold>· {n} new review{n === 1 ? '' : 's'} </Text> : null;
         })()}
-        <Text color={mine ? theme.accent : theme.dim}>· {mine ? 'yours (m: all)' : 'all (m: yours)'} </Text>
+        {!tasksView && <Text color={mine ? theme.accent : theme.dim}>· {mine ? 'yours (m: all)' : 'all (m: yours)'} </Text>}
+        <Text color={tasksView ? theme.accent : theme.dim}>
+          · {tasksView ? `your tasks' PRs (t: requests${otherCount ? ` ${otherCount}` : ''})` : `t: your tasks' PRs${otherCount ? ` (${otherCount})` : ''}`}{' '}
+        </Text>
         <Text dimColor>· sort: </Text>
         <Text color={theme.accent}>
           {sort}
@@ -1174,6 +1189,7 @@ export const reviewsKeys: Array<[string, string]> = [
   [', S', 'sort · reviewed = newest colinear review'],
   ['m', 'only yours / all'],
   ['H', 'hide until new activity / unhide'],
+  ['t', "your colinear tasks' PRs / requests"],
   ['h', 'show settled + hidden'],
   ['u', 'refresh'],
   ['/', 'filter'],

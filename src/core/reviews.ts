@@ -173,6 +173,7 @@ export async function pollReviewRequests(cfg: Config): Promise<void> {
     recoveredOnce = true;
     await recoverPostedReviews().catch((err) => log(`review recovery failed: ${String(err).slice(0, 160)}`));
   }
+  await adoptTaskPrs(cfg).catch((err) => log(`adopting task PRs failed: ${String(err).slice(0, 160)}`));
   let prs: SearchedPr[];
   // needed past the query too: it is what tells a request of you from a
   // request of a team you are on
@@ -595,6 +596,37 @@ export function revivedStatus(existing: Review, prState: string): Review['status
   // a settled pull request has nothing to come back to
   if (prState !== 'OPEN') return undefined;
   return existing.findings?.length || existing.doc ? 'ready' : 'pending';
+}
+
+/**
+ * Every open PR a colinear task opened, as a review in its own view of
+ * :reviews (`t`). Adopted, because that is what keeps a review that never
+ * came from the request search alive and refreshed until its PR settles —
+ * and it is never asked of you, so it stays out of :todo's review queue.
+ * One already on the list is only tagged; adopting it again would revive
+ * what you settled or hid.
+ */
+export async function adoptTaskPrs(cfg: Config): Promise<void> {
+  for (const task of store.list()) {
+    for (const pr of task.prs) {
+      if (pr.state !== 'OPEN') continue;
+      const spec = parsePrSpec(pr.url);
+      if (!spec) continue;
+      const id = reviewId(spec.repository, spec.number);
+      const existing = store.getReview(id);
+      if (existing) {
+        if (existing.task !== task.issue.identifier) store.updateReview(id, { task: task.issue.identifier });
+        continue;
+      }
+      try {
+        await adoptReview(cfg, pr.url);
+        store.updateReview(id, { task: task.issue.identifier, requested: false });
+        store.addReviewActivity(id, `opened by colinear for ${task.issue.identifier} — r has an agent review it`);
+      } catch (err) {
+        log(`review: could not add ${task.issue.identifier}'s PR ${pr.url}: ${String(err).slice(0, 160)}`);
+      }
+    }
+  }
 }
 
 export async function adoptReview(cfg: Config, spec: string): Promise<Review> {

@@ -98,6 +98,8 @@ export interface UiState {
   reviewsSort?: string;
   reviewsSortDesc?: boolean;
   reviewsScope?: 'all' | 'mine';
+  /** :reviews shows the PRs your colinear tasks opened instead of requests (`t`) */
+  reviewsTasks?: boolean;
   /** how :agents lists them: grouped by whose move it is, or every task as a table (`t`) */
   agentsLayout?: 'groups' | 'table';
   /** the four-row header (who, repo, keys) folded away with `\``: `:` and `/` still open their bars */
@@ -549,6 +551,13 @@ export interface Review {
   hidden?: boolean;
   /** the PR's `updatedAt` when you hid it — activity after this brings it back */
   hiddenSince?: string;
+  /**
+   * The colinear task that opened this PR, by identifier. Your own work, not
+   * a request: listed in :reviews only in its own view (`t`), so a pre-review
+   * of what an agent wrote is one key away without crowding what others
+   * asked of you.
+   */
+  task?: string;
   requested?: boolean;
   /**
    * Who it was asked of. GitHub's `review-requested:<you>` search returns both
