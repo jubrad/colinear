@@ -8,26 +8,27 @@ import { useReviews, useTasks } from './core/hooks.js';
 import { notify } from './core/notify.js';
 import { store } from './core/store.js';
 import type { Config, Scope, UiState } from './core/types.js';
-import { CommandBar } from './ui/CommandBar.js';
 import { AppContext, type AppCtx, type ToastKind } from './ui/context.js';
 import { Crumbs } from './ui/Crumbs.js';
-import { formatTokens } from './ui/format.js';
-import { Header } from './ui/Header.js';
+import { KeysPopupBody, keysPopupRows, TitleBar } from './ui/Header.js';
+import { CommandPalette } from './ui/CommandPalette.js';
+import { Popup } from './ui/Popup.js';
 import { AgentRail, RAIL_MIN_COLUMNS, RAIL_WIDTH } from './ui/AgentRail.js';
 import { fleet, markSeen } from './core/fleet.js';
 import type { AgentSession } from './core/sessions.js';
-import { commandCandidates, findView, reloadCustomViews, views } from './views/registry.js';
+import { findView, reloadCustomViews, views } from './views/registry.js';
 import { applyTheme, theme } from './theme.js';
 
 export const VERSION = '0.2.0';
 
 const GLOBAL_KEYS: Array<[string, string]> = [
-  [':', 'command'],
-  ['R', 'reload ui'],
+  [':', 'go to a view'],
+  ['`', 'these keys'],
+  ['?', 'help'],
   ['esc', 'back'],
   ['q', 'quit view'],
   ['\\', 'agent rail'],
-  ['`', 'hide header'],
+  ['R', 'reload ui'],
 ];
 
 interface StackEntry {
@@ -122,6 +123,10 @@ export function App(props: {
     return [{ name: store.list().length ? 'board' : 'issues', key: 0 }];
   });
   const [cmdOpen, setCmdOpen] = useState(false);
+  /** `` ` ``: the keys for this view and the global ones, over the view */
+  const [keysOpen, setKeysOpen] = useState(false);
+  /** either overlay has the keyboard: views stand down while one is open */
+  const overlay = cmdOpen || keysOpen;
   const [fullScreen, setFullScreen] = useState(false);
   const [toast, setToastState] = useState<{ text: string; kind: ToastKind; at: number }>();
   const [viewer, setViewer] = useState<{ id: string; displayName: string }>();
@@ -233,7 +238,7 @@ export function App(props: {
       now,
       navigate,
       back,
-      cmdOpen,
+      cmdOpen: overlay,
       quit: exit,
       toast: (text, kind = 'info') => setToastState({ text, kind, at: Date.now() }),
       setCapture: (on) => {
@@ -248,7 +253,7 @@ export function App(props: {
       fullScreen,
       setFullScreen,
     }),
-    [cfg, dispatcher, onGc, onGcProgress, onPlanChatReady, onAgents, onReviewDiff, onTaskDiff, onCreating, onLogTail, onChannels, onChannelHistory, viewer, teams, size, now, navigate, back, exit, cmdOpen, ui, setUi, fullScreen],
+    [cfg, dispatcher, onGc, onGcProgress, onPlanChatReady, onAgents, onReviewDiff, onTaskDiff, onCreating, onLogTail, onChannels, onChannelHistory, viewer, teams, size, now, navigate, back, exit, overlay, ui, setUi, fullScreen],
   );
 
   useInput(
@@ -274,7 +279,7 @@ export function App(props: {
       }
       if (input === '?') navigate('help');
       if (input === '`') {
-        setUi({ headerHidden: !ui.headerHidden });
+        setKeysOpen(true);
         return;
       }
       if (input === '\\') {
@@ -285,7 +290,18 @@ export function App(props: {
         setUi({ rail: !ui.rail });
       }
     },
-    { isActive: !capture && !cmdOpen },
+    { isActive: !capture && !overlay },
+  );
+  // the keys popup is read and dismissed; nothing else happens while it is up
+  useInput(
+    (input, key) => {
+      if (input === '`' || input === 'q' || key.escape) setKeysOpen(false);
+      if (input === '?') {
+        setKeysOpen(false);
+        navigate('help');
+      }
+    },
+    { isActive: keysOpen },
   );
 
   const active = tasks.filter((t) => ['triage', 'working', 'checks'].includes(t.status)).length;
@@ -294,37 +310,31 @@ export function App(props: {
   // the retention window, since anything older has been dropped anyway
   const horizon = cfg.retentionDays ? Date.now() - cfg.retentionDays * 86_400_000 : 0;
   const spend = [...tasks, ...reviews].filter((t) => (t.startedAt ?? t.endedAt ?? Date.now()) >= horizon);
-  const totalTokens = spend.reduce(
-    (acc, t) => ({ input: acc.input + t.tokens.input, output: acc.output + t.tokens.output }),
-    { input: 0, output: 0 },
-  );
   const totalCost = spend.reduce((n, t) => n + t.costUsd, 0);
 
-  const info: Array<[string, string]> = [
-    ['User', viewer?.displayName ?? '…'],
-    // the context rides on the repo row rather than taking a fifth: every view
-    // sizes its panes against a four-row header
-    ['Repo', cfg.repo.split('/').slice(-1)[0] + (CONTEXT === DEFAULT_CONTEXT ? '' : ` (ctx ${CONTEXT})`)],
-    ['Agents', `${active} active${needsInput ? `, ${needsInput} waiting` : ''} / ${tasks.length}`],
-    [
-      cfg.retentionDays ? `Tokens/${cfg.retentionDays}d` : 'Tokens',
-      `${formatTokens(totalTokens)} ($${totalCost.toFixed(2)})`,
-    ],
-  ];
-
   const ViewComponent = viewDef.Component;
-  const headerShown = !fullScreen && !ui.headerHidden;
-  const viewHeight = Math.max(8, size.rows - (headerShown ? 4 : 0) - 2 - (cmdOpen ? 4 : 0));
-  // the view is told the terminal is the size of what is left of it: every view
-  // sizes itself from ctx.size against a four-row header, and none of them
-  // should have to know a rail exists or that the header is folded away
-  const reclaimed = !fullScreen && !headerShown ? 4 : 0;
+  // one title row, always, then the view, then the crumbs and a spare row
+  const viewHeight = Math.max(8, size.rows - 1 - 2);
+  // The view is told the terminal is the size of what is left of it. Every
+  // view sizes itself from ctx.size against the old four-row header (none in
+  // full screen) and four more rows while `:` is open, so the rows it is told
+  // about are corrected to what is really there: one title row, always, and
+  // the palette floating over the view rather than pushing it down. Same trick
+  // the rail plays on the width — no view needs to know any of this.
+  const rowsBack = (fullScreen ? -1 : 3) + (overlay ? 4 : 0);
   const viewCtx = useMemo<AppCtx>(
     () =>
-      railShown || reclaimed
-        ? { ...ctx, size: { columns: size.columns - (railShown ? RAIL_WIDTH : 0), rows: size.rows + reclaimed } }
+      railShown || rowsBack
+        ? { ...ctx, size: { columns: size.columns - (railShown ? RAIL_WIDTH : 0), rows: size.rows + rowsBack } }
         : ctx,
-    [ctx, railShown, reclaimed, size],
+    [ctx, railShown, rowsBack, size],
+  );
+  const paletteItems = useMemo(
+    () => [
+      ...views.map((v) => ({ value: v.name, aliases: v.aliases, detail: v.describe })),
+      { value: 'reload', detail: 'reload custom views' },
+    ],
+    [views.length, cmdOpen],
   );
 
   return (
@@ -333,31 +343,17 @@ export function App(props: {
           rows (equality included) — one spare row keeps it on the incremental
           diff path, which is what stops the flicker */}
       <Box flexDirection="column" width={size.columns} height={size.rows - 1} paddingX={1} overflow="hidden">
-        {headerShown && (
-          <Header info={info} keys={[...viewDef.keys, ...GLOBAL_KEYS]} width={size.columns - 2} version={VERSION} />
-        )}
-        {cmdOpen && (
-          <Box borderStyle="round" borderColor={theme.key} paddingX={1}>
-            <CommandBar
-              prefix="🐶> "
-              placeholder="view (issues, board, …)"
-              candidates={commandCandidates()}
-              onCancel={() => setCmdOpen(false)}
-              onSubmit={(value, top) => {
-                setCmdOpen(false);
-                const [name, ...rest] = value.trim().split(/\s+/);
-                if (name === 'reload' || top?.value === 'reload') {
-                  const n = reloadCustomViews();
-                  ctx.toast(`custom views reloaded (${n})`, 'ok');
-                  return;
-                }
-                const target = findView(name || '') ?? (top ? findView(top.value) : undefined);
-                if (target) navigate(target.name, rest.join(' ') || undefined);
-                else if (value.trim()) ctx.toast(`unknown view: ${name}`, 'err');
-              }}
-            />
-          </Box>
-        )}
+        <TitleBar
+          user={viewer?.displayName ?? '…'}
+          context={CONTEXT === DEFAULT_CONTEXT ? undefined : CONTEXT}
+          running={active}
+          waiting={needsInput}
+          total={tasks.length}
+          cost={totalCost}
+          costDays={cfg.retentionDays || undefined}
+          width={size.columns - 2}
+          version={VERSION}
+        />
         <Box flexDirection="row" height={viewHeight}>
           {railShown && <AgentRail entries={entries} seen={ui.seen} now={now} height={viewHeight} />}
           <Box
@@ -384,6 +380,47 @@ export function App(props: {
           toast={toast && now - toast.at < 5000 ? toast : undefined}
           width={size.columns - 2}
         />
+        {/* last: a Popup is overdrawn by anything rendered after it */}
+        {cmdOpen &&
+          (() => {
+            const w = Math.min(100, size.columns - 4);
+            const listRows = Math.max(3, Math.min(paletteItems.length, size.rows - 10, 16));
+            return (
+              <Popup width={w} height={listRows + 5} top={1} left={Math.max(0, Math.floor((size.columns - 2 - w) / 2))}>
+                <CommandPalette
+                  items={paletteItems}
+                  width={w - 4}
+                  listRows={listRows}
+                  onCancel={() => setCmdOpen(false)}
+                  onSubmit={(value, picked) => {
+                    setCmdOpen(false);
+                    const [typed, ...rest] = value.trim().split(/\s+/);
+                    // what was typed wins when it names something (an alias, an
+                    // exact name); otherwise the row the cursor is on
+                    const name = findView(typed || '') || typed === 'reload' ? typed : (picked?.value ?? typed);
+                    if (name === 'reload') {
+                      const n = reloadCustomViews();
+                      ctx.toast(`custom views reloaded (${n})`, 'ok');
+                      return;
+                    }
+                    const target = findView(name || '');
+                    if (target) navigate(target.name, rest.join(' ') || undefined);
+                    else if (value.trim()) ctx.toast(`unknown view: ${typed}`, 'err');
+                  }}
+                />
+              </Popup>
+            );
+          })()}
+        {keysOpen &&
+          (() => {
+            const w = Math.min(110, size.columns - 4);
+            const h = Math.min(size.rows - 3, keysPopupRows(viewDef.keys, GLOBAL_KEYS, w - 4) + 2);
+            return (
+              <Popup width={w} height={h} top={1} left={Math.max(0, Math.floor((size.columns - 2 - w) / 2))}>
+                <KeysPopupBody view={viewDef.name} keys={viewDef.keys} global={GLOBAL_KEYS} width={w - 4} />
+              </Popup>
+            );
+          })()}
       </Box>
     </AppContext.Provider>
   );
