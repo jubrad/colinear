@@ -180,6 +180,11 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     linearApiKey,
     repos,
     cloneRoot: raw.cloneRoot ? expandHome(raw.cloneRoot) : undefined,
+    // a search costs 2 of GitHub's 5000 hourly GraphQL points: a minute is
+    // ~240 an hour, with room for everything else. Below 30s buys nothing a
+    // human notices and starts to.
+    reviewPollSeconds:
+      typeof raw.reviewPollSeconds === 'number' && Number.isFinite(raw.reviewPollSeconds) ? Math.max(30, raw.reviewPollSeconds) : 60,
     repo: repos[0].path,
     defaultBranch: repos[0].defaultBranch,
     worktreeRoot: repos[0].worktreeRoot,

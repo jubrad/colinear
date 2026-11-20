@@ -1,7 +1,7 @@
 # `:reviews` — PRs awaiting your review
 
 Aliases: `rev`, `pr`. PRs where your review is requested, across every repo your `gh` auth can see,
-refreshed every five minutes.
+refreshed every minute ([`reviewPollSeconds`](../configuration.md)). `u` refreshes now.
 
 ![The review queue: two PRs, the selected one pre-reviewed with four findings graded lead, blocking, consider and nit](../images/reviews.png)
 
@@ -505,7 +505,7 @@ the network) still just fails and says so, because re-anchoring cannot help with
 | `s` | hand the terminal to that review's claude session |
 | `,` | sort: needs-me / reviewed / updated / size / repo / author / cost — the [sort bar](../README.md#sorting) (`S` too). Remembered |
 | `m` | only yours, or every review. Remembered |
-| `t` | the PRs your colinear tasks opened, or back to the reviews asked of you. Remembered |
+| `t` | cycle the list: reviews asked of you → the PRs your colinear tasks opened → both together. Remembered |
 | `o` | open the PR |
 | `H` | hide this PR until it has new activity, or put a hidden one back now |
 | `h` | show everything, settled and hidden, and go back to the live list |
@@ -540,12 +540,14 @@ yet ("3 new reviews"), so a review that finished while you were elsewhere doesn'
 that merely updated.
 
 **`t` shows the PRs colinear opened for you.** Every open PR one of your tasks opened becomes a
-review here too, added by the review poll (every five minutes). They are kept out of the normal
-list, which is for what others asked of you, and out of `:todo`'s review queue, since nobody asked
-you to review your own work. `t` switches to them and back, and the header shows how many are on
-the other side. In that view `r` has an agent pre-review what the task's agent wrote, and `enter`
-reads it against the code, as with any review. A task PR stays until it merges or closes, like a
-PR you added by name.
+review here too, added by the review poll (every minute). They are kept out of the normal list,
+which is for what others asked of you, and out of `:todo`'s review queue, since nobody asked you to
+review your own work. `t` cycles three views: the reviews asked of you, your tasks' PRs, and **both
+together**. The header counts each side (`requests 12 + tasks 3`). A task's PR carries its task's
+identifier in front of the title, in every view, and `/` finds it by that identifier too. `m` narrows
+only the requests, since your tasks' PRs are yours by definition. `r` has an agent pre-review what
+the task's agent wrote, and `enter` reads it against the code, as with any review. A task PR stays
+until it merges or closes, like a PR you added by name.
 
 **`H` hides a PR until something new happens on it.** It goes the way a settled one does: off the
 list, out of `:todo`, and counted in the header ("2 hidden by you"). `h` shows it again, dimmed and

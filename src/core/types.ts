@@ -98,7 +98,9 @@ export interface UiState {
   reviewsSort?: string;
   reviewsSortDesc?: boolean;
   reviewsScope?: 'all' | 'mine';
-  /** :reviews shows the PRs your colinear tasks opened instead of requests (`t`) */
+  /** :reviews: requests (unset), the PRs your colinear tasks opened, or both — `t` cycles */
+  reviewsView?: 'tasks' | 'all';
+  /** the first version of `reviewsView`, read so a saved choice survives the upgrade */
   reviewsTasks?: boolean;
   /** how :agents lists them: grouped by whose move it is, or every task as a table (`t`) */
   agentsLayout?: 'groups' | 'table';
@@ -942,6 +944,8 @@ export interface Config {
   repos: RepoConfig[];
   /** where a repo imported from GitHub is cloned (default: the directory most of `repos` share) */
   cloneRoot?: string;
+  /** how often the daemon asks GitHub for review requests and refreshes the PRs it tracks (default 60, at least 30) */
+  reviewPollSeconds: number;
   /** absolute path to the default repo (mirror of repos[0].path) */
   repo: string;
   defaultBranch: string;
