@@ -100,6 +100,11 @@ echo '── themes'
 npm run check:theme
 
 echo
+echo '── staleness'
+# what the board, the agents table and :reviews hide for going quiet
+npm run check:staleness
+
+echo
 echo '── repo import'
 # an import appends one repo to the config and nothing else
 npm run check:import

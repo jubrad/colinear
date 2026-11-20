@@ -508,7 +508,7 @@ the network) still just fails and says so, because re-anchoring cannot help with
 | `t` | cycle the list: reviews asked of you → the PRs your colinear tasks opened → both together. Remembered |
 | `o` | open the PR |
 | `H` | hide this PR until it has new activity, or put a hidden one back now |
-| `h` | show everything, settled and hidden, and go back to the live list |
+| `h` | show everything, settled, quiet and hidden, and go back to the live list |
 
 **Every live review follows its PR**, on the same five-minute poll as the list: draft or ready,
 title, size, head, last update. The search for review requests refreshes the reviews it returns.
@@ -525,6 +525,11 @@ reclaimed — not when it's posted, since the author may push again.
 usually far more of them than live ones, and a list of everything would bury the work. The header
 always says how many are being held back, so a short list tells you what it is not showing, and
 `h` shows them. Filtering with `/` still narrows whichever set you are looking at.
+
+**So are quiet ones.** A PR with no activity on GitHub and no colinear review in
+[`hideStaleDays`](../configuration.md) (21 days by default) is held back the same way, and counted as
+`quiet 21d+`. The next push or comment brings it back on its own, because that moves its update
+time.
 
 **`m` narrows the list to yours.** That's a PR whose review was asked of you personally, one you
 added with `:reviews owner/repo#123`, one you've posted on or left a note on, or one colinear has
