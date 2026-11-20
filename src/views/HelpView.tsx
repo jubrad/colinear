@@ -30,8 +30,10 @@ export function HelpView(_props: { param?: string }) {
         </Text>
         {(
           [
-            [':', 'command bar (view name + optional arg, e.g. :project promsql)'],
+            [':', 'go to a view: a list that narrows as you type, ↑↓ to pick (an argument after the name, e.g. :project promsql)'],
+            ['`', "the keys for the view you are on, and these, in a popup"],
             ['?', 'this help'],
+            ['\\', 'the agent rail beside every view'],
             ['esc', 'clear filters, then back'],
             ['q', 'back / quit at root'],
             ['R', 'reload the frontend on new code (agents keep running)'],

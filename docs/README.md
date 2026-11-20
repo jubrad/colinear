@@ -42,15 +42,19 @@
 
 ## Global keys
 
+The line across the top is always there: who you are, how many agents are running and how many are
+waiting on you, what they've cost over the retention window, and the context if it isn't the
+default. The keys used to fill a four-row header there; they're behind `` ` `` now.
+
 | key | what |
 |---|---|
-| `:` | command bar — a view name, optionally with an argument (`:task CLO-142`) |
+| `:` | go to a view: a palette listing every view, narrowed as you type. `↑`/`↓` pick, `tab` completes, `enter` opens. An argument after the name still works (`:task CLO-142`) |
+| `` ` `` | the keys for the view you're on, and the global ones, in a popup. `` ` ``, `esc` or `q` closes it |
 | `?` | help |
 | `esc` | clear filters, then go back |
 | `q` | back, or quit at the root |
 | `R` | reload the frontend on new code — agents keep running |
 | `\` | the [agent rail](views/agents.md#beside-every-view) beside every view |
-| `` ` `` | hide the header (who, repo, the key grid) and give its rows to the view; `:` and `/` still open their bars. Remembered across restarts |
 | `ctrl+c` | quit |
 
 ## Sorting

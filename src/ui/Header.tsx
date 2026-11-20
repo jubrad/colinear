@@ -1,78 +1,106 @@
 import { Box, Text } from 'ink';
 import { theme } from '../theme.js';
 
-// ASCII only: ambiguous-width glyphs here wrap header lines on some terminals,
-// pushing the tree past the screen height and forcing full-clear renders
-const LOGO = [' >> colinear', '    agents on rails'];
-
-const KEY_PAD = 9;
-
-export function Header(props: {
-  info: Array<[string, string]>;
-  keys: Array<[string, string]>;
+/**
+ * The one line over every view: who you are, what your agents are doing and
+ * what they have cost, and the name on the right. It used to be four rows —
+ * this plus a grid of keys and a logo — and the keys now live behind `` ` ``
+ * (KeysPopup), so the line is always there, full screen included, and costs
+ * one row instead of four.
+ *
+ * ASCII and box-drawing only: an ambiguous-width glyph here wraps the line on
+ * some terminals, pushing the frame past the screen and forcing full redraws.
+ */
+export function TitleBar(props: {
+  user: string;
+  /** e.g. "work" when a named context is in use */
+  context?: string;
+  running: number;
+  waiting: number;
+  total: number;
+  cost: number;
+  /** the window the cost covers, in days */
+  costDays?: number;
   width: number;
   version: string;
 }) {
-  const { info, keys, width, version } = props;
-  // k9s layout: info block left, hotkeys middle (2+ columns), logo right
-  // cap the grid at 4 rows so header height stays constant
-  const perCol = 4;
-  const all: Array<Array<[string, string]>> = [];
-  for (let i = 0; i < Math.ceil(keys.length / perCol); i++) all.push(keys.slice(i * perCol, (i + 1) * perCol));
-
-  // Whole columns are dropped from the right rather than letting flex shrink
-  // starve every cell into "<o> …": the rightmost columns are the global keys
-  // (:, R, esc, q), which cost the least to lose, and what survives renders
-  // in full. A key list that shows half its descriptions is worse than a
-  // shorter one that shows all of them.
-  const infoWidth = Math.max(0, ...info.map(([k, v]) => 10 + v.length));
-  const logoWidth = Math.max(...LOGO.map((l) => l.length), version.length + 1);
-  const colWidth = (col: Array<[string, string]>) =>
-    Math.max(...col.map(([k, v]) => Math.max(KEY_PAD, `<${k}>`.length + 1) + v.length));
-  const available = width - Math.min(infoWidth, 28) - logoWidth - 4;
-  const columns: Array<Array<[string, string]>> = [];
-  let used = 0;
-  for (const col of all) {
-    const w = colWidth(col) + (columns.length ? 3 : 0);
-    if (columns.length && used + w > available) break;
-    columns.push(col);
-    used += w;
-  }
-  if (!columns.length && all.length) columns.push(all[0]);
-
+  const { user, context, running, waiting, total, cost, costDays, width, version } = props;
   return (
-    <Box width={width} justifyContent="space-between" flexShrink={0}>
-      <Box flexDirection="column" marginRight={2} flexShrink={1}>
-        {info.map(([k, v]) => (
-          <Text key={k} wrap="truncate">
-            <Text color={theme.key} bold>
-              {k.padEnd(10)}
-            </Text>
-            <Text>{v}</Text>
+    <Box width={width} justifyContent="space-between" flexShrink={0} height={1}>
+      <Text wrap="truncate">
+        <Text bold>{user}</Text>
+        {context ? <Text color={theme.warn}> ctx {context}</Text> : null}
+        <Text dimColor> · </Text>
+        <Text color={running ? theme.ok : theme.dim} bold={running > 0}>
+          {running} running
+        </Text>
+        {waiting ? <Text color={theme.warn}> · {waiting} waiting on you</Text> : null}
+        <Text dimColor> / {total}</Text>
+        <Text dimColor> · </Text>
+        <Text>${cost.toFixed(2)}</Text>
+        <Text dimColor>{costDays ? `/${costDays}d` : ''}</Text>
+      </Text>
+      <Text wrap="truncate">
+        <Text dimColor>` keys · : views  </Text>
+        <Text color={theme.key} bold>
+          colinear
+        </Text>
+        <Text dimColor> v{version}</Text>
+      </Text>
+    </Box>
+  );
+}
+
+/**
+ * `` ` ``: every key that works here, this view's first and then the global
+ * ones, in columns. Floats over the view (render it last, like any Popup);
+ * `` ` ``, esc or q closes it.
+ */
+export function KeysPopupBody(props: { view: string; keys: Array<[string, string]>; global: Array<[string, string]>; width: number }) {
+  const { view, keys, global, width } = props;
+  const section = (title: string, list: Array<[string, string]>) => {
+    const keyWidth = Math.max(5, ...list.map(([k]) => k.length + 2));
+    const cellWidth = Math.max(24, ...list.map(([k, v]) => keyWidth + v.length + 2));
+    const perRow = Math.max(1, Math.floor(width / cellWidth));
+    const rows: Array<Array<[string, string]>> = [];
+    for (let i = 0; i < list.length; i += perRow) rows.push(list.slice(i, i + perRow));
+    return (
+      <Box flexDirection="column" marginBottom={1}>
+        <Text bold color={theme.header}>
+          {title}
+        </Text>
+        {rows.map((row, i) => (
+          <Text key={i} wrap="truncate">
+            {row.map(([k, v]) => (
+              <Text key={k}>
+                <Text color={theme.key} bold>
+                  {k.padEnd(keyWidth)}
+                </Text>
+                <Text dimColor>{v.padEnd(cellWidth - keyWidth)}</Text>
+              </Text>
+            ))}
           </Text>
         ))}
       </Box>
-      <Box gap={3} flexShrink={0}>
-        {columns.map((col, i) => (
-          <Box key={i} flexDirection="column">
-            {col.map(([k, v]) => (
-              <Text key={k} wrap="truncate">
-                <Text color={theme.key} bold>
-                  {`<${k}>`.padEnd(KEY_PAD)}
-                </Text>
-                <Text dimColor>{v}</Text>
-              </Text>
-            ))}
-          </Box>
-        ))}
-      </Box>
-      <Box flexDirection="column" alignItems="flex-end" flexShrink={0}>
-        <Text color={theme.key} bold>
-          {LOGO[0]}
-        </Text>
-        <Text dimColor>{LOGO[1]}</Text>
-        <Text dimColor>v{version}</Text>
-      </Box>
+    );
+  };
+  return (
+    <Box flexDirection="column">
+      {keys.length > 0 && section(`:${view}`, keys)}
+      {section('everywhere', global)}
+      <Text dimColor>` esc or q closes · ? the full help</Text>
     </Box>
   );
+}
+
+/** Rows the keys popup needs inside its frame, so the Popup can be given its height. */
+export function keysPopupRows(keys: Array<[string, string]>, global: Array<[string, string]>, width: number): number {
+  const rowsFor = (list: Array<[string, string]>) => {
+    if (!list.length) return 0;
+    const keyWidth = Math.max(5, ...list.map(([k]) => k.length + 2));
+    const cellWidth = Math.max(24, ...list.map(([k, v]) => keyWidth + v.length + 2));
+    const perRow = Math.max(1, Math.floor(width / cellWidth));
+    return 2 + Math.ceil(list.length / perRow); // title, rows, the gap after
+  };
+  return rowsFor(keys) + rowsFor(global) + 1;
 }
