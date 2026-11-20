@@ -1538,6 +1538,9 @@
 <!-- /generated -->
 
 <h2 id="global-keys">Global keys<a class="headerlink" href="#global-keys" title="Permanent link">&para;</a></h2>
+<p>The line across the top is always there: who you are, how many agents are running and how many are
+waiting on you, what they've cost over the retention window, and the context if it isn't the
+default. The keys used to fill a four-row header there; they're behind <code>`</code> now.</p>
 <table>
 <thead>
 <tr>
@@ -1548,7 +1551,11 @@
 <tbody>
 <tr>
 <td><code>:</code></td>
-<td>command bar — a view name, optionally with an argument (<code>:task CLO-142</code>)</td>
+<td>go to a view: a palette listing every view, narrowed as you type. <code>↑</code>/<code>↓</code> pick, <code>tab</code> completes, <code>enter</code> opens. An argument after the name still works (<code>:task CLO-142</code>)</td>
+</tr>
+<tr>
+<td><code>`</code></td>
+<td>the keys for the view you're on, and the global ones, in a popup. <code>`</code>, <code>esc</code> or <code>q</code> closes it</td>
 </tr>
 <tr>
 <td><code>?</code></td>
@@ -1569,10 +1576,6 @@
 <tr>
 <td><code>\</code></td>
 <td>the <a href="views/agents/#beside-every-view">agent rail</a> beside every view</td>
-</tr>
-<tr>
-<td><code>`</code></td>
-<td>hide the header (who, repo, the key grid) and give its rows to the view; <code>:</code> and <code>/</code> still open their bars. Remembered across restarts</td>
 </tr>
 <tr>
 <td><code>ctrl+c</code></td>

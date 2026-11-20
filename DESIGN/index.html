@@ -2040,10 +2040,12 @@ the default: dispatching agents into the wrong workspace is not a recoverable mi
 config file that exists and doesn't parse, which used to fall through to built-in defaults and run
 against <code>~/work/cloud</code> with none of your settings.</p>
 <p>Constraint on the UI side: every view sizes its panes against a <strong>four-row header</strong>
-(<code>ctx.size.rows - 12</code> and friends), so the context indicator rides on the existing Repo row rather
-than taking a fifth. Hiding the header (<code>`</code>) keeps that true rather than breaking it: the view's
-context reports a terminal four rows taller, the same trick the rail plays on the width, so no
-view knows the header is gone.</p>
+(<code>ctx.size.rows - 12</code> and friends), none in full screen, and four more rows while <code>:</code> is open. The
+header is now a single title row, always shown, and the <code>:</code> palette and the <code>`</code> keys popup float
+over the view rather than pushing it down. Views were not rewritten for it: the view's context
+reports a terminal whose rows are corrected to what is really there (three taller normally, one
+shorter in full screen, four taller while an overlay is up), the same trick the rail plays on the
+width. A view that sizes itself honestly from <code>ctx.size</code> keeps working.</p>
 <h2 id="lifecycle-detours">Lifecycle detours<a class="headerlink" href="#lifecycle-detours" title="Permanent link">&para;</a></h2>
 <p>The diagram above is the shape. These are the parts that surprise people:
 - <code>blocked</code> (Linear blockers open; rechecked every 60s + on merges/completions). Linear has one
