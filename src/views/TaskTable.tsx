@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
+import { taskIsStale } from '../core/staleness.js';
 import type { Task } from '../core/types.js';
 import { CommandBar } from '../ui/CommandBar.js';
 import { SortBar } from '../ui/SortBar.js';
@@ -37,6 +38,11 @@ export function TaskTable(props: { onToggle: () => void }) {
   const [bar, setBar] = useState<'fuzzy' | 'sort' | null>(null);
   const [sortKey, setSortKey] = useState(BOARD_SORT);
   const [sortDesc, setSortDesc] = useState(false);
+  /** `h`: tasks hidden for going quiet (hideStaleDays.tasks) back in the table */
+  const [showStale, setShowStale] = useState(false);
+  const staleDays = ctx.cfg.hideStaleDays.tasks;
+  // quiet is measured in days: an hourly clock keeps the table from re-sorting every tick
+  const staleNow = Math.floor(ctx.now / 3_600_000) * 3_600_000;
 
   const columns = useMemo<Array<Column<Task>>>(
     () => [
@@ -92,11 +98,13 @@ export function TaskTable(props: { onToggle: () => void }) {
     [ctx.now],
   );
 
+  const staleCount = useMemo(() => tasks.filter((t) => taskIsStale(t, staleDays, staleNow)).length, [tasks, staleDays, staleNow]);
   const rows = useMemo(() => {
-    const matched = query ? tasks.filter((task) => matchesQuery(task, query)) : tasks;
+    const queried = query ? tasks.filter((task) => matchesQuery(task, query)) : tasks;
+    const matched = showStale ? queried : queried.filter((t) => !taskIsStale(t, staleDays, staleNow));
     const sorted = [...matched].sort((a, b) => compareTasks(sortKey, a, b));
     return sortDesc ? sorted.reverse() : sorted;
-  }, [tasks, query, sortKey, sortDesc]);
+  }, [tasks, query, sortKey, sortDesc, showStale, staleDays, staleNow]);
 
   useEffect(() => setCursor((c) => Math.max(0, Math.min(c, rows.length - 1))), [rows.length]);
 
@@ -117,6 +125,7 @@ export function TaskTable(props: { onToggle: () => void }) {
       if (input === 'g') setCursor(0);
       if (input === 'G') setCursor(Math.max(0, rows.length - 1));
       if (input === 't') return props.onToggle();
+      if (input === 'h') return setShowStale((v) => !v);
       if (input === '/') {
         setBar('fuzzy');
         return;
@@ -160,6 +169,12 @@ export function TaskTable(props: { onToggle: () => void }) {
           <Text dimColor>
             [{rows.length}/{tasks.length}]
           </Text>
+          {staleCount > 0 && (
+            <Text color={showStale ? theme.accent : theme.dim}>
+              {' '}
+              {staleCount} quiet {staleDays}d+ {showStale ? 'shown (h hides)' : 'hidden (h shows)'}
+            </Text>
+          )}
           <Text dimColor> sorted by </Text>
           <Text color={theme.header}>
             {sortKey}

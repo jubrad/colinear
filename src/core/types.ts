@@ -1,3 +1,4 @@
+import type { HideStaleDays } from './staleness.js';
 import type { AgentKind } from './sessions.js';
 
 /**
@@ -946,6 +947,12 @@ export interface Config {
   cloneRoot?: string;
   /** how often the daemon asks GitHub for review requests and refreshes the PRs it tracks (default 60, at least 30) */
   reviewPollSeconds: number;
+  /**
+   * Days without an update before :board, the agents table and :reviews hide
+   * an item (`h` shows them). One number for all three or one per view;
+   * default 21, 0 never hides.
+   */
+  hideStaleDays: HideStaleDays;
   /** absolute path to the default repo (mirror of repos[0].path) */
   repo: string;
   defaultBranch: string;

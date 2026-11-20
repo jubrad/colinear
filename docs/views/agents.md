@@ -65,6 +65,10 @@ open this view.
 
 ![The task table sorted in board order, the cursor on a PR-open task whose detail pane sits below](../images/tasks.png)
 
+Tasks with no session and no change to their work in [`hideStaleDays`](../configuration.md) (21
+days by default) are left out, and the header counts them (`4 quiet 21d+ hidden (h shows)`). `h` shows
+them. A running agent is never left out.
+
 `CHANGE` is [what the worktree has changed](board.md#what-it-has-changed) — `+added -removed`, then
 `~n` for files not committed yet — and turns amber when a working agent has edited nothing for twenty
 minutes. Default order is the board read left-to-right: column, then what needs you first. `,` opens

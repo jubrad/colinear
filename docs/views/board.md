@@ -42,6 +42,7 @@ count is taken once more and kept: the card's last word is what the agent left.
 | `j` `l` / ← → | sideways — between columns, or between cards when [transposed](#transposing-the-board) |
 | `i` `k` / ↑ ↓ | up and down — between cards, or between statuses when transposed |
 | `t` | [transpose](#transposing-the-board): statuses become rows, cards run sideways |
+| `h` | show the cards hidden for going quiet — no session and no change to the work in [`hideStaleDays`](../configuration.md) (21 days by default). The line above the board counts them |
 | `/` | search — id, title, repo, status, PR state, CI. `/conflict`, `/needs`, `/failing` |
 | `,` | sort within columns — the [sort bar](../README.md#sorting) |
 | `enter` | [task detail](task.md) |

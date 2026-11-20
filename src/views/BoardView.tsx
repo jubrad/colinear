@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { CommandBar } from '../ui/CommandBar.js';
 import { SortBar } from '../ui/SortBar.js';
+import { taskIsStale } from '../core/staleness.js';
 import { useEffect, useMemo, useState } from 'react';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
@@ -94,6 +95,8 @@ export function BoardView(_props: { param?: string }) {
   const tasks = useTasks();
   const [pos, setPos] = useState({ col: 0, row: 0 });
   const [query, setQuery] = useState('');
+  /** `h`: the cards hidden for going quiet (hideStaleDays.board) back on the board */
+  const [showStale, setShowStale] = useState(false);
   const [bar, setBar] = useState<'fuzzy' | 'sort' | null>(null);
   // what moved last on top of its column — an agent running, a session ending,
   // you opening it — until `,` says otherwise
@@ -105,10 +108,13 @@ export function BoardView(_props: { param?: string }) {
 
   // a running card counts as touched now; the app's clock, so every card in a render agrees
   const now = ctx.now;
+  // quiet is measured in days, so an hourly clock is plenty
+  const staleNow = Math.floor(now / 3_600_000) * 3_600_000;
   // grid[col] = tasks in that board column, in render order
   const grid = useMemo(() => {
     // the same matcher the list view uses, so a query means one thing
-    const visible = query ? tasks.filter((t) => matchesQuery(t, query)) : tasks;
+    const matched = query ? tasks.filter((t) => matchesQuery(t, query)) : tasks;
+    const visible = showStale ? matched : matched.filter((t) => !taskIsStale(t, ctx.cfg.hideStaleDays.board, staleNow));
     return COLUMNS.map((col) =>
       // within a column, what needs you first — or whatever `,` chose. A sort
       // orders cards inside their column; it never moves one out of it.
@@ -116,7 +122,12 @@ export function BoardView(_props: { param?: string }) {
         .filter((t) => col.statuses.includes(t.status))
         .sort((a, b) => (sortKey === BOARD_SORT ? prRank(a) - prRank(b) : compareTasks(sortKey, a, b, ctx.ui.seen, now)) * (sortDesc ? -1 : 1)),
     );
-  }, [tasks, store.version, query, sortKey, sortDesc, ctx.ui.seen, now]);
+  }, [tasks, store.version, query, sortKey, sortDesc, ctx.ui.seen, now, staleNow, showStale, ctx.cfg.hideStaleDays.board]);
+  /** how many cards are off the board for going quiet — always said, so a short board says why */
+  const staleCount = useMemo(
+    () => tasks.filter((t) => taskIsStale(t, ctx.cfg.hideStaleDays.board, staleNow)).length,
+    [tasks, store.version, staleNow, ctx.cfg.hideStaleDays.board],
+  );
 
   // keep the cursor on a real card as tasks move between columns; must
   // return the SAME object when nothing changes or this setState loops
@@ -163,6 +174,10 @@ export function BoardView(_props: { param?: string }) {
       if (key.rightArrow || input === 'l') across(1);
       if (key.upArrow || input === 'i') down(-1);
       if (key.downArrow || input === 'k') down(1);
+      if (input === 'h') {
+        setShowStale((v) => !v);
+        return;
+      }
       if (input === 't') {
         // persisted through the daemon: the layout you chose is still there
         // after a restart, and `R` doesn't lose it either
@@ -208,7 +223,7 @@ export function BoardView(_props: { param?: string }) {
   // vertical budget: view inner height (app.tsx sizes the view pane to
   // rows-6-cmd, minus its own border) less the detail pane and the filter/sort
   // lines. Both layouts window to this instead of flex-squeezing.
-  const filtering = Boolean(query) || sortKey !== DEFAULT_SORT || sortDesc;
+  const filtering = Boolean(query) || sortKey !== DEFAULT_SORT || sortDesc || staleCount > 0;
   const viewInner = Math.max(8, ctx.size.rows - 6 - (ctx.cmdOpen ? 4 : 0)) - 2;
   const chrome = (selected ? DETAIL_ROWS : 0) + (filtering ? 1 : 0) + (bar ? 1 : 0);
   // columns reserve one line for the shared column-header row; a lane carries
@@ -249,6 +264,12 @@ export function BoardView(_props: { param?: string }) {
             {sortKey !== DEFAULT_SORT || sortDesc ? ` · sorted by ${sortKey} ${sortDesc ? '↓' : '↑'}` : ''}
             {query ? ' · esc clears' : ''}
           </Text>
+          {staleCount > 0 && (
+            <Text color={showStale ? theme.accent : theme.dim}>
+              {' '}
+              · {staleCount} quiet {ctx.cfg.hideStaleDays.board}d+ {showStale ? 'shown (h hides)' : 'hidden (h shows)'}
+            </Text>
+          )}
         </Text>
       )}
       {bar === 'fuzzy' && (
@@ -663,6 +684,7 @@ export const boardKeys: Array<[string, string]> = [
   ['j/l ←→', 'across'],
   ['i/k ↑↓', 'down'],
   ['t', 'transpose'],
+  ['h', 'show / hide cards quiet past hideStaleDays'],
   ['/', 'search'],
   [',', 'sort'],
   ...TASK_ACTION_KEYS,

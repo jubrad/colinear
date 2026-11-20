@@ -4,6 +4,7 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { execFile } from 'node:child_process';
 import { useHeldIndex } from '../ui/held.js';
+import { reviewIsStale } from '../core/staleness.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { attachTo, rememberView, reviewAttachable, sessionRuntime, setPendingAction } from '../core/attach.js';
 import { useReviews } from '../core/hooks.js';
@@ -165,6 +166,8 @@ export function ReviewsView(props: { param?: string }) {
   /** a column header with the sort arrow, when this column is the sort */
   const sortHead = (label: string, key: SortKey) => (sort === key ? `${label}${desc ? '↓' : '↑'}` : label);
 
+  // quiet is measured in days: an hourly clock keeps the list from rebuilding every tick
+  const staleNow = Math.floor(ctx.now / 3_600_000) * 3_600_000;
   const rows = useMemo(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     const matched = inView.filter((r) => {
@@ -174,6 +177,8 @@ export function ReviewsView(props: { param?: string }) {
       // them by accident as often as on purpose and told nobody they existed.
       // Hidden with `H` is the same deal by your hand rather than GitHub's.
       if ((r.status === 'stale' || r.hidden) && !showHidden) return false;
+      // gone quiet: no update on GitHub or from colinear in hideStaleDays.reviews
+      if (!showHidden && reviewIsStale(r, ctx.cfg.hideStaleDays.reviews, staleNow)) return false;
       // your own work involves you by definition; `m` narrows requests
       if (mine && !r.task && !involvesMe(r)) return false;
       if (!terms.length) return true;
@@ -222,7 +227,7 @@ export function ReviewsView(props: { param?: string }) {
     };
     const sorted = [...matched].sort(compare);
     return desc ? sorted.reverse() : sorted;
-  }, [inView, query, sort, desc, showHidden, mine]);
+  }, [inView, query, sort, desc, showHidden, mine, staleNow, ctx.cfg.hideStaleDays.reviews]);
 
   const at = useHeldIndex(rows, cursor, setCursor, (r) => r.id);
   const atCursor = rows[Math.min(at, Math.max(0, rows.length - 1))];
@@ -461,11 +466,18 @@ export function ReviewsView(props: { param?: string }) {
   const settled = inView.filter((r) => r.status === 'stale').length;
   // a hidden review that has since settled counts once, as settled
   const dismissed = inView.filter((r) => r.hidden && r.status !== 'stale').length;
+  // quiet ones that are not already counted as settled or hidden
+  const quiet = inView.filter((r) => !r.hidden && r.status !== 'stale' && reviewIsStale(r, ctx.cfg.hideStaleDays.reviews, staleNow)).length;
   /** the other view's live count, so the key that reaches it says what is there */
-  const live = (r: Review) => r.status !== 'stale' && !r.hidden;
+  // what each list would show: not settled, not hidden by you, not quiet
+  const live = (r: Review) => r.status !== 'stale' && !r.hidden && !reviewIsStale(r, ctx.cfg.hideStaleDays.reviews, staleNow);
   const taskCount = reviews.filter((r) => r.task && live(r)).length;
   const requestCount = reviews.filter((r) => !r.task && live(r)).length;
-  const held = [settled ? `${settled} settled` : '', dismissed ? `${dismissed} hidden by you` : '']
+  const held = [
+    settled ? `${settled} settled` : '',
+    quiet ? `${quiet} quiet ${ctx.cfg.hideStaleDays.reviews}d+` : '',
+    dismissed ? `${dismissed} hidden by you` : '',
+  ]
     .filter(Boolean)
     .join(', ');
   const cols = layout(ctx.size.columns);

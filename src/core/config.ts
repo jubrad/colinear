@@ -8,6 +8,7 @@ import {
   contextConfigPath,
   listContexts,
 } from './context.js';
+import { normalizeHideStale } from './staleness.js';
 import { log } from './log.js';
 import {
   EXPERIMENTS,
@@ -185,6 +186,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     // human notices and starts to.
     reviewPollSeconds:
       typeof raw.reviewPollSeconds === 'number' && Number.isFinite(raw.reviewPollSeconds) ? Math.max(30, raw.reviewPollSeconds) : 60,
+    hideStaleDays: normalizeHideStale((raw as { hideStaleDays?: unknown }).hideStaleDays),
     repo: repos[0].path,
     defaultBranch: repos[0].defaultBranch,
     worktreeRoot: repos[0].worktreeRoot,
