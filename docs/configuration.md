@@ -52,6 +52,7 @@ Every key is optional except a Linear API key (config or env). Defaults are what
 | `linearApiKey` | `$LINEAR_API_KEY` | Linear personal API key. Leave it out of the file and export the env var if you'd rather not have it on disk |
 | `repos` | one repo (see below) | the allowlist — agents only ever touch these, and only through worktrees. First entry is the default. [Details](#repos) |
 | `cloneRoot` | the directory most of `repos` share | where a repo [added from GitHub](#repos) is cloned |
+| `reviewPollSeconds` | `60` | how often the daemon asks GitHub for review requests and refreshes the PRs `:reviews` tracks, your tasks' PRs included. At least 30. Each poll costs about 2 of GitHub's 5,000 hourly GraphQL points. Read when the daemon starts |
 | `team` | your assigned issues | Linear team key (`"CLOUD"`) to browse, or `"all"` for every team. `--team CLOUD` / `--team all` override it for one run, and the last team picked with `t` is remembered |
 | `concurrency` | `3` | agent sessions running at once. Above ~5 you start hitting subscription rate limits |
 | `agent` | `"claude"` | the runtime for a model no runtime recognises. Most model names say which runtime they belong to on their own, so this is rarely worth setting. [Details](#agent-runtimes) |

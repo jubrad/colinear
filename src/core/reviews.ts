@@ -909,11 +909,21 @@ export async function submitReview(
 export function startReviewPolling(
   cfg: Config,
   afterPoll?: () => void | Promise<void>,
-  intervalMs = 300_000,
+  intervalMs = 60_000,
 ): () => void {
+  // at a minute's cadence a slow poll (gh retrying, a batch of new task PRs
+  // to adopt) can still be running when the next is due; two at once would
+  // adopt the same PR twice, so the later one just skips its turn
+  let running = false;
   const poll = async () => {
-    await pollReviewRequests(cfg);
-    await afterPoll?.();
+    if (running) return;
+    running = true;
+    try {
+      await pollReviewRequests(cfg);
+      await afterPoll?.();
+    } finally {
+      running = false;
+    }
   };
   void poll();
   const timer = setInterval(() => void poll(), intervalMs);

@@ -92,13 +92,18 @@ export async function runDaemon(): Promise<void> {
   const stopPrPolling = isDemo(cfg) ? () => {} : startPrPolling(cfg, dispatcher);
   const stopReviewPolling = isDemo(cfg)
     ? () => {}
-    : startReviewPolling(cfg, async () => {
+    : startReviewPolling(
+        cfg,
         // a poll is what discovers a PR is merged or taken, so cleanup follows it
-        await reviewer.cleanupStale();
-        // same cadence checks planned projects for outside design edits; the
-        // one-sweep debounce below rides on this interval
-        await plans.sweepDocChanges().catch((err) => log(`plan sweep: ${err}`));
-      });
+        () => reviewer.cleanupStale(),
+        cfg.reviewPollSeconds * 1000,
+      );
+  // Planned projects are checked for outside design edits on their own clock.
+  // It used to ride the review poll, but its debounce waits for one quiet
+  // sweep, and a sweep a minute is too short a quiet for someone mid-edit.
+  if (!isDemo(cfg)) {
+    setInterval(() => void plans.sweepDocChanges().catch((err) => log(`plan sweep: ${err}`)), 300_000).unref();
+  }
 
   const clients = new Set<Socket>();
   const broadcast = (msg: ServerMsg) => {
