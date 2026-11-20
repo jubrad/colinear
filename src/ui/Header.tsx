@@ -16,15 +16,15 @@ export function TitleBar(props: {
   /** e.g. "work" when a named context is in use */
   context?: string;
   running: number;
+  /** agents waiting on you: a question, or your move */
   waiting: number;
-  total: number;
   cost: number;
   /** the window the cost covers, in days */
   costDays?: number;
   width: number;
   version: string;
 }) {
-  const { user, context, running, waiting, total, cost, costDays, width, version } = props;
+  const { user, context, running, waiting, cost, costDays, width, version } = props;
   return (
     <Box width={width} justifyContent="space-between" flexShrink={0} height={1}>
       <Text wrap="truncate">
@@ -32,10 +32,9 @@ export function TitleBar(props: {
         {context ? <Text color={theme.warn}> ctx {context}</Text> : null}
         <Text dimColor> · </Text>
         <Text color={running ? theme.ok : theme.dim} bold={running > 0}>
-          {running} running
+          {running} {running === 1 ? 'agent' : 'agents'} running
         </Text>
-        {waiting ? <Text color={theme.warn}> · {waiting} waiting on you</Text> : null}
-        <Text dimColor> / {total}</Text>
+        {waiting ? <Text color={theme.warn}> · {waiting} need{waiting === 1 ? 's' : ''} you</Text> : null}
         <Text dimColor> · </Text>
         <Text>${cost.toFixed(2)}</Text>
         <Text dimColor>{costDays ? `/${costDays}d` : ''}</Text>

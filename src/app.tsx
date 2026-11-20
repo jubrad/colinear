@@ -145,13 +145,14 @@ export function App(props: {
   const [agents, setAgents] = useState<AgentSession[]>([]);
   useEffect(() => onAgents?.(setAgents), [onAgents]);
   useEffect(() => {
-    if (!railShown) return;
-    // the registry is not CDC state: it changes inside sessions that never
-    // touch the store, so it is asked for rather than pushed
+    // The registry is not CDC state: it changes inside sessions that never
+    // touch the store, so it is asked for rather than pushed. Always, not
+    // only while the rail is up: the title bar counts from it too, and a
+    // review, job or plan session exists nowhere else.
     dispatcher.listAgents();
     const timer = setInterval(() => dispatcher.listAgents(), 2000);
     return () => clearInterval(timer);
-  }, [railShown]);
+  }, []);
   const entries = useMemo(() => fleet(tasks, reviews, agents, now), [tasks, reviews, agents, now]);
 
   // Opening a task or a review is looking at it: stamped on the way in and on
@@ -304,8 +305,12 @@ export function App(props: {
     { isActive: keysOpen },
   );
 
-  const active = tasks.filter((t) => ['triage', 'working', 'checks'].includes(t.status)).length;
-  const needsInput = tasks.filter((t) => t.status === 'needs_input').length;
+  // Counted from the fleet — the list the rail and :agents show — rather than
+  // from task statuses, which only ever saw work sessions: a pre-review, a
+  // job, a plan or a draft running was in the rail and missing from here.
+  const active = entries.filter((e) => e.group === 'running').length;
+  // what :agents puts at the top: a question waiting, or your move
+  const needsInput = entries.filter((e) => e.group === 'needs' || e.group === 'yours').length;
   // reviews burn agent sessions too — the headline figure covers both, over
   // the retention window, since anything older has been dropped anyway
   const horizon = cfg.retentionDays ? Date.now() - cfg.retentionDays * 86_400_000 : 0;
@@ -348,7 +353,6 @@ export function App(props: {
           context={CONTEXT === DEFAULT_CONTEXT ? undefined : CONTEXT}
           running={active}
           waiting={needsInput}
-          total={tasks.length}
           cost={totalCost}
           costDays={cfg.retentionDays || undefined}
           width={size.columns - 2}

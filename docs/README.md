@@ -42,8 +42,8 @@
 
 ## Global keys
 
-The line across the top is always there: who you are, how many agents are running and how many are
-waiting on you, what they've cost over the retention window, and the context if it isn't the
+The line across the top is always there: who you are, how many agents are running (work, reviews,
+jobs, plans and drafts alike) and how many need you, what they've cost over the retention window, and the context if it isn't the
 default. The keys used to fill a four-row header there; they're behind `` ` `` now.
 
 | key | what |
