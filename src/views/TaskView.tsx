@@ -76,8 +76,8 @@ export function TaskView(props: { param?: string }) {
     (input, key) => {
       const n = planned.length;
       if (key.escape || input === 'q') setPlanMode(false);
-      if (key.upArrow || input === 'k') setPlanCursor((c) => Math.max(0, c - 1));
-      if (key.downArrow || input === 'j') setPlanCursor((c) => Math.min(n - 1, c + 1));
+      if (key.upArrow || input === 'i') setPlanCursor((c) => Math.max(0, c - 1));
+      if (key.downArrow || input === 'k') setPlanCursor((c) => Math.min(n - 1, c + 1));
       if (input === ' ') {
         setDropped((prev) => {
           const next = new Set(prev);
@@ -100,8 +100,8 @@ export function TaskView(props: { param?: string }) {
   useInput(
     (input, key) => {
       if (!task) return;
-      if (key.upArrow || input === 'k') setScroll((s) => Math.max(0, (s ?? maxStart) - 1));
-      if (key.downArrow || input === 'j') {
+      if (key.upArrow || input === 'i') setScroll((s) => Math.max(0, (s ?? maxStart) - 1));
+      if (key.downArrow || input === 'k') {
         setScroll((s) => {
           const next = (s ?? maxStart) + 1;
           return next >= maxStart ? null : next;
@@ -385,7 +385,7 @@ export function TaskView(props: { param?: string }) {
 }
 
 export const taskKeys: Array<[string, string]> = [
-  ['j/k', 'scroll log'],
+  ['i/k', 'scroll log'],
   ['g/G', 'top/follow'],
   ['a', 'answer form'],
   ['P', 'review split plan'],

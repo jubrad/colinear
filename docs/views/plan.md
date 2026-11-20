@@ -39,7 +39,7 @@ publish. Two separate keys, because they are two separate decisions.
 | `S` | **a shell** in that same worktree, without starting a session |
 | `ctrl+d` | send a chat turn — the first one starts the session |
 | `d` | the agent opens the discussion (doc focus) |
-| `j/k` `g/G` | scroll the draft (doc focus) |
+| `i/k` `g/G` | scroll the draft (doc focus) |
 | `e` | edit the draft in `$EDITOR` (the `editor` config applies); re-absorbed on return |
 | `U` | **publish** — the prose (fence stripped) becomes the project's `Design` document |
 | `p` | **post a project update** — the plan's summary, as a tracker status post |

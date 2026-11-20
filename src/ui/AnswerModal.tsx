@@ -69,8 +69,8 @@ export function AnswerModal(props: {
       onEdit(writeAnswerDoc(subject, question, answers));
       return;
     }
-    if (key.upArrow || input === 'k') setCursor((c) => (c + rows - 1) % rows);
-    if (key.downArrow || input === 'j') setCursor((c) => (c + 1) % rows);
+    if (key.upArrow || input === 'i') setCursor((c) => (c + rows - 1) % rows);
+    if (key.downArrow || input === 'k') setCursor((c) => (c + 1) % rows);
     // back up a question to change an answer
     if (key.leftArrow && index > 0) {
       setIndex(index - 1);

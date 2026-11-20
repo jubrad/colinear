@@ -102,8 +102,8 @@ export function NewIssueModal(props: {
     if (focus === 'team') {
       cycleKey(input, key, teamOptions.length, setTeamIdx);
       // a long list of teams is quicker by letter: jump to the next key starting
-      // with it (h and l stay arrows; `a` reaches auto by way of the A teams)
-      if (/^[a-z0-9]$/i.test(input) && input !== 'h' && input !== 'l') {
+      // with it (j and l stay arrows; `a` reaches auto by way of the A teams)
+      if (/^[a-z0-9]$/i.test(input) && input !== 'j' && input !== 'l') {
         const n = teamOptions.length;
         for (let step = 1; step <= n; step++) {
           const i = (teamIdx + step) % n;

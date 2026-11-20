@@ -13,7 +13,7 @@ nobody on it* is most of the question this view exists to answer.
 
 | key | what |
 |---|---|
-| `j/k` `↑↓` · `g/G` | move |
+| `i/k` `↑↓` · `g/G` | move |
 | `enter` | open that task |
 | everything else | the board's keys, on the row you're on — `r` resume, `x` cancel, `M` message, `s` attach, `d` promote… |
 

@@ -127,7 +127,7 @@ export function DispatchModal(props: {
     // the repo to clone is typed; enter there dispatches, through the text area
     if (focus === 'slug') return;
     const cycle = (len: number, set: (fn: (i: number) => number) => void) => {
-      if (key.leftArrow || input === 'h') set((i) => (i + len - 1) % len);
+      if (key.leftArrow || input === 'j') set((i) => (i + len - 1) % len);
       if (key.rightArrow || input === 'l') set((i) => (i + 1) % len);
     };
     if (focus === 'model') cycle(modelChoices.length, setModelIdx);
@@ -137,7 +137,7 @@ export function DispatchModal(props: {
     // moves the other: skipping triage on auto names the first repo, and auto
     // on a skipped triage turns triage back on. The hint row says which.
     const step = (len: number, at: number) =>
-      key.leftArrow || input === 'h' ? (at + len - 1) % len : key.rightArrow || input === 'l' ? (at + 1) % len : at;
+      key.leftArrow || input === 'j' ? (at + len - 1) % len : key.rightArrow || input === 'l' ? (at + 1) % len : at;
     if (focus === 'repo') {
       const next = step(repoChoices.length, repoIdx);
       setRepoIdx(next);

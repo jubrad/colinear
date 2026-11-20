@@ -120,8 +120,8 @@ export function TaskTable(props: { onToggle: () => void }) {
 
   useInput(
     (input, key) => {
-      if (key.upArrow || input === 'k') setCursor((c) => Math.max(0, c - 1));
-      if (key.downArrow || input === 'j') setCursor((c) => Math.min(rows.length - 1, c + 1));
+      if (key.upArrow || input === 'i') setCursor((c) => Math.max(0, c - 1));
+      if (key.downArrow || input === 'k') setCursor((c) => Math.min(rows.length - 1, c + 1));
       if (input === 'g') setCursor(0);
       if (input === 'G') setCursor(Math.max(0, rows.length - 1));
       if (input === 't') return props.onToggle();

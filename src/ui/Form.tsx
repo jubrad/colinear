@@ -158,7 +158,7 @@ export function KeyHints(props: { hints: Array<[string, string]> }) {
   );
 }
 
-/** Cycle an index with ←/→ (or h/l) — the one way every row is driven. */
+/** Cycle an index with ←/→ (or j/l, ijkl's sideways) — the one way every row is driven. */
 export function cycleKey(
   input: string,
   key: { leftArrow: boolean; rightArrow: boolean },
@@ -166,7 +166,7 @@ export function cycleKey(
   set: (fn: (i: number) => number) => void,
 ): void {
   if (length <= 1) return;
-  if (key.leftArrow || input === 'h') set((i) => (i + length - 1) % length);
+  if (key.leftArrow || input === 'j') set((i) => (i + length - 1) % length);
   if (key.rightArrow || input === 'l') set((i) => (i + 1) % length);
 }
 

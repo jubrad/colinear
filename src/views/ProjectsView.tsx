@@ -203,8 +203,8 @@ export function ProjectsView(_props: { param?: string }) {
 
   useInput(
     (input, key) => {
-      if (key.upArrow || input === 'k') setCursor((c) => Math.max(0, c - 1));
-      if (key.downArrow || input === 'j') setCursor((c) => Math.min(rows.length - 1, c + 1));
+      if (key.upArrow || input === 'i') setCursor((c) => Math.max(0, c - 1));
+      if (key.downArrow || input === 'k') setCursor((c) => Math.min(rows.length - 1, c + 1));
       if (input === '/') setBar('fuzzy');
       if (input === 't') setBar('team');
       if (input === 's' || input === ',') setBar('sort');

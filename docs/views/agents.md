@@ -50,7 +50,7 @@ its worktree and a ready-to-paste `claude --resume`.
 
 | key | what |
 |---|---|
-| `j` `k` / ↑ ↓ | move · `g` top · `G` bottom |
+| `i` `k` / ↑ ↓ | move · `g` top · `G` bottom |
 | `enter` | open whatever owns it — the task, the review, the plan |
 | `t` | switch to [the table](#the-table) and back — remembered, like the board's layout |
 | everything else | on a task's row, identical to the [board](board.md#keys): `a`, `1`–`9`, `M`, `s`, `S`, `r`, `f`, `v`, `b`, `x`, `o`, … |
