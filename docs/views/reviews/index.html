@@ -2340,7 +2340,7 @@ the network) still just fails and says so, because re-anchoring cannot help with
 </tr>
 <tr>
 <td><code>h</code></td>
-<td>show everything, settled and hidden, and go back to the live list</td>
+<td>show everything, settled, quiet and hidden, and go back to the live list</td>
 </tr>
 </tbody>
 </table>
@@ -2357,6 +2357,10 @@ reclaimed — not when it's posted, since the author may push again.</p>
 usually far more of them than live ones, and a list of everything would bury the work. The header
 always says how many are being held back, so a short list tells you what it is not showing, and
 <code>h</code> shows them. Filtering with <code>/</code> still narrows whichever set you are looking at.</p>
+<p><strong>So are quiet ones.</strong> A PR with no activity on GitHub and no colinear review in
+<a href="../../configuration/"><code>hideStaleDays</code></a> (21 days by default) is held back the same way, and counted as
+<code>quiet 21d+</code>. The next push or comment brings it back on its own, because that moves its update
+time.</p>
 <p><strong><code>m</code> narrows the list to yours.</strong> That's a PR whose review was asked of you personally, one you
 added with <code>:reviews owner/repo#123</code>, one you've posted on or left a note on, or one colinear has
 reviewed or is reviewing. What drops out is the long tail: team requests anyone on the team can take,

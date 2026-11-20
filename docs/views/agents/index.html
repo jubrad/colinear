@@ -1423,6 +1423,9 @@ its worktree and a ready-to-paste <code>claude --resume</code>.</p>
 board's geometry, with the columns the grouped list has no room for. This was <code>:tasks</code>; its names
 open this view.</p>
 <p><a class="glightbox" href="../../images/tasks.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The task table sorted in board order, the cursor on a PR-open task whose detail pane sits below" src="../../images/tasks.png" /></a></p>
+<p>Tasks with no session and no change to their work in <a href="../../configuration/"><code>hideStaleDays</code></a> (21
+days by default) are left out, and the header counts them (<code>4 quiet 21d+ hidden (h shows)</code>). <code>h</code> shows
+them. A running agent is never left out.</p>
 <p><code>CHANGE</code> is <a href="../board/#what-it-has-changed">what the worktree has changed</a> — <code>+added -removed</code>, then
 <code>~n</code> for files not committed yet — and turns amber when a working agent has edited nothing for twenty
 minutes. Default order is the board read left-to-right: column, then what needs you first. <code>,</code> opens

@@ -1784,6 +1784,11 @@
 <td>how often the daemon asks GitHub for review requests and refreshes the PRs <code>:reviews</code> tracks, your tasks' PRs included. At least 30. Each poll costs about 2 of GitHub's 5,000 hourly GraphQL points. Read when the daemon starts</td>
 </tr>
 <tr>
+<td><code>hideStaleDays</code></td>
+<td><code>21</code></td>
+<td>days without an update before <code>:board</code>, the <a href="../views/agents/#the-table">agents table</a> and <code>:reviews</code> hide an item; <code>h</code> in each shows them. One number for all three, or per view: <code>{ "board": 14, "tasks": 30, "reviews": 21 }</code> (an unnamed view keeps 21). <code>0</code> never hides. A task's update is a session starting or ending, or its work changing; a running agent is never hidden. A review's update is GitHub's last activity on the PR, or colinear reviewing it</td>
+</tr>
+<tr>
 <td><code>team</code></td>
 <td>your assigned issues</td>
 <td>Linear team key (<code>"CLOUD"</code>) to browse, or <code>"all"</code> for every team. <code>--team CLOUD</code> / <code>--team all</code> override it for one run, and the last team picked with <code>t</code> is remembered</td>
