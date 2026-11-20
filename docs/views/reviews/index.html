@@ -2327,6 +2327,10 @@ the network) still just fails and says so, because re-anchoring cannot help with
 <td>only yours, or every review. Remembered</td>
 </tr>
 <tr>
+<td><code>t</code></td>
+<td>the PRs your colinear tasks opened, or back to the reviews asked of you. Remembered</td>
+</tr>
+<tr>
 <td><code>o</code></td>
 <td>open the PR</td>
 </tr>
@@ -2364,6 +2368,13 @@ long ago colinear last reviewed it. It's bold and coloured until you've looked a
 means resting the cursor on its row for a moment. The header counts the reviews you haven't looked at
 yet ("3 new reviews"), so a review that finished while you were elsewhere doesn't get lost under PRs
 that merely updated.</p>
+<p><strong><code>t</code> shows the PRs colinear opened for you.</strong> Every open PR one of your tasks opened becomes a
+review here too, added by the review poll (every five minutes). They are kept out of the normal
+list, which is for what others asked of you, and out of <code>:todo</code>'s review queue, since nobody asked
+you to review your own work. <code>t</code> switches to them and back, and the header shows how many are on
+the other side. In that view <code>r</code> has an agent pre-review what the task's agent wrote, and <code>enter</code>
+reads it against the code, as with any review. A task PR stays until it merges or closes, like a
+PR you added by name.</p>
 <p><strong><code>H</code> hides a PR until something new happens on it.</strong> It goes the way a settled one does: off the
 list, out of <code>:todo</code>, and counted in the header ("2 hidden by you"). <code>h</code> shows it again, dimmed and
 marked <code>-</code>, and <code>H</code> on it puts it back straight away. Otherwise it comes back by itself the next time
