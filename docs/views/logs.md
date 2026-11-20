@@ -5,7 +5,7 @@ the screen — React warnings and SDK noise land here rather than tearing the di
 
 | key | what |
 |---|---|
-| `j` `k` scroll · `space` page · `g` top · `G` follow |
+| `i` `k` scroll · `space` page · `g` top · `G` follow |
 | `/` | filter |
 
 The file is `~/.local/state/colinear/colinear.log` (per [context](../configuration.md#contexts)), so

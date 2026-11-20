@@ -12,7 +12,7 @@ handles you need to poke at a session from outside colinear (the transcript live
 
 | key | what |
 |---|---|
-| `j` `k` | scroll the log · `g` top · `G` follow the tail |
+| `i` `k` | scroll the log · `g` top · `G` follow the tail |
 | `a` | answer the agent's question |
 | `1`–`9` | pick an option, when there's a single question |
 | `P` | review a split plan or a coordinator's proposed sub-issues |

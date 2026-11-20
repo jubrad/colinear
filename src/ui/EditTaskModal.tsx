@@ -98,7 +98,7 @@ export function EditTaskModal(props: {
     if (key.tab) setFocus((f) => fields[(fields.indexOf(f) + 1) % fields.length]);
     if (key.ctrl && input === 'r') submit(true);
     const cycle = (len: number, set: (fn: (i: number) => number) => void) => {
-      if (key.leftArrow || input === 'h') set((i) => (i + len - 1) % len);
+      if (key.leftArrow || input === 'j') set((i) => (i + len - 1) % len);
       if (key.rightArrow || input === 'l') set((i) => (i + 1) % len);
     };
     if (focus === 'repo') {

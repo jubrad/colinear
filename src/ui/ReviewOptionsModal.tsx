@@ -52,7 +52,7 @@ export function ReviewOptionsModal(props: {
     if (key.tab) return setFocus((f) => (f === 'model' ? 'instructions' : 'model'));
     // the text area owns every other key while it has focus, enter included
     if (focus === 'instructions') return;
-    if (key.leftArrow || input === 'h') setModelIdx((i) => (i + choices.length - 1) % choices.length);
+    if (key.leftArrow || input === 'j') setModelIdx((i) => (i + choices.length - 1) % choices.length);
     if (key.rightArrow || input === 'l') setModelIdx((i) => (i + 1) % choices.length);
     if (key.return) submit();
   });

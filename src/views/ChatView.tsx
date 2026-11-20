@@ -123,8 +123,8 @@ export function ChatView(props: { param?: string }) {
         return ctx.back();
       }
       if (focus !== 'doc' || approving) return;
-      if (key.downArrow || input === 'j') setScroll((s) => Math.min(maxScroll, s + 1));
-      if (key.upArrow || input === 'k') setScroll((s) => Math.max(0, s - 1));
+      if (key.downArrow || input === 'k') setScroll((s) => Math.min(maxScroll, s + 1));
+      if (key.upArrow || input === 'i') setScroll((s) => Math.max(0, s - 1));
       if (input === 'g') setScroll(0);
       if (input === 'G') setScroll(maxScroll);
       if (input === 'e' && plan && project) {
@@ -168,8 +168,8 @@ export function ChatView(props: { param?: string }) {
     (input, key) => {
       if (!approving || !project) return;
       if (key.escape) return setApproving(false);
-      if (key.downArrow || input === 'j') setApproveCursor((c) => Math.min(proposed.length - 1, c + 1));
-      if (key.upArrow || input === 'k') setApproveCursor((c) => Math.max(0, c - 1));
+      if (key.downArrow || input === 'k') setApproveCursor((c) => Math.min(proposed.length - 1, c + 1));
+      if (key.upArrow || input === 'i') setApproveCursor((c) => Math.max(0, c - 1));
       if (input === ' ') {
         const title = proposed[approveCursor]?.title;
         if (!title) return;
@@ -242,7 +242,7 @@ export function ChatView(props: { param?: string }) {
         />
       </Box>
       <Text dimColor>
-        tab: doc/chat · doc: j/k scroll · c session · S shell · e $EDITOR · U publish · A/D approve
+        tab: doc/chat · doc: i/k scroll · c session · S shell · e $EDITOR · U publish · A/D approve
         {' · '}s reopen · ctrl+d: send · esc: back
       </Text>
       {opening &&
@@ -364,7 +364,7 @@ export const chatKeys: Array<[string, string]> = [
   ['c', 'chat in a worktree (live claude)'],
   ['S', 'shell in that worktree'],
   ['d', 'agent opens the discussion'],
-  ['j/k', 'scroll doc'],
+  ['i/k', 'scroll doc'],
   ['e', 'edit draft in $EDITOR'],
   ['U', 'publish to the tracker'],
   ['p', 'post a project update'],

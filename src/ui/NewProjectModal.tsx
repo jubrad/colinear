@@ -70,7 +70,7 @@ export function NewProjectModal(props: {
     // the brief owns every other key, enter included
     if (focus === 'brief') return;
     const cycle = (len: number, set: (fn: (i: number) => number) => void) => {
-      if (key.leftArrow || input === 'h') set((i) => (i + len - 1) % len);
+      if (key.leftArrow || input === 'j') set((i) => (i + len - 1) % len);
       if (key.rightArrow || input === 'l') set((i) => (i + 1) % len);
     };
     if (focus === 'scope') cycle(scopes.length, setScopeIdx);

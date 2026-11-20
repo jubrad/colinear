@@ -25,7 +25,7 @@ one that keeps up.
 
 | key | what |
 |---|---|
-| `j` `k` / ↑ ↓ | try a theme · `g` first · `G` last |
+| `i` `k` / ↑ ↓ | try a theme · `g` first · `G` last |
 | `enter` | keep it |
 | `esc` | put back the theme you had and go back |
 

@@ -140,16 +140,16 @@ export function JobsView(props: { param?: string }) {
       if (input === 'v') return viewReport();
       if (input === 'y') return copyReport();
       if (focus === 'report') {
-        if (key.upArrow || input === 'k') setScroll((s) => Math.max(0, s - 1));
-        if (key.downArrow || input === 'j') setScroll((s) => Math.min(Math.max(0, reportLines.length - 1), s + 1));
+        if (key.upArrow || input === 'i') setScroll((s) => Math.max(0, s - 1));
+        if (key.downArrow || input === 'k') setScroll((s) => Math.min(Math.max(0, reportLines.length - 1), s + 1));
         if (input === ' ' || key.pageDown) setScroll((s) => Math.min(Math.max(0, reportLines.length - 1), s + 10));
         if (key.pageUp) setScroll((s) => Math.max(0, s - 10));
         if (input === '[') setBack((b) => Math.min(runs.length - 1, b + 1));
         if (input === ']') setBack((b) => Math.max(0, b - 1));
         return;
       }
-      if (key.upArrow || input === 'k') move(cursor - 1);
-      if (key.downArrow || input === 'j') move(cursor + 1);
+      if (key.upArrow || input === 'i') move(cursor - 1);
+      if (key.downArrow || input === 'k') move(cursor + 1);
       if (input === 'g') move(0);
       if (input === 'G') move(jobs.length - 1);
       if (input === 'n') return setForm({});
@@ -371,7 +371,7 @@ function Preview(props: {
       <Box flexGrow={1} />
       <Text color={theme.key} wrap="truncate">
         {props.focused
-          ? `j/k scroll · space page · [ ] other runs · v $EDITOR · y copy · esc back${props.lines.length > room ? ` · ${props.scroll + 1}-${Math.min(props.lines.length, props.scroll + room)} of ${props.lines.length}` : ''}`
+          ? `i/k scroll · space page · [ ] other runs · v $EDITOR · y copy · esc back${props.lines.length > room ? ` · ${props.scroll + 1}-${Math.min(props.lines.length, props.scroll + room)} of ${props.lines.length}` : ''}`
           : 'enter read · v $EDITOR · y copy · [ ] other runs · r run now · x stop · p pause · D delete'}
       </Text>
     </Box>
@@ -379,7 +379,7 @@ function Preview(props: {
 }
 
 export const jobsKeys: Array<[string, string]> = [
-  ['j/k ↑↓', 'job · in the report, scroll'],
+  ['i/k ↑↓', 'job · in the report, scroll'],
   ['n', 'new job'],
   ['e', 'edit'],
   ['r', 'run now'],

@@ -100,8 +100,8 @@ export function ProjectView(props: { param?: string }) {
 
   useInput(
     (input, key) => {
-      if (key.leftArrow || input === 'h' || key.upArrow || input === 'k') setCursor((c) => Math.max(0, c - 1));
-      if (key.rightArrow || input === 'l' || key.downArrow || input === 'j') {
+      if (key.leftArrow || input === 'j' || key.upArrow || input === 'i') setCursor((c) => Math.max(0, c - 1));
+      if (key.rightArrow || input === 'l' || key.downArrow || input === 'k') {
         setCursor((c) => Math.min(ordered.length - 1, c + 1));
       }
       if (input === ' ' && current) {

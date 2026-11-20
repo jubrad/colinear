@@ -97,8 +97,8 @@ export function LogsView(_props: { param?: string }) {
       setFollow(false);
       setOffset((o) => Math.max(0, Math.min(maxOffset, (follow ? maxOffset : o) + delta)));
     };
-    if (input === 'j' || key.downArrow) move(1);
-    if (input === 'k' || key.upArrow) move(-1);
+    if (input === 'k' || key.downArrow) move(1);
+    if (input === 'i' || key.upArrow) move(-1);
     if (key.pageDown || input === ' ') move(rows - 1);
     if (key.pageUp) move(-(rows - 1));
     if (input === 'g') {
@@ -123,7 +123,7 @@ export function LogsView(_props: { param?: string }) {
           {' '}· {remote ? `${remote.label}:…/colinear.log · local client log ${LOG_FILE}` : LOG_FILE}
         </Text>
       </Box>
-      <Text dimColor>j/k scroll · space/pgdn page · g top · G follow · / filter</Text>
+      <Text dimColor>i/k scroll · space/pgdn page · g top · G follow · / filter</Text>
       {filtering && (
         <CommandBar
           prefix="/"
@@ -159,7 +159,7 @@ function lineColor(line: string): string | undefined {
 }
 
 export const logsKeys: Array<[string, string]> = [
-  ['j/k ↑↓', 'scroll'],
+  ['i/k ↑↓', 'scroll'],
   ['space', 'page'],
   ['g/G', 'top/follow'],
   ['/', 'filter'],

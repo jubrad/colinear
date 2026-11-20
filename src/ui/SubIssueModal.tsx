@@ -25,8 +25,8 @@ export function SubIssueModal(props: {
 
   useInput((input, key) => {
     if (key.escape || input === 'q') onCancel();
-    if (key.upArrow || input === 'k') setCursor((c) => Math.max(0, c - 1));
-    if (key.downArrow || input === 'j') setCursor((c) => Math.min(rows.length - 1, c + 1));
+    if (key.upArrow || input === 'i') setCursor((c) => Math.max(0, c - 1));
+    if (key.downArrow || input === 'k') setCursor((c) => Math.min(rows.length - 1, c + 1));
     if (input === ' ') {
       const row = rows[cursor];
       if (!row || row.disabled) return;

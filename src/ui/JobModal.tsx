@@ -91,10 +91,10 @@ export function JobModal(props: {
     if (key.ctrl && input === 's') return submit();
     // the text fields own every other key while focused
     if (TEXT.includes(focus)) return;
-    if (key.upArrow || input === 'k') return move(-1);
-    if (key.downArrow || input === 'j') return move(1);
+    if (key.upArrow || input === 'i') return move(-1);
+    if (key.downArrow || input === 'k') return move(1);
     if (key.return) return submit();
-    const left = key.leftArrow || input === 'h';
+    const left = key.leftArrow || input === 'j';
     const right = key.rightArrow || input === 'l';
     if (!left && !right && input !== ' ') return;
     if (focus === 'model') setModelIdx((i) => (i + (left ? models.length - 1 : 1)) % models.length);

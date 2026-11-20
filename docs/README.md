@@ -46,6 +46,10 @@ The line across the top is always there: who you are, how many agents are runnin
 jobs, plans and drafts alike) and how many need you, what they've cost over the retention window, and the context if it isn't the
 default. The keys used to fill a four-row header there; they're behind `` ` `` now.
 
+**Movement is `ijkl` everywhere,** laid out like the arrow keys: `i` up, `k` down, `j` left, `l` right.
+That holds in every list, every scrolling pane and every popup, and on a form's choice rows `j`/`l`
+step through the options. The arrow keys always work too.
+
 | key | what |
 |---|---|
 | `:` | go to a view: a palette listing every view, narrowed as you type. `↑`/`↓` pick, `tab` completes, `enter` opens. An argument after the name still works (`:task CLO-142`) |

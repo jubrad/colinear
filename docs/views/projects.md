@@ -57,7 +57,7 @@ Needs a provider with the `createProjects` capability.
 
 | key | what |
 |---|---|
-| `h/l` `j/k` / arrows | move between issues |
+| `ijkl` / arrows | move between issues |
 | `space` | select |
 | `d` dispatch · `D` dispatch skipping triage (with several repos, custom dispatch preset to skip it on the first repo) · `c` custom dispatch |
 | `p` | open the [planning chat](plan.md) for this project |

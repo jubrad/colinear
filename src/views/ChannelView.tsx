@@ -50,8 +50,8 @@ export function ChannelView(props: { param?: string }) {
 
   useInput(
     (input, key) => {
-      if (key.upArrow || input === 'k') setCursor((c) => Math.max(0, c - 1));
-      if (key.downArrow || input === 'j') setCursor((c) => Math.min(list.length - 1, c + 1));
+      if (key.upArrow || input === 'i') setCursor((c) => Math.max(0, c - 1));
+      if (key.downArrow || input === 'k') setCursor((c) => Math.min(list.length - 1, c + 1));
       if (key.return && list[cursor]) ctx.navigate('chan', list[cursor].name);
     },
     { isActive: !name && !ctx.cmdOpen },
@@ -172,6 +172,6 @@ function normalize(param: string): string {
 
 export const channelKeys: Array<[string, string]> = [
   ['enter', 'open / send'],
-  ['j/k', 'move'],
+  ['i/k', 'move'],
   ['esc', 'back'],
 ];

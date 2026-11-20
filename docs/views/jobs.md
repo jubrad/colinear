@@ -29,12 +29,12 @@ report, which is what you open the job to read.
 
 | key | what |
 |---|---|
-| `j` `k` / ↑ ↓ | move · `g` top · `G` bottom |
+| `i` `k` / ↑ ↓ | move · `g` top · `G` bottom |
 | `n` | new job |
 | `e` | edit the selected job |
 | `r` | run it now |
 | `x` | stop the run in flight |
-| `enter` | move into the report to scroll it (`j`/`k`, `space` a page) · `esc` back |
+| `enter` | move into the report to scroll it (`i`/`k`, `space` a page) · `esc` back |
 | `[` `]` | older / newer run (it keeps the last 20) |
 | `v` | open the report in your editor (`editor` in the config, else `$EDITOR`) — as markdown, at full width, to search or copy from; the file is left in the temp directory |
 | `y` | copy the whole report to the clipboard — `pbcopy`, `wl-copy` or `xclip` locally; over ssh, the terminal's own clipboard (OSC 52) |

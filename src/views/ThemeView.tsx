@@ -37,8 +37,8 @@ export function ThemeView(_props: { param?: string }) {
 
   useInput(
     (input, key) => {
-      if (key.upArrow || input === 'k') tryTheme(cursor - 1);
-      if (key.downArrow || input === 'j') tryTheme(cursor + 1);
+      if (key.upArrow || input === 'i') tryTheme(cursor - 1);
+      if (key.downArrow || input === 'k') tryTheme(cursor + 1);
       if (input === 'g') tryTheme(0);
       if (input === 'G') tryTheme(NAMES.length - 1);
       if (key.return) {
@@ -56,7 +56,7 @@ export function ThemeView(_props: { param?: string }) {
         <Text bold color={theme.header}>
           theme{' '}
         </Text>
-        <Text dimColor>j/k tries one · enter keeps it · esc puts back {original.current}</Text>
+        <Text dimColor>i/k tries one · enter keeps it · esc puts back {original.current}</Text>
       </Text>
       <Box height={1} />
       {NAMES.map((name, i) => {
@@ -141,6 +141,6 @@ function Sample() {
 }
 
 export const themeKeys: Array<[string, string]> = [
-  ['j/k ↑↓', 'try a theme'],
+  ['i/k ↑↓', 'try a theme'],
   ['enter', 'keep it · esc puts back the old one'],
 ];

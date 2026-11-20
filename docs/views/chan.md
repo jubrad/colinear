@@ -14,7 +14,7 @@ at spawn, so an agent can't post as a sibling or reach a family it isn't in.
 
 | key | what |
 |---|---|
-| `j` `k` | move between channels · `enter` opens one |
+| `i` `k` | move between channels · `enter` opens one |
 | `:chan CLO-67` | tail a channel directly, with an input box |
 | type + `enter` | post as the operator — one message reaches every agent in that channel at its next read |
 | `esc` | back |

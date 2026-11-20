@@ -98,8 +98,8 @@ export function AgentsView(_props: { param?: string }) {
   useInput(
     (input, key) => {
       if (input === 't') return toggle();
-      if (key.upArrow || input === 'k') move(cursor - 1);
-      if (key.downArrow || input === 'j') move(cursor + 1);
+      if (key.upArrow || input === 'i') move(cursor - 1);
+      if (key.downArrow || input === 'k') move(cursor + 1);
       if (input === 'g') move(0);
       if (input === 'G') move(entries.length - 1);
       if (!selected) return;
@@ -366,7 +366,7 @@ function Preview(props: {
 }
 
 export const agentsKeys: Array<[string, string]> = [
-  ['j/k ↑↓', 'row'],
+  ['i/k ↑↓', 'row'],
   ['t', 'groups ⇄ table'],
   ['/ ,', 'filter · sort (table)'],
   ...TASK_ACTION_KEYS,
