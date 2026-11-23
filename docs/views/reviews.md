@@ -554,6 +554,24 @@ only the requests, since your tasks' PRs are yours by definition. `r` has an age
 the task's agent wrote, and `enter` reads it against the code, as with any review. A task PR stays
 until it merges or closes, like a PR you added by name.
 
+### Your tasks' PRs, reviewed on their own
+
+With [`taskReviews`](../configuration.md) on (the default), you don't have to start these reviews or
+carry the comments across:
+
+1. When a task's PR appears here, colinear starts a pre-review of it.
+2. When the review is done, the findings the agent should act on go to **the task's own agent** as
+   its next turn. That's the same path `p` in [`:diff`](diff.md) takes. Annotations and praise stay
+   in the review for you.
+3. When the agent pushes, colinear reviews the PR again. That round's findings go back the same way.
+4. It stops after `maxRounds` (2 by default). The last hand-back tells the agent it was the last.
+
+Each step waits for the task to be idle on its open PR, so nothing is handed to an agent that is
+mid-revision or running checks. The same findings are never handed twice. A round that fails is not
+retried on its own; `r` retries it. The review's activity log and the task's both record every
+round. Nothing is posted to GitHub: the findings stay between colinear and the agent unless you post
+them. The loop checks once a minute, alongside the review poll.
+
 **`H` hides a PR until something new happens on it.** It goes the way a settled one does: off the
 list, out of `:todo`, and counted in the header ("2 hidden by you"). `h` shows it again, dimmed and
 marked `-`, and `H` on it puts it back straight away. Otherwise it comes back by itself the next time

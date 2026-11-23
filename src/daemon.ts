@@ -14,6 +14,7 @@ import { PlanManager } from './core/projectplan.js';
 import { providerFor } from './core/provider.js';
 import type { Project, RepoConfig, Severity } from './core/types.js';
 import { importRepo } from './core/repoimport.js';
+import { sweepTaskReviews } from './core/taskreview.js';
 import { adoptReview, notConfigured, pollReviewRequests, startReviewPolling } from './core/reviews.js';
 import {
   createDecoder,
@@ -94,8 +95,16 @@ export async function runDaemon(): Promise<void> {
     ? () => {}
     : startReviewPolling(
         cfg,
-        // a poll is what discovers a PR is merged or taken, so cleanup follows it
-        () => reviewer.cleanupStale(),
+        async () => {
+          // a poll is what discovers a PR is merged or taken, so cleanup follows it
+          await reviewer.cleanupStale();
+          // and what brings in a task's PR and moves its head: the loop that
+          // reviews it and hands the findings back to its agent rides on it
+          sweepTaskReviews(cfg, {
+            startReview: (id) => void reviewer.start(id),
+            revise: (taskId, text) => dispatcher.revise(taskId, text),
+          });
+        },
         cfg.reviewPollSeconds * 1000,
       );
   // Planned projects are checked for outside design edits on their own clock.
