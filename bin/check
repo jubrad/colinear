@@ -100,6 +100,11 @@ echo '── themes'
 npm run check:theme
 
 echo
+echo '── task review loop'
+# review a task's PR, hand back, review the push, stop at the cap
+npm run check:taskreview
+
+echo
 echo '── staleness'
 # what the board, the agents table and :reviews hide for going quiet
 npm run check:staleness

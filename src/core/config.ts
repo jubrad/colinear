@@ -181,6 +181,7 @@ export function loadConfig(opts?: { requireKey?: boolean }): Config {
     linearApiKey,
     repos,
     cloneRoot: raw.cloneRoot ? expandHome(raw.cloneRoot) : undefined,
+    taskReviews: normalizeTaskReviews((raw as { taskReviews?: unknown }).taskReviews),
     // a search costs 2 of GitHub's 5000 hourly GraphQL points: a minute is
     // ~240 an hour, with room for everything else. Below 30s buys nothing a
     // human notices and starts to.
@@ -410,4 +411,12 @@ export function experimentOn(cfg: Config, name: ExperimentName): boolean {
 
 function expandHome(p: string): string {
   return p.startsWith('~') ? join(homedir(), p.slice(1)) : p;
+}
+
+/** `taskReviews`: `false` switches it off, `true` is the default spelled out, or `{ auto, maxRounds }`. */
+function normalizeTaskReviews(raw: unknown): { auto: boolean; maxRounds: number } {
+  if (typeof raw === 'boolean') return { auto: raw, maxRounds: 2 };
+  const given = raw && typeof raw === 'object' ? (raw as { auto?: unknown; maxRounds?: unknown }) : {};
+  const rounds = typeof given.maxRounds === 'number' && Number.isFinite(given.maxRounds) ? Math.max(1, Math.floor(given.maxRounds)) : 2;
+  return { auto: given.auto !== false, maxRounds: rounds };
 }
