@@ -1084,6 +1084,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Keys">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#your-tasks-prs-reviewed-on-their-own" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Your tasks' PRs, reviewed on their own
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -1770,6 +1787,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Keys">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#your-tasks-prs-reviewed-on-their-own" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Your tasks' PRs, reviewed on their own
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
     </ul>
@@ -2381,6 +2415,22 @@ identifier in front of the title, in every view, and <code>/</code> finds it by 
 only the requests, since your tasks' PRs are yours by definition. <code>r</code> has an agent pre-review what
 the task's agent wrote, and <code>enter</code> reads it against the code, as with any review. A task PR stays
 until it merges or closes, like a PR you added by name.</p>
+<h3 id="your-tasks-prs-reviewed-on-their-own">Your tasks' PRs, reviewed on their own<a class="headerlink" href="#your-tasks-prs-reviewed-on-their-own" title="Permanent link">&para;</a></h3>
+<p>With <a href="../../configuration/"><code>taskReviews</code></a> on (the default), you don't have to start these reviews or
+carry the comments across:</p>
+<ol>
+<li>When a task's PR appears here, colinear starts a pre-review of it.</li>
+<li>When the review is done, the findings the agent should act on go to <strong>the task's own agent</strong> as
+   its next turn. That's the same path <code>p</code> in <a href="../diff/"><code>:diff</code></a> takes. Annotations and praise stay
+   in the review for you.</li>
+<li>When the agent pushes, colinear reviews the PR again. That round's findings go back the same way.</li>
+<li>It stops after <code>maxRounds</code> (2 by default). The last hand-back tells the agent it was the last.</li>
+</ol>
+<p>Each step waits for the task to be idle on its open PR, so nothing is handed to an agent that is
+mid-revision or running checks. The same findings are never handed twice. A round that fails is not
+retried on its own; <code>r</code> retries it. The review's activity log and the task's both record every
+round. Nothing is posted to GitHub: the findings stay between colinear and the agent unless you post
+them. The loop checks once a minute, alongside the review poll.</p>
 <p><strong><code>H</code> hides a PR until something new happens on it.</strong> It goes the way a settled one does: off the
 list, out of <code>:todo</code>, and counted in the header ("2 hidden by you"). <code>h</code> shows it again, dimmed and
 marked <code>-</code>, and <code>H</code> on it puts it back straight away. Otherwise it comes back by itself the next time
