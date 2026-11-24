@@ -265,6 +265,13 @@ export function sqliteProvider(cfg: Config): IssueProvider {
     },
     issuesByIds: async (ids) =>
       ids.length ? issues(`WHERE i.id IN (${ids.map(() => '?').join(',')})`, ids) : [],
+    search: async (text) => {
+      const term = text.trim();
+      if (!term) return [];
+      if (/^[A-Za-z][A-Za-z0-9]*-\d+$/.test(term)) return issues('WHERE upper(i.identifier) = upper(?)', [term]);
+      if (term.length < 3) return [];
+      return issues("WHERE i.title LIKE ? AND st.type NOT IN ('completed','canceled') LIMIT 25", [`%${term}%`]);
+    },
     subIssues: async (parentId) => issues('WHERE i.parent_id = ? ORDER BY i.number', [parentId]),
     blockers: async (issueId) =>
       conn()

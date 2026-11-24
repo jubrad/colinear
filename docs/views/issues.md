@@ -10,9 +10,10 @@ still dispatch.
 
 | key | what |
 |---|---|
-| `/` | fuzzy filter. `#bug` or `label:bug` by label; `parent:CAD-12` or `parent:cadence` by what an issue is part of — the issue above it or its project, since both answer the same question |
+| `/` | fuzzy filter. `#bug` or `label:bug` by label; `parent:CAD-12` or `parent:cadence` by what an issue is part of — the issue above it or its project, since both answer the same question. It also **searches the tracker** past this list's narrowing: an identifier (`APP-12`) finds that issue, and three or more letters find open issues by title, in any team or project, assigned to anyone or no one. Those are added to the list, workable like the rest, and the header counts them (`+2 found by search outside this list`) |
 | `t` | switch team (the provider's word for it — team, project, repo) |
 | `l` | add a label filter · `,` (or `s`) sort by any column — the [sort bar](../README.md#sorting) · `p` include/exclude project issues |
+| `A` | everything: every team, project issues and sub-issues at once · `A` again goes back to your own |
 | `S` | sub-issues on/off — pull in the children of the issues listed, under their parents |
 | `space` | select — actions apply to the selection, or to the row under the cursor |
 | `enter` | **dispatch** |
@@ -53,7 +54,7 @@ given, and an answer that isn't one of them fails the draft rather than filing i
 - Issues with unresolved blocking relations park as ⛓ blocked in the Queued column and start
   automatically when their blockers finish. `f` on the board starts one anyway, keeping the blockers
   as merge-order dependencies.
-- Queries paginate with a 500-issue cap; the default view hides project issues (`p` shows them).
+- Queries paginate with a 500-issue cap; the default view hides project issues (`p` shows them, `A` shows everything). A search (`/`) finds any issue regardless.
 - **Sub-issues are usually missing for reasons that have nothing to do with being sub-issues.** They
   inherit their parent's project (hidden unless `p`), or they belong to whoever picked them up
   (hidden in the default `mine` view). `S` asks for them by parent instead of relaxing those
