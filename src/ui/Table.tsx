@@ -34,8 +34,10 @@ export function Table<T>(props: {
   sortKey?: string;
   sortDesc?: boolean;
   emptyText?: string;
+  /** a row drawn whole instead of as cells — a section header — when this returns something */
+  fullRow?: (row: T, width: number, onCursor: boolean) => ReactNode | undefined;
 }) {
-  const { rows, columns, getId, cursor, selectedIds, width, maxRows, sortKey, sortDesc, emptyText } = props;
+  const { rows, columns, getId, cursor, selectedIds, width, maxRows, sortKey, sortDesc, emptyText, fullRow } = props;
 
   const selWidth = selectedIds ? 2 : 0;
   const fixed = columns.reduce((n, c) => n + (c.width === 'flex' ? 0 : c.width), selWidth);
@@ -69,6 +71,14 @@ export function Table<T>(props: {
         // per-cell colours turns the selected row into a row of mismatched
         // blocks instead of one bar
         const onCursor = idx === cursor;
+        const whole = fullRow?.(row, width, onCursor);
+        if (whole !== undefined) {
+          return (
+            <Text key={id} wrap="truncate">
+              {whole}
+            </Text>
+          );
+        }
         return (
           <Text key={id} inverse={onCursor} wrap="truncate">
             {selectedIds && (

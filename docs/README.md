@@ -31,7 +31,8 @@
 | [`:costs`](views/costs.md) | `cost` `$` | spend per ticket |
 | [`:logs`](views/logs.md) | `log` `debug` | live debug log (what colinear is actually doing) |
 | [`:diff`](views/diff.md) | `selfreview` | read a task's own branch before promoting its draft PR |
-| [`:agents`](views/agents.md) | `ps` `tasks` `ls` `t` | every agent and task: what needs you, what is working, what waits |
+| [`:agents`](views/agents.md) | `ps` `ls` | every agent and task: what needs you, what is working, what waits |
+| [`:tasks`](views/tasks.md) | `t` | the board as a list: by column, each parent with its sub-issues under it |
 | [`:family`](views/family.md) | `fam` `subs` | split work: every tracking parent and its sub-issue tasks |
 | [`:gc`](views/gc.md) | `disk` | reclaim worktree disk and finished cards |
 | [`:chan`](views/chan.md) | `channel` `irc` | coordination channels (experimental — :chan CLO-67) |
