@@ -47,6 +47,8 @@ export function formatDuration(run: { startedAt?: number; endedAt?: number }, no
   const secs = Math.floor(((run.endedAt ?? now) - run.startedAt) / 1000);
   const m = Math.floor(secs / 60);
   const s = secs % 60;
+  // past two days, hours stop being readable: 2693h is 112 days
+  if (m >= 48 * 60) return `${Math.floor(m / 1440)}d${Math.floor((m % 1440) / 60)}h`;
   if (m >= 60) return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`;
   return `${m}:${String(s).padStart(2, '0')}`;
 }

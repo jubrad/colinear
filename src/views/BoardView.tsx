@@ -409,7 +409,7 @@ export function BoardView(_props: { param?: string }) {
         // fixed-height pane: however tall the task detail gets, it clips here
         // instead of flex-squeezing the board columns (and their headers) away
         <Box height={DETAIL_ROWS} flexShrink={0} flexDirection="column" overflow="hidden">
-          <DetailPane task={selected} />
+          <DetailPane task={selected} height={DETAIL_ROWS} />
         </Box>
       )}
       {/* last on purpose: an absolute box is painted in tree order, so a popup
