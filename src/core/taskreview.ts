@@ -73,13 +73,16 @@ export function sweepTaskReviews(cfg: Config, deps: TaskReviewDeps): void {
   // before the push (the default), a coli task is reviewed on its own
   // worktree inside its run (Dispatcher.reviewBeforePublishing); this PR loop
   // is the after-push alternative
-  if (!cfg.taskReviews.auto || cfg.taskReviews.beforePush) return;
+  if (!cfg.taskReviews.auto) return;
   const max = cfg.taskReviews.maxRounds;
   for (const review of store.listReviews()) {
     if (!review.task || review.status === 'stale' || review.hidden || ACTIVE.includes(review.status)) continue;
     if (!review.repo) continue; // nowhere to check it out; the import path heals this
     const task = store.list().find((t) => t.issue.identifier === review.task);
     if (!task) continue;
+    // a task reviewed on its own worktree before it pushed is not reviewed again on its PR;
+    // this loop is for the ones that pushed first (beforePush off, or the CI tier with ciPushesFirst)
+    if (cfg.taskReviews.beforePush && !(cfg.taskReviews.ciPushesFirst && task.verdict?.verification === 'ci')) continue;
     const rounds = review.autoRounds ?? 0;
 
     // a finished review whose findings the task has not had yet
