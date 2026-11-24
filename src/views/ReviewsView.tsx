@@ -307,8 +307,31 @@ export function ReviewsView(props: { param?: string }) {
     setCursor((c) => Math.max(0, Math.min(c, rows.length - 1)));
   }, [rows.length]);
 
+  /**
+   * A task's PR whose review happened on the task itself: the local review
+   * cycle before the push reviews the task's own worktree and keeps its
+   * findings there, so this row's own record was never reviewed and showed
+   * nothing — no summary, no findings, no diff. Such a row reads the task's
+   * review instead, and enter opens the task's own annotated diff.
+   */
+  const localTask = (r: Review | undefined) => {
+    if (!r?.task || r.doc || r.findings?.length || ACTIVE.includes(r.status)) return undefined;
+    const t = store.list().find((x) => x.issue.identifier === r.task);
+    return t && (t.findings?.length || t.reviewedSha || t.autoReviewRounds) ? t : undefined;
+  };
+  const local = localTask(selected);
+  /** what the preview and detail draw: the row itself, or it filled in from its task's local review */
+  const shown: Review | undefined =
+    selected && local
+      ? {
+          ...selected,
+          findings: local.findings ?? [],
+          summary: `Reviewed locally by colinear before the push${local.autoReviewRounds ? `, ${local.autoReviewRounds} round${local.autoReviewRounds === 1 ? '' : 's'}` : ''} — ${local.findings?.length ?? 0} finding${local.findings?.length === 1 ? '' : 's'} left. Enter opens ${local.issue.identifier}'s diff with them beside the code.`,
+        }
+      : selected;
+
   /** the preview's findings, in the order you would want them read */
-  const ordered = useMemo(() => byWeight(selected?.findings ?? []), [selected?.findings]);
+  const ordered = useMemo(() => byWeight(shown?.findings ?? []), [shown?.findings]);
   // a finding edited or added re-weighs the list; stay on the one you were on
   const findAt = useHeldIndex(ordered, findIdx, setFindIdx, (f) => `${f.file ?? ''}:${f.startLine ?? ''}:${f.line ?? ''}:${f.severity ?? ''}:${f.comment.slice(0, 40)}`);
   // another PR is another list of findings: start at its first, from the list
@@ -422,6 +445,11 @@ export function ReviewsView(props: { param?: string }) {
       if (input === 'a' && selected.question) return; // answering handled below
       // enter reads the review against the code — from the preview, at the
       // finding the cursor is on; d reads the document itself
+      if ((key.return || input === 'd') && local) {
+        // its review lives with the task: read it there, findings beside the code
+        ctx.navigate('diff', local.issue.identifier);
+        return;
+      }
       if (key.return) {
         const f = inPreview ? ordered[findAt] : undefined;
         setStartAt(f?.file && typeof f.line === 'number' ? { file: f.file, line: f.line } : undefined);
@@ -753,7 +781,7 @@ export function ReviewsView(props: { param?: string }) {
           </Box>
           {selected && (
             <Preview
-              review={selected}
+              review={shown!}
               now={ctx.now}
               width={pane.width - listWidth - 1}
               height={splitHeight}
@@ -838,7 +866,7 @@ export function ReviewsView(props: { param?: string }) {
 
       {selected && (
         <Detail
-          review={selected}
+          review={shown!}
           now={ctx.now}
           resumeHint={(id) => {
             const owner = sessionRuntime(selected);
