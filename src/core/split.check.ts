@@ -6,7 +6,7 @@
  * Run with `npx tsx src/core/split.check.ts`. `bin/check` runs it.
  */
 import { registerProvider, type CreateIssueInput, type IssueProvider } from './provider.js';
-import { autoSplitDecision, fileSplit, trackingFields } from './split.js';
+import { autoSplitDecision, fileSplit, resolvePlanRepo, trackingFields } from './split.js';
 import type { Config, PlannedSubtask, Task, TriageVerdict } from './types.js';
 
 const failures: string[] = [];
@@ -105,8 +105,18 @@ const run = async (): Promise<void> => {
 };
 
 await run();
+// a plan names its repo however the agent wrote it: name, any case, owner/name, or URL
+{
+  const cfgR = { repos: [{ name: 'cloud', path: '/nonexistent/cloud' }, { name: 'materialize', path: '/nonexistent/materialize' }] } as unknown as Config;
+  const names = await Promise.all(['materialize', 'Materialize', 'MaterializeInc/materialize', 'https://github.com/MaterializeInc/materialize', 'nope', undefined].map((r) => resolvePlanRepo(cfgR, r)));
+  check('the config name finds its repo, any case', names[0]?.name === 'materialize' && names[1]?.name === 'materialize');
+  check('so does owner/name — it was sending this sub-issue to the first repo on the list', names[2]?.name === 'materialize', String(names[2]?.name));
+  check('and a GitHub URL', names[3]?.name === 'materialize');
+  check('a repo that is not configured stays unresolved, rather than becoming the first one', names[4] === undefined && names[5] === undefined);
+}
+
 if (failures.length) {
   console.error(`split: ${failures.length} failed\n  ${failures.join('\n  ')}`);
   process.exit(1);
 }
-console.log('ok — a too_big plan is filed with its dependencies intact, a failure part way names\n     what it filed, and the daemon splits on its own only one level deep');
+console.log('ok — a too_big plan is filed with its dependencies intact, a failure part way names\n     what it filed, the daemon splits on its own only one level deep, and a plan\'s repo is\n     found however it was named');
