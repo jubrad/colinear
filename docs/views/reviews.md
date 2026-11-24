@@ -596,6 +596,11 @@ instead:
 Nothing reaches GitHub until the publish step, and the review's findings never do unless you post
 them.
 
+**Where to read that review.** It lives with the task, not on the PR's row here. In the `t` view, a
+task's PR whose only review was the local one shows it in the preview: how many rounds ran and the
+findings left. `enter` (or `d`) opens the task's own annotated diff in [`:diff`](diff.md), with the
+findings beside the code. `r` still runs a fresh pre-review of the PR itself if you want one.
+
 **After the push instead.** With `"taskReviews": { "beforePush": false }` the cycle runs on the PR.
 When a task's PR appears in the `t` view, colinear pre-reviews it
 and hands the findings to the task's agent. When the agent pushes, it reviews the PR again, up to
