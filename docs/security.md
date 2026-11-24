@@ -8,7 +8,7 @@ colinear dispatches agents that write code and push branches. This page is what 
 
 **Draft PRs only.** Agents are told not to run `gh pr ready`, and nothing in colinear does it for them. A PR becomes ready when you press `d` in the task view — and `d` refuses while a merge-order dependency hasn't landed (`D` overrides, because colinear can see that a blocker *merged* but never whether it *deployed*).
 
-**Nothing reaches GitHub or Linear unasked.** Review comments are posted by a deterministic `gh api` call after you press `p`, never by an agent — an agent can report a success its own tool call didn't have. Escalation comments need `c`. Issue creation needs `A`. The coordinator agent can propose sub-issues but cannot create them.
+**Nothing reaches GitHub or Linear unasked.** Review comments are posted by a deterministic `gh api` call after you press `p`, never by an agent — an agent can report a success its own tool call didn't have. Escalation comments need `c`. Issue creation needs `A`. The coordinator agent proposes sub-issues, and creates them only in a turn you opened with a message asking for it; when it wakes on its own it has no tool that creates anything.
 
 ## Permissions
 
