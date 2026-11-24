@@ -2052,6 +2052,11 @@ neither should be given an API key — the runs bill the subscription behind the
 </tr>
 </tbody>
 </table>
+<p><strong>A model picks its runtime.</strong> A task given a model of its own (<code>m</code>, or custom dispatch) runs on the
+runtime that model belongs to, whatever <code>model</code> says for that kind of work. A Codex model on one task
+runs on Codex, and the rest stay on Claude Code. If the task's earlier session belongs to the other
+runtime, it starts a fresh session instead of trying to resume one that runtime never wrote. The
+fallback model is left off, because it's the other runtime's.</p>
 <p><strong>The model lists keep themselves current.</strong> The daemon asks each runtime which models it can run:
 when it starts, then once a day. Claude Code reports what your account offers, and Codex reports
 what its build knows. The answer is saved in the state directory (<code>models.json</code>) and offered in
