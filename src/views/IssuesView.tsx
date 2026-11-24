@@ -184,8 +184,39 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
     return spec?.columns?.length ? supported.filter((c) => spec.columns!.includes(c.key)) : supported;
   }, [columns, spec, provider]);
 
+  /**
+   * What a search found past this list's own narrowing — an issue in a
+   * project, assigned to someone else, or in another team. Asked of the
+   * tracker once the typing settles, and listed with the rest, workable like
+   * them. Issues already on the board stay off this list, as everywhere here.
+   */
+  const [found, setFound] = useState<Issue[]>([]);
+  useEffect(() => {
+    const term = query.trim();
+    if (!term || spec) {
+      setFound([]);
+      return;
+    }
+    let live = true;
+    const t = setTimeout(() => {
+      void provider
+        .search(term)
+        .then((hits) => live && setFound(hits.filter((i) => !store.get(i.id))))
+        .catch(() => live && setFound([]));
+    }, 400);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [query, spec, provider]);
+  const extra = useMemo(() => {
+    const have = new Set(issues.map((i) => i.id));
+    return found.filter((i) => !have.has(i.id));
+  }, [issues, found]);
+
   const rows = useMemo(() => {
-    const matched = filterIssues(issues, query, labelFilters);
+    // the search's finds are matches already: they skip the local text filter
+    const matched = [...filterIssues(issues, query, labelFilters), ...filterIssues(extra, '', labelFilters)];
     const ordered = (() => {
       if (sortKey === 'updated') return sortDesc ? [...matched].reverse() : matched;
       const col = columns.find((c) => c.key === sortKey);
@@ -194,7 +225,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
       return sortDesc ? sorted.reverse() : sorted;
     })();
     return includeSubs ? nestUnderParents(ordered) : ordered;
-  }, [issues, query, labelFilters, sortKey, sortDesc, columns, includeSubs]);
+  }, [issues, extra, query, labelFilters, sortKey, sortDesc, columns, includeSubs]);
 
   useEffect(() => setCursor((c) => Math.max(0, Math.min(c, rows.length - 1))), [rows.length]);
 
@@ -264,6 +295,17 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
           refresh(team, !v);
           return !v;
         });
+      }
+      // everything at once: every team, project issues, sub-issues
+      if (input === 'A') {
+        const all = team === '*' && includeProjects && (includeSubs || !provider.capabilities.subIssues);
+        const next = all ? undefined : '*';
+        const subs = !all && provider.capabilities.subIssues;
+        setTeam(next);
+        setIncludeProjects(!all);
+        setIncludeSubs(Boolean(subs));
+        refresh(next, !all, Boolean(subs));
+        ctx.toast(all ? 'back to your issues' : 'every open issue: all teams, projects and sub-issues', 'info');
       }
       // a tracker without sub-issues has nothing to toggle
       if (input === 'S' && provider.capabilities.subIssues) {
@@ -370,6 +412,7 @@ export function IssuesView(props: { param?: string; spec?: CustomViewSpec }) {
           <Text dimColor>
             [{rows.length}/{issues.length}]
           </Text>
+          {extra.length > 0 && <Text color={theme.accent}> +{extra.length} found by search outside this list</Text>}
           {selected.size > 0 && <Text color={theme.selection}> {selected.size} selected</Text>}
         </Text>
         <Text>
@@ -541,6 +584,7 @@ export const issuesKeys: Array<[string, string]> = [
   [', s', 'sort'],
   ['n', 'new issue'],
   ['p', 'projects on/off'],
+  ['A', 'everything: all teams, projects and sub-issues'],
   ['S', 'sub-issues on/off'],
   ['r', 'refresh'],
 ];

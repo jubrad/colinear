@@ -114,6 +114,12 @@ export interface IssueProvider {
   ): Promise<Issue[]>;
   filteredIssues(filter: IssueFilter): Promise<Issue[]>;
   issuesByIds(ids: string[]): Promise<Issue[]>;
+  /**
+   * Issues matching typed text, wherever they are: an identifier finds that
+   * issue, other text finds open issues by title — any scope, project or
+   * assignee. What lets a search reach past a list's own narrowing.
+   */
+  search(text: string): Promise<Issue[]>;
   subIssues(parentId: string): Promise<Issue[]>;
   /** issues that must finish before this one — [] when unsupported */
   blockers(id: string): Promise<Array<{ id: string; identifier: string; done: boolean }>>;

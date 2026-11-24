@@ -557,6 +557,7 @@ export function linearProvider(cfg: Config): IssueProvider {
     // turns a team-confined sweep into a workspace-wide one
     filteredIssues: (filter) => fetchFilteredIssues(cfg, { ...filter, team: filter.scope }),
     issuesByIds: (ids) => fetchIssuesByIds(cfg, ids),
+    search: (text) => searchIssues(cfg, text),
     subIssues: (parentId) => fetchSubIssues(cfg, parentId),
     blockers: (id) => fetchBlockers(cfg, id),
     scopes: () => fetchTeams(cfg),
@@ -579,4 +580,37 @@ export function linearProvider(cfg: Config): IssueProvider {
     // Linear hands us a branch name per issue; only fall back if it didn't
     branchFor: (issue) => issue.branchName || safeBranch(issue),
   };
+}
+
+/**
+ * Issues matching what you typed, anywhere: an identifier (`APP-12`) finds
+ * that issue, and other text finds open issues whose title contains it — in
+ * every team and project, assigned to anyone or no one. The list views
+ * narrow by scope (yours, a team, no project); a search is how you reach
+ * past that without changing what the list means.
+ */
+export async function searchIssues(cfg: Config, text: string): Promise<Issue[]> {
+  const term = text.trim();
+  if (!term) return [];
+  const id = term.match(/^([A-Za-z][A-Za-z0-9]*)-(\d+)$/);
+  if (id) {
+    const data = await gql<{ issues: { nodes: IssueNode[] } }>(
+      cfg,
+      `query ($filter: IssueFilter) { issues(first: 5, filter: $filter) { nodes { ${ISSUE_FIELDS} } } }`,
+      { filter: { team: { key: { eqIgnoreCase: id[1] } }, number: { eq: Number(id[2]) } } },
+    );
+    return data.issues.nodes.map(toIssue);
+  }
+  if (term.length < 3) return [];
+  const data = await gql<{ issues: { nodes: IssueNode[] } }>(
+    cfg,
+    `query ($filter: IssueFilter) { issues(first: 25, orderBy: updatedAt, filter: $filter) { nodes { ${ISSUE_FIELDS} } } }`,
+    {
+      filter: {
+        title: { containsIgnoreCase: term },
+        state: { type: { in: ['triage', 'backlog', 'unstarted', 'started'] } },
+      },
+    },
+  );
+  return data.issues.nodes.map(toIssue);
 }

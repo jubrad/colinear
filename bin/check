@@ -100,6 +100,11 @@ echo '── themes'
 npm run check:theme
 
 echo
+echo '── issue search'
+# a search reaches past what :issues narrows away
+npm run check:issuesearch
+
+echo
 echo '── :tasks'
 # the board as a list: columns, families under their parents, folding
 npm run check:tasks
