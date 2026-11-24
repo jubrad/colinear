@@ -221,7 +221,7 @@ export function TaskTable(props: { onToggle: () => void }) {
       />
       {showDetail && selected && (
         <Box height={15} flexShrink={0} flexDirection="column" overflow="hidden">
-          <DetailPane task={selected} />
+          <DetailPane task={selected} height={15} />
         </Box>
       )}
       {/* last: absolute boxes paint in tree order (see BoardView) */}
