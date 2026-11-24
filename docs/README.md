@@ -55,12 +55,37 @@ step through the options. The arrow keys always work too.
 |---|---|
 | `:` | go to a view: a palette listing every view, narrowed as you type. `↑`/`↓` pick, `tab` completes, `enter` opens. An argument after the name still works (`:task CLO-142`) |
 | `` ` `` | the keys for the view you're on, and the global ones, in a popup. `` ` ``, `esc` or `q` closes it |
+| `@` | [ask colinear](#asking-colinear) to do something |
 | `?` | help |
 | `esc` | clear filters, then go back |
 | `q` | back, or quit at the root |
 | `R` | reload the frontend on new code — agents keep running |
 | `\` | the [agent rail](views/agents.md#beside-every-view) beside every view |
 | `ctrl+c` | quit |
+
+## Asking colinear
+
+`@` opens a chat with an agent that can run colinear. Ask it for something in your own words:
+"find all PRs in the stack under owner/repo#123, add them to reviews and start a local review on each".
+It works it out with the GitHub CLI and colinear's own tools, then says what it did. Its tools:
+
+- `list_reviews` and `list_tasks`;
+- `review_status` for one PR's review;
+- `add_review`, which puts a PR on the review list;
+- `start_review`, which starts colinear's local pre-review of a PR in the background, so it can start
+  several and report back.
+
+It never posts. Commenting, approving, merging and pushing stay keys you press, and it can't edit
+files. It runs under your `agentPermissionMode` and `denyTools`, on Claude Code.
+
+- **Messages and replies:** `enter` sends. A message typed while it's working waits its turn. The line
+  above the input shows what it's doing right now.
+- **Closing:** `esc` closes the chat and the agent keeps working. When it replies, a toast says so,
+  and `@` shows the conversation again.
+- **Starting over:** `ctrl-n` starts a new conversation. `ctrl-x` stops the current one.
+
+The conversation lives in the daemon, so it survives the frontend restarting. Each message resumes
+the same session, so "and the next one" means what you'd expect.
 
 ## Sorting
 

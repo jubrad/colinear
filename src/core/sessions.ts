@@ -23,7 +23,9 @@ export type AgentKind =
   /** orders the :todo list */
   | 'todo'
   /** a job from :jobs, run by hand or on its schedule */
-  | 'job';
+  | 'job'
+  /** the `@` chat: the operator asking colinear to do something */
+  | 'ask';
 
 export interface AgentSession {
   /** registry id, not the Claude session id */

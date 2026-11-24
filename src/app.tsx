@@ -12,6 +12,8 @@ import { AppContext, type AppCtx, type ToastKind } from './ui/context.js';
 import { Crumbs } from './ui/Crumbs.js';
 import { KeysPopupBody, keysPopupRows, TitleBar } from './ui/Header.js';
 import { CommandPalette } from './ui/CommandPalette.js';
+import { AskPopup } from './ui/AskPopup.js';
+import type { AskState } from './core/ask.js';
 import { Popup } from './ui/Popup.js';
 import { AgentRail, RAIL_MIN_COLUMNS, RAIL_WIDTH } from './ui/AgentRail.js';
 import { fleet, markSeen } from './core/fleet.js';
@@ -24,6 +26,7 @@ export const VERSION = '0.2.0';
 const GLOBAL_KEYS: Array<[string, string]> = [
   [':', 'go to a view'],
   ['`', 'these keys'],
+  ['@', 'ask colinear to do something'],
   ['?', 'help'],
   ['esc', 'back'],
   ['q', 'quit view'],
@@ -77,6 +80,8 @@ export function App(props: {
   onGcProgress?: AppCtx['onGcProgress'];
   onPlanChatReady?: AppCtx['onPlanChatReady'];
   onAgents?: AppCtx['onAgents'];
+  /** the @ chat's conversation, as the daemon pushes it */
+  onAsk?: (fn: (state: AskState) => void) => () => void;
   onReviewDiff?: AppCtx['onReviewDiff'];
   onTaskDiff?: AppCtx['onTaskDiff'];
   onCreating?: AppCtx['onCreating'];
@@ -88,7 +93,7 @@ export function App(props: {
   ui?: UiState;
   setUi?: (patch: Partial<UiState>) => void;
 }) {
-  const { cfg, dispatcher, onToast, onGc, onGcProgress, onPlanChatReady, onAgents, onReviewDiff, onTaskDiff, onCreating, onLogTail, onChannels, onChannelHistory, onNotify } = props;
+  const { cfg, dispatcher, onToast, onGc, onGcProgress, onPlanChatReady, onAgents, onAsk, onReviewDiff, onTaskDiff, onCreating, onLogTail, onChannels, onChannelHistory, onNotify } = props;
   const { exit } = useApp();
   const size = useTerminalSize();
   const tasks = useTasks();
@@ -125,8 +130,11 @@ export function App(props: {
   const [cmdOpen, setCmdOpen] = useState(false);
   /** `` ` ``: the keys for this view and the global ones, over the view */
   const [keysOpen, setKeysOpen] = useState(false);
-  /** either overlay has the keyboard: views stand down while one is open */
-  const overlay = cmdOpen || keysOpen;
+  /** `@`: the chat with colinear's assistant */
+  const [askOpen, setAskOpen] = useState(false);
+  const [askState, setAskState] = useState<AskState>({ messages: [], busy: false, queued: 0 });
+  /** any overlay has the keyboard: views stand down while one is open */
+  const overlay = cmdOpen || keysOpen || askOpen;
   const [fullScreen, setFullScreen] = useState(false);
   const [toast, setToastState] = useState<{ text: string; kind: ToastKind; at: number }>();
   const [viewer, setViewer] = useState<{ id: string; displayName: string }>();
@@ -144,6 +152,22 @@ export function App(props: {
   const railShown = Boolean(ui.rail) && !fullScreen && size.columns >= RAIL_MIN_COLUMNS && viewDef.name !== 'agents';
   const [agents, setAgents] = useState<AgentSession[]>([]);
   useEffect(() => onAgents?.(setAgents), [onAgents]);
+  // the chat's conversation, pushed on every change; asked for once at start
+  const askOpenRef = useRef(false);
+  askOpenRef.current = askOpen;
+  useEffect(
+    () =>
+      onAsk?.((state) => {
+        setAskState((prev) => {
+          // a reply landing while the chat is closed says so, once
+          const replied = state.messages.length > prev.messages.length && state.messages.at(-1)?.from === 'colinear';
+          if (replied && !askOpenRef.current) setTimeout(() => ctx.toast('colinear replied — @ to read it', 'info'), 0);
+          return state;
+        });
+      }),
+    [onAsk],
+  );
+  useEffect(() => dispatcher.askState(), []);
   useEffect(() => {
     // The registry is not CDC state: it changes inside sessions that never
     // touch the store, so it is asked for rather than pushed. Always, not
@@ -283,6 +307,10 @@ export function App(props: {
         setKeysOpen(true);
         return;
       }
+      if (input === '@') {
+        setAskOpen(true);
+        return;
+      }
       if (input === '\\') {
         if (!ui.rail && size.columns < RAIL_MIN_COLUMNS) {
           ctx.toast(`the agent rail needs ${RAIL_MIN_COLUMNS} columns — :agents has the same list`, 'info');
@@ -411,6 +439,25 @@ export function App(props: {
                     if (target) navigate(target.name, rest.join(' ') || undefined);
                     else if (value.trim()) ctx.toast(`unknown view: ${typed}`, 'err');
                   }}
+                />
+              </Popup>
+            );
+          })()}
+        {askOpen &&
+          (() => {
+            const w = Math.min(120, size.columns - 4);
+            const h = Math.max(12, size.rows - 4);
+            return (
+              <Popup width={w} height={h} top={1} left={Math.max(0, Math.floor((size.columns - 2 - w) / 2))}>
+                <AskPopup
+                  state={askState}
+                  width={w - 4}
+                  height={h - 2}
+                  now={now}
+                  onSend={(text) => dispatcher.ask(text)}
+                  onClose={() => setAskOpen(false)}
+                  onReset={() => dispatcher.askReset()}
+                  onCancel={() => dispatcher.askCancel()}
                 />
               </Popup>
             );

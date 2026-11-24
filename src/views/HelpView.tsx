@@ -32,6 +32,7 @@ export function HelpView(_props: { param?: string }) {
           [
             [':', 'go to a view: a list that narrows as you type, ↑↓ to pick (an argument after the name, e.g. :project promsql)'],
             ['`', "the keys for the view you are on, and these, in a popup"],
+            ['@', 'ask colinear to do something: an agent that can add PRs to reviews and start local reviews'],
             ['?', 'this help'],
             ['\\', 'the agent rail beside every view'],
             ['esc', 'clear filters, then back'],

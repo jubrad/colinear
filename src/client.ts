@@ -1,3 +1,4 @@
+import type { AskState } from './core/ask.js';
 import type { DiskSession } from './core/disksessions.js';
 import { setCatalog } from './core/modelcatalog.js';
 import type { DiffAgainst } from './core/diff.js';
@@ -80,6 +81,11 @@ export interface DispatcherApi {
   codeSearch(id: string, mode: SearchMode, query: string): Promise<CodeSearchResult>;
   /** every Claude Code and Codex conversation on the daemon's disk — :sessions */
   diskSessions(): Promise<DiskSession[]>;
+  /** the @ chat */
+  ask(text: string): void;
+  askState(): void;
+  askReset(): void;
+  askCancel(): void;
   explainLines(
     id: string,
     file: string,
@@ -153,6 +159,8 @@ export interface Connection {
   onGcProgress(fn: (p: GcProgress) => void): () => void;
   onPlanChatReady(fn: (r: PlanChatReady) => void): () => void;
   onAgents(fn: (list: AgentSession[]) => void): () => void;
+  /** the @ chat's conversation, whenever it changes */
+  onAsk(fn: (state: AskState) => void): () => void;
   onReviewDiff(fn: (id: string, diff: string, against?: DiffAgainst) => void): () => void;
   onTaskDiff(fn: (id: string, diff: string, against?: DiffAgainst) => void): () => void;
   onCreating(fn: (agentId: string) => void): () => void;
@@ -288,6 +296,7 @@ export async function connectToDaemon(): Promise<Connection> {
   const gcProgressListeners = new Set<(p: GcProgress) => void>();
   const planChatListeners = new Set<(r: PlanChatReady) => void>();
   const agentListeners = new Set<(list: AgentSession[]) => void>();
+  const askListeners = new Set<(state: AskState) => void>();
   const diffListeners = new Set<(id: string, diff: string, against?: DiffAgainst) => void>();
   const taskDiffListeners = new Set<(id: string, diff: string, against?: DiffAgainst) => void>();
   const creatingListeners = new Set<(agentId: string) => void>();
@@ -359,6 +368,10 @@ export async function connectToDaemon(): Promise<Connection> {
             planChatListeners.add(fn);
             return () => planChatListeners.delete(fn);
           },
+          onAsk: (fn) => {
+            askListeners.add(fn);
+            return () => askListeners.delete(fn);
+          },
           onAgents: (fn) => {
             agentListeners.add(fn);
             return () => agentListeners.delete(fn);
@@ -417,6 +430,10 @@ export async function connectToDaemon(): Promise<Connection> {
           listAgents: () => command({ name: 'listAgents' }),
           reviewDiff: (id, expand, against) => command({ name: 'reviewDiff', id, expand, against }),
           taskDiff: (id, expand, against) => command({ name: 'taskDiff', id, expand, against }),
+          ask: (text) => command({ name: 'ask', text }),
+          askState: () => command({ name: 'askState' }),
+          askReset: () => command({ name: 'askReset' }),
+          askCancel: () => command({ name: 'askCancel' }),
           diskSessions: () =>
             new Promise<DiskSession[]>((resolve) => {
               const reqId = nextSearch++;
@@ -467,6 +484,8 @@ export async function connectToDaemon(): Promise<Connection> {
         });
       } else if (msg.t === 'taskDiff') {
         for (const fn of taskDiffListeners) fn(msg.id, msg.diff, msg.against);
+      } else if (msg.t === 'ask') {
+        for (const fn of askListeners) fn(msg.state);
       } else if (msg.t === 'diskSessions') {
         const done = sessionLists.get(msg.reqId);
         sessionLists.delete(msg.reqId);
