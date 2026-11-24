@@ -1088,10 +1088,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#your-tasks-prs-reviewed-on-their-own" class="md-nav__link">
+  <a href="#your-tasks-reviewed-before-they-push" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Your tasks' PRs, reviewed on their own
+        Your tasks, reviewed before they push
       
     </span>
   </a>
@@ -1791,10 +1791,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#your-tasks-prs-reviewed-on-their-own" class="md-nav__link">
+  <a href="#your-tasks-reviewed-before-they-push" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Your tasks' PRs, reviewed on their own
+        Your tasks, reviewed before they push
       
     </span>
   </a>
@@ -2424,22 +2424,35 @@ identifier in front of the title, in every view, and <code>/</code> finds it by 
 only the requests, since your tasks' PRs are yours by definition. <code>r</code> has an agent pre-review what
 the task's agent wrote, and <code>enter</code> reads it against the code, as with any review. A task PR stays
 until it merges or closes, like a PR you added by name.</p>
-<h3 id="your-tasks-prs-reviewed-on-their-own">Your tasks' PRs, reviewed on their own<a class="headerlink" href="#your-tasks-prs-reviewed-on-their-own" title="Permanent link">&para;</a></h3>
-<p>With <a href="../../configuration/"><code>taskReviews</code></a> on (the default), you don't have to start these reviews or
-carry the comments across:</p>
+<h3 id="your-tasks-reviewed-before-they-push">Your tasks, reviewed before they push<a class="headerlink" href="#your-tasks-reviewed-before-they-push" title="Permanent link">&para;</a></h3>
+<p>With <a href="../../configuration/"><code>taskReviews</code></a> on (the default), a colinear task gets its review cycle
+<strong>locally, before anything is pushed</strong>. You don't start the reviews or carry the comments across:</p>
 <ol>
-<li>When a task's PR appears here, colinear starts a pre-review of it.</li>
-<li>When the review is done, the findings the agent should act on go to <strong>the task's own agent</strong> as
-   its next turn. That's the same path <code>p</code> in <a href="../diff/"><code>:diff</code></a> takes. Annotations and praise stay
-   in the review for you.</li>
-<li>When the agent pushes, colinear reviews the PR again. That round's findings go back the same way.</li>
-<li>It stops after <code>maxRounds</code> (2 by default). The last hand-back tells the agent it was the last.</li>
+<li>The work pass commits on the task's branch and stops, instead of pushing.</li>
+<li>colinear reviews the task's own worktree: the whole branch against its base, uncommitted work
+   included. It's the same review <code>R</code> runs in <a href="../diff/"><code>:diff</code></a>, and its findings are there to read.</li>
+<li>The findings the agent should act on go back to <strong>the same session</strong>, which fixes, commits and
+   still doesn't push. Annotations and praise stay in the review for you.</li>
+<li>colinear reviews again, up to <code>maxRounds</code> (2 by default), or stops early when a round finds
+   nothing to change.</li>
+<li>Then one last turn publishes it: the push and the draft PR, or a push onto the PR the task already
+   had.</li>
 </ol>
-<p>Each step waits for the task to be idle on its open PR, so nothing is handed to an agent that is
-mid-revision or running checks. The same findings are never handed twice. A round that fails is not
-retried on its own; <code>r</code> retries it. The review's activity log and the task's both record every
-round. Nothing is posted to GitHub: the findings stay between colinear and the agent unless you post
-them. The loop checks once a minute, alongside the review poll.</p>
+<p>The card stays in Working throughout, and its activity log records each round. Two kinds of task
+push right away instead:</p>
+<ul>
+<li>a task whose triage chose the <strong>CI</strong> verification tier, since pushing early so CI runs is the point
+  of that tier;</li>
+<li>any task with <code>beforePush</code> turned off.</li>
+</ul>
+<p>Nothing reaches GitHub until the publish step, and the review's findings never do unless you post
+them.</p>
+<p><strong>After the push instead.</strong> With <code>"taskReviews": { "beforePush": false }</code> the cycle runs on the PR.
+When a task's PR appears in the <code>t</code> view, colinear pre-reviews it
+and hands the findings to the task's agent. When the agent pushes, it reviews the PR again, up to
+<code>maxRounds</code>. Each step waits for the task to be idle on its open PR. The same findings are never
+handed twice, and a round that fails is retried only by <code>r</code>.</p>
+<p>PRs that aren't colinear tasks are reviewed on their PR, as always, whatever this setting says.</p>
 <p><strong>PR stacks are drawn together.</strong> A PR whose base branch is another listed PR's branch, in the same
 repo, is built on it. Such PRs are listed under a header line that names the stack after its bottom
 PR's branch:</p>

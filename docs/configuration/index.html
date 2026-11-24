@@ -1780,8 +1780,8 @@
 </tr>
 <tr>
 <td><code>taskReviews</code></td>
-<td><code>{ "auto": true, "maxRounds": 2 }</code></td>
-<td>review a task's own PR automatically and hand the findings back to its agent, then review again after it pushes, up to <code>maxRounds</code>. <code>false</code> switches it off. <a href="../views/reviews/#your-tasks-prs-reviewed-on-their-own">Details</a></td>
+<td><code>{ "auto": true, "maxRounds": 2, "beforePush": true }</code></td>
+<td>review a task's work automatically and hand the findings back to its agent, up to <code>maxRounds</code>. <code>beforePush</code> reviews the task's own worktree before anything is pushed, then publishes; <code>false</code> there reviews the pushed PR after each push instead. <code>false</code> switches the whole thing off. <a href="../views/reviews/#your-tasks-reviewed-before-they-push">Details</a></td>
 </tr>
 <tr>
 <td><code>reviewPollSeconds</code></td>
