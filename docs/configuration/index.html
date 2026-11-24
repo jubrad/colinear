@@ -1780,8 +1780,8 @@
 </tr>
 <tr>
 <td><code>taskReviews</code></td>
-<td><code>{ "auto": true, "maxRounds": 2, "beforePush": true }</code></td>
-<td>review a task's work automatically and hand the findings back to its agent, up to <code>maxRounds</code>. <code>beforePush</code> reviews the task's own worktree before anything is pushed, then publishes; <code>false</code> there reviews the pushed PR after each push instead. <code>false</code> switches the whole thing off. <a href="../views/reviews/#your-tasks-reviewed-before-they-push">Details</a></td>
+<td><code>{ "auto": true, "maxRounds": 2, "beforePush": true, "ciPushesFirst": false }</code></td>
+<td>review a task's work automatically and hand the findings back to its agent, up to <code>maxRounds</code>. <code>beforePush</code> reviews the task's own worktree before anything is pushed, then publishes, for every verification tier; <code>false</code> there reviews the pushed PR after each push instead. <code>ciPushesFirst</code> lets a CI-tier task push early, so CI starts sooner, and reviews its PR after the push. <code>false</code> switches the whole thing off. <a href="../views/reviews/#your-tasks-reviewed-before-they-push">Details</a></td>
 </tr>
 <tr>
 <td><code>reviewPollSeconds</code></td>

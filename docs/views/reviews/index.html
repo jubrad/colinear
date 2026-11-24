@@ -2444,11 +2444,13 @@ extra revision. A middle round checks that the last round's findings were addres
 what the fixes disturbed, without raising settled points again. The last round raises only what
 would stop the change shipping and leaves the rest in its prose for you. The after-push loop below
 tells its PR reviews the same.</p>
-<p>The card stays in Working throughout, and its activity log records each round. Two kinds of task
-push right away instead:</p>
+<p>The card stays in Working throughout, and its activity log records each round. This applies to
+every verification tier. A <strong>CI</strong>-tier task runs its fast checks locally, goes through the review
+rounds, and then pushes, so GitHub CI runs on what was reviewed. Two kinds of task push right away
+instead:</p>
 <ul>
-<li>a task whose triage chose the <strong>CI</strong> verification tier, since pushing early so CI runs is the point
-  of that tier;</li>
+<li>a CI-tier task with <code>"ciPushesFirst": true</code>, for when CI's early signal matters more than a review
+  before the push. Its PR is then reviewed after the push (below), so it isn't left unreviewed;</li>
 <li>any task with <code>beforePush</code> turned off.</li>
 </ul>
 <p>Nothing reaches GitHub until the publish step, and the review's findings never do unless you post
