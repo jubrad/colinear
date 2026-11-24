@@ -293,7 +293,7 @@ ${task.issue.identifier}: ${task.issue.title}
 ${task.issue.description?.trim() ? `\n${task.issue.description.trim().slice(0, 4000)}\n` : ''}
 
 ## What to do
-Read the diff (\`git diff\`, \`git log\`) and enough of the surrounding code to judge it in context — a diff alone hides most real problems. Ask the question the issue implies: does this change actually do what was asked, and what does it break? Do not modify any file except the review document below.
+Read the whole branch against its base — \`git log ${task.repo?.remote ?? 'origin'}/${task.repo?.prBase ?? task.repo?.defaultBranch ?? 'main'}..HEAD\` and \`git diff ${task.repo?.remote ?? 'origin'}/${task.repo?.prBase ?? task.repo?.defaultBranch ?? 'main'}...HEAD\`, plus \`git diff\` for anything not yet committed; it may not have been pushed — and enough of the surrounding code to judge it in context — a diff alone hides most real problems. Ask the question the issue implies: does this change actually do what was asked, and what does it break? Do not modify any file except the review document below.
 
 Write your review to \`${REVIEW_FILE}\` in the working directory (it is git-excluded). Prose first — what the change does and where your judgement is weakest — then a \`\`\`findings block: a JSON array, one object per finding, \`{"file", "line", "severity", "comment"}\`. \`line\` is a line in the new version of the file that the diff touches. \`severity\` is one of blocking, consider, nit, praise, or **info** — or \`comment\`, which only the operator writes; leave those as they are.
 

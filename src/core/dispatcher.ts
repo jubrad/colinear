@@ -7,7 +7,8 @@ import { promisify } from 'node:util';
 import { agentFor, SessionInbox, type AgentBackend, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
 import { measureChanges, sameChanges } from './changes.js';
-import { taskRanges } from './selfreview.js';
+import { reviewTask, taskRanges } from './selfreview.js';
+import { actionable as actionableFindings } from './taskreview.js';
 import { demoChecks, demoPullRequest, demoSession, demoWorktree, isDemo } from './demo.js';
 import { channels, projectChannel, type SessionChannels } from './channel.js';
 import { coordinatorCwd, coordinatorPrompt, familyStatus, type CoordinatorTools } from './coordinator.js';
@@ -22,7 +23,7 @@ import { syncIssueState } from './statesync.js';
 import { guidanceFor } from './guidance.js';
 import { autoSplitDecision, childIssues, fileSplit, trackingFields, type SplitChild } from './split.js';
 import { store } from './store.js';
-import { questionSummary, type Config, type Issue, type PrInfo, type RepoConfig, type Subtask, type Task, type TaskEdits, type TaskStatus, type TriageVerdict, type Verification } from './types.js';
+import { questionSummary, type Config, type Issue, type PrInfo, type RepoConfig, type ReviewFinding, type Subtask, type Task, type TaskEdits, type TaskStatus, type TriageVerdict, type Verification } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -999,6 +1000,75 @@ export class Dispatcher {
     };
   }
 
+  /**
+   * The review cycle on a task's own worktree, before anything is pushed:
+   * colinear reviews the branch where the agent left it, hands the findings
+   * back on the same session to fix and commit, and goes again — up to
+   * taskReviews.maxRounds, or until a round finds nothing to change. Then
+   * one last turn publishes it: the push and the draft PR, or a push onto
+   * the PR it already had.
+   */
+  private async reviewBeforePublishing(
+    id: string,
+    worktree: string,
+    taskRepo: { defaultBranch: string; remote?: string; pushRemote?: string; prBase?: string },
+    issue: Issue,
+    knownPr: PrInfo | undefined,
+    controller: AbortController,
+  ): Promise<void> {
+    const max = this.cfg.taskReviews.maxRounds;
+    const pushRemote = taskRepo.pushRemote ?? taskRepo.remote ?? 'origin';
+    const upstream = taskRepo.remote ?? 'origin';
+    const prBase = taskRepo.prBase ?? taskRepo.defaultBranch;
+    store.setStatus(id, 'working');
+    for (let round = 1; round <= max; round++) {
+      if (controller.signal.aborted) return;
+      const before = store.get(id);
+      if (!before) return;
+      store.addActivity(id, `local review, round ${round} of ${max}`);
+      await reviewTask(this.cfg, { ...before, worktree });
+      const reviewed = store.get(id);
+      if (!reviewed) return;
+      store.update(id, { autoReviewRounds: round });
+      const findings = actionableFindings(reviewed.findings);
+      if (!findings.length) {
+        store.addActivity(id, `local review round ${round}: nothing to change`);
+        break;
+      }
+      store.addActivity(id, `local review round ${round}: ${findings.length} comment${findings.length === 1 ? '' : 's'} handed back`);
+      const revised = await this.session({
+        agent: { kind: 'work', label: issue.identifier, origin: `colinear's local review, round ${round}` },
+        prompt: localRevisePrompt(findings, round, max),
+        cwd: worktree,
+        callbacks: this.callbacks(id),
+        ...modelsFor(this.cfg, 'work', store.get(id)?.model),
+        resume: store.get(id)?.sessionId,
+        abortController: controller,
+        permissions: this.permissions(),
+      });
+      if (revised.spend) store.addSpend(id, revised.spend);
+      store.update(id, { handedSha: reviewed.reviewedSha });
+      if (revised.isError) {
+        store.addActivity(id, `revising on round ${round} failed: ${revised.errors.join('; ').slice(0, 120)}`);
+        break;
+      }
+    }
+    if (controller.signal.aborted) return;
+    store.addActivity(id, knownPr ? `reviewed locally — pushing to PR #${knownPr.number}` : 'reviewed locally — pushing and opening the draft PR');
+    const published = await this.session({
+      agent: { kind: 'work', label: issue.identifier, origin: 'publishing after the local review' },
+      prompt: publishPrompt(issue, pushRemote, upstream, prBase, knownPr),
+      cwd: worktree,
+      callbacks: this.callbacks(id),
+      ...modelsFor(this.cfg, 'work', store.get(id)?.model),
+      resume: store.get(id)?.sessionId,
+      abortController: controller,
+      permissions: this.permissions(),
+    });
+    if (published.spend) store.addSpend(id, published.spend);
+    store.update(id, { holdPush: undefined });
+  }
+
   private async runTask(id: string) {
     const task = store.get(id);
     if (!task) return;
@@ -1149,6 +1219,17 @@ export class Dispatcher {
       // the kind of work an operator most often wants on a cheaper model, so
       // the same distinction picks the model
       const workScope = mode === 'fixci' || mode === 'rebase' || mode === 'revise' ? 'maintenance' : 'work';
+      // Review before publishing: a fresh work pass commits locally and stops,
+      // colinear reviews the worktree and hands back what it finds, and only
+      // then is the branch pushed. Not for the CI tier, whose whole point is
+      // pushing early so CI runs, nor in demo mode. A session resumed after a
+      // restart keeps whatever its pass was told.
+      const holdPush = isDemo(this.cfg)
+        ? false
+        : resumeSession
+          ? Boolean(current.holdPush)
+          : !mode && this.cfg.taskReviews.auto && this.cfg.taskReviews.beforePush && current.verdict?.verification !== 'ci';
+      if (holdPush !== Boolean(current.holdPush)) store.update(id, { holdPush: holdPush || undefined });
       const work = await this.session({
         agent: {
           kind: workScope,
@@ -1175,7 +1256,7 @@ export class Dispatcher {
                 ? `${ctx}\n\nYou were idle and the operator sent you the message(s) above. Deal with them — check ${SUBTASKS_FILE} and git status to reorient first if you need to. If a message asks for a change, make it and push; if it only asks a question, answer it and stop.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
                 : resumeSession
                 ? `${ctx}\n\ncolinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
-                : workPrompt(ctx, issue, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, current.verdict?.verification, task.skipTriage, knownPr),
+                : workPrompt(ctx, issue, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, current.verdict?.verification, task.skipTriage, knownPr, holdPush),
         cwd: worktree,
         callbacks: this.callbacks(id),
         ...modelsFor(this.cfg, workScope, store.get(id)?.model),
@@ -1229,6 +1310,11 @@ export class Dispatcher {
         store.addActivity(id, 'running checks');
         const results = await this.checks(repoChecks, worktree, controller.signal);
         store.update(id, { checks: results });
+      }
+
+      if (holdPush && !controller.signal.aborted) {
+        await this.reviewBeforePublishing(id, worktree, taskRepo, issue, knownPr, controller);
+        if (controller.signal.aborted) throw new Error('cancelled');
       }
 
       // decide the terminal status from actual PR state — setting done first
@@ -1710,7 +1796,7 @@ function verificationBlock(verification?: Verification): string {
   }
 }
 
-function workPrompt(
+export function workPrompt(
   ctx: string,
   issue: Issue,
   pushRemote: string,
@@ -1719,6 +1805,8 @@ function workPrompt(
   verification?: Verification,
   triageSkipped?: boolean,
   existingPr?: PrInfo,
+  /** commit locally and stop: colinear reviews the branch before it is published */
+  holdPush?: boolean,
 ): string {
   const forked = pushRemote !== upstreamRemote;
   const skipNote = triageSkipped
@@ -1737,7 +1825,7 @@ Requirements:
 ${verificationBlock(verification)}
 - Commit with clear messages referencing ${issue.identifier}.
 - Before opening the PR, spawn a subagent (Task tool) to review your full branch diff for bugs, missed edge cases, and convention violations. Address any real findings. Include this review as a subtask.
-${existingPr ? `- Push further commits to the "${pushRemote}" remote branch "${existingPr.headRefName}" — they land on the existing PR #${existingPr.number}. Never open a second PR.` : `- Push the branch to the "${pushRemote}" remote${forked ? ` (a fork — the upstream is "${upstreamRemote}")` : ''} and open a DRAFT PR against ${prBase} of the upstream repo with "gh pr create --draft --base ${prBase}"${forked ? ' (gh handles fork PRs; pass --head <fork-owner>:<branch> if it asks)' : ''}, title prefixed with "${issue.identifier}:", body linking ${issue.url}.`}
+${holdPush ? `- Commit your work locally and stop there. Do NOT push and do NOT open a PR yet: colinear reviews your branch locally first, hands you what it finds, and tells you when to publish.` : `- ${pushInstruction(issue, pushRemote, upstreamRemote, prBase, existingPr)}`}
 - PRs stay DRAFT: never run "gh pr ready" or mark a PR ready for review — promoting a PR out of draft is always a human decision.
 ${forked ? '- Do NOT create stacked PRs: this repo uses a fork workflow and stacked PRs require pushing to the upstream. Keep it to a single PR.' : '- If the change is genuinely better split into stacked PRs, create stacked branches off this one and open a draft PR per layer, each based on the previous branch.'}
 - If you get blocked on a decision only a human can make, use AskUserQuestion.`;
@@ -1772,6 +1860,33 @@ Never mark the PR ready; promoting it stays the operator's call. Say plainly in 
  * what was raised — including by pushing back, which is more useful than a
  * change made to satisfy a comment the agent thinks is wrong.
  */
+/** How the work is published: onto the PR it already has, or as a new draft PR. */
+function pushInstruction(issue: Issue, pushRemote: string, upstreamRemote: string, prBase: string, existingPr?: PrInfo): string {
+  const forked = pushRemote !== upstreamRemote;
+  return existingPr
+    ? `Push further commits to the "${pushRemote}" remote branch "${existingPr.headRefName}" — they land on the existing PR #${existingPr.number}. Never open a second PR.`
+    : `Push the branch to the "${pushRemote}" remote${forked ? ` (a fork — the upstream is "${upstreamRemote}")` : ''} and open a DRAFT PR against ${prBase} of the upstream repo with "gh pr create --draft --base ${prBase}"${forked ? ' (gh handles fork PRs; pass --head <fork-owner>:<branch> if it asks)' : ''}, title prefixed with "${issue.identifier}:", body linking ${issue.url}.`;
+}
+
+/** A local review round's findings, handed back before anything is pushed. */
+export function localRevisePrompt(findings: ReviewFinding[], round: number, max: number): string {
+  const lines = findings.map((f) => {
+    const where = f.file ? `${f.file}${f.line ? `:${f.line}` : ''}` : 'the change as a whole';
+    return `- **${where}** (${f.severity ?? 'consider'}) — ${f.comment.trim()}`;
+  });
+  return `colinear reviewed your branch locally (round ${round} of ${max}) and left ${findings.length} comment${findings.length === 1 ? '' : 's'}. The same list is in \`${REVIEW_FILE}\` in this worktree.
+
+${lines.join('\n')}
+
+Work through them: fix what should be fixed, and say so plainly where you disagree rather than making a change you think is wrong. Commit locally when you are done. Do NOT push or open a PR yet — ${round < max ? 'colinear reviews the branch again first' : 'colinear tells you when to publish'}.`;
+}
+
+/** The last turn of a held task: everything reviewed, now publish it. */
+export function publishPrompt(issue: Issue, pushRemote: string, upstreamRemote: string, prBase: string, existingPr?: PrInfo): string {
+  return `colinear's local review of your branch is done. Publish it now: ${pushInstruction(issue, pushRemote, upstreamRemote, prBase, existingPr)}
+PRs stay DRAFT: never run "gh pr ready". Make no further changes to the code in this turn unless publishing fails and needs one.`;
+}
+
 function revisePrompt(ctx: string, prs: Task['prs']): string {
   const pr = prs[0];
   return `${ctx}

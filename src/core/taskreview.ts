@@ -69,7 +69,10 @@ export function handBackText(review: Review, findings: ReviewFinding[], round: n
  * - anything else — a review running, the task busy, rounds spent — waits.
  */
 export function sweepTaskReviews(cfg: Config, deps: TaskReviewDeps): void {
-  if (!cfg.taskReviews.auto) return;
+  // before the push (the default), a coli task is reviewed on its own
+  // worktree inside its run (Dispatcher.reviewBeforePublishing); this PR loop
+  // is the after-push alternative
+  if (!cfg.taskReviews.auto || cfg.taskReviews.beforePush) return;
   const max = cfg.taskReviews.maxRounds;
   for (const review of store.listReviews()) {
     if (!review.task || review.status === 'stale' || review.hidden || ACTIVE.includes(review.status)) continue;

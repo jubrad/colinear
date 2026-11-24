@@ -15,7 +15,7 @@ const check = (name: string, ok: boolean, detail = '') => {
   if (!ok) failures.push(`${name}${detail ? ` — ${detail}` : ''}`);
 };
 
-const cfg = { taskReviews: { auto: true, maxRounds: 2 } } as unknown as Config;
+const cfg = { taskReviews: { auto: true, maxRounds: 2, beforePush: false } } as unknown as Config;
 const started: string[] = [];
 const handed: string[] = [];
 let accept = true;
@@ -76,9 +76,14 @@ store.updateReview('o/r#1', { autoRounds: 1, handedSha: undefined, status: 'erro
 sweepTaskReviews(cfg, deps);
 check('a round that failed is not retried on its own', started.length === 2);
 
+// before the push (the default), tasks are reviewed on their worktree inside their run: this loop stands down
+store.updateReview('o/r#1', { autoRounds: 0, status: 'pending', handedSha: undefined, headSha: 'eee' } as Partial<Review>);
+sweepTaskReviews({ taskReviews: { auto: true, maxRounds: 2, beforePush: true } } as unknown as Config, deps);
+check('with beforePush the PR loop starts nothing', started.length === 2);
+
 // off is off
 store.updateReview('o/r#1', { autoRounds: 0, status: 'pending', handedSha: undefined } as Partial<Review>);
-sweepTaskReviews({ taskReviews: { auto: false, maxRounds: 2 } } as unknown as Config, deps);
+sweepTaskReviews({ taskReviews: { auto: false, maxRounds: 2, beforePush: false } } as unknown as Config, deps);
 check('taskReviews off starts nothing', started.length === 2);
 
 check('actionable drops annotations, praise and empty comments', actionable([{ severity: 'info', comment: 'x' }, { severity: 'praise', comment: 'y' }, { severity: 'consider', comment: ' ' }, { severity: 'consider', comment: 'z' }]).length === 1);
