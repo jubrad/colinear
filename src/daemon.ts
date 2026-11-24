@@ -36,6 +36,7 @@ import { scanDiskSessions } from './core/disksessions.js';
 import { store } from './core/store.js';
 import { TodoManager } from './core/todolist.js';
 import { JobRunner } from './core/jobs.js';
+import { AskChat } from './core/ask.js';
 import { agentNamed, knownAgents } from './core/agent.js';
 import { CATALOG_REFRESH_MS, getCatalog, loadCatalog, refreshCatalog, saveCatalog } from './core/modelcatalog.js';
 
@@ -79,6 +80,8 @@ export async function runDaemon(): Promise<void> {
   });
   const todo = new TodoManager(cfg);
   const jobs = new JobRunner(cfg, reviewer);
+  /** the @ chat: one conversation with an agent that can run colinear — its reviews start the way `r` does */
+  const ask = new AskChat(cfg, (id, opts) => startReview(id, opts));
   loadState(cfg);
   reviewer.resumeWatching(); // reviews restored from disk keep their live doc
   plans.resumeWatching();
@@ -127,6 +130,7 @@ export async function runDaemon(): Promise<void> {
   todo.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
   todo.startClock();
   jobs.onToast = (text, kind) => broadcast({ t: 'toast', text, kind });
+  ask.onChange = (state) => broadcast({ t: 'ask', state });
   // demo mode reaches no network, and a scheduled job would
   if (!isDemo(cfg)) jobs.startClock();
 
@@ -234,19 +238,9 @@ export async function runDaemon(): Promise<void> {
             broadcast({ t: 'toast', text: String((err as Error)?.message ?? err).slice(0, 160), kind: 'err' }),
           );
         break;
-      case 'startReview': {
-        // a review of a repo you have not got: reviewing it is asking for it,
-        // so clone it, add it to the config, and carry on
-        const asked = store.getReview(cmd.id);
-        if (asked && !asked.repo && !isDemo(cfg)) {
-          void importAndReport(asked.repository).then((repo) => {
-            if (repo) void reviewer.start(cmd.id, cmd.opts);
-          });
-          break;
-        }
-        void reviewer.start(cmd.id, cmd.opts);
+      case 'startReview':
+        startReview(cmd.id, cmd.opts);
         break;
-      }
       case 'cancelReview':
         reviewer.cancel(cmd.id);
         break;
@@ -410,6 +404,19 @@ export async function runDaemon(): Promise<void> {
           cmd.nth,
         );
         break;
+      case 'ask':
+        if (isDemo(cfg)) reply({ t: 'toast', text: 'the demo has no assistant to ask', kind: 'info' });
+        else ask.send(cmd.text);
+        break;
+      case 'askState':
+        reply({ t: 'ask', state: ask.get() });
+        break;
+      case 'askReset':
+        ask.reset();
+        break;
+      case 'askCancel':
+        ask.cancel();
+        break;
       case 'diskSessions': {
         // colinear's own headless sessions say what they were for
         const label = new Map<string, string>();
@@ -562,6 +569,20 @@ export async function runDaemon(): Promise<void> {
    * config, and tell everyone: the toasts, the clients' copy of the config,
    * and every review of that repo, which until now had nowhere to check out.
    */
+  /**
+   * Start a review the way `r` does: a PR in a repo you have not got is
+   * cloned and added first, since reviewing it is asking for it.
+   */
+  function startReview(id: string, opts?: { model?: string; instructions?: string }): void {
+    const asked = store.getReview(id);
+    if (asked && !asked.repo && !isDemo(cfg)) {
+      void importAndReport(asked.repository).then((repo) => {
+        if (repo) void reviewer.start(id, opts);
+      });
+      return;
+    }
+    void reviewer.start(id, opts);
+  }
   const importing = new Map<string, Promise<RepoConfig | undefined>>();
   const importAndReport = (slug: string): Promise<RepoConfig | undefined> => {
     const key = slug.toLowerCase();

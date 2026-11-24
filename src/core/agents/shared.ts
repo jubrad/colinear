@@ -2,6 +2,7 @@ import type { SessionChannels } from '../channel.js';
 import type { DiscoveredModel } from '../modelcatalog.js';
 import type { CoordinatorTools } from '../coordinator.js';
 import type { JobTools } from '../jobs.js';
+import type { AskTools } from '../ask.js';
 import type { AgentKind } from '../sessions.js';
 import type { PendingQuestion, SessionSpend } from '../types.js';
 
@@ -166,6 +167,8 @@ export interface RunSessionOpts {
   coordinator?: CoordinatorTools;
   /** a job's colinear actions — only the ones its job lists */
   jobTools?: JobTools;
+  /** the `@` chat's colinear tools: reading, and adding and starting local reviews */
+  askTools?: AskTools;
   /**
    * Load the operator's user-level settings too, not just the project's: their
    * own MCP servers come with them. Off by default — a session sees only what

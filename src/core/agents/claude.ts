@@ -14,6 +14,7 @@ import { endSession, startSession, updateSession } from '../sessions.js';
 import type { SessionChannels } from '../channel.js';
 import type { CoordinatorTools } from '../coordinator.js';
 import type { JobTools } from '../jobs.js';
+import type { AskTools } from '../ask.js';
 import type { DiscoveredModel } from '../modelcatalog.js';
 import type { AskedQuestion, PlannedSubtask, SessionSpend } from '../types.js';
 import type {
@@ -119,6 +120,7 @@ function colinearServer(opts: {
   channels?: SessionChannels;
   coordinator?: CoordinatorTools;
   jobTools?: JobTools;
+  askTools?: AskTools;
 }) {
   const tools = [];
   const membership = opts.channels;
@@ -240,6 +242,25 @@ function colinearServer(opts: {
       );
     }
   }
+  // the @ chat: read anything, add and start local reviews — nothing that posts
+  const ask = opts.askTools;
+  if (ask) {
+    const pr = z.string().min(1).describe('the pull request: owner/repo#123 or its URL');
+    const filter = z.string().max(200).optional().describe('only rows containing this text (case-insensitive)');
+    const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
+    tools.push(
+      tool('list_reviews', "Every PR on colinear's review list that is still open: status, the task that opened it if any, title.", { filter }, async ({ filter: f }) => text(ask.listReviews(f))),
+      tool('list_tasks', "colinear's tasks: issue, status, its PR, title.", { filter }, async ({ filter: f }) => text(ask.listTasks(f))),
+      tool('review_status', "One PR's colinear review: status, summary, findings.", { pr }, async ({ pr: spec }) => text(ask.reviewStatus(spec))),
+      tool('add_review', "Put a pull request on colinear's review list without reviewing it.", { pr }, async ({ pr: spec }) => text(await ask.addReview(spec))),
+      tool(
+        'start_review',
+        "Add a pull request to colinear's review list if needed and start colinear's local pre-review of it. Returns at once; the review runs in the background and shows in :reviews.",
+        { pr, instructions: z.string().max(2000).optional().describe('what to look for, on top of the standing review guidance') },
+        async ({ pr: spec, instructions }) => text(await ask.startReview(spec, instructions)),
+      ),
+    );
+  }
   return tools.length ? createSdkMcpServer({ name: 'colinear', tools }) : undefined;
 }
 
@@ -346,9 +367,9 @@ export async function runSession(opts: RunSessionOpts): Promise<SessionResult> {
 async function runOne(opts: RunSessionOpts): Promise<SessionResult> {
   const {
     prompt, cwd, callbacks, outputSchema, model, fallbackModel, maxTurns, resume, abortController,
-    channels: membership, inbox, coordinator, permissions, jobTools, userSettings,
+    channels: membership, inbox, coordinator, permissions, jobTools, askTools, userSettings,
   } = opts;
-  const mcp = colinearServer({ channels: membership, coordinator, jobTools });
+  const mcp = colinearServer({ channels: membership, coordinator, jobTools, askTools });
 
   const q = query({
     prompt: inbox ? asUserMessages(inbox.stream(prompt)) : prompt,
