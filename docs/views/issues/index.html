@@ -1429,7 +1429,7 @@ still dispatch.</p>
 <tbody>
 <tr>
 <td><code>/</code></td>
-<td>fuzzy filter. <code>#bug</code> or <code>label:bug</code> by label; <code>parent:CAD-12</code> or <code>parent:cadence</code> by what an issue is part of — the issue above it or its project, since both answer the same question</td>
+<td>fuzzy filter. <code>#bug</code> or <code>label:bug</code> by label; <code>parent:CAD-12</code> or <code>parent:cadence</code> by what an issue is part of — the issue above it or its project, since both answer the same question. It also <strong>searches the tracker</strong> past this list's narrowing: an identifier (<code>APP-12</code>) finds that issue, and three or more letters find open issues by title, in any team or project, assigned to anyone or no one. Those are added to the list, workable like the rest, and the header counts them (<code>+2 found by search outside this list</code>)</td>
 </tr>
 <tr>
 <td><code>t</code></td>
@@ -1438,6 +1438,10 @@ still dispatch.</p>
 <tr>
 <td><code>l</code></td>
 <td>add a label filter · <code>,</code> (or <code>s</code>) sort by any column — the <a href="../../#sorting">sort bar</a> · <code>p</code> include/exclude project issues</td>
+</tr>
+<tr>
+<td><code>A</code></td>
+<td>everything: every team, project issues and sub-issues at once · <code>A</code> again goes back to your own</td>
 </tr>
 <tr>
 <td><code>S</code></td>
@@ -1516,7 +1520,7 @@ given, and an answer that isn't one of them fails the draft rather than filing i
 <li>Issues with unresolved blocking relations park as ⛓ blocked in the Queued column and start
   automatically when their blockers finish. <code>f</code> on the board starts one anyway, keeping the blockers
   as merge-order dependencies.</li>
-<li>Queries paginate with a 500-issue cap; the default view hides project issues (<code>p</code> shows them).</li>
+<li>Queries paginate with a 500-issue cap; the default view hides project issues (<code>p</code> shows them, <code>A</code> shows everything). A search (<code>/</code>) finds any issue regardless.</li>
 <li><strong>Sub-issues are usually missing for reasons that have nothing to do with being sub-issues.</strong> They
   inherit their parent's project (hidden unless <code>p</code>), or they belong to whoever picked them up
   (hidden in the default <code>mine</code> view). <code>S</code> asks for them by parent instead of relaxing those
