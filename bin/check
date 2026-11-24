@@ -100,6 +100,11 @@ echo '── themes'
 npm run check:theme
 
 echo
+echo '── @ chat history'
+# conversations kept, listed, reopened, current after a restart
+npm run check:ask
+
+echo
 echo '── sessions on disk'
 # Claude Code and Codex transcripts, read from a fabricated home
 npm run check:sessions

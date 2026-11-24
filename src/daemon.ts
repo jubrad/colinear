@@ -417,6 +417,12 @@ export async function runDaemon(): Promise<void> {
       case 'askCancel':
         ask.cancel();
         break;
+      case 'askHistory':
+        reply({ t: 'askHistory', reqId: cmd.reqId, list: ask.history() });
+        break;
+      case 'askOpen':
+        if (!ask.open(cmd.id)) reply({ t: 'toast', text: 'that conversation is gone', kind: 'err' });
+        break;
       case 'diskSessions': {
         // colinear's own headless sessions say what they were for
         const label = new Map<string, string>();

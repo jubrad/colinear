@@ -1,4 +1,4 @@
-import type { AskState } from './core/ask.js';
+import type { AskState, AskSummary } from './core/ask.js';
 import type { DiskSession } from './core/disksessions.js';
 import { setCatalog } from './core/modelcatalog.js';
 import type { DiffAgainst } from './core/diff.js';
@@ -86,6 +86,9 @@ export interface DispatcherApi {
   askState(): void;
   askReset(): void;
   askCancel(): void;
+  /** the @ chat's saved conversations, newest first */
+  askHistory(): Promise<AskSummary[]>;
+  askOpen(id: string): void;
   explainLines(
     id: string,
     file: string,
@@ -305,6 +308,8 @@ export async function connectToDaemon(): Promise<Connection> {
   let nextSearch = 1;
   /** :sessions lists in flight, by request id */
   const sessionLists = new Map<number, (list: DiskSession[]) => void>();
+  /** @ chat history lists in flight */
+  const histories = new Map<number, (list: AskSummary[]) => void>();
 
   /** the config the app was handed, kept so a `config` message can update it in place */
   let liveCfg: Config | undefined;
@@ -434,6 +439,20 @@ export async function connectToDaemon(): Promise<Connection> {
           askState: () => command({ name: 'askState' }),
           askReset: () => command({ name: 'askReset' }),
           askCancel: () => command({ name: 'askCancel' }),
+          askOpen: (id) => command({ name: 'askOpen', id }),
+          askHistory: () =>
+            new Promise<AskSummary[]>((resolve) => {
+              const reqId = nextSearch++;
+              const timer = setTimeout(() => {
+                histories.delete(reqId);
+                resolve([]);
+              }, 15_000);
+              histories.set(reqId, (list) => {
+                clearTimeout(timer);
+                resolve(list);
+              });
+              command({ name: 'askHistory', reqId });
+            }),
           diskSessions: () =>
             new Promise<DiskSession[]>((resolve) => {
               const reqId = nextSearch++;
@@ -484,6 +503,10 @@ export async function connectToDaemon(): Promise<Connection> {
         });
       } else if (msg.t === 'taskDiff') {
         for (const fn of taskDiffListeners) fn(msg.id, msg.diff, msg.against);
+      } else if (msg.t === 'askHistory') {
+        const done = histories.get(msg.reqId);
+        histories.delete(msg.reqId);
+        done?.(msg.list);
       } else if (msg.t === 'ask') {
         for (const fn of askListeners) fn(msg.state);
       } else if (msg.t === 'diskSessions') {

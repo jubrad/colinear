@@ -132,7 +132,7 @@ export function App(props: {
   const [keysOpen, setKeysOpen] = useState(false);
   /** `@`: the chat with colinear's assistant */
   const [askOpen, setAskOpen] = useState(false);
-  const [askState, setAskState] = useState<AskState>({ messages: [], busy: false, queued: 0 });
+  const [askState, setAskState] = useState<AskState>({ id: '', messages: [], busy: false, queued: 0 });
   /** any overlay has the keyboard: views stand down while one is open */
   const overlay = cmdOpen || keysOpen || askOpen;
   const [fullScreen, setFullScreen] = useState(false);
@@ -458,6 +458,8 @@ export function App(props: {
                   onClose={() => setAskOpen(false)}
                   onReset={() => dispatcher.askReset()}
                   onCancel={() => dispatcher.askCancel()}
+                  onHistory={() => dispatcher.askHistory()}
+                  onOpen={(id) => dispatcher.askOpen(id)}
                 />
               </Popup>
             );

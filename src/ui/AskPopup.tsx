@@ -1,6 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import { useMemo, useState } from 'react';
-import type { AskState } from '../core/ask.js';
+import type { AskState, AskSummary } from '../core/ask.js';
+import { age } from '../core/fleet.js';
 import { theme } from '../theme.js';
 import { spinner } from './format.js';
 import { TextArea, wrap } from './TextArea.js';
@@ -22,9 +23,15 @@ export function AskPopup(props: {
   onClose: () => void;
   onReset: () => void;
   onCancel: () => void;
+  /** the saved conversations, newest first */
+  onHistory: () => Promise<AskSummary[]>;
+  onOpen: (id: string) => void;
 }) {
-  const { state, width, height, now, onSend, onClose, onReset, onCancel } = props;
+  const { state, width, height, now, onSend, onClose, onReset, onCancel, onHistory, onOpen } = props;
   const [draft, setDraft] = useState('');
+  /** `ctrl-o`: the past conversations, in place of this one */
+  const [history, setHistory] = useState<AskSummary[] | null>(null);
+  const [pick, setPick] = useState(0);
   /** lines scrolled up from the bottom of the conversation */
   const [back, setBack] = useState(0);
 
@@ -48,8 +55,31 @@ export function AskPopup(props: {
   const from = Math.max(0, lines.length - room - Math.min(back, maxBack));
   const shown = lines.slice(from, from + room);
 
+  const openHistory = () => {
+    setPick(0);
+    setHistory([]);
+    void onHistory().then(setHistory);
+  };
+
   useInput((input, key) => {
+    if (history) {
+      // the list has the keyboard: nothing is being typed
+      if (key.escape || (key.ctrl && input === 'o')) return setHistory(null);
+      if (key.upArrow || input === 'i') return setPick((p) => Math.max(0, p - 1));
+      if (key.downArrow || input === 'k') return setPick((p) => Math.min(Math.max(0, history.length - 1), p + 1));
+      if (key.return && history[pick]) {
+        onOpen(history[pick].id);
+        setBack(0);
+        return setHistory(null);
+      }
+      if (key.ctrl && input === 'n') {
+        onReset();
+        return setHistory(null);
+      }
+      return;
+    }
     if (key.escape) return onClose();
+    if (key.ctrl && input === 'o') return openHistory();
     if (key.pageUp) return setBack((b) => Math.min(maxBack, b + room - 1));
     if (key.pageDown) return setBack((b) => Math.max(0, b - (room - 1)));
     if (key.ctrl && input === 'n') {
@@ -67,6 +97,26 @@ export function AskPopup(props: {
         </Text>
         <Text dimColor> — it can find PRs, add them to reviews and start local reviews; it never posts</Text>
       </Text>
+      {history ? (
+        <Box flexDirection="column" height={room + 4}>
+          <Text bold color={theme.header}>
+            past conversations <Text dimColor>({history.length})</Text>
+          </Text>
+          {!history.length && <Text dimColor>  nothing yet — what you ask is kept here</Text>}
+          {history.slice(Math.max(0, Math.min(pick - Math.floor((room + 2) / 2), history.length - (room + 2))), Math.max(0, Math.min(pick - Math.floor((room + 2) / 2), history.length - (room + 2))) + room + 2).map((h) => {
+            const on = h === history[pick];
+            const current = h.id === state.id;
+            return (
+              <Text key={h.id} wrap="truncate" inverse={on}>
+                {` ${age(h.updatedAt, now).padEnd(5)}`}
+                <Text dimColor={!on}>{`${String(h.count).padStart(3)} msgs  `}</Text>
+                {current ? <Text color={on ? undefined : theme.accent}>(open) </Text> : null}
+                {h.title || '(empty)'}
+              </Text>
+            );
+          })}
+        </Box>
+      ) : (
       <Box flexDirection="column" height={room}>
         {!lines.length && (
           <Text dimColor>
@@ -85,10 +135,14 @@ export function AskPopup(props: {
           ),
         )}
       </Box>
+      )}
+      {!history && (
       <Text wrap="truncate" color={state.busy ? theme.warn : theme.dim}>
         {state.busy ? `${spinner(now)} ${state.activity ?? 'working…'}${state.queued ? ` · ${state.queued} more queued` : ''}` : back ? `↑ ${back} lines up · pgdn` : ' '}
       </Text>
-      <Text color={theme.border}>{'─'.repeat(Math.max(0, width))}</Text>
+      )}
+      {!history && <Text color={theme.border}>{'─'.repeat(Math.max(0, width))}</Text>}
+      {!history && (
       <TextArea
         value={draft}
         onChange={setDraft}
@@ -104,8 +158,11 @@ export function AskPopup(props: {
           setBack(0);
         }}
       />
+      )}
       <Text dimColor wrap="truncate">
-        enter sends · pgup/pgdn scroll · {state.busy ? 'ctrl-x stops it · ' : ''}ctrl-n new conversation · esc closes (it keeps working)
+        {history
+          ? 'i/k pick · enter opens it · ctrl-n new conversation · esc back'
+          : `enter sends · pgup/pgdn scroll · ${state.busy ? 'ctrl-x stops it · ' : ''}ctrl-o past conversations · ctrl-n new · esc closes (it keeps working)`}
       </Text>
     </Box>
   );
