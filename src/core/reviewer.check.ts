@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bodyByAgent, clearBrokenSubmodules, leadFinding, parseDoc, reviewBody, reviewPrompt, rereviewPrompt, staleAnchors, upsertFinding, writeFindings } from './reviewer.js';
-import { involvesMe, lastReviewed, othersReviewed, parsePrSpec, refreshMeta, reviewPayload, revivedStatus, wakesHidden, type CurrentPr } from './reviews.js';
+import { involvesMe, lastReviewed, stackOrder, othersReviewed, parsePrSpec, refreshMeta, reviewPayload, revivedStatus, wakesHidden, type CurrentPr } from './reviews.js';
 import { store } from './store.js';
 import { askedLine, explainPrompt } from './selfreview.js';
 import type { Config, Review, ReviewFinding } from './types.js';
@@ -485,6 +485,20 @@ for (const [spec, repository, number] of SPECS) {
     !wakesHidden({ ...woke, hidden: true, updatedAt: at } as Review, at) && wakesHidden({ ...woke, hidden: true, updatedAt: at } as Review, '2026-03-05T00:00:00Z'));
   check('a review on the list is never "woken"', !wakesHidden(woke, '2027-01-01T00:00:00Z'));
   store.deleteReview(id);
+}
+
+// PR stacks: drawn together, bottom first, at the bottom's place in the sort
+{
+  const pr = (id: string, head: string, base: string, repository = 'o/r') => ({ id, repository, headRefName: head, baseRefName: base });
+  // sorted with the stack scattered through it, and a lone PR between
+  const sorted = [pr('top', 'c', 'b'), pr('lone', 'x', 'main'), pr('bottom', 'a', 'main'), pr('middle', 'b', 'a'), pr('other-repo', 'b2', 'a', 'o/other')];
+  const { order, depth, stacked } = stackOrder(sorted);
+  check('a stack is drawn bottom first, each PR under the one it is built on', order.map((r) => r.id).join() === 'lone,bottom,middle,top,other-repo', order.map((r) => r.id).join());
+  check('each PR one level deeper than its base', depth.get('bottom') === 0 && depth.get('middle') === 1 && depth.get('top') === 2);
+  check('a PR in no stack is not marked as one', !stacked.has('lone') && stacked.has('bottom') && stacked.has('top'));
+  check('a base branch in another repo does not join a stack', !stacked.has('other-repo'));
+  const cycle = stackOrder([pr('p', 'one', 'two'), pr('q', 'two', 'one')]);
+  check('a cycle of bases still draws each PR once', cycle.order.length === 2);
 }
 
 // "yours" and "last reviewed": what `m` keeps and what the `reviewed` sort reads

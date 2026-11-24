@@ -930,3 +930,49 @@ export function startReviewPolling(
   timer.unref();
   return () => clearInterval(timer);
 }
+
+/**
+ * PR stacks, in the order the list draws them. A PR whose base branch is
+ * another listed PR's head branch, in the same repository, sits on top of
+ * it: the stack is drawn bottom first, each PR above one level deeper, right
+ * under its base wherever the sort put the bottom of the stack. PRs in no
+ * stack keep the sort's order untouched.
+ *
+ * `sorted` is the list as sorted; a stack's place is its bottom PR's place.
+ * Only PRs in the list are linked — a stack whose bottom is filtered out or
+ * settled starts at the lowest PR still shown.
+ */
+export function stackOrder<R extends Pick<Review, 'id' | 'repository' | 'headRefName' | 'baseRefName'>>(
+  sorted: R[],
+): { order: R[]; depth: Map<string, number>; stacked: Set<string> } {
+  const key = (repo: string, branch: string) => `${repo.toLowerCase()}\u0000${branch}`;
+  const byHead = new Map<string, R>();
+  for (const r of sorted) if (r.headRefName) byHead.set(key(r.repository, r.headRefName), r);
+  const parentOf = (r: R): R | undefined => {
+    if (!r.baseRefName) return undefined;
+    const p = byHead.get(key(r.repository, r.baseRefName));
+    return p && p.id !== r.id ? p : undefined;
+  };
+  const children = new Map<string, R[]>();
+  for (const r of sorted) {
+    const p = parentOf(r);
+    if (p) children.set(p.id, [...(children.get(p.id) ?? []), r]);
+  }
+  const order: R[] = [];
+  const depth = new Map<string, number>();
+  const stacked = new Set<string>();
+  const placed = new Set<string>();
+  const walk = (r: R, d: number) => {
+    if (placed.has(r.id)) return; // a cycle of bases: draw each PR once
+    placed.add(r.id);
+    order.push(r);
+    depth.set(r.id, d);
+    const kids = children.get(r.id) ?? [];
+    if (kids.length || d > 0) stacked.add(r.id);
+    for (const k of kids) walk(k, d + 1);
+  };
+  for (const r of sorted) if (!parentOf(r)) walk(r, 0);
+  // anything left sat in a cycle with no bottom: listed where the sort put it
+  for (const r of sorted) if (!placed.has(r.id)) walk(r, 0);
+  return { order, depth, stacked };
+}
