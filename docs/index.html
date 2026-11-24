@@ -1635,9 +1635,15 @@ files. It runs under your <code>agentPermissionMode</code> and <code>denyTools</
   above the input shows what it's doing right now.</li>
 <li><strong>Closing:</strong> <code>esc</code> closes the chat and the agent keeps working. When it replies, a toast says so,
   and <code>@</code> shows the conversation again.</li>
-<li><strong>Starting over:</strong> <code>ctrl-n</code> starts a new conversation. <code>ctrl-x</code> stops the current one.</li>
+<li><strong>Starting over:</strong> <code>ctrl-n</code> starts a new conversation; the one before is kept. <code>ctrl-x</code> stops the
+  current one.</li>
+<li><strong>History:</strong> every conversation is kept. <code>ctrl-o</code> lists them, newest first, with when each was last
+  used and how long it is. <code>enter</code> opens one again, and the next message resumes its session, so
+  the agent remembers it. A reply to a conversation you've moved away from still lands in that
+  conversation. After a restart, the most recent one is open.</li>
 </ul>
-<p>The conversation lives in the daemon, so it survives the frontend restarting. Each message resumes
+<p>Conversations are saved in the state directory (<code>ask/conversations/</code>), so they survive the frontend
+and the daemon restarting. Each message resumes
 the same session, so "and the next one" means what you'd expect.</p>
 <h2 id="sorting">Sorting<a class="headerlink" href="#sorting" title="Permanent link">&para;</a></h2>
 <p>Every sortable view (the agents table, the board, <code>:issues</code>, <code>:projects</code>, <code>:reviews</code>, <code>:costs</code>)
