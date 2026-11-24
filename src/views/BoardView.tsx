@@ -18,7 +18,7 @@ interface BoardColumn {
   statuses: TaskStatus[];
 }
 
-const COLUMNS: BoardColumn[] = [
+export const COLUMNS: BoardColumn[] = [
   // pipeline reads left-to-right; finished work parks on the right edge
   { title: 'Queued', statuses: ['queued', 'blocked', 'interrupted'] },
   { title: 'Triage', statuses: ['triage'] },

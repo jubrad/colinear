@@ -8,7 +8,6 @@ import { useColinear, useViewSize } from '../ui/context.js';
 import { cell, changesShort, formatTokens } from '../ui/format.js';
 import { palette, theme } from '../theme.js';
 import { statusText } from './taskLens.js';
-import { TaskTable } from './TaskTable.js';
 import { fleetGlyph } from '../ui/AgentRail.js';
 import { TASK_ACTION_KEYS, useTaskActions } from './taskActions.js';
 
@@ -74,8 +73,8 @@ export function AgentsView(_props: { param?: string }) {
   /** the cursor follows a row, not an index: rows move between groups as agents finish */
   const [cursorKey, setCursorKey] = useState<string>();
   const actions = useTaskActions();
-  const table = ctx.ui.agentsLayout === 'table';
-  const toggle = () => ctx.setUi({ agentsLayout: table ? 'groups' : 'table' });
+  // the list of every task is its own view now, :tasks — the board as a list
+  const toggle = () => ctx.navigate('tasks');
 
   useEffect(() => ctx.onAgents?.(setAgents), []);
   // the registry isn't CDC state — it changes on its own clock inside sessions
@@ -112,7 +111,7 @@ export function AgentsView(_props: { param?: string }) {
       // a review's question is answered from the review, where its context is
       if (input === 'a' && selected.review?.question) ctx.navigate('reviews', selected.review.id);
     },
-    { isActive: !table && !actions.busy && !ctx.cmdOpen },
+    { isActive: !actions.busy && !ctx.cmdOpen },
   );
 
   const wide = pane.width >= SPLIT_MIN;
@@ -135,8 +134,6 @@ export function AgentsView(_props: { param?: string }) {
   const top = Math.max(0, Math.min(cursorRow - Math.floor(listRows / 2), rows.length - listRows));
 
   const counts = (g: FleetGroup) => entries.filter((e) => e.group === g).length;
-
-  if (table) return <TaskTable onToggle={toggle} />;
 
   return (
     <Box flexDirection="column" flexGrow={1} overflow="hidden">
@@ -367,7 +364,6 @@ function Preview(props: {
 
 export const agentsKeys: Array<[string, string]> = [
   ['i/k ↑↓', 'row'],
-  ['t', 'groups ⇄ table'],
-  ['/ ,', 'filter · sort (table)'],
+  ['t', 'every task as a list — :tasks'],
   ...TASK_ACTION_KEYS,
 ];
