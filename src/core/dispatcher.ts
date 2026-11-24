@@ -23,7 +23,7 @@ import { syncIssueState } from './statesync.js';
 import { guidanceFor } from './guidance.js';
 import { autoSplitDecision, childIssues, fileSplit, trackingFields, type SplitChild } from './split.js';
 import { store } from './store.js';
-import { questionSummary, type Config, type Issue, type PrInfo, type RepoConfig, type ReviewFinding, type Subtask, type Task, type TaskEdits, type TaskStatus, type TriageVerdict, type Verification } from './types.js';
+import { questionSummary, type Config, type Issue, type PrInfo, type PlannedSubtask, type RepoConfig, type ReviewFinding, type Subtask, type Task, type TaskEdits, type TaskStatus, type TriageVerdict, type Verification } from './types.js';
 
 const exec = promisify(execFile);
 
@@ -266,7 +266,8 @@ export class Dispatcher {
         permissions: this.permissions(),
         channels: coordChannels,
         inbox,
-        coordinator: this.coordinatorTools(id),
+        // the operator messaged it: this turn may create what they ask for
+        coordinator: this.coordinatorTools(id, messages.length > 0),
       });
       if (result.spend) store.addSpend(id, result.spend);
       if (result.isError) {
@@ -291,7 +292,7 @@ export class Dispatcher {
    * the agent gains reach, not authority. Creating Linear issues is absent on
    * purpose: proposals wait for `A`.
    */
-  private coordinatorTools(parentId: string): CoordinatorTools {
+  private coordinatorTools(parentId: string, operatorAsked = false): CoordinatorTools {
     const sub = (identifier: string): Task | undefined => {
       const parent = store.get(parentId);
       const match = parent?.subIssues?.find((s) => s.identifier.toLowerCase() === identifier.toLowerCase());
@@ -320,11 +321,56 @@ export class Dispatcher {
       propose: (subtasks) => {
         const parent = store.get(parentId);
         if (!parent) return 'parent is gone';
-        store.update(parentId, { proposals: [...(parent.proposals ?? []), ...subtasks] });
-        store.addActivity(parentId, `proposed ${subtasks.length} sub-issue(s) — waiting on the operator`);
-        this.toast(`${parent.issue.identifier}: ${subtasks.length} proposed sub-issue(s) — enter, then A`, 'info');
-        return `proposed ${subtasks.length}; they are NOT created — the operator reviews them on the parent card and approves with A`;
+        // the same proposal twice is a coordinator that lost track, not two
+        // pieces of work: anything already proposed or already a sub-issue
+        // under the same title is dropped
+        const seen = new Set([...(parent.proposals ?? []), ...(parent.subIssues ?? [])].map((p) => p.title.trim().toLowerCase()));
+        const fresh = subtasks.filter((s) => !seen.has(s.title.trim().toLowerCase()));
+        const how = `enter on ${parent.issue.identifier} opens them, A creates them, D creates and starts them`;
+        if (!fresh.length) return `already proposed or already a sub-issue — nothing new. They wait for the operator: ${how}`;
+        store.update(parentId, { proposals: [...(parent.proposals ?? []), ...fresh] });
+        store.addActivity(parentId, `proposed ${fresh.length} sub-issue(s) — waiting on you: ${how}`);
+        this.toast(`${parent.issue.identifier}: ${fresh.length} proposed sub-issue(s) — enter, then A (or D to start them)`, 'info');
+        return `proposed ${fresh.length}; they are NOT created — the operator approves them: ${how}`;
       },
+      ...(operatorAsked
+        ? {
+            create: async ({ titles, subtasks, start }: { titles?: string[]; subtasks?: PlannedSubtask[]; start: boolean }) => {
+              const parent = store.get(parentId);
+              if (!parent) return 'parent is gone';
+              const pending = parent.proposals ?? [];
+              const wanted = new Set((titles ?? []).map((t) => t.trim().toLowerCase()));
+              // proposals by title, or all of them when nothing else was named
+              const takeAll = !titles?.length && !subtasks?.length;
+              const pick = (i: number) => takeAll || wanted.has(pending[i].title.trim().toLowerCase());
+              const have = new Set((parent.subIssues ?? []).map((s) => s.title.trim().toLowerCase()));
+              const extra = (subtasks ?? []).filter((s) => !have.has(s.title.trim().toLowerCase()));
+              if (!pending.some((_, i) => pick(i)) && !extra.length) {
+                return titles?.length ? `no pending proposal matches ${titles.join(', ')}` : 'nothing to create: no pending proposals, and no new sub-issues given';
+              }
+              try {
+                // proposals keep their own blockedBy indices, so they are filed as their batch
+                const fromProposals = pending.some((_, i) => pick(i)) ? await fileSplit(this.cfg, parent, pending, pick) : [];
+                const fromNew = extra.length ? await fileSplit(this.cfg, store.get(parentId) ?? parent, extra) : [];
+                const children = [...fromProposals, ...fromNew];
+                const after = store.get(parentId) ?? parent;
+                store.update(parentId, {
+                  ...trackingFields(after, children),
+                  proposals: pending.filter((_, i) => !pick(i)).length ? pending.filter((_, i) => !pick(i)) : undefined,
+                });
+                const names = children.map((c) => c.identifier);
+                if (start) {
+                  for (const { issue, repo } of await childIssues(this.cfg, children)) this.enqueue([issue], { repo, skipTriage: true });
+                }
+                store.addActivity(parentId, `created ${names.join(', ')} on your request${start ? ' and started them' : ''}`);
+                this.toast(`${parent.issue.identifier}: created ${names.join(', ')}${start ? ' and started them' : ''}`, 'ok');
+                return `created ${names.join(', ')}${start ? ' and started their agents (anything blocked waits for its blocker)' : ' — not started; the operator can start them, or ask you to'}`;
+              } catch (err) {
+                return `creating failed: ${String((err as Error)?.message ?? err).slice(0, 200)}`;
+              }
+            },
+          }
+        : {}),
     };
   }
 

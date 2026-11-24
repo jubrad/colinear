@@ -29,11 +29,20 @@ export function TaskView(props: { param?: string }) {
   };
   const [scroll, setScroll] = useState<number | null>(null); // null = follow tail
   const [answering, setAnswering] = useState(false);
-  // a parked too_big verdict is exactly why you'd open this task — land in review
-  // a split plan from triage and a coordinator's proposals review identically
-  const planned = task?.verdict?.subtasks?.length ? task.verdict.subtasks : (task?.proposals ?? []);
-  const [planMode, setPlanMode] = useState(
-    () => Boolean(task && task.status === 'needs_input' && task.verdict?.subtasks?.length),
+  // What the plan review approves: a coordinator's proposals first — they are
+  // the only thing waiting — and triage's split plan only while it has not
+  // been filed. It used to prefer the split plan whenever the verdict had
+  // one, so on a parent already split, the screen offered the old plan (A
+  // would have filed it twice) and the proposal could not be reached at all.
+  const planned = task?.proposals?.length
+    ? task.proposals
+    : task?.verdict?.subtasks?.length && !task.subIssues?.length
+      ? task.verdict.subtasks
+      : [];
+  // a parked too_big verdict, or proposals waiting, is exactly why you'd open
+  // this task — land in the review
+  const [planMode, setPlanMode] = useState(() =>
+    Boolean(task && (task.proposals?.length || (task.status === 'needs_input' && task.verdict?.subtasks?.length && !task.subIssues?.length))),
   );
   const [planCursor, setPlanCursor] = useState(0);
   const [dropped, setDropped] = useState<Set<number>>(new Set());
@@ -230,7 +239,7 @@ export function TaskView(props: { param?: string }) {
           paddingX={1}
         >
           <Text bold color={theme.header}>
-            {task.verdict?.subtasks?.length ? 'SPLIT PLAN' : 'PROPOSED SUB-ISSUES'} (
+            {task.proposals?.length ? 'PROPOSED SUB-ISSUES' : 'SPLIT PLAN'} (
             {planned.length - dropped.size}/{planned.length}){' '}
             <Text dimColor>
               {planMode

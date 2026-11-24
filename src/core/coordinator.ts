@@ -14,9 +14,11 @@ import type { PlannedSubtask, Task } from './types.js';
  * writing code: it can look at what the sub-issues are doing, message them,
  * cancel one, and propose new ones.
  *
- * It cannot create Linear issues. Proposals land on the parent card and you
- * press `A` — nothing reaches Linear without the operator asking, and an agent
- * that can spawn issues unattended is exactly the thing that rule is for.
+ * It creates Linear issues only when asked. Left to itself it proposes: the
+ * proposals land on the parent card, and enter, then `A` (or `D`) approves
+ * them. A turn the operator opened with a message also gets family_create,
+ * because their asking is the approval; a coordinator woken by anything else
+ * never has it, so it cannot spawn issues unattended.
  */
 export interface CoordinatorTools {
   /** live state of the family, fresher than whatever the prompt said */
@@ -27,6 +29,12 @@ export interface CoordinatorTools {
   cancel(identifier: string, reason: string): string;
   /** offer new sub-issues for the operator to approve */
   propose(subtasks: PlannedSubtask[]): string;
+  /**
+   * Create sub-issues, and start them if asked — present only in a turn the
+   * operator opened with a message, since their asking is the approval. The
+   * pending proposals (all, or the ones named by title) and/or new ones.
+   */
+  create?(opts: { titles?: string[]; subtasks?: PlannedSubtask[]; start: boolean }): Promise<string>;
 }
 
 /** Scratch cwd: a coordinator has no code to edit, so it gets no checkout. */
@@ -40,7 +48,14 @@ export function coordinatorCwd(task: Task): string {
 /** One line per sub-issue: colinear's live view, not Linear's cached one. */
 export function familyStatus(parent: Task): string {
   const subs = parent.subIssues ?? [];
-  if (!subs.length) return 'This issue has no sub-issues.';
+  // what is proposed and not yet approved is part of the family's state: a
+  // coordinator that cannot see its own proposal proposes it again, or tells
+  // the operator there is nothing left to create
+  const pending = parent.proposals ?? [];
+  const proposed = pending.length
+    ? `\n\nProposed, waiting for the operator to approve (NOT created yet — do not propose these again):\n${pending.map((p) => `- ${p.title}`).join('\n')}\nThe operator approves them on ${parent.issue.identifier}: enter opens the proposals, A creates them, D creates and starts them.`
+    : '';
+  if (!subs.length) return `This issue has no sub-issues.${proposed}`;
   return subs
     .map((sub) => {
       const task = store.get(sub.id);
@@ -54,7 +69,7 @@ export function familyStatus(parent: Task): string {
       const last = task.activity.at(-1);
       return `- ${sub.identifier} ${sub.title} — ${bits.join(' · ')}${last ? `\n    last: ${last.slice(0, 100)}` : ''}`;
     })
-    .join('\n');
+    .join('\n') + proposed;
 }
 
 export function coordinatorPrompt(parent: Task, channelIds: string[], messages: string[]): string {
@@ -71,8 +86,19 @@ export function coordinatorPrompt(parent: Task, channelIds: string[], messages: 
     '- mcp__colinear__family_status — the live state of every sub-issue (use it before deciding anything)',
     '- mcp__colinear__family_message — send a sub-issue\'s agent an instruction; an idle one is woken to read it',
     '- mcp__colinear__family_cancel — stop a sub-issue\'s agent (it can be resumed later by the operator)',
-    '- mcp__colinear__family_propose — propose new sub-issues. This does NOT create them: the operator',
-    '  reviews your proposal and approves it. Say so when you propose, rather than reporting them as created.',
+    '- mcp__colinear__family_propose — propose new sub-issues. This does NOT create them: the operator approves',
+    '  them. Say so when you propose, rather than reporting them as created,',
+    `  and tell them how: enter on ${parent.issue.identifier} opens the proposals, A creates them, D creates and`,
+    '  starts them. If the operator asks you to create or start one, the answer is the same — propose it (once;',
+    '  check family_status for what is already proposed) and give them those keys.',
+    ...(messages.length
+      ? [
+          '- mcp__colinear__family_create — create sub-issues, and start their agents with start: true. You may use',
+          '  it in this turn because the operator messaged you: use it ONLY if their message asks you to create or',
+          '  start sub-issues (their asking is the approval). It creates the pending proposals — all of them, or the',
+          '  ones you name by title — and/or new ones you pass. Anything else: propose instead.',
+        ]
+      : []),
   ];
   if (channelIds.length) {
     lines.push(

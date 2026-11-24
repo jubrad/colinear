@@ -204,6 +204,35 @@ function colinearServer(opts: {
         }),
       ),
     );
+    // only in a turn the operator opened with a message: their asking is the approval
+    const create = co.create?.bind(co);
+    if (create) {
+      tools.push(
+        tool(
+          'family_create',
+          "Create sub-issues in the tracker, and start their agents with start: true. Use only when the operator's message asks you to create or start sub-issues. Creates the pending proposals (all of them, or those named in titles) and/or new subtasks you pass.",
+          {
+            titles: z.array(z.string().min(1)).max(10).optional().describe('which pending proposals to create, by title; omit for all of them'),
+            subtasks: z
+              .array(
+                z.object({
+                  title: z.string().min(1),
+                  description: z.string().min(1),
+                  repo: z.string().optional(),
+                  blockedBy: z.array(z.number()).optional(),
+                }),
+              )
+              .max(10)
+              .optional()
+              .describe('new sub-issues to create that were not proposed'),
+            start: z.boolean().describe('start an agent on each one created'),
+          },
+          async ({ titles, subtasks, start }) => ({
+            content: [{ type: 'text' as const, text: await create({ titles, subtasks: subtasks as PlannedSubtask[] | undefined, start }) }],
+          }),
+        ),
+      );
+    }
   }
   // a job's actions: only the ones its job lists exist at all, so an action
   // the operator did not grant is not refused — it is not there to call

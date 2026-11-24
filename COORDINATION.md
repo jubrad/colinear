@@ -109,18 +109,28 @@ these tools beside the channel:
   one is woken.
 - `family_cancel` — stop a sibling's session, with a reason. Recoverable: the
   operator can resume it.
-- `family_propose` — offer new sub-issues.
+- `family_propose` — offer new sub-issues for the operator to approve.
+- `family_create` — create sub-issues and optionally start them. Present only in a turn the operator
+  opened with a message (see below).
 
 Every one of those is something the operator can already do by hand, so the
 agent gains reach, not authority. The tools are built per session with the
 family closed over, so a coordinator can only touch its own sub-issues —
 naming a stranger returns "not a sub-issue of this family".
 
-**It cannot create Linear issues.** `family_propose` puts them on the parent
-card and the operator presses `A` (or `D` to create and dispatch), through the
-same review UI a `too_big` triage split uses. Nothing reaches Linear without
-being asked, and an agent that can spawn issues unattended is exactly what that
-rule is for. The parent stays `tracking` throughout — coordinating is not the
+**It creates sub-issues only when you ask.** Left to itself, it uses
+`family_propose`, which puts them on the parent card. `enter` on the parent opens
+them in the same review a `too_big` triage split uses: `A` creates them, `D`
+creates and starts them. When *you* message the parent and ask it to create or
+start sub-issues, it does it with `family_create`, because your asking is the
+approval. That tool exists only in a turn you opened with a message, never when
+the coordinator wakes on its own, so it can't spawn issues unattended. It creates
+the pending proposals (all, or named by title) and/or new ones, optionally starts
+their agents, and records on the parent that you asked.
+
+It always sees what it has already proposed: `family_status` lists pending
+proposals and how they're approved. A proposal with the same title as one already
+pending, or as an existing sub-issue, is dropped rather than added twice. The parent stays `tracking` throughout — coordinating is not the
 parent going back into development.
 
 The project's **plan session** (`:plan`) gets the same tools, scoped to the
