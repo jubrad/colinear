@@ -1,3 +1,4 @@
+import type { DiskSession } from './disksessions.js';
 import type { ModelCatalog } from './modelcatalog.js';
 import type { DiffAgainst } from './diff.js';
 import { join } from 'node:path';
@@ -24,7 +25,7 @@ export const SOCKET_PATH = process.env.COLINEAR_SOCKET || join(STATE_DIR, 'coli.
  * TUI on an old daemon would report nothing at all and an old TUI on a new one
  * would report a requeue twice. A mismatched client refuses to attach.
  */
-export const PROTOCOL_VERSION = 25;
+export const PROTOCOL_VERSION = 26;
 
 /** Backend calls the UI makes. Anything the daemon owns lives here. */
 export type Command =
@@ -79,6 +80,8 @@ export type Command =
   | { name: 'reviewDiff'; id: string; expand?: string[]; against?: DiffAgainst }
   /** search a review's or a task's checkout — `/` text, `*` a symbol's call sites */
   | { name: 'codeSearch'; id: string; reqId: number; mode: SearchMode; query: string }
+  /** every Claude Code and Codex conversation on the daemon's disk, newest first — :sessions */
+  | { name: 'diskSessions'; reqId: number }
   /** edit, add or drop the comment anchored at a line (rewrites the document) */
   /** by: who wrote it, which decides whether it is signed (absent keeps it as it was) */
   | { name: 'editFinding'; id: string; file: string; line: number; comment: string; severity?: string; startLine?: number; by?: 'you' | 'agent'; nth?: number }
@@ -129,6 +132,7 @@ export type ServerMsg =
   | { t: 'reviewDiff'; id: string; diff: string; against?: DiffAgainst }
   | { t: 'taskDiff'; id: string; diff: string; against?: DiffAgainst }
   | { t: 'codeSearch'; id: string; reqId: number; result: CodeSearchResult }
+  | { t: 'diskSessions'; reqId: number; list: DiskSession[] }
   /** a daemon-side draft started; watch it in :agents by this id */
   | { t: 'creating'; agentId: string }
   /**

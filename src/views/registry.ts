@@ -19,6 +19,7 @@ import { ProjectView, projectKeys } from './ProjectView.js';
 import { ReviewsView, reviewsKeys } from './ReviewsView.js';
 import { TaskView, taskKeys } from './TaskView.js';
 import { ThemeView, themeKeys } from './ThemeView.js';
+import { SessionsView, sessionsKeys } from './SessionsView.js';
 import { TodoView, todoKeys } from './TodoView.js';
 
 export interface ViewDef {
@@ -151,6 +152,13 @@ const builtinViews: ViewDef[] = [
     describe: 'view & edit colinear config',
     Component: ConfigView,
     keys: configKeys,
+  },
+  {
+    name: 'sessions',
+    aliases: ['sess', 'claude', 'codex'],
+    describe: 'your Claude Code and Codex conversations — enter resumes one',
+    Component: SessionsView,
+    keys: sessionsKeys,
   },
   {
     name: 'theme',
