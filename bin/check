@@ -100,6 +100,11 @@ echo '── themes'
 npm run check:theme
 
 echo
+echo '── :tasks'
+# the board as a list: columns, families under their parents, folding
+npm run check:tasks
+
+echo
 echo '── coordinator'
 # proposals seen, proposed once, keys named; creating only when the operator asked
 npm run check:coordinator

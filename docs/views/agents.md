@@ -1,6 +1,6 @@
 # `:agents` — every agent and task, by whose move it is
 
-Aliases: `ps`, `tasks`, `ls`, `t`. No argument.
+Aliases: `ps`, `ls`. No argument.
 
 Every agent and every dispatched task, in the order it wants you. Sessions belong to four different
 things — a task, a review, a project plan, a one-off draft — and a task outlives its sessions: an agent
@@ -52,29 +52,10 @@ its worktree and a ready-to-paste `claude --resume`.
 |---|---|
 | `i` `k` / ↑ ↓ | move · `g` top · `G` bottom |
 | `enter` | open whatever owns it — the task, the review, the plan |
-| `t` | switch to [the table](#the-table) and back — remembered, like the board's layout |
+| `t` | [`:tasks`](tasks.md): every task as a list, laid out like the board |
 | everything else | on a task's row, identical to the [board](board.md#keys): `a`, `1`–`9`, `M`, `s`, `S`, `r`, `f`, `v`, `b`, `x`, `o`, … |
 
 On a review's row, `a` takes you to the review to answer it there, where its context is.
-
-## The table
-
-`t` swaps the groups for every task as one searchable, sortable table — the board's data without the
-board's geometry, with the columns the grouped list has no room for. This was `:tasks`; its names
-open this view.
-
-![The task table sorted in board order, the cursor on a PR-open task whose detail pane sits below](../images/tasks.png)
-
-Tasks with no session and no change to their work in [`hideStaleDays`](../configuration.md) (21
-days by default) are left out, and the header counts them (`4 quiet 21d+ hidden (h shows)`). `h` shows
-them. A running agent is never left out.
-
-`CHANGE` is [what the worktree has changed](board.md#what-it-has-changed) — `+added -removed`, then
-`~n` for files not committed yet — and turns amber when a working agent has edited nothing for twenty
-minutes. Default order is the board read left-to-right: column, then what needs you first. `,` opens
-the [sort bar](../README.md#sorting): `tab` to a column, `enter` to sort, `↑` `↓` for direction, `/` filters with the same matcher the board uses —
-id, title, repo, status, PR state, CI. The selected task's detail pane sits below the table when the
-terminal is tall enough. Every board key works on the selected row.
 
 ## Beside every view
 

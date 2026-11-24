@@ -19,6 +19,7 @@ import { ProjectView, projectKeys } from './ProjectView.js';
 import { ReviewsView, reviewsKeys } from './ReviewsView.js';
 import { TaskView, taskKeys } from './TaskView.js';
 import { ThemeView, themeKeys } from './ThemeView.js';
+import { TasksView, tasksKeys } from './TaskTable.js';
 import { SessionsView, sessionsKeys } from './SessionsView.js';
 import { TodoView, todoKeys } from './TodoView.js';
 
@@ -118,12 +119,18 @@ const builtinViews: ViewDef[] = [
     keys: diffKeys,
   },
   {
-    // :tasks was the table that is now `t` here, so its names open it
     name: 'agents',
-    aliases: ['ps', 'tasks', 'ls', 't'],
+    aliases: ['ps', 'ls'],
     describe: 'every agent and task: what needs you, what is working, what waits',
     Component: AgentsView,
     keys: agentsKeys,
+  },
+  {
+    name: 'tasks',
+    aliases: ['t'],
+    describe: 'the board as a list: by column, each parent with its sub-issues under it',
+    Component: TasksView,
+    keys: tasksKeys,
   },
   {
     name: 'family',

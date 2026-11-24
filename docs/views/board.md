@@ -32,7 +32,7 @@ it is worth a look, not that anything is wrong. The clock restarts whenever an a
 task, so resuming one that sat idle overnight does not read as stalled.
 
 The detail pane spells it out — files, what is committed, when it last moved — and
-[`:agents`](agents.md#the-table)' table has it as the `CHANGE` column, sortable by size. Once the agent stops, the
+[`:tasks`](tasks.md) has it as the `CHANGE` column, sortable by size. Once the agent stops, the
 count is taken once more and kept: the card's last word is what the agent left.
 
 ## Keys
