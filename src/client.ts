@@ -1,3 +1,4 @@
+import type { DiskSession } from './core/disksessions.js';
 import { setCatalog } from './core/modelcatalog.js';
 import type { DiffAgainst } from './core/diff.js';
 import { spawn } from 'node:child_process';
@@ -77,6 +78,8 @@ export interface DispatcherApi {
   taskDiff(id: string, expand?: string[], against?: DiffAgainst): void;
   /** search the checkout behind a review or a task: `grep` a pattern, `refs` a symbol's call sites */
   codeSearch(id: string, mode: SearchMode, query: string): Promise<CodeSearchResult>;
+  /** every Claude Code and Codex conversation on the daemon's disk — :sessions */
+  diskSessions(): Promise<DiskSession[]>;
   explainLines(
     id: string,
     file: string,
@@ -291,6 +294,8 @@ export async function connectToDaemon(): Promise<Connection> {
   /** code searches in flight, by the id their reply will carry */
   const searches = new Map<number, (result: CodeSearchResult) => void>();
   let nextSearch = 1;
+  /** :sessions lists in flight, by request id */
+  const sessionLists = new Map<number, (list: DiskSession[]) => void>();
 
   /** the config the app was handed, kept so a `config` message can update it in place */
   let liveCfg: Config | undefined;
@@ -412,6 +417,19 @@ export async function connectToDaemon(): Promise<Connection> {
           listAgents: () => command({ name: 'listAgents' }),
           reviewDiff: (id, expand, against) => command({ name: 'reviewDiff', id, expand, against }),
           taskDiff: (id, expand, against) => command({ name: 'taskDiff', id, expand, against }),
+          diskSessions: () =>
+            new Promise<DiskSession[]>((resolve) => {
+              const reqId = nextSearch++;
+              const timer = setTimeout(() => {
+                sessionLists.delete(reqId);
+                resolve([]);
+              }, 30_000);
+              sessionLists.set(reqId, (list) => {
+                clearTimeout(timer);
+                resolve(list);
+              });
+              command({ name: 'diskSessions', reqId });
+            }),
           codeSearch: (id, mode, query) =>
             new Promise<CodeSearchResult>((resolve) => {
               const reqId = nextSearch++;
@@ -449,6 +467,10 @@ export async function connectToDaemon(): Promise<Connection> {
         });
       } else if (msg.t === 'taskDiff') {
         for (const fn of taskDiffListeners) fn(msg.id, msg.diff, msg.against);
+      } else if (msg.t === 'diskSessions') {
+        const done = sessionLists.get(msg.reqId);
+        sessionLists.delete(msg.reqId);
+        done?.(msg.list);
       } else if (msg.t === 'codeSearch') {
         const done = searches.get(msg.reqId);
         searches.delete(msg.reqId);

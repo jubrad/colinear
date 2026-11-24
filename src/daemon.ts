@@ -32,6 +32,7 @@ import type { CodeSearchResult } from './core/symbols.js';
 import { createIssueFromPrompt } from './core/newissue.js';
 import { createProjectFromPrompt } from './core/newproject.js';
 import { listSessions, updateSession } from './core/sessions.js';
+import { scanDiskSessions } from './core/disksessions.js';
 import { store } from './core/store.js';
 import { TodoManager } from './core/todolist.js';
 import { JobRunner } from './core/jobs.js';
@@ -409,6 +410,19 @@ export async function runDaemon(): Promise<void> {
           cmd.nth,
         );
         break;
+      case 'diskSessions': {
+        // colinear's own headless sessions say what they were for
+        const label = new Map<string, string>();
+        for (const t of store.list()) {
+          if (t.sessionId) label.set(t.sessionId, t.issue.identifier);
+          for (const h of t.sessionHistory ?? []) label.set(h.sessionId, t.issue.identifier);
+        }
+        for (const r of store.listReviews()) if (r.sessionId) label.set(r.sessionId, `${r.repository}#${r.number}`);
+        for (const s of listSessions()) if (s.sessionId) label.set(s.sessionId, s.label);
+        const list = isDemo(cfg) ? [] : scanDiskSessions().map((s) => ({ ...s, label: label.get(s.id) }));
+        reply({ t: 'diskSessions', reqId: cmd.reqId, list });
+        break;
+      }
       case 'listAgents':
         reply({ t: 'agents', list: listSessions() });
         break;
