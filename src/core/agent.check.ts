@@ -1,4 +1,5 @@
-import { agentFor, registerAgent, runtimeFor, splitModel, SessionInbox, type AgentBackend } from './agent.js';
+import { agentFor, modelOwner, registerAgent, runtimeFor, splitModel, SessionInbox, type AgentBackend } from './agent.js';
+import { Dispatcher } from './dispatcher.js';
 import { CLAUDE_CAPABILITIES, fallbackFor, outOfAllowance } from './agents/claude.js';
 import { askedIn } from './agents/codex.js';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -129,6 +130,7 @@ for (const text of UNRELATED) {
  * the working directory, the model, resume, cancellation and the mailbox. So
  * this registers a fake runtime and drives a real caller's path through it.
  */
+let lastRun: { fallbackModel?: string; resume?: string } | undefined;
 {
   const ran: string[] = [];
   const fake: AgentBackend = {
@@ -137,6 +139,7 @@ for (const text of UNRELATED) {
     models: ['fake-small', 'fake-large'],
     async runSession(opts) {
       ran.push(opts.model ?? 'default');
+      lastRun = { fallbackModel: opts.fallbackModel, resume: opts.resume };
       return { text: 'ok', costUsd: 0, isError: false, errors: [], assistantTurns: 1 };
     },
     claims: (m) => m.startsWith('fake-'),
@@ -152,6 +155,21 @@ for (const text of UNRELATED) {
 
   const claudeCfg = {} as unknown as Config;
   const fakeCfg = { agent: 'fake' } as unknown as Config;
+
+  // a task's own model picks the runtime that owns it — it used to go to the
+  // runtime for that kind of session, so a Codex model was handed to Claude Code
+  check('a model belongs to the runtime that claims it', modelOwner(claudeCfg, 'fake-small') === 'fake' && modelOwner(claudeCfg, 'sonnet') === 'claude');
+  check('a name nobody claims belongs to nobody', modelOwner(claudeCfg, 'mystery-model') === undefined);
+  {
+    const d = new Dispatcher({ repos: [], model: {}, fallbackModel: { general: 'opus' } } as unknown as Config) as unknown as {
+      session: AgentBackend['runSession'];
+    };
+    const before = ran.length;
+    await d.session({ prompt: 'p', cwd: '/tmp', model: 'fake-small', resume: 'claude-session-id', agent: { kind: 'work', label: 'T-1', origin: 'test' }, callbacks: { onActivity() {}, onSessionId() {}, onQuestion() {} } } as never);
+    check('a work session with another runtime\'s model runs on that runtime', ran.length === before + 1 && ran.at(-1) === 'fake-small');
+    check('without the scope runtime\'s fallback model, which it cannot demote to', lastRun?.fallbackModel === undefined, String(lastRun?.fallbackModel));
+    check('and without resuming a session that runtime never wrote', lastRun?.resume === undefined, String(lastRun?.resume));
+  }
 
   check('an unset runtime is claude', agentFor(claudeCfg).name === 'claude', agentFor(claudeCfg).name);
   check('a named runtime is resolved', agentFor(fakeCfg).name === 'fake', agentFor(fakeCfg).name);

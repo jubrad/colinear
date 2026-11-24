@@ -52,7 +52,7 @@ count is taken once more and kept: the card's last word is what the agent left.
 | `M` | message the agent without attaching — a multi-line box; `ctrl+d` sends, `ctrl+q` queues without waking |
 | `u` | dispatch this parent's sub-issues (picker) |
 | `s` | attach `claude` in the worktree · `S` a plain shell |
-| `x` cancel · `r` resume — or start the agent on a [manually dispatched](../dispatch.md#manual-dispatch-a-worktree-no-agent) task · `f` force-start a blocked task · `b` rebase a conflicting PR |
+| `x` cancel · `r` resume — or start the agent on a [manually dispatched](../dispatch.md#manual-dispatch-a-worktree-no-agent) task · `f` force-start a blocked task (on any other task it says which key does start it) · `b` rebase a conflicting PR |
 | `c` | post the triage escalation to the tracker |
 | `o` open the PR · `O` open the issue · `n` back to issues |
 

@@ -84,9 +84,17 @@ export function useTaskActions(): TaskActions {
       }
       return ctx.navigate('diff', selected.issue.identifier);
     }
-    if (input === 'f' && selected.status === 'blocked') {
-      ctx.dispatcher.force(selected.issue.id);
-      ctx.toast(`${selected.issue.identifier}: starting now — blockers still gate the merge`, 'ok');
+    if (input === 'f') {
+      if (selected.status === 'blocked') {
+        ctx.dispatcher.force(selected.issue.id);
+        ctx.toast(`${selected.issue.identifier}: starting now — blockers still gate the merge`, 'ok');
+      } else {
+        // f only starts what blockers hold back; say what does start this one
+        ctx.toast(
+          `${selected.issue.identifier} is not blocked (${selected.status}) — ${['error', 'escalated', 'interrupted'].includes(selected.status) ? 'r resumes it' : selected.awaitingStart ? 'r starts its agent' : 'f only starts a task waiting on blockers'}`,
+          'info',
+        );
+      }
     }
     if (input === 'b' && selected.prs.length) {
       ctx.dispatcher.rebase(selected.issue.id);

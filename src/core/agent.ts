@@ -104,6 +104,18 @@ export interface SessionRuntime {
  * per-task override carries the runtime with it, so `m` can send one task to
  * Codex and leave the next on Claude.
  */
+/**
+ * The runtime a model name belongs to, when exactly one claims it — by its
+ * patterns or because it listed the name itself. Undefined when none does,
+ * or more than one.
+ */
+export function modelOwner(cfg: Config, model: string): string | undefined {
+  const slash = model.indexOf('/');
+  if (slash > 0 && registry.has(model.slice(0, slash))) return model.slice(0, slash);
+  const owners = [...registry.keys()].filter((n) => agentNamed(cfg, n).claims(model) || discovered(n).includes(model));
+  return owners.length === 1 ? owners[0] : undefined;
+}
+
 export function splitModel(cfg: Config, model: string | undefined): { name: string; model?: string } {
   const fallbackName = cfg.agent ?? 'claude';
   if (!model) return { name: fallbackName, model: undefined };
