@@ -1278,17 +1278,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-table" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The table
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#beside-every-view" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1328,7 +1317,7 @@
 
 
 <h1 id="agents-every-agent-and-task-by-whose-move-it-is"><code>:agents</code> — every agent and task, by whose move it is<a class="headerlink" href="#agents-every-agent-and-task-by-whose-move-it-is" title="Permanent link">&para;</a></h1>
-<p>Aliases: <code>ps</code>, <code>tasks</code>, <code>ls</code>, <code>t</code>. No argument.</p>
+<p>Aliases: <code>ps</code>, <code>ls</code>. No argument.</p>
 <p>Every agent and every dispatched task, in the order it wants you. Sessions belong to four different
 things — a task, a review, a project plan, a one-off draft — and a task outlives its sessions: an agent
 that failed, opened a draft PR or was interrupted has stopped, but the task is still waiting on
@@ -1409,7 +1398,7 @@ its worktree and a ready-to-paste <code>claude --resume</code>.</p>
 </tr>
 <tr>
 <td><code>t</code></td>
-<td>switch to <a href="#the-table">the table</a> and back — remembered, like the board's layout</td>
+<td><a href="../tasks/"><code>:tasks</code></a>: every task as a list, laid out like the board</td>
 </tr>
 <tr>
 <td>everything else</td>
@@ -1418,20 +1407,6 @@ its worktree and a ready-to-paste <code>claude --resume</code>.</p>
 </tbody>
 </table>
 <p>On a review's row, <code>a</code> takes you to the review to answer it there, where its context is.</p>
-<h2 id="the-table">The table<a class="headerlink" href="#the-table" title="Permanent link">&para;</a></h2>
-<p><code>t</code> swaps the groups for every task as one searchable, sortable table — the board's data without the
-board's geometry, with the columns the grouped list has no room for. This was <code>:tasks</code>; its names
-open this view.</p>
-<p><a class="glightbox" href="../../images/tasks.png" data-type="image" data-width="auto" data-height="auto" data-desc-position="bottom"><img alt="The task table sorted in board order, the cursor on a PR-open task whose detail pane sits below" src="../../images/tasks.png" /></a></p>
-<p>Tasks with no session and no change to their work in <a href="../../configuration/"><code>hideStaleDays</code></a> (21
-days by default) are left out, and the header counts them (<code>4 quiet 21d+ hidden (h shows)</code>). <code>h</code> shows
-them. A running agent is never left out.</p>
-<p><code>CHANGE</code> is <a href="../board/#what-it-has-changed">what the worktree has changed</a> — <code>+added -removed</code>, then
-<code>~n</code> for files not committed yet — and turns amber when a working agent has edited nothing for twenty
-minutes. Default order is the board read left-to-right: column, then what needs you first. <code>,</code> opens
-the <a href="../../#sorting">sort bar</a>: <code>tab</code> to a column, <code>enter</code> to sort, <code>↑</code> <code>↓</code> for direction, <code>/</code> filters with the same matcher the board uses —
-id, title, repo, status, PR state, CI. The selected task's detail pane sits below the table when the
-terminal is tall enough. Every board key works on the selected row.</p>
 <h2 id="beside-every-view">Beside every view<a class="headerlink" href="#beside-every-view" title="Permanent link">&para;</a></h2>
 <p><strong><code>\</code></strong> puts the same list in a rail down the left of every view — two rows an agent, what it is on
 and for how long, then what it is doing, bold where there is something new. It keeps what might need
