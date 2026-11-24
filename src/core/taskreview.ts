@@ -20,7 +20,8 @@ import type { Config, Review, ReviewFinding, Task } from './types.js';
 
 /** What the loop may ask of the rest of the daemon. */
 export interface TaskReviewDeps {
-  startReview: (id: string) => void;
+  /** with which automatic round this is, so the reviewer can pace itself */
+  startReview: (id: string, round: { n: number; max: number }) => void;
   /** a revision turn for an idle task on an open PR; false when it is not idle */
   revise: (taskId: string, text: string) => boolean;
 }
@@ -106,6 +107,6 @@ export function sweepTaskReviews(cfg: Config, deps: TaskReviewDeps): void {
     if (rounds > 0 && review.handedSha === undefined) continue;
     store.updateReview(review.id, { autoRounds: rounds + 1 });
     store.addReviewActivity(review.id, `round ${rounds + 1} of ${max}: reviewing ${task.issue.identifier}'s PR automatically`);
-    deps.startReview(review.id);
+    deps.startReview(review.id, { n: rounds + 1, max });
   }
 }

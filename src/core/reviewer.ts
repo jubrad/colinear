@@ -1,3 +1,4 @@
+import { roundGuidance, type ReviewRound } from './reviewrounds.js';
 import { modelsFor } from './models.js';
 import { execFile } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, type FSWatcher, writeFileSync } from 'node:fs';
@@ -278,7 +279,7 @@ export class Reviewer {
    * the `c` popup: a model and instructions for this review, kept on it so a
    * plain `r` afterwards runs the same way. An empty value clears it.
    */
-  async start(id: string, opts?: { model?: string; instructions?: string }) {
+  async start(id: string, opts?: { model?: string; instructions?: string }, round?: ReviewRound) {
     if (this.refuseInDemo(id, 'starting a pre-review')) return;
     if (opts && store.getReview(id) && !this.aborts.has(id)) {
       store.updateReview(id, {
@@ -351,8 +352,8 @@ export class Reviewer {
           origin: roundTwo ? 'you asked for another round' : 'you pressed r',
         },
         prompt: roundTwo
-          ? rereviewPrompt(this.cfg, review, details, await this.roundTwoContext(review), !resume)
-          : reviewPrompt(this.cfg, review, details),
+          ? rereviewPrompt(this.cfg, review, details, await this.roundTwoContext(review), !resume) + roundSuffix(round)
+          : reviewPrompt(this.cfg, review, details) + roundSuffix(round),
         cwd: worktree,
         resume,
         ...models,
@@ -1348,3 +1349,9 @@ ${text}
 Answer them directly and briefly. If what they say changes your review, update \`${REVIEW_FILE}\` — including the fenced findings block at the end, which must always match the prose. If it doesn't change the review, just answer; don't rewrite the file to look busy. Never post anything to GitHub yourself — colinear does that from the document when the operator asks.${posted}`;
 }
 
+
+/** The round block on a PR review that is one of several automatic rounds (taskReviews). */
+function roundSuffix(round: ReviewRound | undefined): string {
+  const g = roundGuidance(round);
+  return g ? `\n\n${g}` : '';
+}

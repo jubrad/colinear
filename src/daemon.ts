@@ -105,7 +105,7 @@ export async function runDaemon(): Promise<void> {
           // and what brings in a task's PR and moves its head: the loop that
           // reviews it and hands the findings back to its agent rides on it
           sweepTaskReviews(cfg, {
-            startReview: (id) => void reviewer.start(id),
+            startReview: (id, round) => void reviewer.start(id, undefined, round),
             revise: (taskId, text) => dispatcher.revise(taskId, text),
           });
         },

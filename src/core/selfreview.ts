@@ -1,3 +1,4 @@
+import { roundGuidance, type ReviewRound } from './reviewrounds.js';
 import { modelsFor } from './models.js';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -98,7 +99,7 @@ export function absorb(task: Task): void {
  * reads the diff and reads around it is the only one whose "this looks fine"
  * means anything.
  */
-export async function reviewTask(cfg: Config, task: Task): Promise<void> {
+export async function reviewTask(cfg: Config, task: Task, round?: ReviewRound): Promise<void> {
   const id = task.issue.id;
   if (!task.worktree) return;
   if (isDemo(cfg)) {
@@ -112,7 +113,7 @@ export async function reviewTask(cfg: Config, task: Task): Promise<void> {
     const result = await runtimeFor(cfg, 'review').backend.runSession({
       permissions: { mode: cfg.agentPermissionMode, deny: cfg.denyTools },
       agent: { kind: 'review', label: task.issue.identifier, origin: 'you asked for a self-review' },
-      prompt: selfReviewPrompt(cfg, task),
+      prompt: selfReviewPrompt(cfg, task, round),
       cwd: task.worktree,
       ...modelsFor(cfg, 'review'),
       callbacks: {
@@ -285,9 +286,10 @@ async function headSha(worktree: string): Promise<string | undefined> {
   return stdout.trim() || undefined;
 }
 
-function selfReviewPrompt(cfg: Config, task: Task): string {
+function selfReviewPrompt(cfg: Config, task: Task, round?: ReviewRound): string {
   return `You are reviewing a branch before its pull request is promoted out of draft. The code was written by another agent working the issue below; you did not write it, and your job is to read it as someone who has to decide whether it is safe to ship.
 
+${roundGuidance(round) ? `\n${roundGuidance(round)}\n` : ''}
 ## The issue it was meant to solve
 ${task.issue.identifier}: ${task.issue.title}
 ${task.issue.description?.trim() ? `\n${task.issue.description.trim().slice(0, 4000)}\n` : ''}
