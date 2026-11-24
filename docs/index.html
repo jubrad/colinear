@@ -577,6 +577,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#asking-colinear" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asking colinear
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sorting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1386,6 +1397,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#asking-colinear" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Asking colinear
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sorting" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1566,6 +1588,10 @@ step through the options. The arrow keys always work too.</p>
 <td>the keys for the view you're on, and the global ones, in a popup. <code>`</code>, <code>esc</code> or <code>q</code> closes it</td>
 </tr>
 <tr>
+<td><code>@</code></td>
+<td><a href="#asking-colinear">ask colinear</a> to do something</td>
+</tr>
+<tr>
 <td><code>?</code></td>
 <td>help</td>
 </tr>
@@ -1591,6 +1617,28 @@ step through the options. The arrow keys always work too.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="asking-colinear">Asking colinear<a class="headerlink" href="#asking-colinear" title="Permanent link">&para;</a></h2>
+<p><code>@</code> opens a chat with an agent that can run colinear. Ask it for something in your own words:
+"find all PRs in the stack under owner/repo#123, add them to reviews and start a local review on each".
+It works it out with the GitHub CLI and colinear's own tools, then says what it did. Its tools:</p>
+<ul>
+<li><code>list_reviews</code> and <code>list_tasks</code>;</li>
+<li><code>review_status</code> for one PR's review;</li>
+<li><code>add_review</code>, which puts a PR on the review list;</li>
+<li><code>start_review</code>, which starts colinear's local pre-review of a PR in the background, so it can start
+  several and report back.</li>
+</ul>
+<p>It never posts. Commenting, approving, merging and pushing stay keys you press, and it can't edit
+files. It runs under your <code>agentPermissionMode</code> and <code>denyTools</code>, on Claude Code.</p>
+<ul>
+<li><strong>Messages and replies:</strong> <code>enter</code> sends. A message typed while it's working waits its turn. The line
+  above the input shows what it's doing right now.</li>
+<li><strong>Closing:</strong> <code>esc</code> closes the chat and the agent keeps working. When it replies, a toast says so,
+  and <code>@</code> shows the conversation again.</li>
+<li><strong>Starting over:</strong> <code>ctrl-n</code> starts a new conversation. <code>ctrl-x</code> stops the current one.</li>
+</ul>
+<p>The conversation lives in the daemon, so it survives the frontend restarting. Each message resumes
+the same session, so "and the next one" means what you'd expect.</p>
 <h2 id="sorting">Sorting<a class="headerlink" href="#sorting" title="Permanent link">&para;</a></h2>
 <p>Every sortable view (the agents table, the board, <code>:issues</code>, <code>:projects</code>, <code>:reviews</code>, <code>:costs</code>)
 sorts the same way. <code>,</code> opens the sort bar, which lists the columns in a row:</p>
