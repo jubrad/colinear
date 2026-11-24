@@ -101,7 +101,8 @@ sorts the same way. `,` opens the sort bar, which lists the columns in a row:
 - **Pick a column:** `tab` or `←` `→` walks the columns, and typing jumps to one (`tok` lands on
   tokens).
 - **Sort:** `enter` sorts by the column under the cursor. On the column that's already sorted, it
-  reverses.
+  reverses. A date, a size or a cost starts descending (newest or biggest first); anything else
+  starts ascending.
 - **Choose a direction:** `↑` sorts ascending and `↓` descending, so a direction never takes two
   steps. `shift-enter` also reverses in terminals that report it; most send plain enter for it, which
   is why `↓` exists.

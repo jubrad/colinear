@@ -538,12 +538,19 @@ reviewed or is reviewing. What drops out is the long tail: team requests anyone 
 and PRs that stopped asking you, that you never touched. A team request becomes yours the moment you
 press `r` on it. The header says which scope you're in, and it's remembered, like the sort.
 
-**The `reviewed` sort puts the newest colinear review first.** A review running now sorts above all
-of them, and PRs colinear has never reviewed come after every one it has. `REV` on each row says how
-long ago colinear last reviewed it. It's bold and coloured until you've looked at that review, which
-means resting the cursor on its row for a moment. The header counts the reviews you haven't looked at
-yet ("3 new reviews"), so a review that finished while you were elsewhere doesn't get lost under PRs
-that merely updated.
+**Two ages on every row.** `REV` is when colinear last reviewed the PR, and `UPD` is when the PR last
+moved on GitHub (a push, a comment, a review). The `reviewed` and `updated` sorts order by these, so
+the column you sort by is the one you can read down.
+
+**The arrows mean what they say.** `↓` is newest first for the two dates, and biggest first for
+`size` and `cost`; `↑` is the reverse. Picking one of those four in the sort bar starts it on `↓`.
+Under `reviewed`, a review running now counts as the newest of all, and PRs colinear has never
+reviewed count as the oldest. A stack (see below) keeps its PRs together under its bottom PR, so
+inside a stack the order follows the stack, not the dates.
+
+`REV` is bold and coloured until you've looked at that review, which means resting the cursor on its
+row for a moment. The header counts the reviews you haven't looked at yet ("3 new reviews"), so a
+review that finished while you were elsewhere doesn't get lost under PRs that merely updated.
 
 **`t` shows the PRs colinear opened for you.** Every open PR one of your tasks opened becomes a
 review here too, added by the review poll (every minute). They are kept out of the normal list,

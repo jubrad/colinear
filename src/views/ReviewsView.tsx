@@ -29,7 +29,7 @@ const ACTIVE: Review['status'][] = ['reviewing', 'posting', 'queued'];
  * Column widths. Status/PR always show; author and size drop out on narrow
  * terminals so the row never wraps (a wrapped row breaks the whole table).
  */
-const W = { flag: 4, reviewed: 5, status: 12, pr: 24, draft: 9, author: 18, size: 14 };
+const W = { flag: 4, reviewed: 5, updated: 5, status: 12, pr: 24, draft: 9, author: 18, size: 14 };
 
 /**
  * Two facts that decide whether a row wants you, neither of which the status
@@ -61,6 +61,8 @@ export function freshness(r: Review): { glyph: string; color: string; why: strin
 
 /** Sort fields, cycled with S; picking the same one again flips direction. */
 const SORTS = ['needs me', 'reviewed', 'updated', 'size', 'repo', 'author', 'cost'] as const;
+/** the sorts that start descending when picked: newest or biggest first */
+const DESC_FIRST = new Set<string>(['reviewed', 'updated', 'size', 'cost']);
 type SortKey = (typeof SORTS)[number];
 
 /**
@@ -80,7 +82,7 @@ function layout(columns: number) {
   return {
     size,
     author,
-    title: Math.max(16, avail - W.flag - W.reviewed - W.status - W.pr - W.draft - author - size),
+    title: Math.max(16, avail - W.flag - W.reviewed - W.updated - W.status - W.pr - W.draft - author - size),
   };
 }
 const SEVERITY_COLOR: Record<string, string> = palette(() => ({
@@ -208,19 +210,22 @@ export function ReviewsView(props: { param?: string }) {
     const size = (r: Review) => r.additions + r.deletions;
     const compare = (a: Review, b: Review) => {
       switch (sort) {
+        // The arrows mean what they say: ↑ ascending (oldest, smallest
+        // first), ↓ descending (newest, biggest first). These four used to
+        // run newest-first under ↑, so a "descending" list read oldest first.
         case 'reviewed':
-          // newest colinear review first; never reviewed after every one that was
-          return (lastReviewed(b) ?? -1) - (lastReviewed(a) ?? -1) || b.updatedAt.localeCompare(a.updatedAt);
+          // by when colinear last reviewed it; never reviewed counts as oldest
+          return (lastReviewed(a) ?? -1) - (lastReviewed(b) ?? -1) || a.updatedAt.localeCompare(b.updatedAt);
         case 'updated':
-          return b.updatedAt.localeCompare(a.updatedAt);
+          return a.updatedAt.localeCompare(b.updatedAt);
         case 'size':
-          return size(b) - size(a);
+          return size(a) - size(b);
         case 'repo':
           return a.repository.localeCompare(b.repository) || a.number - b.number;
         case 'author':
           return a.author.localeCompare(b.author) || b.updatedAt.localeCompare(a.updatedAt);
         case 'cost':
-          return b.costUsd - a.costUsd;
+          return a.costUsd - b.costUsd;
         default:
           return rank(a) - rank(b) || b.updatedAt.localeCompare(a.updatedAt);
       }
@@ -665,13 +670,13 @@ export function ReviewsView(props: { param?: string }) {
         <Text dimColor>· sort: </Text>
         <Text color={theme.accent}>
           {sort}
-          {desc ? ' ↑' : ' ↓'}
+          {desc ? ' ↓' : ' ↑'}
         </Text>
         {query ? <Text color={theme.accent}>/{query}</Text> : null}
       </Box>
       {sorting && (
         <SortBar
-          options={SORTS.map((key) => ({ key }))}
+          options={SORTS.map((key) => ({ key, prefersDesc: DESC_FIRST.has(key) }))}
           current={sort}
           desc={desc}
           onApply={(key, d) => {
@@ -702,6 +707,7 @@ export function ReviewsView(props: { param?: string }) {
               {cell('', W.flag)}
               {'  '}
               {cell(sortHead('REV', 'reviewed'), W.reviewed)}
+              {cell(sortHead('UPD', 'updated'), W.updated)}
               {cell(sortHead('PR', 'repo'), W.pr)}
               TITLE
             </Text>
@@ -726,6 +732,7 @@ export function ReviewsView(props: { param?: string }) {
                     {ACTIVE.includes(r.status) ? spinner(ctx.now) : statusGlyph(r)}{' '}
                   </Text>
                   <ReviewedCell review={r} now={ctx.now} fresh={fresh(r)} plain={lit} />
+                  <UpdatedCell review={r} now={ctx.now} plain={lit} />
                   <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
                   {line.mark && <Text color={lit ? undefined : theme.dim}>{line.mark}</Text>}
                   {r.task && <Text color={lit ? undefined : theme.accent}>{r.task} </Text>}
@@ -770,6 +777,7 @@ export function ReviewsView(props: { param?: string }) {
           {cell('', W.flag)}
           {cell('REVIEW', W.status)}
           {cell(sortHead('REV', 'reviewed'), W.reviewed)}
+          {cell(sortHead('UPD', 'updated'), W.updated)}
           {cell(sortHead('PR', 'repo'), W.pr)}
           {cell('PR STATE', W.draft)}
           {cell('TITLE', cols.title)}
@@ -792,6 +800,7 @@ export function ReviewsView(props: { param?: string }) {
                 {cell(STATUS_LABEL[r.status] ?? r.status, W.status)}
               </Text>
               <ReviewedCell review={r} now={ctx.now} fresh={fresh(r)} plain={onCursor} />
+              <UpdatedCell review={r} now={ctx.now} plain={onCursor} />
               <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
               <Text color={onCursor ? undefined : r.isDraft ? theme.dim : theme.ok}>
                 {cell(r.isDraft ? 'draft' : 'open', W.draft)}
@@ -1337,6 +1346,18 @@ export const reviewsKeys: Array<[string, string]> = [
  * while that review is one you have not looked at yet, so a fresh one stands
  * out from the PRs that merely updated.
  */
+/**
+ * When the PR last moved on GitHub — a push, a comment, a review. What the
+ * `updated` sort orders by; without it on screen the list looked unsorted,
+ * since the only age shown was colinear's own review (`REV`).
+ */
+function UpdatedCell(props: { review: Review; now: number; plain: boolean }) {
+  const at = Date.parse(props.review.updatedAt);
+  return (
+    <Text color={props.plain ? undefined : theme.dim}>{cell(Number.isFinite(at) ? age(at, props.now) : '', W.updated)}</Text>
+  );
+}
+
 function ReviewedCell(props: { review: Review; now: number; fresh: boolean; plain: boolean }) {
   const at = lastReviewed(props.review, props.now);
   const text = at === undefined ? '' : props.review.status === 'reviewing' || props.review.status === 'queued' ? 'now' : age(at, props.now);
