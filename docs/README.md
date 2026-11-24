@@ -82,9 +82,15 @@ files. It runs under your `agentPermissionMode` and `denyTools`, on Claude Code.
   above the input shows what it's doing right now.
 - **Closing:** `esc` closes the chat and the agent keeps working. When it replies, a toast says so,
   and `@` shows the conversation again.
-- **Starting over:** `ctrl-n` starts a new conversation. `ctrl-x` stops the current one.
+- **Starting over:** `ctrl-n` starts a new conversation; the one before is kept. `ctrl-x` stops the
+  current one.
+- **History:** every conversation is kept. `ctrl-o` lists them, newest first, with when each was last
+  used and how long it is. `enter` opens one again, and the next message resumes its session, so
+  the agent remembers it. A reply to a conversation you've moved away from still lands in that
+  conversation. After a restart, the most recent one is open.
 
-The conversation lives in the daemon, so it survives the frontend restarting. Each message resumes
+Conversations are saved in the state directory (`ask/conversations/`), so they survive the frontend
+and the daemon restarting. Each message resumes
 the same session, so "and the next one" means what you'd expect.
 
 ## Sorting

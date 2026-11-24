@@ -29,6 +29,7 @@
     "check:fleet": "tsx src/core/fleet.check.ts",
     "check:jobs": "tsx src/core/jobs.check.ts",
     "check:theme": "tsx src/theme.check.ts",
+    "check:ask": "tsx src/core/ask.check.ts",
     "check:sessions": "tsx src/core/disksessions.check.ts",
     "check:taskreview": "tsx src/core/taskreview.check.ts",
     "check:staleness": "tsx src/core/staleness.check.ts",

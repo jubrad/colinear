@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { agentNamed } from './agent.js';
 import { log, STATE_DIR } from './log.js';
@@ -29,12 +29,84 @@ export interface AskMessage {
 
 /** What a client draws: the conversation, and what the agent is doing right now. */
 export interface AskState {
+  /** which conversation this is — the history lists them by it */
+  id: string;
   messages: AskMessage[];
   busy: boolean;
   /** the agent's latest step while busy — a tool call, a line of thinking */
   activity?: string;
   /** messages typed while it was busy, answered in turn */
   queued: number;
+}
+
+/** A conversation as kept on disk: every message, and the session that resumes it. */
+export interface AskConversation {
+  id: string;
+  startedAt: number;
+  updatedAt: number;
+  /** the agent session behind it — opening it again resumes this */
+  sessionId?: string;
+  messages: AskMessage[];
+}
+
+/** One line of the history: enough to recognise a conversation and open it. */
+export interface AskSummary {
+  id: string;
+  /** the first thing you asked */
+  title: string;
+  startedAt: number;
+  updatedAt: number;
+  count: number;
+}
+
+const newId = () => `ask-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+
+/**
+ * Where conversations are kept: one JSON file each, under the state dir —
+ * so they outlive the TUI and the daemon both, and the history is a listing.
+ */
+export class AskStore {
+  constructor(private dir: string) {}
+
+  private path(id: string): string {
+    return join(this.dir, `${id.replace(/[^\w-]/g, '')}.json`);
+  }
+
+  save(c: AskConversation): void {
+    // a conversation nothing was said in is not history
+    if (!c.messages.length) return;
+    mkdirSync(this.dir, { recursive: true });
+    writeFileSync(this.path(c.id), JSON.stringify(c));
+  }
+
+  load(id: string): AskConversation | undefined {
+    try {
+      return JSON.parse(readFileSync(this.path(id), 'utf8')) as AskConversation;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** newest first */
+  list(): AskSummary[] {
+    let files: string[] = [];
+    try {
+      files = readdirSync(this.dir).filter((f) => f.endsWith('.json'));
+    } catch {
+      return [];
+    }
+    return files
+      .map((f) => this.load(f.replace(/\.json$/, '')))
+      .filter((c): c is AskConversation => Boolean(c?.messages?.length))
+      .map((c) => ({
+        id: c.id,
+        title: (c.messages.find((m) => m.from === 'you')?.text ?? '').replace(/\s+/g, ' ').slice(0, 200),
+        startedAt: c.startedAt,
+        updatedAt: c.updatedAt,
+        count: c.messages.length,
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  }
 }
 
 const KEEP = 200;
@@ -54,38 +126,70 @@ Keep replies short. Say what you did, as a list when it is a list (each PR as ow
  * while it is working wait their turn rather than interrupting it.
  */
 export class AskChat {
-  private state: AskState = { messages: [], busy: false, queued: 0 };
-  private pending: string[] = [];
-  private sessionId?: string;
+  private conv: AskConversation;
+  private busy = false;
+  private activity?: string;
+  private pending: Array<{ conv: string; text: string }> = [];
   private abort?: AbortController;
+  private store: AskStore;
   onChange?: (state: AskState) => void;
 
   constructor(
     private cfg: Config,
     /** starts a review the way `r` does — importing a repo you have not got */
     private start: (id: string, opts?: { instructions?: string }) => void,
-  ) {}
+    dir = join(STATE_DIR, 'ask', 'conversations'),
+  ) {
+    this.store = new AskStore(dir);
+    // a restart picks up where you were: the newest conversation stays current
+    const last = this.store.list()[0];
+    this.conv = (last && this.store.load(last.id)) || this.blank();
+  }
+
+  private blank(): AskConversation {
+    return { id: newId(), startedAt: Date.now(), updatedAt: Date.now(), messages: [] };
+  }
 
   get(): AskState {
-    return this.state;
+    return {
+      id: this.conv.id,
+      messages: this.conv.messages,
+      busy: this.busy,
+      activity: this.activity,
+      queued: this.pending.length,
+    };
+  }
+
+  /** every saved conversation, newest first */
+  history(): AskSummary[] {
+    return this.store.list();
   }
 
   send(text: string): void {
     const t = text.trim();
     if (!t) return;
-    this.push({ from: 'you', text: t, at: Date.now() });
-    this.pending.push(t);
-    this.set({ queued: this.state.busy ? this.pending.length : 0 });
-    if (!this.state.busy) void this.drain();
+    this.append(this.conv.id, { from: 'you', text: t, at: Date.now() });
+    this.pending.push({ conv: this.conv.id, text: t });
+    this.changed();
+    if (!this.busy) void this.drain();
   }
 
-  /** a fresh conversation: the history and the session behind it go */
+  /** a new conversation; the one before stays in the history */
   reset(): void {
-    this.abort?.abort();
-    this.pending = [];
-    this.sessionId = undefined;
-    this.state = { messages: [], busy: false, queued: 0 };
-    this.onChange?.(this.state);
+    this.cancel();
+    this.conv = this.blank();
+    this.changed();
+  }
+
+  /** bring a past conversation back: its messages, and its session to resume */
+  open(id: string): boolean {
+    if (id === this.conv.id) return true;
+    const found = this.store.load(id);
+    if (!found) return false;
+    this.cancel();
+    this.conv = found;
+    this.changed();
+    return true;
   }
 
   /** stop what it is doing now; what was queued is dropped too */
@@ -94,42 +198,63 @@ export class AskChat {
     this.abort?.abort();
   }
 
-  private set(patch: Partial<AskState>): void {
-    this.state = { ...this.state, ...patch };
-    this.onChange?.(this.state);
+  private changed(): void {
+    this.onChange?.(this.get());
   }
 
-  private push(m: AskMessage): void {
-    this.set({ messages: [...this.state.messages, m].slice(-KEEP) });
+  /** a message onto its own conversation — the current one, or one you have since left */
+  private append(id: string, m: AskMessage): void {
+    const conv = id === this.conv.id ? this.conv : this.store.load(id);
+    if (!conv) return;
+    conv.messages = [...conv.messages, m].slice(-KEEP);
+    conv.updatedAt = m.at;
+    this.store.save(conv);
   }
 
   private async drain(): Promise<void> {
+    this.busy = true;
     while (this.pending.length) {
-      const text = this.pending.shift()!;
-      this.set({ busy: true, activity: 'thinking…', queued: this.pending.length });
-      const reply = await this.turn(text);
-      this.push({ from: 'colinear', text: reply, at: Date.now() });
+      const next = this.pending.shift()!;
+      this.activity = 'thinking…';
+      this.changed();
+      const reply = await this.turn(next.conv, next.text);
+      // the reply goes where the question was asked, even if you have moved on
+      this.append(next.conv, { from: 'colinear', text: reply, at: Date.now() });
+      this.changed();
     }
-    this.set({ busy: false, activity: undefined, queued: 0 });
+    this.busy = false;
+    this.activity = undefined;
+    this.changed();
   }
 
-  private async turn(text: string): Promise<string> {
+  private async turn(convId: string, text: string): Promise<string> {
     // the colinear tools are an MCP server only Claude Code's adapter builds
     const backend = agentNamed(this.cfg, 'claude');
     const cwd = join(STATE_DIR, 'ask');
     mkdirSync(cwd, { recursive: true });
     const controller = new AbortController();
     this.abort = controller;
+    // each conversation resumes its own session
+    const conv = convId === this.conv.id ? this.conv : this.store.load(convId);
+    const sessionId = conv?.sessionId;
     try {
       const result = await backend.runSession({
-        prompt: this.sessionId ? text : `${PREFACE}\n\n---\n\n${text}`,
+        prompt: sessionId ? text : `${PREFACE}\n\n---\n\n${text}`,
         cwd,
-        resume: this.sessionId,
+        resume: sessionId,
         permissions: { mode: this.cfg.agentPermissionMode, deny: [...this.cfg.denyTools, 'Edit', 'Write', 'NotebookEdit'] },
         agent: { kind: 'ask', label: 'ask colinear', origin: 'you, in the @ chat' },
         callbacks: {
-          onActivity: (line) => this.set({ activity: line }),
-          onSessionId: (id) => (this.sessionId = id),
+          onActivity: (line) => {
+            this.activity = line;
+            this.changed();
+          },
+          onSessionId: (id) => {
+            const target = convId === this.conv.id ? this.conv : this.store.load(convId);
+            if (!target) return;
+            target.sessionId = id;
+            this.store.save(target);
+          },
           // the operator is right there, but not inside this turn: ask in the reply
           onQuestion: (q) => q.answer(q.questions.map(() => 'Ask this at the end of your reply instead; the operator answers in their next message.')),
         },
