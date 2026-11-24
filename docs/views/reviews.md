@@ -505,6 +505,7 @@ the network) still just fails and says so, because re-anchoring cannot help with
 | `s` | hand the terminal to that review's claude session |
 | `,` | sort: needs-me / reviewed / updated / size / repo / author / cost — the [sort bar](../README.md#sorting) (`S` too). Remembered |
 | `m` | only yours, or every review. Remembered |
+| `z` | fold or open the PR stack the cursor is in; `enter` on a stack's header does the same |
 | `t` | cycle the list: reviews asked of you → the PRs your colinear tasks opened → both together. Remembered |
 | `o` | open the PR |
 | `H` | hide this PR until it has new activity, or put a hidden one back now |
@@ -571,6 +572,24 @@ mid-revision or running checks. The same findings are never handed twice. A roun
 retried on its own; `r` retries it. The review's activity log and the task's both record every
 round. Nothing is posted to GitHub: the findings stay between colinear and the agent unless you post
 them. The loop checks once a minute, alongside the review poll.
+
+**PR stacks are drawn together.** A PR whose base branch is another listed PR's branch, in the same
+repo, is built on it. Such PRs are listed under a header line that names the stack after its bottom
+PR's branch:
+
+```
+- stack · app · feature/auth-tokens · 3 PRs
+○  1h   app#120   └ Add the token store
+○  —    app#121     └ Issue tokens on login
+○  —    app#124       └ Expire tokens after an hour
+```
+
+The PRs run bottom first, each joined to the one it's built on and indented a level deeper. The
+stack sits where the sort puts its bottom PR, and PRs in no stack are unaffected. `z` on any PR in a
+stack, or `enter` on its header, folds it to the header line and back. A folded header still says
+how many of its PRs are pre-reviewed or being reviewed, so a closed stack doesn't hide finished
+work. Only listed PRs are linked: if a stack's bottom is filtered out or settled, the stack starts
+at the lowest PR still shown.
 
 **`H` hides a PR until something new happens on it.** It goes the way a settled one does: off the
 list, out of `:todo`, and counted in the header ("2 hidden by you"). `h` shows it again, dimmed and

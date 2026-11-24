@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { attachTo, rememberView, reviewAttachable, sessionRuntime, setPendingAction } from '../core/attach.js';
 import { useReviews } from '../core/hooks.js';
 import { age, markSeen } from '../core/fleet.js';
-import { involvesMe, lastReviewed, parsePrSpec } from '../core/reviews.js';
+import { involvesMe, lastReviewed, stackOrder, parsePrSpec } from '../core/reviews.js';
 import { store } from '../core/store.js';
 import { fileStats, parseDiff, type DiffAgainst, type FileStat } from '../core/diff.js';
 import type { Review, ReviewFinding } from '../core/types.js';
@@ -168,7 +168,7 @@ export function ReviewsView(props: { param?: string }) {
 
   // quiet is measured in days: an hourly clock keeps the list from rebuilding every tick
   const staleNow = Math.floor(ctx.now / 3_600_000) * 3_600_000;
-  const rows = useMemo(() => {
+  const stacks = useMemo(() => {
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     const matched = inView.filter((r) => {
       // Settled reviews pile up — a month of them, since retention keeps them
@@ -226,11 +226,50 @@ export function ReviewsView(props: { param?: string }) {
       }
     };
     const sorted = [...matched].sort(compare);
-    return desc ? sorted.reverse() : sorted;
+    // a PR stack is drawn together, bottom first, under its bottom PR's place
+    return stackOrder(desc ? sorted.reverse() : sorted);
   }, [inView, query, sort, desc, showHidden, mine, staleNow, ctx.cfg.hideStaleDays.reviews]);
+  /** the PRs shown, in drawing order — what the counts count */
+  const prs = stacks.order;
+  /** stacks folded to their header line (`z`, or enter on the header) */
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  /**
+   * The lines the list draws: a PR on its own, or a stack — a header line
+   * naming it, then its PRs bottom first, each joined to the one it is built
+   * on (`└ `, a level deeper per PR). A stack is named by its bottom PR's
+   * branch, the one the rest were built on, and keeps that PR's place in the
+   * sort.
+   */
+  const rows = useMemo<ListLine[]>(() => {
+    const out: ListLine[] = [];
+    for (let i = 0; i < prs.length; i++) {
+      const r = prs[i];
+      if (!stacks.stacked.has(r.id) || (stacks.depth.get(r.id) ?? 0) > 0) {
+        out.push({ kind: 'pr', review: r });
+        continue;
+      }
+      // a stack's bottom: its members follow it, up to the next PR at depth 0
+      const members = [r];
+      while (i + 1 < prs.length && (stacks.depth.get(prs[i + 1].id) ?? 0) > 0) members.push(prs[++i]);
+      const key = `stack:${r.id}`;
+      const folded = collapsed.has(key);
+      const header: StackLine = { kind: 'stack', key, bottom: r, members, collapsed: folded };
+      out.push(header);
+      if (!folded) for (const m of members) out.push({ kind: 'pr', review: m, stack: header, mark: `${'  '.repeat(stacks.depth.get(m.id) ?? 0)}└ ` });
+    }
+    return out;
+  }, [prs, stacks, collapsed]);
+  const toggleStack = (key: string) =>
+    setCollapsed((c) => {
+      const next = new Set(c);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
 
-  const at = useHeldIndex(rows, cursor, setCursor, (r) => r.id);
-  const atCursor = rows[Math.min(at, Math.max(0, rows.length - 1))];
+  const at = useHeldIndex(rows, cursor, setCursor, (l) => (l.kind === 'pr' ? l.review.id : l.key));
+  const atLine = rows[Math.min(at, Math.max(0, rows.length - 1))];
+  const atCursor = atLine?.kind === 'pr' ? atLine.review : undefined;
   /**
    * The review the document or the diff was opened on. Held by id rather than
    * read off the list: while you read one, a poll can re-sort the list, or the
@@ -313,7 +352,7 @@ export function ReviewsView(props: { param?: string }) {
     if (!props.param) return;
     const wantsDoc = props.param.startsWith('doc:');
     const id = wantsDoc ? props.param.slice(4) : props.param;
-    const idx = rows.findIndex((r) => r.id === id);
+    const idx = rows.findIndex((l) => l.kind === 'pr' && l.review.id === id);
     if (idx === -1) {
       // Once per thing typed, not once per list change: this effect re-runs
       // whenever the list grows, and adopting or complaining again each time
@@ -364,6 +403,16 @@ export function ReviewsView(props: { param?: string }) {
         if (key.downArrow || input === 'k') setCursor((c) => Math.min(rows.length - 1, c + 1));
       }
       if (input === '/') setFiltering(true);
+      // a stack folds to its header and back: enter on the header, z anywhere in it
+      if (!inPreview && (input === 'z' || (key.return && atLine?.kind === 'stack'))) {
+        const stack = atLine?.kind === 'stack' ? atLine : atLine?.stack;
+        if (stack) {
+          // folding from inside it leaves the cursor on the header
+          if (!stack.collapsed && atLine?.kind === 'pr') setCursor(rows.indexOf(stack));
+          toggleStack(stack.key);
+        }
+        return;
+      }
       if (!selected) return;
       if (input === 'a' && selected.question) return; // answering handled below
       // enter reads the review against the code — from the preview, at the
@@ -592,7 +641,7 @@ export function ReviewsView(props: { param?: string }) {
           reviews{' '}
         </Text>
         <Text dimColor>
-          {rows.length} {tasksView ? 'from your tasks' : view === 'all' ? 'in all' : showHidden ? 'shown' : mine ? 'yours' : 'awaiting me'}{' '}
+          {prs.length} {tasksView ? 'from your tasks' : view === 'all' ? 'in all' : showHidden ? 'shown' : mine ? 'yours' : 'awaiting me'}{' '}
         </Text>
         {ready > 0 && <Text color={REVIEW_COLORS.ready}>· {ready} pre-reviewed </Text>}
         {held && (
@@ -601,7 +650,7 @@ export function ReviewsView(props: { param?: string }) {
           </Text>
         )}
         {(() => {
-          const n = rows.filter(fresh).length;
+          const n = prs.filter(fresh).length;
           return n ? <Text color={theme.accent} bold>· {n} new review{n === 1 ? '' : 's'} </Text> : null;
         })()}
         {!tasksView && <Text color={mine ? theme.accent : theme.dim}>· {mine ? 'yours (m: all)' : 'all (m: yours)'} </Text>}
@@ -656,12 +705,14 @@ export function ReviewsView(props: { param?: string }) {
               {cell(sortHead('PR', 'repo'), W.pr)}
               TITLE
             </Text>
-            {window.map((r, i) => {
+            {window.map((line, i) => {
               const onCursor = start + i === at;
-              const flag = freshness(r);
               // the cursor stays lit while you are in the preview, dimmer, so
               // it still says which PR the preview is of
               const lit = onCursor && focus === 'list';
+              if (line.kind === 'stack') return <StackHeader key={line.key} line={line} lit={lit} bold={onCursor && !lit} />;
+              const r = line.review;
+              const flag = freshness(r);
               return (
                 <Text
                   key={r.id}
@@ -676,6 +727,7 @@ export function ReviewsView(props: { param?: string }) {
                   </Text>
                   <ReviewedCell review={r} now={ctx.now} fresh={fresh(r)} plain={lit} />
                   <Text bold>{cell(`${shortRepo(r.repository)}#${r.number}`, W.pr)}</Text>
+                  {line.mark && <Text color={lit ? undefined : theme.dim}>{line.mark}</Text>}
                   {r.task && <Text color={lit ? undefined : theme.accent}>{r.task} </Text>}
                   <Text bold={fresh(r)} color={!lit && r.isDraft ? theme.dim : undefined}>
                     {r.title}
@@ -724,11 +776,13 @@ export function ReviewsView(props: { param?: string }) {
           {cols.author ? cell(sortHead('AUTHOR', 'author'), cols.author) : ''}
           {cols.size ? cell(sortHead('SIZE', 'size'), cols.size) : ''}
         </Text>
-        {window.map((r, i) => {
+        {window.map((line, i) => {
           // the cursor row goes plain: `inverse` over coloured cells turns each
           // colour into a background, so a coloured row inverts into a strip of
           // mismatched blocks rather than one bar (same rule as ui/Table)
           const onCursor = start + i === at;
+          if (line.kind === 'stack') return <StackHeader key={line.key} line={line} lit={onCursor} bold={false} />;
+          const r = line.review;
           const flag = freshness(r);
           return (
             <Text key={r.id} wrap="truncate" inverse={onCursor} dimColor={r.hidden && !onCursor}>
@@ -742,14 +796,18 @@ export function ReviewsView(props: { param?: string }) {
               <Text color={onCursor ? undefined : r.isDraft ? theme.dim : theme.ok}>
                 {cell(r.isDraft ? 'draft' : 'open', W.draft)}
               </Text>
-              {r.task ? (
-                <Text>
-                  <Text color={onCursor ? undefined : theme.accent}>{r.task} </Text>
-                  <Text bold={fresh(r)}>{cell(r.title, Math.max(4, cols.title - r.task.length - 1))}</Text>
-                </Text>
-              ) : (
-                <Text bold={fresh(r)}>{cell(r.title, cols.title)}</Text>
-              )}
+              {(() => {
+                // the stack mark and the task tag come out of the title's width, so the columns after it stay put
+                const mark = line.mark ?? '';
+                const tag = r.task ? `${r.task} ` : '';
+                return (
+                  <Text>
+                    {mark && <Text color={onCursor ? undefined : theme.dim}>{mark}</Text>}
+                    {tag && <Text color={onCursor ? undefined : theme.accent}>{tag}</Text>}
+                    <Text bold={fresh(r)}>{cell(r.title, Math.max(4, cols.title - mark.length - tag.length))}</Text>
+                  </Text>
+                );
+              })()}
               <Text dimColor={!onCursor}>
                 {cols.author ? cell(r.author, cols.author) : ''}
                 {cols.size
@@ -995,6 +1053,46 @@ const WEIGHT: Record<string, number> = { blocking: 1, consider: 2, comment: 3, n
  * whole thing amounts to), then blocking down to praise, annotations last —
  * they are context for reading the diff, and read best beside it.
  */
+/** A stack's header line in the list; its PRs follow it unless it is folded. */
+interface StackLine {
+  kind: 'stack';
+  key: string;
+  /** the PR the rest are built on — the stack is named by its branch */
+  bottom: Review;
+  /** bottom first, each one built on the one before */
+  members: Review[];
+  collapsed: boolean;
+}
+
+/** A line of the list: a PR — joined to the stack it is in, when it is in one — or a stack's header. */
+type ListLine = { kind: 'pr'; review: Review; stack?: StackLine; mark?: string } | StackLine;
+
+/**
+ * `- stack · app · feature/auth-tokens · 3 PRs`, or `+` when folded. Folded, it
+ * also says what is inside that wants you, so a closed stack does not hide
+ * a finished review.
+ */
+function StackHeader(props: { line: StackLine; lit: boolean; bold: boolean }) {
+  const { line, lit, bold } = props;
+  const ready = line.members.filter((m) => m.status === 'ready').length;
+  const running = line.members.filter((m) => ACTIVE.includes(m.status)).length;
+  return (
+    <Text wrap="truncate" inverse={lit} bold={bold}>
+      <Text color={lit ? undefined : theme.key} bold>
+        {line.collapsed ? '+ ' : '- '}
+      </Text>
+      <Text color={lit ? undefined : theme.header}>stack</Text>
+      <Text dimColor={!lit}>
+        {' · '}
+        {shortRepo(line.bottom.repository)} · {line.bottom.headRefName} · {line.members.length} PRs
+      </Text>
+      {line.collapsed && ready > 0 && <Text color={lit ? undefined : REVIEW_COLORS.ready}> · {ready} pre-reviewed</Text>}
+      {line.collapsed && running > 0 && <Text color={lit ? undefined : theme.warn}> · {running} reviewing</Text>}
+      <Text dimColor={!lit}>{line.collapsed ? '  (enter opens)' : ''}</Text>
+    </Text>
+  );
+}
+
 function byWeight(findings: ReviewFinding[]): ReviewFinding[] {
   return [...findings].sort((a, b) => (a.severity ? WEIGHT[a.severity] ?? 7 : 0) - (b.severity ? WEIGHT[b.severity] ?? 7 : 0));
 }
@@ -1228,6 +1326,7 @@ export const reviewsKeys: Array<[string, string]> = [
   ['m', 'only yours / all'],
   ['H', 'hide until new activity / unhide'],
   ['t', "requests → your tasks' PRs → both"],
+  ['z', 'fold or open the PR stack under the cursor'],
   ['h', 'show settled + hidden'],
   ['u', 'refresh'],
   ['/', 'filter'],
