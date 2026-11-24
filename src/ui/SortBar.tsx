@@ -7,6 +7,12 @@ export interface SortOption {
   key: string;
   /** what the bar shows; defaults to the key */
   label?: string;
+  /**
+   * Start this column descending when it is first picked: a date (newest
+   * first), a size or a cost (biggest first). Everything else starts
+   * ascending.
+   */
+  prefersDesc?: boolean;
 }
 
 /**
@@ -50,7 +56,7 @@ export function SortBar(props: {
     if (key.return) {
       if (key.shift) return props.onApply(o.key, true);
       // the column already sorted: enter reverses it
-      return props.onApply(o.key, o.key === current ? !desc : false);
+      return props.onApply(o.key, o.key === current ? !desc : Boolean(o.prefersDesc));
     }
     if (key.tab) return setFocus((f) => step(f, key.shift ? -1 : 1));
     if (key.rightArrow) return setFocus((f) => step(f, 1));
