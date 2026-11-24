@@ -577,6 +577,13 @@ With [`taskReviews`](../configuration.md) on (the default), a colinear task gets
 5. Then one last turn publishes it: the push and the draft PR, or a push onto the PR the task already
    had.
 
+Each reviewer is told which round it is and how many there are, and paces itself by that. The first
+round raises everything that matters at once, grouped, because anything held back costs a whole
+extra revision. A middle round checks that the last round's findings were addressed and looks at
+what the fixes disturbed, without raising settled points again. The last round raises only what
+would stop the change shipping and leaves the rest in its prose for you. The after-push loop below
+tells its PR reviews the same.
+
 The card stays in Working throughout, and its activity log records each round. Two kinds of task
 push right away instead:
 

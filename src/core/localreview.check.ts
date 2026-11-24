@@ -1,5 +1,6 @@
 import { localRevisePrompt, publishPrompt, workPrompt } from './dispatcher.js';
 import type { Issue, PrInfo } from './types.js';
+import { roundGuidance } from './reviewrounds.js';
 
 /**
  * Reviewing a task before it is pushed rests on three prompts saying the
@@ -33,8 +34,19 @@ const onto = publishPrompt(issue, 'origin', 'origin', 'main', pr);
 check('a task that already has a PR pushes onto it, never a second', /existing PR #42/.test(onto) && /Never open a second PR/.test(onto) && !/gh pr create/.test(onto));
 check('publishing never promotes the PR out of draft', /never run "gh pr ready"/.test(fresh));
 
+// the reviewer knows its round, and paces itself by it
+const first = roundGuidance({ n: 1, max: 3 });
+check('a reviewer is told its round and how many there are', /review round 1 of 3/.test(first));
+check('the first round says to raise everything now, grouped', /everything that matters \*\*now\*\*/.test(first) && /Group related points/.test(first));
+const middle = roundGuidance({ n: 2, max: 3 });
+check('a middle round checks what was asked and what the fix disturbed', /Check that each was addressed/.test(middle) && /fixes break things/.test(middle));
+check('and does not re-raise what was settled', /Do not raise again/.test(middle));
+const last = roundGuidance({ n: 3, max: 3 });
+check('the last round keeps to what would stop it shipping', /\*\*last\*\* round/.test(last) && /Raise only what would stop this change shipping/.test(last));
+check('a single review, or none in a series, gets no round talk', roundGuidance({ n: 1, max: 1 }) === '' && roundGuidance(undefined) === '');
+
 if (failures.length) {
   console.error(`local review: ${failures.length} failed\n  ${failures.join('\n  ')}`);
   process.exit(1);
 }
-console.log('ok — a held work pass commits and stops, a review round hands back without publishing,\n     and the last turn pushes: as a new draft PR, or onto the one the task has');
+console.log('ok — a held work pass commits and stops, a review round hands back without publishing,\n     the last turn pushes, and each reviewer knows its round and paces itself by it');

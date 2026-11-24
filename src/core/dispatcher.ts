@@ -1026,7 +1026,7 @@ export class Dispatcher {
       const before = store.get(id);
       if (!before) return;
       store.addActivity(id, `local review, round ${round} of ${max}`);
-      await reviewTask(this.cfg, { ...before, worktree });
+      await reviewTask(this.cfg, { ...before, worktree }, { n: round, max });
       const reviewed = store.get(id);
       if (!reviewed) return;
       store.update(id, { autoReviewRounds: round });
