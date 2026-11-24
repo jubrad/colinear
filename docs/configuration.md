@@ -133,6 +133,12 @@ neither should be given an API key — the runs bill the subscription behind the
 | enforces `denyTools` | yes | **no**, sandbox modes only |
 | reports a price | yes | **no**, tokens only |
 
+**A model picks its runtime.** A task given a model of its own (`m`, or custom dispatch) runs on the
+runtime that model belongs to, whatever `model` says for that kind of work. A Codex model on one task
+runs on Codex, and the rest stay on Claude Code. If the task's earlier session belongs to the other
+runtime, it starts a fresh session instead of trying to resume one that runtime never wrote. The
+fallback model is left off, because it's the other runtime's.
+
 **The model lists keep themselves current.** The daemon asks each runtime which models it can run:
 when it starts, then once a day. Claude Code reports what your account offers, and Codex reports
 what its build knows. The answer is saved in the state directory (`models.json`) and offered in

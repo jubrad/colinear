@@ -4,7 +4,7 @@ import { recoveryNote, worktreeForBranch } from './worktrees.js';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
-import { agentFor, SessionInbox, type AgentBackend, type SessionCallbacks } from './agent.js';
+import { agentFor, agentNamed, modelOwner, SessionInbox, type AgentBackend, type SessionCallbacks } from './agent.js';
 import { runChecks } from './checks.js';
 import { measureChanges, sameChanges } from './changes.js';
 import { reviewTask, taskRanges } from './selfreview.js';
@@ -988,9 +988,23 @@ export class Dispatcher {
     // without one. An explicit value in `opts` still wins.
     const scope = opts.agent?.kind ?? 'general';
     const withFallback = { fallbackModel: modelFor(this.cfg.fallbackModel, scope), ...opts };
-    // the runtime is resolved for the same kind as the fallback, so a config
-    // that sends triage one way and work another is honoured here too
-    return isDemo(this.cfg) ? demoSession(withFallback) : agentFor(this.cfg, scope).runSession(withFallback);
+    if (isDemo(this.cfg)) return demoSession(withFallback);
+    // The runtime that owns the model runs it. It used to be the runtime for
+    // this kind of session regardless, so a task given a Codex model (`m`, or
+    // custom dispatch) was handed to Claude Code, which refused the name.
+    const forScope = agentFor(this.cfg, scope);
+    const owner = opts.model ? modelOwner(this.cfg, opts.model) : undefined;
+    const backend = owner && owner !== forScope.name ? agentNamed(this.cfg, owner) : forScope;
+    let run = withFallback;
+    // the scope's fallback is the scope runtime's model; another runtime cannot demote to it
+    if (backend !== forScope && !opts.fallbackModel) run = { ...run, fallbackModel: undefined };
+    // a session the runtime does not have — written by the other one, before
+    // the model changed — cannot be resumed: start fresh rather than fail
+    if (run.resume && !backend.sessionExists(run.cwd, run.resume)) {
+      log(`${opts.agent?.label ?? 'session'}: ${backend.name} has no session ${run.resume.slice(0, 8)}… — starting fresh`);
+      run = { ...run, resume: undefined };
+    }
+    return backend.runSession(run);
   };
 
   private checks(...args: Parameters<typeof runChecks>) {
