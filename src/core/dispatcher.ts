@@ -21,6 +21,7 @@ import { notify } from './notify.js';
 import { pollPrs } from './prs.js';
 import { syncIssueState } from './statesync.js';
 import { guidanceFor } from './guidance.js';
+import { repoForSlug } from './reviews.js';
 import { autoSplitDecision, childIssues, fileSplit, trackingFields, type SplitChild } from './split.js';
 import { store } from './store.js';
 import { questionSummary, type Config, type Issue, type PrInfo, type PlannedSubtask, type RepoConfig, type ReviewFinding, type Subtask, type Task, type TaskEdits, type TaskStatus, type TriageVerdict, type Verification } from './types.js';
@@ -1115,6 +1116,33 @@ export class Dispatcher {
     store.update(id, { holdPush: undefined });
   }
 
+  /**
+   * A task that finished with no PR in its repo, whose agent reported one in
+   * another configured repo — the work belonged there and the agent went
+   * where it had to. Rather than failing work that exists, the task moves to
+   * that repo (and the worktree there, if one was cut) and its PR is picked
+   * up from it. True when it moved.
+   */
+  private async followPrElsewhere(id: string, repoPath: string): Promise<boolean> {
+    const task = store.get(id);
+    if (!task) return false;
+    const urls = task.activity.slice(-40).join('\n').match(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g) ?? [];
+    for (const url of [...new Set(urls)].reverse()) {
+      const slug = url.replace('https://github.com/', '').split('/').slice(0, 2).join('/');
+      const repo = await repoForSlug(this.cfg, slug).catch(() => undefined);
+      if (!repo || repo.path === repoPath) continue;
+      const there = join(repo.worktreeRoot, task.issue.identifier);
+      store.update(id, {
+        repo: { name: repo.name, path: repo.path, defaultBranch: repo.defaultBranch, remote: repo.remote, pushRemote: repo.pushRemote, prBase: repo.prBase, worktreeRoot: repo.worktreeRoot },
+        ...(existsSync(there) ? { worktree: there } : {}),
+      });
+      store.addActivity(id, `its PR is in ${repo.name} (${url}) — the task follows it there`);
+      await pollPrs(this.cfg, this);
+      if (store.get(id)?.prs.length) return true;
+    }
+    return false;
+  }
+
   private async runTask(id: string) {
     const task = store.get(id);
     if (!task) return;
@@ -1299,7 +1327,7 @@ export class Dispatcher {
               : mode === 'revise'
                 ? revisePrompt(ctx, current.prs)
               : resumeSession && queued.length
-                ? `${ctx}\n\nYou were idle and the operator sent you the message(s) above. Deal with them — check ${SUBTASKS_FILE} and git status to reorient first if you need to. If a message asks for a change, make it and push; if it only asks a question, answer it and stop.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
+                ? `${ctx}\n\nYou were idle and the operator sent you the message(s) above. Deal with them — check ${SUBTASKS_FILE} and git status to reorient first if you need to. If a message asks for a change, make it and push; if it only asks a question, answer it and stop. PRs stay DRAFT whatever a message says: never run "gh pr ready" — promoting a PR is the operator's own decision, made in colinear.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
                 : resumeSession
                 ? `${ctx}\n\ncolinear was restarted and your session was interrupted. Review where you left off (check ${SUBTASKS_FILE}, git status, and your last steps) and finish the task, following all the original requirements.${knownPr ? ` The PR for this issue is #${knownPr.number} (branch "${knownPr.headRefName}") — push further commits there; do NOT open a new PR.` : ''}`
                 : workPrompt(ctx, issue, taskRepo.pushRemote ?? taskRepo.remote ?? 'origin', taskRepo.remote ?? 'origin', taskRepo.prBase ?? taskRepo.defaultBranch, current.verdict?.verification, task.skipTriage, knownPr, holdPush),
@@ -1372,6 +1400,10 @@ export class Dispatcher {
         store.setStatus(id, 'pr_open');
       } else if (prs.length && prs.every((pr) => pr.state === 'MERGED')) {
         store.setStatus(id, 'done');
+      } else if (!prs.length && (await this.followPrElsewhere(id, taskRepo.path))) {
+        // its PR turned up in another configured repo: the task now lives there
+        const moved = store.get(id)?.prs ?? [];
+        store.setStatus(id, moved.some((pr) => pr.state === 'OPEN') ? 'pr_open' : moved.length ? 'done' : 'pr_open');
       } else if (!prs.length) {
         store.update(id, { status: 'error', error: 'agent finished without an open PR (check activity)' });
       } else {

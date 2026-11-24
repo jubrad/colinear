@@ -1,4 +1,5 @@
 import { providerFor } from './provider.js';
+import { repoForSlug } from './reviews.js';
 import type { Config, Issue, PlannedSubtask, RepoConfig, Task, TriageVerdict } from './types.js';
 
 export interface SplitChild {
@@ -41,7 +42,7 @@ export async function fileSplit(
         priority: st.priority,
         parentId: parent.issue.id,
       });
-      children.push({ index: i, ...created, title: st.title, repo: cfg.repos.find((r) => r.name === st.repo) });
+      children.push({ index: i, ...created, title: st.title, repo: await resolvePlanRepo(cfg, st.repo) });
     }
     for (const child of children) {
       for (const dep of plan[child.index].blockedBy ?? []) {
@@ -55,6 +56,26 @@ export async function fileSplit(
     throw new Error(`${String(err).replace(/^Error: /, '')} — after filing ${children.map((c) => c.identifier).join(', ')}`);
   }
   return children;
+}
+
+/**
+ * The configured repo a plan means, however it named it: the repo's name in
+ * the config, any case; its GitHub slug (`owner/name`) or URL, matched on the
+ * clone's remotes; or the slug's last part as a name. Agents write the slug
+ * as often as the name, and matching the exact name alone sent a sub-issue
+ * meant for one repo to work in the first repo on the list.
+ */
+export async function resolvePlanRepo(cfg: Config, spec: string | undefined): Promise<RepoConfig | undefined> {
+  const raw = spec?.trim().replace(/\.git$/, '').replace(/^https?:\/\/(www\.)?github\.com\//i, '').replace(/\/+$/, '');
+  if (!raw) return undefined;
+  const byName = (n: string) => cfg.repos.find((r) => r.name === n) ?? cfg.repos.find((r) => r.name.toLowerCase() === n.toLowerCase());
+  const named = byName(raw);
+  if (named) return named;
+  if (raw.includes('/')) {
+    const slug = raw.split('/').slice(0, 2).join('/');
+    return (await repoForSlug(cfg, slug).catch(() => undefined)) ?? byName(slug.split('/')[1]);
+  }
+  return undefined;
 }
 
 /**
