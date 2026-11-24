@@ -584,11 +584,13 @@ what the fixes disturbed, without raising settled points again. The last round r
 would stop the change shipping and leaves the rest in its prose for you. The after-push loop below
 tells its PR reviews the same.
 
-The card stays in Working throughout, and its activity log records each round. Two kinds of task
-push right away instead:
+The card stays in Working throughout, and its activity log records each round. This applies to
+every verification tier. A **CI**-tier task runs its fast checks locally, goes through the review
+rounds, and then pushes, so GitHub CI runs on what was reviewed. Two kinds of task push right away
+instead:
 
-- a task whose triage chose the **CI** verification tier, since pushing early so CI runs is the point
-  of that tier;
+- a CI-tier task with `"ciPushesFirst": true`, for when CI's early signal matters more than a review
+  before the push. Its PR is then reviewed after the push (below), so it isn't left unreviewed;
 - any task with `beforePush` turned off.
 
 Nothing reaches GitHub until the publish step, and the review's findings never do unless you post

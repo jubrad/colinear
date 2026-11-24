@@ -414,9 +414,9 @@ function expandHome(p: string): string {
 }
 
 /** `taskReviews`: `false` switches it off, `true` is the default spelled out, or `{ auto, maxRounds }`. */
-function normalizeTaskReviews(raw: unknown): { auto: boolean; maxRounds: number; beforePush: boolean } {
-  if (typeof raw === 'boolean') return { auto: raw, maxRounds: 2, beforePush: true };
-  const given = raw && typeof raw === 'object' ? (raw as { auto?: unknown; maxRounds?: unknown; beforePush?: unknown }) : {};
+function normalizeTaskReviews(raw: unknown): Config['taskReviews'] {
+  if (typeof raw === 'boolean') return { auto: raw, maxRounds: 2, beforePush: true, ciPushesFirst: false };
+  const given = raw && typeof raw === 'object' ? (raw as { auto?: unknown; maxRounds?: unknown; beforePush?: unknown; ciPushesFirst?: unknown }) : {};
   const rounds = typeof given.maxRounds === 'number' && Number.isFinite(given.maxRounds) ? Math.max(1, Math.floor(given.maxRounds)) : 2;
-  return { auto: given.auto !== false, maxRounds: rounds, beforePush: given.beforePush !== false };
+  return { auto: given.auto !== false, maxRounds: rounds, beforePush: given.beforePush !== false, ciPushesFirst: given.ciPushesFirst === true };
 }

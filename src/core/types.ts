@@ -964,7 +964,17 @@ export interface Config {
    * runs the cycle on the task's own worktree before anything is pushed;
    * off, it reviews the pushed PR after each push instead.
    */
-  taskReviews: { auto: boolean; maxRounds: number; beforePush: boolean };
+  taskReviews: {
+    auto: boolean;
+    maxRounds: number;
+    beforePush: boolean;
+    /**
+     * A CI-tier task pushes first and is reviewed on its PR after (the
+     * after-push loop), instead of the local cycle (default off: it too
+     * is reviewed locally, then pushed, and CI runs on what was reviewed).
+     */
+    ciPushesFirst: boolean;
+  };
   /** how often the daemon asks GitHub for review requests and refreshes the PRs it tracks (default 60, at least 30) */
   reviewPollSeconds: number;
   /**

@@ -1,4 +1,5 @@
-import { localRevisePrompt, publishPrompt, workPrompt } from './dispatcher.js';
+import { localRevisePrompt, publishPrompt, reviewsLocally, workPrompt } from './dispatcher.js';
+import type { Config } from './types.js';
 import type { Issue, PrInfo } from './types.js';
 import { roundGuidance } from './reviewrounds.js';
 
@@ -44,6 +45,16 @@ check('and does not re-raise what was settled', /Do not raise again/.test(middle
 const last = roundGuidance({ n: 3, max: 3 });
 check('the last round keeps to what would stop it shipping', /\*\*last\*\* round/.test(last) && /Raise only what would stop this change shipping/.test(last));
 check('a single review, or none in a series, gets no round talk', roundGuidance({ n: 1, max: 1 }) === '' && roundGuidance(undefined) === '');
+
+// every tier is reviewed locally by default, the CI tier included
+const cfgOf = (r: Partial<Config['taskReviews']>) => ({ taskReviews: { auto: true, maxRounds: 2, beforePush: true, ciPushesFirst: false, ...r } }) as Config;
+check('a local-light task is reviewed before it pushes', reviewsLocally(cfgOf({}), 'local-light'));
+check('so is a CI-tier task, by default', reviewsLocally(cfgOf({}), 'ci'));
+check('unless ciPushesFirst, which pushes it first', !reviewsLocally(cfgOf({ ciPushesFirst: true }), 'ci') && reviewsLocally(cfgOf({ ciPushesFirst: true }), 'local-light'));
+check('and nothing holds when the cycle is off or after the push', !reviewsLocally(cfgOf({ auto: false }), 'local-light') && !reviewsLocally(cfgOf({ beforePush: false }), 'local-light'));
+const heldCi = workPrompt('ctx', issue, 'origin', 'origin', 'main', 'ci', false, undefined, true);
+check('a held CI-tier pass is not told to push early', !/push the branch and open the draft PR EARLY/.test(heldCi) && /after colinear's local review/.test(heldCi));
+check('one that pushes first still is', /push the branch and open the draft PR EARLY/.test(workPrompt('ctx', issue, 'origin', 'origin', 'main', 'ci', false, undefined, false)));
 
 if (failures.length) {
   console.error(`local review: ${failures.length} failed\n  ${failures.join('\n  ')}`);

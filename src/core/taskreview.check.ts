@@ -81,10 +81,17 @@ store.updateReview('o/r#1', { autoRounds: 0, status: 'pending', handedSha: undef
 sweepTaskReviews({ taskReviews: { auto: true, maxRounds: 2, beforePush: true } } as unknown as Config, deps);
 check('with beforePush the PR loop starts nothing', started.length === 2);
 
+// a CI-tier task that pushed first (ciPushesFirst) is reviewed on its PR even with beforePush on
+store.update('T1', { verdict: { verdict: 'do', verification: 'ci', reason: 'r' } } as Partial<Task>);
+store.updateReview('o/r#1', { autoRounds: 0, status: 'pending', handedSha: undefined, headSha: 'fff', reviewedSha: undefined } as Partial<Review>);
+sweepTaskReviews({ taskReviews: { auto: true, maxRounds: 2, beforePush: true, ciPushesFirst: true } } as unknown as Config, deps);
+check('a CI-tier task that pushed first gets the review after the push', started.length === 3, String(started.length));
+store.update('T1', { verdict: undefined } as Partial<Task>);
+
 // off is off
 store.updateReview('o/r#1', { autoRounds: 0, status: 'pending', handedSha: undefined } as Partial<Review>);
 sweepTaskReviews({ taskReviews: { auto: false, maxRounds: 2, beforePush: false } } as unknown as Config, deps);
-check('taskReviews off starts nothing', started.length === 2);
+check('taskReviews off starts nothing', started.length === 3);
 
 check('actionable drops annotations, praise and empty comments', actionable([{ severity: 'info', comment: 'x' }, { severity: 'praise', comment: 'y' }, { severity: 'consider', comment: ' ' }, { severity: 'consider', comment: 'z' }]).length === 1);
 

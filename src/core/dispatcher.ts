@@ -1316,7 +1316,7 @@ export class Dispatcher {
         ? false
         : resumeSession
           ? Boolean(current.holdPush)
-          : !mode && this.cfg.taskReviews.auto && this.cfg.taskReviews.beforePush && current.verdict?.verification !== 'ci';
+          : !mode && reviewsLocally(this.cfg, current.verdict?.verification);
       if (holdPush !== Boolean(current.holdPush)) store.update(id, { holdPush: holdPush || undefined });
       const work = await this.session({
         agent: {
@@ -1877,10 +1877,25 @@ Also decide HOW the change should be verified ("verification") — this repo may
 Only use AskUserQuestion if a single quick answer would flip you from needs_info to do.`;
 }
 
-function verificationBlock(verification?: Verification): string {
+/**
+ * Does this task get the review cycle on its own worktree, before it pushes?
+ * The default for every tier. A CI-tier task pushes first instead only when
+ * taskReviews.ciPushesFirst says so — then its PR is reviewed after the
+ * push (sweepTaskReviews), so no task goes without a review.
+ */
+export function reviewsLocally(cfg: Config, verification?: Verification): boolean {
+  const r = cfg.taskReviews;
+  if (!r.auto || !r.beforePush) return false;
+  return !(verification === 'ci' && r.ciPushesFirst);
+}
+
+function verificationBlock(verification?: Verification, holdPush?: boolean): string {
   switch (verification) {
     case 'ci':
-      return `- Verification tier: CI. Run linters and fast unit tests locally, but do NOT run heavyweight local suites or spin up local environments — push the branch and open the draft PR EARLY so GitHub CI carries the expensive tests. After pushing, check "gh pr checks" and fix any failures.`;
+      // held for the local review cycle, the push — and so CI — comes after it
+      return holdPush
+        ? `- Verification tier: CI. Run linters and fast unit tests locally, but do NOT run heavyweight local suites or spin up local environments — GitHub CI carries the expensive tests once the branch is published, after colinear's local review.`
+        : `- Verification tier: CI. Run linters and fast unit tests locally, but do NOT run heavyweight local suites or spin up local environments — push the branch and open the draft PR EARLY so GitHub CI carries the expensive tests. After pushing, check "gh pr checks" and fix any failures.`;
     case 'needs-env':
       return `- Verification tier: needs-env. Local environments here are shared and contended — run linters, unit tests, and whatever verification you can without claiming a cluster/stack. List everything you could NOT verify in the PR body under a "Needs environment verification" section so the human knows what to exercise.`;
     default:
@@ -1914,7 +1929,7 @@ Before writing any code, create ${SUBTASKS_FILE} in the worktree root: a short m
 
 Requirements:
 - Follow the repository's CLAUDE.md conventions.
-${verificationBlock(verification)}
+${verificationBlock(verification, holdPush)}
 - Commit with clear messages referencing ${issue.identifier}.
 - Before opening the PR, spawn a subagent (Task tool) to review your full branch diff for bugs, missed edge cases, and convention violations. Address any real findings. Include this review as a subtask.
 ${holdPush ? `- Commit your work locally and stop there. Do NOT push and do NOT open a PR yet: colinear reviews your branch locally first, hands you what it finds, and tells you when to publish.` : `- ${pushInstruction(issue, pushRemote, upstreamRemote, prBase, existingPr)}`}
