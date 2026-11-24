@@ -2404,12 +2404,17 @@ added with <code>:reviews owner/repo#123</code>, one you've posted on or left a 
 reviewed or is reviewing. What drops out is the long tail: team requests anyone on the team can take,
 and PRs that stopped asking you, that you never touched. A team request becomes yours the moment you
 press <code>r</code> on it. The header says which scope you're in, and it's remembered, like the sort.</p>
-<p><strong>The <code>reviewed</code> sort puts the newest colinear review first.</strong> A review running now sorts above all
-of them, and PRs colinear has never reviewed come after every one it has. <code>REV</code> on each row says how
-long ago colinear last reviewed it. It's bold and coloured until you've looked at that review, which
-means resting the cursor on its row for a moment. The header counts the reviews you haven't looked at
-yet ("3 new reviews"), so a review that finished while you were elsewhere doesn't get lost under PRs
-that merely updated.</p>
+<p><strong>Two ages on every row.</strong> <code>REV</code> is when colinear last reviewed the PR, and <code>UPD</code> is when the PR last
+moved on GitHub (a push, a comment, a review). The <code>reviewed</code> and <code>updated</code> sorts order by these, so
+the column you sort by is the one you can read down.</p>
+<p><strong>The arrows mean what they say.</strong> <code>↓</code> is newest first for the two dates, and biggest first for
+<code>size</code> and <code>cost</code>; <code>↑</code> is the reverse. Picking one of those four in the sort bar starts it on <code>↓</code>.
+Under <code>reviewed</code>, a review running now counts as the newest of all, and PRs colinear has never
+reviewed count as the oldest. A stack (see below) keeps its PRs together under its bottom PR, so
+inside a stack the order follows the stack, not the dates.</p>
+<p><code>REV</code> is bold and coloured until you've looked at that review, which means resting the cursor on its
+row for a moment. The header counts the reviews you haven't looked at yet ("3 new reviews"), so a
+review that finished while you were elsewhere doesn't get lost under PRs that merely updated.</p>
 <p><strong><code>t</code> shows the PRs colinear opened for you.</strong> Every open PR one of your tasks opened becomes a
 review here too, added by the review poll (every minute). They are kept out of the normal list,
 which is for what others asked of you, and out of <code>:todo</code>'s review queue, since nobody asked you to
