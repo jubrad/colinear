@@ -562,23 +562,38 @@ only the requests, since your tasks' PRs are yours by definition. `r` has an age
 the task's agent wrote, and `enter` reads it against the code, as with any review. A task PR stays
 until it merges or closes, like a PR you added by name.
 
-### Your tasks' PRs, reviewed on their own
+### Your tasks, reviewed before they push
 
-With [`taskReviews`](../configuration.md) on (the default), you don't have to start these reviews or
-carry the comments across:
+With [`taskReviews`](../configuration.md) on (the default), a colinear task gets its review cycle
+**locally, before anything is pushed**. You don't start the reviews or carry the comments across:
 
-1. When a task's PR appears here, colinear starts a pre-review of it.
-2. When the review is done, the findings the agent should act on go to **the task's own agent** as
-   its next turn. That's the same path `p` in [`:diff`](diff.md) takes. Annotations and praise stay
-   in the review for you.
-3. When the agent pushes, colinear reviews the PR again. That round's findings go back the same way.
-4. It stops after `maxRounds` (2 by default). The last hand-back tells the agent it was the last.
+1. The work pass commits on the task's branch and stops, instead of pushing.
+2. colinear reviews the task's own worktree: the whole branch against its base, uncommitted work
+   included. It's the same review `R` runs in [`:diff`](diff.md), and its findings are there to read.
+3. The findings the agent should act on go back to **the same session**, which fixes, commits and
+   still doesn't push. Annotations and praise stay in the review for you.
+4. colinear reviews again, up to `maxRounds` (2 by default), or stops early when a round finds
+   nothing to change.
+5. Then one last turn publishes it: the push and the draft PR, or a push onto the PR the task already
+   had.
 
-Each step waits for the task to be idle on its open PR, so nothing is handed to an agent that is
-mid-revision or running checks. The same findings are never handed twice. A round that fails is not
-retried on its own; `r` retries it. The review's activity log and the task's both record every
-round. Nothing is posted to GitHub: the findings stay between colinear and the agent unless you post
-them. The loop checks once a minute, alongside the review poll.
+The card stays in Working throughout, and its activity log records each round. Two kinds of task
+push right away instead:
+
+- a task whose triage chose the **CI** verification tier, since pushing early so CI runs is the point
+  of that tier;
+- any task with `beforePush` turned off.
+
+Nothing reaches GitHub until the publish step, and the review's findings never do unless you post
+them.
+
+**After the push instead.** With `"taskReviews": { "beforePush": false }` the cycle runs on the PR.
+When a task's PR appears in the `t` view, colinear pre-reviews it
+and hands the findings to the task's agent. When the agent pushes, it reviews the PR again, up to
+`maxRounds`. Each step waits for the task to be idle on its open PR. The same findings are never
+handed twice, and a round that fails is retried only by `r`.
+
+PRs that aren't colinear tasks are reviewed on their PR, as always, whatever this setting says.
 
 **PR stacks are drawn together.** A PR whose base branch is another listed PR's branch, in the same
 repo, is built on it. Such PRs are listed under a header line that names the stack after its bottom

@@ -249,6 +249,15 @@ export interface Task {
   sessionId?: string;
   worktree?: string;
   branch?: string;
+  /**
+   * The work pass was told to commit and stop rather than push: colinear
+   * reviews the worktree first (taskReviews.beforePush), then publishes.
+   */
+  holdPush?: boolean;
+  /** local review rounds run on this task before it was published */
+  autoReviewRounds?: number;
+  /** the reviewed commit whose findings went back to the agent */
+  handedSha?: string;
   verdict?: TriageVerdict;
   question?: PendingQuestion;
   checks: CheckResult[];
@@ -561,7 +570,7 @@ export interface Review {
    * asked of you.
    */
   task?: string;
-  /** reviews of a task's PR colinear started on its own (taskReviews) */
+  /** reviews of a task's PR colinear started on its own (taskReviews, after the push) */
   autoRounds?: number;
   /** the reviewed commit whose findings went back to the task — handed once per review */
   handedSha?: string;
@@ -950,10 +959,12 @@ export interface Config {
   /** where a repo imported from GitHub is cloned (default: the directory most of `repos` share) */
   cloneRoot?: string;
   /**
-   * Review a task's own PR automatically and hand the findings back to its
-   * agent, again after each push, up to `maxRounds` (default on, 2 rounds).
+   * Review a task's work automatically and hand the findings back to its
+   * agent, up to `maxRounds` (default on, 2 rounds). `beforePush` (default)
+   * runs the cycle on the task's own worktree before anything is pushed;
+   * off, it reviews the pushed PR after each push instead.
    */
-  taskReviews: { auto: boolean; maxRounds: number };
+  taskReviews: { auto: boolean; maxRounds: number; beforePush: boolean };
   /** how often the daemon asks GitHub for review requests and refreshes the PRs it tracks (default 60, at least 30) */
   reviewPollSeconds: number;
   /**
