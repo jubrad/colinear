@@ -1,5 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useMemo, useState } from 'react';
+import { useHeldIndex } from '../ui/held.js';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import { useColinear, useViewSize } from '../ui/context.js';
@@ -64,12 +65,16 @@ export function FamilyView(props: { param?: string }) {
   useEffect(() => ctx.setCapture(actions.busy), [actions.busy]);
   useEffect(() => () => ctx.setCapture(false), []);
 
-  const selected = rows[Math.min(cursor, rows.length - 1)];
+  // the line under the cursor stays under it as families change: a sub-issue
+  // added or dropped by the tracker sweep shifted every line below it, and
+  // the cursor slid onto the line above — a child's keys acted on its parent
+  const at = useHeldIndex(rows, cursor, setCursor, (r) => `${r.kind}:${r.label}`);
+  const selected = rows[Math.min(at, rows.length - 1)];
 
   useInput(
     (input, key) => {
-      if (key.upArrow || input === 'i') setCursor((c) => Math.max(0, c - 1));
-      if (key.downArrow || input === 'k') setCursor((c) => Math.min(rows.length - 1, c + 1));
+      if (key.upArrow || input === 'i') setCursor(Math.max(0, at - 1));
+      if (key.downArrow || input === 'k') setCursor(Math.min(rows.length - 1, at + 1));
       if (input === 'g') setCursor(0);
       if (input === 'G') setCursor(Math.max(0, rows.length - 1));
       if (key.return && selected?.task) return ctx.navigate('task', selected.task.issue.identifier);
@@ -107,7 +112,7 @@ export function FamilyView(props: { param?: string }) {
         {cell('TITLE', titleWidth)}
       </Text>
       {rows.map((row, i) => {
-        const onCursor = i === cursor;
+        const onCursor = i === at;
         const task = row.task;
         const isParent = row.kind === 'parent';
         const family = isParent ? families.find((f) => f.parent === task) : undefined;

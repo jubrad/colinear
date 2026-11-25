@@ -1,4 +1,4 @@
-import { follow } from './held.js';
+import { follow, followPos } from './held.js';
 
 /**
  * A list re-sorted under the cursor keeps the cursor on the same item — the
@@ -18,8 +18,16 @@ check('the item leaving hands the cursor to whatever took its place', follow(['a
 check('a cursor past the end follows the last item', follow(['a', 'b'], 5, ['b', 'a'], id) === 0);
 check('an empty list leaves the cursor alone', follow([], 3, ['a'], id) === 3);
 
+// the board: a card keeps the cursor as the board re-sorts and cards change column
+const board = [['a', 'parent'], ['child', 'x']];
+const resorted = [['parent', 'a'], ['x'], ['child']];
+const moved = followPos(board, { col: 1, row: 0 }, resorted, id);
+check('a card that moves column keeps the cursor', moved.col === 2 && moved.row === 0, JSON.stringify(moved));
+check('a card re-sorted within its column keeps it too', JSON.stringify(followPos(board, { col: 0, row: 1 }, resorted, id)) === JSON.stringify({ col: 0, row: 0 }));
+check('a card that is gone leaves the cursor where it was', JSON.stringify(followPos(board, { col: 1, row: 1 }, [['a']], id)) === JSON.stringify({ col: 1, row: 1 }));
+
 if (failures.length) {
   console.error(`held: ${failures.length} failed\n  ${failures.join('\n  ')}`);
   process.exit(1);
 }
-console.log('ok — a list re-sorted under the cursor keeps it on the same item');
+console.log('ok — a list or a board re-sorted under the cursor keeps it on the same item');

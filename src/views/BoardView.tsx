@@ -3,6 +3,7 @@ import { CommandBar } from '../ui/CommandBar.js';
 import { SortBar } from '../ui/SortBar.js';
 import { taskIsStale } from '../core/staleness.js';
 import { useEffect, useMemo, useState } from 'react';
+import { useHeldPos } from '../ui/held.js';
 import { useTasks } from '../core/hooks.js';
 import { store } from '../core/store.js';
 import { questionSummary, type BoardLayout, type Task, type TaskStatus } from '../core/types.js';
@@ -145,7 +146,9 @@ export function BoardView(_props: { param?: string }) {
     });
   }, [grid]);
 
-  const selected = grid[pos.col]?.[Math.min(pos.row, Math.max(0, (grid[pos.col]?.length ?? 1) - 1))];
+  // the card under the cursor stays under it as the board re-sorts and cards change column
+  const held = useHeldPos(grid, pos, setPos, (t) => t.issue.id);
+  const selected = grid[held.col]?.[Math.min(held.row, Math.max(0, (grid[held.col]?.length ?? 1) - 1))];
 
   const moveCol = (dir: 1 | -1) =>
     setPos((p) => {
@@ -237,7 +240,7 @@ export function BoardView(_props: { param?: string }) {
   const perLane = Math.max(1, Math.floor((avail + 1) / (LANE_CARD_MIN + 1)));
   const laneCardW = Math.floor((avail - (perLane - 1)) / perLane);
   const laneWindows = grid.map((lane, i) =>
-    windowLane(lane.length, perLane, i === pos.col ? Math.min(pos.row, Math.max(0, lane.length - 1)) : 0),
+    windowLane(lane.length, perLane, i === held.col ? Math.min(held.row, Math.max(0, lane.length - 1)) : 0),
   );
   const laneHeights = grid.map((lane, i) => {
     if (!lane.length) return 1;
@@ -247,7 +250,7 @@ export function BoardView(_props: { param?: string }) {
   // whole lanes only: a lane's height is whatever its tallest card needs, and
   // Ink overflows rather than clips (see DESIGN.md), so half a lane would
   // paint over the pane below it
-  const [laneStart, laneEnd] = windowColumn(laneHeights, laneBudget, pos.col);
+  const [laneStart, laneEnd] = windowColumn(laneHeights, laneBudget, held.col);
 
 
   const shown = grid.reduce((n, col) => n + col.length, 0);
@@ -368,7 +371,7 @@ export function BoardView(_props: { param?: string }) {
           const color = STATUS_COLORS[col.statuses[0]];
           // window the column to the height budget, scrolled so the cursor's
           // card stays visible — cards never flex-shrink into unreadability
-          const selIdx = colIdx === pos.col ? Math.min(pos.row, Math.max(0, colTasks.length - 1)) : 0;
+          const selIdx = colIdx === held.col ? Math.min(held.row, Math.max(0, colTasks.length - 1)) : 0;
           const [start, end] = windowColumn(colTasks.map(cardHeight), cardBudget, selIdx);
           return (
             <Box key={col.title} flexDirection="column" width={colWidth} flexShrink={0}>
